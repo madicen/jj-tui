@@ -1,0 +1,515 @@
+package jj
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/madicen-utilities/jj-tui/v2/internal/models"
+)
+
+// Service handles jujutsu command execution
+type Service struct {
+	RepoPath string
+}
+
+// NewService creates a new jj service
+func NewService(repoPath string) (*Service, error) {
+	// Verify jj is installed
+	if _, err := exec.LookPath("jj"); err != nil {
+		return nil, fmt.Errorf("jj command not found - please install jujutsu: %w", err)
+	}
+
+	// If no repo path provided, use current directory
+	if repoPath == "" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get current directory: %w", err)
+		}
+		repoPath = cwd
+	}
+
+	// Verify it's a jj repository
+	if !isJJRepo(repoPath) {
+		return nil, fmt.Errorf("not a jujutsu repository: %s\nHint: Run 'jj git init' or 'jj init --git' to initialize a repository", repoPath)
+	}
+
+	service := &Service{RepoPath: repoPath}
+
+	// Test that we can actually run jj commands
+	ctx := context.Background()
+	if _, err := service.runJJOutput(ctx, "--version"); err != nil {
+		return nil, fmt.Errorf("failed to execute jj commands: %w", err)
+	}
+
+	return service, nil
+}
+
+// GetRepository retrieves the current repository state
+func (s *Service) GetRepository(ctx context.Context) (*models.Repository, error) {
+	// Get commit graph (includes working copy)
+	graph, err := s.getCommitGraph(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get commit graph: %w", err)
+	}
+
+	// Find working copy from graph
+	var workingCopy models.Commit
+	for _, c := range graph.Commits {
+		if c.IsWorking {
+			workingCopy = c
+			break
+		}
+	}
+
+	return &models.Repository{
+		Path:        s.RepoPath,
+		WorkingCopy: workingCopy,
+		Graph:       *graph,
+		PRs:         []models.GitHubPR{}, // TODO: populate from GitHub
+	}, nil
+}
+
+// CreateNewCommit creates a new commit with the given description
+func (s *Service) CreateNewCommit(ctx context.Context, description string) error {
+	args := []string{"commit", "-m", description}
+	return s.runJJ(ctx, args...)
+}
+
+// DescribeCommit sets a new description for a commit (non-interactive)
+func (s *Service) DescribeCommit(ctx context.Context, commitID string, message string) error {
+	args := []string{"describe", commitID, "-m", message}
+	_, err := s.runJJOutput(ctx, args...)
+	return err
+}
+
+// GetCommitDescription gets the full description of a commit
+func (s *Service) GetCommitDescription(ctx context.Context, commitID string) (string, error) {
+	out, err := s.runJJOutput(ctx, "log", "-r", commitID, "--no-graph", "-T", "description")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
+// IsCommitMutable checks if a commit can be modified
+func (s *Service) IsCommitMutable(ctx context.Context, commitID string) bool {
+	// Try a no-op describe to see if the commit is mutable
+	_, err := s.runJJOutput(ctx, "log", "-r", commitID, "--no-graph", "-T", "if(immutable, \"immutable\", \"mutable\")")
+	if err != nil {
+		return false
+	}
+	return true
+}
+
+// CheckoutCommit checks out a specific commit (uses jj edit)
+func (s *Service) CheckoutCommit(ctx context.Context, commitID string) error {
+	args := []string{"edit", commitID}
+	return s.runJJ(ctx, args...)
+}
+
+// CreateNewBranch creates a new branch at the current commit
+func (s *Service) CreateNewBranch(ctx context.Context, branchName string) error {
+	args := []string{"branch", "create", branchName}
+	return s.runJJ(ctx, args...)
+}
+
+// SquashCommit squashes a commit into its parent
+// After squashing, it moves to the squash result (the parent that received the changes)
+func (s *Service) SquashCommit(ctx context.Context, commitID string) error {
+	// Get the description of the commit being squashed
+	sourceDesc, err := s.runJJOutput(ctx, "log", "-r", commitID, "--no-graph", "-T", "description")
+	if err != nil {
+		return err
+	}
+	sourceDesc = strings.TrimSpace(sourceDesc)
+
+	// Get the description of the parent (destination)
+	parentDesc, err := s.runJJOutput(ctx, "log", "-r", fmt.Sprintf("parents(%s)", commitID), "--no-graph", "-T", "description")
+	if err != nil {
+		return err
+	}
+	parentDesc = strings.TrimSpace(parentDesc)
+
+	// Combine descriptions - prefer parent's if it exists, otherwise use source's
+	// If both have descriptions, combine them with the parent first
+	var combinedDesc string
+	if parentDesc != "" && sourceDesc != "" {
+		combinedDesc = parentDesc + "\n\n" + sourceDesc
+	} else if parentDesc != "" {
+		combinedDesc = parentDesc
+	} else {
+		combinedDesc = sourceDesc
+	}
+
+	// Squash the commit into its parent with explicit message to avoid interactive editor
+	args := []string{"squash", "-r", commitID, "-m", combinedDesc}
+	if err := s.runJJ(ctx, args...); err != nil {
+		return err
+	}
+
+	// After squash, @ is a new empty commit on top of the squash result
+	// Use `jj edit @-` to move directly to the parent (squash result)
+	// This abandons the empty commit automatically
+	return s.runJJ(ctx, "edit", "@-")
+}
+
+// NewCommit creates a new empty commit after the current working copy
+func (s *Service) NewCommit(ctx context.Context) error {
+	args := []string{"new"}
+	return s.runJJ(ctx, args...)
+}
+
+// AbandonCommit abandons a commit, removing it from the repository
+func (s *Service) AbandonCommit(ctx context.Context, commitID string) error {
+	args := []string{"abandon", commitID}
+	return s.runJJ(ctx, args...)
+}
+
+// GetGitRemoteURL returns the URL of the git remote (origin)
+func (s *Service) GetGitRemoteURL(ctx context.Context) (string, error) {
+	out, err := s.runJJOutput(ctx, "git", "remote", "list")
+	if err != nil {
+		return "", fmt.Errorf("failed to list git remotes: %w", err)
+	}
+
+	// Parse the output - format is "remote_name url"
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	for _, line := range lines {
+		parts := strings.Fields(line)
+		if len(parts) >= 2 {
+			// Prefer "origin" remote, but take the first one if no origin
+			if parts[0] == "origin" {
+				return parts[1], nil
+			}
+		}
+	}
+
+	// Return first remote if no origin found
+	for _, line := range lines {
+		parts := strings.Fields(line)
+		if len(parts) >= 2 {
+			return parts[1], nil
+		}
+	}
+
+	return "", fmt.Errorf("no git remotes found")
+}
+
+// GetCurrentBranch returns the current bookmark/branch being tracked
+func (s *Service) GetCurrentBranch(ctx context.Context) (string, error) {
+	// Get bookmarks that point to the current working copy or its ancestors
+	out, err := s.runJJOutput(ctx, "log", "-r", "@", "--no-graph", "-T", "bookmarks")
+	if err != nil {
+		return "", err
+	}
+	
+	branch := strings.TrimSpace(out)
+	if branch == "" {
+		// No bookmark on @, check parent
+		out, err = s.runJJOutput(ctx, "log", "-r", "@-", "--no-graph", "-T", "bookmarks")
+		if err != nil {
+			return "", err
+		}
+		branch = strings.TrimSpace(out)
+	}
+	
+	if branch == "" {
+		return "main", nil // Default to main
+	}
+	
+	// If multiple bookmarks, take the first one
+	parts := strings.Split(branch, " ")
+	return parts[0], nil
+}
+
+// PushToGit pushes the current branch to the git remote
+func (s *Service) PushToGit(ctx context.Context, branch string) error {
+	args := []string{"git", "push", "--bookmark", branch}
+	return s.runJJ(ctx, args...)
+}
+
+// getCommitGraph retrieves the commit graph with real jj data
+func (s *Service) getCommitGraph(ctx context.Context) (*models.CommitGraph, error) {
+	// Use a custom template with a unique marker to separate graph prefix from data
+	// The marker "<<<COMMIT>>>" lets us identify where the graph ends and data begins
+	// Format after marker: change_id|commit_id|author|date|description|parents|bookmarks|is_working|has_conflict|immutable
+	template := `concat(
+		"<<<COMMIT>>>",
+		change_id.short(8), "|",
+		commit_id.short(8), "|",
+		author.email(), "|",
+		author.timestamp(), "|",
+		if(description, description.first_line(), "(no description)"), "|",
+		parents.map(|p| p.commit_id().short(8)).join(","), "|",
+		bookmarks.join(","), "|",
+		if(self.current_working_copy(), "true", "false"), "|",
+		if(self.conflict(), "true", "false"), "|",
+		if(immutable, "true", "false"),
+		"\n"
+	)`
+
+	// Run WITH the graph to get ASCII art (no --reversed, keep natural newest-first order)
+	// Revset: all mutable (unpushed) commits plus bookmarks - this catches sibling branches
+	out, err := s.runJJOutput(ctx, "log", "-r", "mutable() | bookmarks()", "-T", template)
+	if err != nil {
+		// If template fails, try simpler approach
+		return s.getCommitGraphSimple(ctx)
+	}
+
+	commits := []models.Commit{}
+	connections := make(map[string][]string)
+	var pendingGraphLines []string // Graph lines between commits
+
+	lines := strings.Split(out, "\n")
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+
+		// Check if this line contains commit data (has our marker)
+		markerIdx := strings.Index(line, "<<<COMMIT>>>")
+		if markerIdx == -1 {
+			// This is a graph-only line (connector between commits)
+			// Store it to attach to the previous commit (connects it to the next one below)
+			graphLine := strings.TrimRight(line, " ")
+			if graphLine != "" {
+				pendingGraphLines = append(pendingGraphLines, graphLine)
+			}
+			continue
+		}
+
+		// Attach pending graph lines to the previous commit first
+		if len(commits) > 0 && len(pendingGraphLines) > 0 {
+			commits[len(commits)-1].GraphLines = pendingGraphLines
+			pendingGraphLines = nil
+		}
+
+		// Extract the graph prefix (everything before the marker)
+		graphPrefix := line[:markerIdx]
+
+		// Extract the data (everything after the marker)
+		data := line[markerIdx+len("<<<COMMIT>>>"):]
+
+		parts := strings.Split(data, "|")
+		if len(parts) < 10 {
+			continue
+		}
+
+		changeID := strings.TrimSpace(parts[0])
+		commitID := strings.TrimSpace(parts[1])
+		author := strings.TrimSpace(parts[2])
+		dateStr := strings.TrimSpace(parts[3])
+		description := strings.TrimSpace(parts[4])
+		parentsStr := strings.TrimSpace(parts[5])
+		branchesStr := strings.TrimSpace(parts[6])
+		isWorking := strings.TrimSpace(parts[7]) == "true"
+		hasConflict := strings.TrimSpace(parts[8]) == "true"
+		isImmutable := strings.TrimSpace(parts[9]) == "true"
+
+		// Parse parents
+		var parents []string
+		if parentsStr != "" {
+			parents = strings.Split(parentsStr, ",")
+		}
+
+		// Parse branches/bookmarks
+		var branches []string
+		if branchesStr != "" {
+			branches = strings.Split(branchesStr, ",")
+		}
+
+		// Parse date
+		var date time.Time
+		if dateStr != "" {
+			date, _ = time.Parse(time.RFC3339, dateStr)
+		}
+
+		commit := models.Commit{
+			ID:          commitID,
+			ShortID:     commitID,
+			ChangeID:    changeID,
+			Author:      author,
+			Email:       author,
+			Date:        date,
+			Summary:     description,
+			Description: description,
+			Parents:     parents,
+			Branches:    branches,
+			IsWorking:   isWorking,
+			Conflicts:   hasConflict,
+			Immutable:   isImmutable,
+			GraphPrefix: graphPrefix,
+		}
+
+		commits = append(commits, commit)
+
+		// Build connections
+		for _, parent := range parents {
+			connections[parent] = append(connections[parent], commitID)
+		}
+	}
+
+	// Attach any remaining graph lines to the last commit
+	if len(commits) > 0 && len(pendingGraphLines) > 0 {
+		commits[len(commits)-1].GraphLines = pendingGraphLines
+	}
+
+	return &models.CommitGraph{
+		Commits:     commits,
+		Connections: connections,
+	}, nil
+}
+
+// getCommitGraphSimple is a fallback that uses simpler parsing
+func (s *Service) getCommitGraphSimple(ctx context.Context) (*models.CommitGraph, error) {
+	out, err := s.runJJOutput(ctx, "log", "-r", "mutable() | bookmarks()", "--no-graph")
+	if err != nil {
+		return nil, err
+	}
+
+	commits := []models.Commit{}
+
+	// Parse the default jj log output
+	lines := strings.Split(out, "\n")
+	var currentCommit *models.Commit
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			if currentCommit != nil {
+				commits = append(commits, *currentCommit)
+				currentCommit = nil
+			}
+			continue
+		}
+
+		// Lines starting with @ or ○ indicate a commit
+		if strings.HasPrefix(line, "@") || strings.HasPrefix(line, "○") || strings.HasPrefix(line, "◆") {
+			if currentCommit != nil {
+				commits = append(commits, *currentCommit)
+			}
+
+			isWorking := strings.HasPrefix(line, "@")
+			// Remove the prefix and parse the rest
+			line = strings.TrimLeft(line, "@○◆ ")
+
+			// Try to parse: change_id commit_id author date summary
+			parts := strings.Fields(line)
+			if len(parts) >= 2 {
+				currentCommit = &models.Commit{
+					ChangeID:  parts[0],
+					ShortID:   parts[0],
+					ID:        parts[0],
+					IsWorking: isWorking,
+				}
+
+				if len(parts) >= 3 {
+					currentCommit.Author = parts[1]
+				}
+				if len(parts) >= 4 {
+					// Rest is the summary
+					currentCommit.Summary = strings.Join(parts[3:], " ")
+				}
+			}
+		} else if currentCommit != nil && currentCommit.Summary == "" {
+			// This might be a continuation line with the summary
+			currentCommit.Summary = line
+		}
+	}
+
+	if currentCommit != nil {
+		commits = append(commits, *currentCommit)
+	}
+
+	return &models.CommitGraph{
+		Commits:     commits,
+		Connections: make(map[string][]string),
+	}, nil
+}
+
+// runJJ executes a jj command and returns a clean error if it fails
+func (s *Service) runJJ(ctx context.Context, args ...string) error {
+	cmd := exec.CommandContext(ctx, "jj", args...)
+	cmd.Dir = s.RepoPath
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		// Extract just the main error message
+		errMsg := extractErrorMessage(string(out))
+		if errMsg != "" {
+			return fmt.Errorf("%s", errMsg)
+		}
+		return fmt.Errorf("command failed: %w", err)
+	}
+	return nil
+}
+
+// extractErrorMessage extracts the main error message from jj output
+func extractErrorMessage(output string) string {
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "Error:") {
+			return strings.TrimPrefix(line, "Error: ")
+		}
+	}
+	// Return first non-empty, non-warning line
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line != "" && !strings.HasPrefix(line, "Warning:") && !strings.HasPrefix(line, "Hint:") {
+			return line
+		}
+	}
+	return ""
+}
+
+// runJJOutput executes a jj command and returns its output
+func (s *Service) runJJOutput(ctx context.Context, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, "jj", args...)
+	cmd.Dir = s.RepoPath
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("jj command '%s' failed: %w\nOutput: %s",
+			fmt.Sprintf("jj %s", strings.Join(args, " ")), err, string(out))
+	}
+	// Filter out warning lines
+	return filterWarnings(string(out)), nil
+}
+
+// filterWarnings removes jj warning messages from output
+func filterWarnings(output string) string {
+	lines := strings.Split(output, "\n")
+	var filtered []string
+	skip := false
+	for _, line := range lines {
+		// Skip Warning: and Hint: lines and their continuations
+		if strings.HasPrefix(line, "Warning:") || strings.HasPrefix(line, "Hint:") {
+			skip = true
+			continue
+		}
+		if skip && strings.HasPrefix(line, "  ") {
+			continue
+		}
+		skip = false
+		filtered = append(filtered, line)
+	}
+	return strings.Join(filtered, "\n")
+}
+
+// isJJRepo checks if a directory is a jj repository
+func isJJRepo(path string) bool {
+	jjDir := filepath.Join(path, ".jj")
+	if info, err := os.Stat(jjDir); err == nil && info.IsDir() {
+		return true
+	}
+	// Check parent directories recursively
+	parent := filepath.Dir(path)
+	if parent != path {
+		return isJJRepo(parent)
+	}
+	return false
+}
