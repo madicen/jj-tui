@@ -171,11 +171,11 @@ func (r *Renderer) Graph(data GraphData) string {
 			}
 
 			if prBranch != "" {
-				// This commit (or an ancestor) has an open PR - show Push button
-				buttonLabel := "Push (u)"
+				// This commit (or an ancestor) has an open PR - show Update PR button
+				buttonLabel := "Update PR (u)"
 				if len(commit.Branches) == 0 {
-					// This is a descendant without the bookmark - indicate we'll move the bookmark
-					buttonLabel = "Push to PR (u)"
+					// This is a descendant without the bookmark - indicate we'll add commits to the PR
+					buttonLabel = fmt.Sprintf("Update PR [%s] (u)", prBranch)
 				}
 				actionButtons = append(actionButtons,
 					r.Zone.Mark(ZoneActionPush, ButtonStyle.Render(buttonLabel)),
@@ -187,7 +187,7 @@ func (r *Renderer) Graph(data GraphData) string {
 					createPRBranch = data.CommitBookmark[data.SelectedCommit]
 				}
 				if createPRBranch != "" {
-					// Can create a PR - show button
+					// Can create a NEW PR - show button
 					buttonLabel := "Create PR (c)"
 					if len(commit.Branches) == 0 {
 						// This is a descendant - indicate we'll move the bookmark to include all commits
