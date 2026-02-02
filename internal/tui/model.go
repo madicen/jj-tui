@@ -95,10 +95,14 @@ type Model struct {
 	prCommitIndex  int // Index of commit PR is being created from
 
 	// Bookmark creation state
-	bookmarkNameInput   textinput.Model
-	bookmarkCommitIdx   int      // Index of commit to create bookmark on
-	existingBookmarks   []string // List of existing bookmarks
-	selectedBookmarkIdx int      // Index of selected existing bookmark (-1 for new)
+	bookmarkNameInput       textinput.Model
+	bookmarkCommitIdx       int               // Index of commit to create bookmark on (-1 for new branch from main)
+	existingBookmarks       []string          // List of existing bookmarks
+	selectedBookmarkIdx     int               // Index of selected existing bookmark (-1 for new)
+	bookmarkFromJira        bool              // True if creating bookmark from Jira ticket
+	bookmarkJiraTicketKey   string            // Jira ticket key if creating from Jira
+	bookmarkJiraTicketTitle string            // Jira ticket summary if creating from Jira
+	jiraBookmarkTitles      map[string]string // Maps bookmark names to formatted PR titles ("KEY - Title")
 }
 
 // Messages for async operations
@@ -251,6 +255,7 @@ func New(ctx context.Context) *Model {
 		bookmarkNameInput:   bookmarkName,
 		bookmarkCommitIdx:   -1,
 		selectedBookmarkIdx: -1,
+		jiraBookmarkTitles:  make(map[string]string),
 	}
 }
 

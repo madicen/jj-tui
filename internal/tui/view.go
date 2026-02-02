@@ -355,6 +355,8 @@ func (m *Model) renderCreateBookmark() string {
 		NameInput:         m.bookmarkNameInput.View(),
 		ExistingBookmarks: m.existingBookmarks,
 		SelectedBookmark:  m.selectedBookmarkIdx,
+		FromJira:          m.bookmarkFromJira,
+		JiraTicketKey:     m.bookmarkJiraTicketKey,
 	})
 }
 

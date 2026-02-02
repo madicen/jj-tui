@@ -99,8 +99,10 @@ type CreatePRData struct {
 // BookmarkData contains data needed for bookmark creation view
 type BookmarkData struct {
 	Repository        *models.Repository
-	CommitIndex       int
+	CommitIndex       int // -1 means creating new branch from main
 	NameInput         string
 	ExistingBookmarks []string // List of existing bookmarks that can be moved
 	SelectedBookmark  int      // Index of selected existing bookmark (-1 for new)
+	FromJira          bool     // True if creating bookmark from Jira ticket
+	JiraTicketKey     string   // Jira ticket key when FromJira is true
 }

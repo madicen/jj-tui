@@ -118,6 +118,47 @@ func (s *Service) CreateNewBranch(ctx context.Context, branchName string) error 
 	return s.runJJ(ctx, args...)
 }
 
+// CreateBranchFromMain creates a new branch from main, bookmarks it, and rebases
+// the current working copy onto it. This is used when creating a new branch for a Jira ticket.
+func (s *Service) CreateBranchFromMain(ctx context.Context, bookmarkName string) error {
+	// Get the current working copy's change ID before we move away from it
+	currentChangeID, err := s.runJJOutput(ctx, "log", "-r", "@", "--no-graph", "-T", "change_id")
+	if err != nil {
+		return fmt.Errorf("failed to get current working copy: %w", err)
+	}
+	currentChangeID = strings.TrimSpace(currentChangeID)
+
+	// Check if the current working copy is empty (no changes)
+	// If it's empty, we'll just create the new branch without rebasing
+	status, _ := s.runJJOutput(ctx, "log", "-r", "@", "--no-graph", "-T", "empty")
+	isEmpty := strings.TrimSpace(status) == "true"
+
+	// Create a new commit from main
+	if err := s.runJJ(ctx, "new", "main"); err != nil {
+		return fmt.Errorf("failed to create new commit from main: %w", err)
+	}
+
+	// Create bookmark on the new commit
+	if err := s.runJJ(ctx, "bookmark", "create", bookmarkName); err != nil {
+		return fmt.Errorf("failed to create bookmark: %w", err)
+	}
+
+	// If the old working copy had changes, rebase it onto the new branch
+	if !isEmpty && currentChangeID != "" {
+		// Rebase the old working copy onto the new branch
+		if err := s.runJJ(ctx, "rebase", "-s", currentChangeID, "-d", "@"); err != nil {
+			return fmt.Errorf("failed to rebase current work onto new branch: %w", err)
+		}
+
+		// Edit the rebased commit (move working copy to it)
+		if err := s.runJJ(ctx, "edit", currentChangeID); err != nil {
+			return fmt.Errorf("failed to edit rebased commit: %w", err)
+		}
+	}
+
+	return nil
+}
+
 // CreateBookmarkOnCommit creates a bookmark on a specific commit
 func (s *Service) CreateBookmarkOnCommit(ctx context.Context, bookmarkName, commitID string) error {
 	// jj bookmark create <name> -r <revision>
