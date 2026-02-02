@@ -237,6 +237,16 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.startCreateBookmark()
 			return m, nil
 		}
+	case "x":
+		// Delete bookmark from selected commit
+		if m.viewMode == ViewCommitGraph && m.selectedCommit >= 0 && m.jjService != nil && m.repository != nil {
+			commit := m.repository.Graph.Commits[m.selectedCommit]
+			if len(commit.Branches) == 0 {
+				m.statusMessage = "No bookmark on this commit to delete"
+				return m, nil
+			}
+			return m, m.deleteBookmark()
+		}
 	case "u":
 		// Push updates to PR (for commits with PR branches or their descendants)
 		if m.viewMode == ViewCommitGraph && m.selectedCommit >= 0 && m.jjService != nil && m.repository != nil {

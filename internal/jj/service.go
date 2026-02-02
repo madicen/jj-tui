@@ -173,6 +173,12 @@ func (s *Service) MoveBookmark(ctx context.Context, bookmarkName, commitID strin
 	return s.runJJ(ctx, args...)
 }
 
+// DeleteBookmark deletes a bookmark
+func (s *Service) DeleteBookmark(ctx context.Context, bookmarkName string) error {
+	args := []string{"bookmark", "delete", bookmarkName}
+	return s.runJJ(ctx, args...)
+}
+
 // SquashCommit squashes a commit into its parent
 // After squashing, it moves to the squash result (the parent that received the changes)
 func (s *Service) SquashCommit(ctx context.Context, commitID string) error {

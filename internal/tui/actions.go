@@ -436,6 +436,36 @@ func (m *Model) submitBookmarkFromJira() tea.Cmd {
 	}
 }
 
+// deleteBookmark deletes a bookmark from the selected commit
+func (m *Model) deleteBookmark() tea.Cmd {
+	if m.repository == nil || m.selectedCommit < 0 || m.selectedCommit >= len(m.repository.Graph.Commits) {
+		m.statusMessage = "No commit selected"
+		return nil
+	}
+
+	commit := m.repository.Graph.Commits[m.selectedCommit]
+
+	if len(commit.Branches) == 0 {
+		m.statusMessage = "No bookmark on this commit to delete"
+		return nil
+	}
+
+	// For now, delete the first bookmark on the commit
+	// TODO: If multiple bookmarks, show a selection UI
+	bookmarkName := commit.Branches[0]
+	m.statusMessage = fmt.Sprintf("Deleting bookmark '%s'...", bookmarkName)
+
+	return func() tea.Msg {
+		ctx := context.Background()
+
+		if err := m.jjService.DeleteBookmark(ctx, bookmarkName); err != nil {
+			return errorMsg{err: fmt.Errorf("failed to delete bookmark: %w", err)}
+		}
+
+		return bookmarkDeletedMsg{bookmarkName: bookmarkName}
+	}
+}
+
 // pushToPR pushes updates to a PR, moving the bookmark if necessary
 func (m *Model) pushToPR(branch string, commitID string, moveBookmark bool) tea.Cmd {
 	if moveBookmark {

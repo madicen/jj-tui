@@ -165,6 +165,11 @@ type bookmarkCreatedOnCommitMsg struct {
 	wasMoved     bool // true if bookmark was moved, false if newly created
 }
 
+// bookmarkDeletedMsg is sent when a bookmark is deleted
+type bookmarkDeletedMsg struct {
+	bookmarkName string
+}
+
 // silentRepositoryLoadedMsg is for background refreshes that don't update the status
 type silentRepositoryLoadedMsg struct {
 	repository *models.Repository
@@ -477,6 +482,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.statusMessage = fmt.Sprintf("Bookmark '%s' created", msg.bookmarkName)
 		}
+
+	case bookmarkDeletedMsg:
+		m.viewMode = ViewCommitGraph
+		m.statusMessage = fmt.Sprintf("Bookmark '%s' deleted", msg.bookmarkName)
+		// Reload repository to update the view
+		return m, tea.Batch(m.loadRepository(), m.loadPRs())
 		// Reload repository AND PRs to update action buttons
 		return m, tea.Batch(m.loadRepository(), m.loadPRs())
 

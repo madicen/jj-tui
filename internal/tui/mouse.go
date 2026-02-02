@@ -158,6 +158,16 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 	}
+	if m.zone.Get(ZoneActionDelBookmark) == zoneInfo {
+		if m.selectedCommit >= 0 && m.jjService != nil && m.repository != nil {
+			commit := m.repository.Graph.Commits[m.selectedCommit]
+			if len(commit.Branches) == 0 {
+				m.statusMessage = "No bookmark on this commit to delete"
+				return m, nil
+			}
+			return m, m.deleteBookmark()
+		}
+	}
 	if m.zone.Get(ZoneActionPush) == zoneInfo {
 		if m.selectedCommit >= 0 && m.jjService != nil && m.repository != nil {
 			// Find the PR branch for this commit (could be on this commit or an ancestor)

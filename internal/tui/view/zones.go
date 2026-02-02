@@ -31,10 +31,11 @@ const (
 	ZoneActionCreatePR = "zone:action:createpr"
 
 	// Bookmark creation zones
-	ZoneBookmarkName   = "zone:bookmark:name"
-	ZoneBookmarkSubmit = "zone:bookmark:submit"
-	ZoneBookmarkCancel = "zone:bookmark:cancel"
-	ZoneActionBookmark = "zone:action:bookmark"
+	ZoneBookmarkName      = "zone:bookmark:name"
+	ZoneBookmarkSubmit    = "zone:bookmark:submit"
+	ZoneBookmarkCancel    = "zone:bookmark:cancel"
+	ZoneActionBookmark    = "zone:action:bookmark"
+	ZoneActionDelBookmark = "zone:action:delbookmark"
 
 	// Push action zone
 	ZoneActionPush = "zone:action:push"

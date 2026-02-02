@@ -137,6 +137,12 @@ func (r *Renderer) Graph(data GraphData) string {
 		commit := data.Repository.Graph.Commits[data.SelectedCommit]
 
 		if commit.Immutable {
+			// For immutable commits, only show delete bookmark if it has one
+			if len(commit.Branches) > 0 {
+				actionButtons = append(actionButtons,
+					r.Zone.Mark(ZoneActionDelBookmark, ButtonStyle.Render("Del Bookmark (x)")),
+				)
+			}
 			lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Left, actionButtons...))
 			lines = append(lines, "")
 			lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("◆ Selected commit is immutable (pushed to remote)"))
@@ -149,6 +155,13 @@ func (r *Renderer) Graph(data GraphData) string {
 				r.Zone.Mark(ZoneActionAbandon, ButtonStyle.Render("Abandon (a)")),
 				r.Zone.Mark(ZoneActionBookmark, ButtonStyle.Render("Bookmark (m)")),
 			)
+
+			// Show delete bookmark button if commit has bookmarks
+			if len(commit.Branches) > 0 {
+				actionButtons = append(actionButtons,
+					r.Zone.Mark(ZoneActionDelBookmark, ButtonStyle.Render("Del Bookmark (x)")),
+				)
+			}
 
 			// Check if this commit can push to a PR (either has the bookmark or is a descendant)
 			prBranch := ""

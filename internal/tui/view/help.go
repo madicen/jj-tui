@@ -20,6 +20,7 @@ func (r *Renderer) Help() string {
 	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("a"), HelpDescStyle.Render("Abandon commit")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("n"), HelpDescStyle.Render("Create new commit (jj new)")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("m"), HelpDescStyle.Render("Create/move bookmark on commit")))
+	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("x"), HelpDescStyle.Render("Delete bookmark from commit")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("c"), HelpDescStyle.Render("Create PR from commit (needs bookmark)")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("u"), HelpDescStyle.Render("Push to PR (moves bookmark to include new commits)")))
 
