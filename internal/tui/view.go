@@ -98,13 +98,13 @@ func (m *Model) renderHeader() string {
 		title += " " + lipgloss.NewStyle().Foreground(colorMuted).Render(m.repository.Path)
 	}
 
-	// Create tabs wrapped in zones
+	// Create tabs wrapped in zones (with keyboard shortcuts)
 	tabs := []string{
-		m.zone.Mark(ZoneTabGraph, m.renderTab("Graph", m.viewMode == ViewCommitGraph)),
-		m.zone.Mark(ZoneTabPRs, m.renderTab("PRs", m.viewMode == ViewPullRequests)),
-		m.zone.Mark(ZoneTabJira, m.renderTab("Jira", m.viewMode == ViewJira)),
-		m.zone.Mark(ZoneTabSettings, m.renderTab("Settings", m.viewMode == ViewSettings)),
-		m.zone.Mark(ZoneTabHelp, m.renderTab("Help", m.viewMode == ViewHelp)),
+		m.zone.Mark(ZoneTabGraph, m.renderTab("Graph (g)", m.viewMode == ViewCommitGraph)),
+		m.zone.Mark(ZoneTabPRs, m.renderTab("PRs (p)", m.viewMode == ViewPullRequests)),
+		m.zone.Mark(ZoneTabJira, m.renderTab("Jira (i)", m.viewMode == ViewJira)),
+		m.zone.Mark(ZoneTabSettings, m.renderTab("Settings (,)", m.viewMode == ViewSettings)),
+		m.zone.Mark(ZoneTabHelp, m.renderTab("Help (h)", m.viewMode == ViewHelp)),
 	}
 
 	tabsStr := lipgloss.JoinHorizontal(lipgloss.Left, tabs...)
