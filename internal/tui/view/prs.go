@@ -7,8 +7,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// PullRequests renders the PR list view
-func (r *Renderer) PullRequests(data PRData) string {
+// PullRequests renders the PR list view with split header/list for scrolling
+func (r *Renderer) PullRequests(data PRData) PRResult {
 	if !data.GithubService {
 		noGitHub := []string{
 			TitleStyle.Render("GitHub Integration"),
@@ -22,18 +22,21 @@ func (r *Renderer) PullRequests(data PRData) string {
 			"",
 			"Press 'g' to return to the commit graph.",
 		}
-		return strings.Join(noGitHub, "\n")
+		content := strings.Join(noGitHub, "\n")
+		return PRResult{FullContent: content}
 	}
 
 	if data.Repository == nil || len(data.Repository.PRs) == 0 {
-		return "No pull requests found.\n\nPress 'r' to refresh."
+		content := "No pull requests found.\n\nPress 'r' to refresh."
+		return PRResult{FullContent: content}
 	}
 
-	var lines []string
-	lines = append(lines, TitleStyle.Render("Pull Requests"))
-	lines = append(lines, "")
+	// Build fixed header section
+	var headerLines []string
+	headerLines = append(headerLines, TitleStyle.Render("Pull Requests"))
+	headerLines = append(headerLines, "")
 
-	// Show selected PR details at the TOP (fixed section)
+	// Show selected PR details in the fixed header
 	if data.SelectedPR >= 0 && data.SelectedPR < len(data.Repository.PRs) {
 		pr := data.Repository.PRs[data.SelectedPR]
 		detailsBox := lipgloss.NewStyle().
@@ -49,14 +52,15 @@ func (r *Renderer) PullRequests(data PRData) string {
 				pr.BaseBranch,
 				pr.HeadBranch,
 			))
-		lines = append(lines, detailsBox)
-		lines = append(lines, "")
+		headerLines = append(headerLines, detailsBox)
+		headerLines = append(headerLines, "")
 	}
 
-	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("Press Enter/o to open in browser"))
-	lines = append(lines, "")
+	headerLines = append(headerLines, lipgloss.NewStyle().Foreground(ColorMuted).Render("Press Enter/o to open in browser"))
+	headerLines = append(headerLines, "")
 
-	// PR list (scrollable section)
+	// Build scrollable list section
+	var listLines []string
 	for i, pr := range data.Repository.PRs {
 		prefix := "  "
 		style := CommitStyle
@@ -85,10 +89,18 @@ func (r *Renderer) PullRequests(data PRData) string {
 			pr.Title,
 		)
 
-		lines = append(lines, r.Zone.Mark(ZonePR(i), style.Render(prLine)))
+		listLines = append(listLines, r.Zone.Mark(ZonePR(i), style.Render(prLine)))
 	}
 
-	return strings.Join(lines, "\n")
+	fixedHeader := strings.Join(headerLines, "\n")
+	scrollableList := strings.Join(listLines, "\n")
+	fullContent := fixedHeader + "\n" + scrollableList
+
+	return PRResult{
+		FixedHeader:    fixedHeader,
+		ScrollableList: scrollableList,
+		FullContent:    fullContent,
+	}
 }
 
 // CreatePR renders the create PR view

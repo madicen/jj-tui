@@ -33,11 +33,25 @@ type PRData struct {
 	GithubService bool // whether GitHub is connected
 }
 
+// PRResult contains the split rendering for PRs
+type PRResult struct {
+	FixedHeader    string // Details section that stays fixed
+	ScrollableList string // List that scrolls
+	FullContent    string // Full content for non-split views
+}
+
 // JiraData contains data needed for Jira rendering
 type JiraData struct {
 	Tickets        []JiraTicket
 	SelectedTicket int
 	JiraService    bool // whether Jira is connected
+}
+
+// JiraResult contains the split rendering for Jira
+type JiraResult struct {
+	FixedHeader    string // Details section that stays fixed
+	ScrollableList string // List that scrolls
+	FullContent    string // Full content for non-split views
 }
 
 // JiraTicket represents a Jira ticket for rendering

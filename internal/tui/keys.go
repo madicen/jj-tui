@@ -116,6 +116,10 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "r":
 		m.statusMessage = "Refreshing..."
 		m.loading = true
+		// Refresh repository and PRs (if on PR view or if GitHub is connected)
+		if m.viewMode == ViewPullRequests && m.githubService != nil {
+			return m, tea.Batch(m.loadRepository(), m.loadPRs())
+		}
 		return m, m.loadRepository()
 	case "esc":
 		if m.viewMode != ViewCommitGraph {

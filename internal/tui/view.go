@@ -17,19 +17,70 @@ func (m *Model) View() string {
 
 	// Build the view with zone markers
 	header := m.renderHeader()
-	content := m.renderContent()
 	statusBar := m.renderStatusBar()
 
-	// Put content in viewport for scrolling
-	m.viewport.SetContent(content)
-	viewportContent := m.viewport.View()
+	var v string
 
-	v := lipgloss.JoinVertical(
-		lipgloss.Left,
-		header,
-		viewportContent,
-		statusBar,
-	)
+	// For PR and Jira views, use split rendering with fixed header
+	if m.viewMode == ViewPullRequests || m.viewMode == ViewJira {
+		fixedHeader, scrollableList := m.renderSplitContent()
+
+		if scrollableList != "" {
+			// Render the fixed header with styling
+			styledFixedHeader := ContentStyle.Width(m.width).Render(fixedHeader)
+
+			// Calculate how many lines the fixed header takes
+			fixedHeaderLines := strings.Count(styledFixedHeader, "\n") + 1
+
+			// Temporarily reduce viewport height for the split view
+			originalHeight := m.viewport.Height
+			headerHeight := strings.Count(header, "\n") + 1
+			statusHeight := strings.Count(statusBar, "\n") + 1
+			availableHeight := m.height - headerHeight - statusHeight - fixedHeaderLines
+			if availableHeight < 3 {
+				availableHeight = 3 // Minimum height
+			}
+			m.viewport.Height = availableHeight
+
+			// Put only the scrollable list in the viewport
+			m.viewport.SetContent(scrollableList)
+			viewportContent := m.viewport.View()
+
+			// Restore original viewport height
+			m.viewport.Height = originalHeight
+
+			v = lipgloss.JoinVertical(
+				lipgloss.Left,
+				header,
+				styledFixedHeader,
+				viewportContent,
+				statusBar,
+			)
+		} else {
+			// No split content (e.g., error message or empty state)
+			m.viewport.SetContent(fixedHeader)
+			viewportContent := m.viewport.View()
+
+			v = lipgloss.JoinVertical(
+				lipgloss.Left,
+				header,
+				viewportContent,
+				statusBar,
+			)
+		}
+	} else {
+		// Normal views: put all content in viewport
+		content := m.renderContent()
+		m.viewport.SetContent(content)
+		viewportContent := m.viewport.View()
+
+		v = lipgloss.JoinVertical(
+			lipgloss.Left,
+			header,
+			viewportContent,
+			statusBar,
+		)
+	}
 
 	// CRITICAL: Scan the view to register zone positions
 	return m.zone.Scan(v)
@@ -110,6 +161,25 @@ func (m *Model) renderContent() string {
 	return ContentStyle.Width(m.width).Render(content)
 }
 
+// renderSplitContent returns fixed header and scrollable list for PR/Jira views
+func (m *Model) renderSplitContent() (string, string) {
+	if m.err != nil {
+		return m.renderError(), ""
+	}
+	if m.loading {
+		return "Loading...", ""
+	}
+
+	switch m.viewMode {
+	case ViewPullRequests:
+		return m.renderPullRequestsSplit()
+	case ViewJira:
+		return m.renderJiraSplit()
+	default:
+		return m.renderContent(), ""
+	}
+}
+
 // renderError renders an error message
 func (m *Model) renderError() string {
 	style := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555"))
@@ -181,15 +251,48 @@ func (m *Model) renderCommitGraph() string {
 
 // renderPullRequests renders the PR list view using the view package
 func (m *Model) renderPullRequests() string {
-	return m.renderer().PullRequests(view.PRData{
+	result := m.renderer().PullRequests(view.PRData{
 		Repository:    m.repository,
 		SelectedPR:    m.selectedPR,
 		GithubService: m.githubService != nil,
 	})
+	return result.FullContent
+}
+
+// renderPullRequestsSplit returns split header and list for the PR view
+// Returns (fixedHeader, scrollableList) - if scrollableList is empty, use FullContent in fixedHeader
+func (m *Model) renderPullRequestsSplit() (string, string) {
+	result := m.renderer().PullRequests(view.PRData{
+		Repository:    m.repository,
+		SelectedPR:    m.selectedPR,
+		GithubService: m.githubService != nil,
+	})
+	// If there's no scrollable list (error states), return full content as the "header"
+	if result.ScrollableList == "" {
+		return result.FullContent, ""
+	}
+	return result.FixedHeader, result.ScrollableList
 }
 
 // renderJira renders the Jira tickets view using the view package
 func (m *Model) renderJira() string {
+	result := m.getJiraResult()
+	return result.FullContent
+}
+
+// renderJiraSplit returns split header and list for the Jira view
+// Returns (fixedHeader, scrollableList) - if scrollableList is empty, use FullContent in fixedHeader
+func (m *Model) renderJiraSplit() (string, string) {
+	result := m.getJiraResult()
+	// If there's no scrollable list (error states), return full content as the "header"
+	if result.ScrollableList == "" {
+		return result.FullContent, ""
+	}
+	return result.FixedHeader, result.ScrollableList
+}
+
+// getJiraResult returns the JiraResult for rendering
+func (m *Model) getJiraResult() view.JiraResult {
 	// Convert jira.Ticket to view.JiraTicket
 	tickets := make([]view.JiraTicket, len(m.jiraTickets))
 	for i, t := range m.jiraTickets {

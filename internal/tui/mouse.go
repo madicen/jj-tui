@@ -55,6 +55,10 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 	if m.zone.Get(ZoneActionRefresh) == zoneInfo {
 		m.statusMessage = "Refreshing..."
 		m.loading = true
+		// Refresh repository and PRs (if on PR view or if GitHub is connected)
+		if m.viewMode == ViewPullRequests && m.githubService != nil {
+			return m, tea.Batch(m.loadRepository(), m.loadPRs())
+		}
 		return m, m.loadRepository()
 	}
 	if m.zone.Get(ZoneActionNewCommit) == zoneInfo {
