@@ -11,6 +11,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen-utilities/jj-tui/v2/internal/github"
@@ -66,6 +67,14 @@ type Model struct {
 	err            error
 	loading        bool
 
+	// Viewport for scrollable content
+	viewport      viewport.Model
+	viewportReady bool
+
+	// Rebase mode state
+	selectionMode      SelectionMode
+	rebaseSourceCommit int // Index of commit being rebased
+
 	// Jira state
 	jiraTickets []jira.Ticket
 
@@ -76,6 +85,20 @@ type Model struct {
 	// Settings inputs
 	settingsInputs       []textinput.Model
 	settingsFocusedField int
+
+	// PR creation state
+	prTitleInput   textinput.Model
+	prBodyInput    textarea.Model
+	prBaseBranch   string
+	prHeadBranch   string
+	prFocusedField int // 0=title, 1=body
+	prCommitIndex  int // Index of commit PR is being created from
+
+	// Bookmark creation state
+	bookmarkNameInput   textinput.Model
+	bookmarkCommitIdx   int      // Index of commit to create bookmark on
+	existingBookmarks   []string // List of existing bookmarks
+	selectedBookmarkIdx int      // Index of selected existing bookmark (-1 for new)
 }
 
 // Messages for async operations
@@ -120,6 +143,24 @@ type descriptionSavedMsg struct {
 	commitID string
 }
 
+// prCreatedMsg is sent when a PR is successfully created
+type prCreatedMsg struct {
+	pr *models.GitHubPR
+}
+
+// branchPushedMsg is sent when a branch is pushed to remote
+type branchPushedMsg struct {
+	branch     string
+	pushOutput string
+}
+
+// bookmarkCreatedOnCommitMsg is sent when a bookmark is created or moved on a commit
+type bookmarkCreatedOnCommitMsg struct {
+	bookmarkName string
+	commitID     string
+	wasMoved     bool // true if bookmark was moved, false if newly created
+}
+
 // silentRepositoryLoadedMsg is for background refreshes that don't update the status
 type silentRepositoryLoadedMsg struct {
 	repository *models.Repository
@@ -146,7 +187,7 @@ func New(ctx context.Context) *Model {
 	// GitHub Token
 	settingsInputs[0] = textinput.New()
 	settingsInputs[0].Placeholder = "GitHub Personal Access Token"
-	settingsInputs[0].CharLimit = 100
+	settingsInputs[0].CharLimit = 256 // GitHub PATs can be long
 	settingsInputs[0].Width = 50
 	settingsInputs[0].EchoMode = textinput.EchoPassword
 	settingsInputs[0].EchoCharacter = '•'
@@ -169,21 +210,47 @@ func New(ctx context.Context) *Model {
 	// Jira Token
 	settingsInputs[3] = textinput.New()
 	settingsInputs[3].Placeholder = "Jira API Token"
-	settingsInputs[3].CharLimit = 100
+	settingsInputs[3].CharLimit = 256 // Atlassian tokens can be 150+ chars
 	settingsInputs[3].Width = 50
 	settingsInputs[3].EchoMode = textinput.EchoPassword
 	settingsInputs[3].EchoCharacter = '•'
 	settingsInputs[3].SetValue(os.Getenv("JIRA_TOKEN"))
 
+	// PR title input
+	prTitle := textinput.New()
+	prTitle.Placeholder = "Pull request title"
+	prTitle.CharLimit = 200
+	prTitle.Width = 60
+
+	// PR body textarea
+	prBody := textarea.New()
+	prBody.Placeholder = "Describe your changes..."
+	prBody.ShowLineNumbers = false
+	prBody.SetWidth(60)
+	prBody.SetHeight(8)
+
+	// Bookmark name input
+	bookmarkName := textinput.New()
+	bookmarkName.Placeholder = "bookmark-name"
+	bookmarkName.CharLimit = 100
+	bookmarkName.Width = 50
+
 	return &Model{
-		ctx:              ctx,
-		zone:             zone.New(),
-		viewMode:         ViewCommitGraph,
-		selectedCommit:   -1,
-		statusMessage:    "Initializing...",
-		loading:          true,
-		descriptionInput: ta,
-		settingsInputs:   settingsInputs,
+		ctx:                 ctx,
+		zone:                zone.New(),
+		viewMode:            ViewCommitGraph,
+		selectedCommit:      -1,
+		statusMessage:       "Initializing...",
+		loading:             true,
+		descriptionInput:    ta,
+		settingsInputs:      settingsInputs,
+		prTitleInput:        prTitle,
+		prBodyInput:         prBody,
+		prBaseBranch:        "main",
+		prCommitIndex:       -1,
+		bookmarkNameInput:   bookmarkName,
+		bookmarkCommitIdx:   -1,
+		selectedBookmarkIdx: -1,
 	}
 }
 
@@ -215,12 +282,33 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+
+		// Initialize or resize viewport
+		// Header is 1 line, status bar is 1 line
+		headerHeight := 1
+		statusHeight := 1
+		contentHeight := m.height - headerHeight - statusHeight
+
+		if !m.viewportReady {
+			m.viewport = viewport.New(m.width, contentHeight)
+			m.viewport.MouseWheelEnabled = true
+			m.viewportReady = true
+		} else {
+			m.viewport.Width = m.width
+			m.viewport.Height = contentHeight
+		}
 		return m, nil
 
 	case tea.KeyMsg:
 		return m.handleKeyMsg(msg)
 
 	case tea.MouseMsg:
+		// Handle mouse wheel scrolling
+		if msg.Action == tea.MouseActionPress && (msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown) {
+			var cmd tea.Cmd
+			m.viewport, cmd = m.viewport.Update(msg)
+			return m, cmd
+		}
 		// Use AnyInBoundsAndUpdate to detect which zone was clicked
 		if msg.Action == tea.MouseActionRelease {
 			return m.zone.AnyInBoundsAndUpdate(m, msg)
@@ -231,7 +319,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleZoneClick(msg.Zone)
 
 	case repositoryLoadedMsg:
+		// Preserve PRs from previous repository
+		var oldPRs []models.GitHubPR
+		if m.repository != nil {
+			oldPRs = m.repository.PRs
+		}
 		m.repository = msg.repository
+		m.repository.PRs = oldPRs // Restore PRs
 		m.loading = false
 		m.err = nil
 		if m.jjService == nil {
@@ -247,7 +341,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.tickCmd() // Continue auto-refresh timer
 
 	case editCompletedMsg:
+		// Preserve PRs from previous repository
+		var oldPRs []models.GitHubPR
+		if m.repository != nil {
+			oldPRs = m.repository.PRs
+		}
 		m.repository = msg.repository
+		m.repository.PRs = oldPRs // Restore PRs
 		m.loading = false
 		m.err = nil
 		// Find and select the working copy commit
@@ -264,10 +364,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Background refresh - update data without changing status
 		if msg.repository != nil {
 			oldCount := 0
+			var oldPRs []models.GitHubPR
 			if m.repository != nil {
 				oldCount = len(m.repository.Graph.Commits)
+				oldPRs = m.repository.PRs // Preserve PRs from previous load
 			}
 			m.repository = msg.repository
+			m.repository.PRs = oldPRs // Restore PRs
 			m.err = nil
 			// Only update status if commit count changed
 			newCount := len(msg.repository.Graph.Commits)
@@ -313,8 +416,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case prsLoadedMsg:
 		if m.repository != nil {
 			m.repository.PRs = msg.prs
+			m.statusMessage = fmt.Sprintf("Loaded %d PRs", len(msg.prs))
+		} else {
+			m.statusMessage = fmt.Sprintf("Loaded %d PRs (warning: repository is nil)", len(msg.prs))
 		}
-		m.statusMessage = fmt.Sprintf("Loaded %d PRs", len(msg.prs))
 		return m, nil
 
 	case jiraTicketsLoadedMsg:
@@ -349,9 +454,30 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Reinitialize services with new credentials
 		return m, m.initializeServices()
 
+	case prCreatedMsg:
+		m.viewMode = ViewCommitGraph
+		m.statusMessage = fmt.Sprintf("PR #%d created: %s", msg.pr.Number, msg.pr.Title)
+		// Open the PR in browser
+		return m, openURL(msg.pr.URL)
+
+	case branchPushedMsg:
+		m.statusMessage = fmt.Sprintf("Pushed %s to remote", msg.branch)
+		// Reload repository and PRs to show updated state
+		return m, tea.Batch(m.loadRepository(), m.loadPRs())
+
+	case bookmarkCreatedOnCommitMsg:
+		m.viewMode = ViewCommitGraph
+		if msg.wasMoved {
+			m.statusMessage = fmt.Sprintf("Bookmark '%s' moved", msg.bookmarkName)
+		} else {
+			m.statusMessage = fmt.Sprintf("Bookmark '%s' created", msg.bookmarkName)
+		}
+		// Reload repository AND PRs to update action buttons
+		return m, tea.Batch(m.loadRepository(), m.loadPRs())
+
 	case tickMsg:
-		// Auto-refresh: reload repository data silently (but not while editing)
-		if !m.loading && m.jjService != nil && m.viewMode != ViewEditDescription {
+		// Auto-refresh: reload repository data silently (but not while editing, creating PR, or creating bookmark)
+		if !m.loading && m.jjService != nil && m.viewMode != ViewEditDescription && m.viewMode != ViewCreatePR && m.viewMode != ViewCreateBookmark {
 			return m, tea.Batch(m.loadRepositorySilent(), m.tickCmd())
 		}
 		return m, m.tickCmd()
@@ -373,7 +499,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.descriptionInput.SetValue(description)
 			m.descriptionInput.Focus()
-			m.statusMessage = fmt.Sprintf("Editing description (Ctrl+S to save, Esc to cancel)")
+			m.statusMessage = "Editing description (Ctrl+S to save, Esc to cancel)"
 		}
 		return m, nil
 

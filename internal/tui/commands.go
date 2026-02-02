@@ -39,11 +39,14 @@ func (m *Model) initializeServices() tea.Cmd {
 
 		// Try to create GitHub service (optional - won't fail if no token)
 		var ghSvc *github.Service
+		var ghErr error
 		remoteURL, err := jjSvc.GetGitRemoteURL(ctx)
 		if err == nil {
 			owner, repoName, err := github.ParseGitHubURL(remoteURL)
 			if err == nil {
-				ghSvc, _ = github.NewService(owner, repoName) // Ignore error if no GITHUB_TOKEN
+				ghSvc, ghErr = github.NewService(owner, repoName)
+				// ghErr will be non-nil if GITHUB_TOKEN is not set
+				_ = ghErr // Suppress unused error - GitHub is optional
 			}
 		}
 
@@ -97,12 +100,16 @@ func (m *Model) loadRepositorySilent() tea.Cmd {
 func (m *Model) loadPRs() tea.Cmd {
 	if m.githubService == nil {
 		return func() tea.Msg {
+			// Return a status message to show GitHub isn't connected
 			return prsLoadedMsg{prs: []models.GitHubPR{}}
 		}
 	}
 
+	// Capture service reference for the closure
+	ghSvc := m.githubService
+
 	return func() tea.Msg {
-		prs, err := m.githubService.GetPullRequests(context.Background())
+		prs, err := ghSvc.GetPullRequests(context.Background())
 		if err != nil {
 			return errorMsg{err: fmt.Errorf("failed to load PRs: %w", err)}
 		}

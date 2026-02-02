@@ -7,8 +7,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Jira renders the Jira tickets view
-func (r *Renderer) Jira(data JiraData) string {
+// Jira renders the Jira tickets view with split header/list for scrolling
+func (r *Renderer) Jira(data JiraData) JiraResult {
 	if !data.JiraService {
 		noJira := []string{
 			TitleStyle.Render("Jira Integration"),
@@ -25,19 +25,60 @@ func (r *Renderer) Jira(data JiraData) string {
 			"",
 			"Press 'g' to return to the commit graph.",
 		}
-		return strings.Join(noJira, "\n")
+		content := strings.Join(noJira, "\n")
+		return JiraResult{FullContent: content}
 	}
 
 	if len(data.Tickets) == 0 {
-		return "No assigned tickets found.\n\nPress 'r' to refresh."
+		content := "No assigned tickets found.\n\nPress 'r' to refresh."
+		return JiraResult{FullContent: content}
 	}
 
-	var lines []string
-	lines = append(lines, TitleStyle.Render("Assigned Jira Tickets"))
-	lines = append(lines, "")
-	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("Press Enter to create a branch from the selected ticket"))
-	lines = append(lines, "")
+	// Build fixed header section
+	var headerLines []string
+	headerLines = append(headerLines, TitleStyle.Render("Assigned Jira Tickets"))
+	headerLines = append(headerLines, "")
 
+	// Show selected ticket details in the fixed header
+	if data.SelectedTicket >= 0 && data.SelectedTicket < len(data.Tickets) {
+		ticket := data.Tickets[data.SelectedTicket]
+
+		// Build details content
+		var detailLines []string
+		detailLines = append(detailLines, fmt.Sprintf("%s %s",
+			lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render(ticket.Key),
+			ticket.Summary,
+		))
+		detailLines = append(detailLines, fmt.Sprintf("Type: %s  |  Priority: %s  |  Status: %s",
+			ticket.Type, ticket.Priority, ticket.Status,
+		))
+		if ticket.Description != "" {
+			// Truncate description if too long
+			desc := ticket.Description
+			if len(desc) > 150 {
+				desc = desc[:150] + "..."
+			}
+			detailLines = append(detailLines, lipgloss.NewStyle().Foreground(ColorMuted).Render(desc))
+		}
+
+		detailsBox := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(ColorPrimary).
+			Padding(0, 1).
+			Render(strings.Join(detailLines, "\n"))
+		headerLines = append(headerLines, detailsBox)
+		headerLines = append(headerLines, "")
+
+		// Action button in header
+		headerLines = append(headerLines, r.Zone.Mark(ZoneJiraCreateBranch, ButtonStyle.Render("Create Branch (Enter)")))
+		headerLines = append(headerLines, "")
+	}
+
+	headerLines = append(headerLines, lipgloss.NewStyle().Foreground(ColorMuted).Render("Select a ticket to create a branch:"))
+	headerLines = append(headerLines, "")
+
+	// Build scrollable list section
+	var listLines []string
 	for i, ticket := range data.Tickets {
 		prefix := "  "
 		style := CommitStyle
@@ -66,31 +107,17 @@ func (r *Renderer) Jira(data JiraData) string {
 			ticket.Summary,
 		)
 
-		lines = append(lines, r.Zone.Mark(ZoneJiraTicket(i), style.Render(ticketLine)))
+		listLines = append(listLines, r.Zone.Mark(ZoneJiraTicket(i), style.Render(ticketLine)))
 	}
 
-	// Show selected ticket details
-	if data.SelectedTicket >= 0 && data.SelectedTicket < len(data.Tickets) {
-		ticket := data.Tickets[data.SelectedTicket]
-		lines = append(lines, "")
-		lines = append(lines, lipgloss.NewStyle().Bold(true).Render("Details:"))
-		lines = append(lines, fmt.Sprintf("  Type: %s", ticket.Type))
-		lines = append(lines, fmt.Sprintf("  Priority: %s", ticket.Priority))
-		if ticket.Description != "" {
-			// Truncate description if too long
-			desc := ticket.Description
-			if len(desc) > 200 {
-				desc = desc[:200] + "..."
-			}
-			lines = append(lines, fmt.Sprintf("  Description: %s", desc))
-		}
+	fixedHeader := strings.Join(headerLines, "\n")
+	scrollableList := strings.Join(listLines, "\n")
+	fullContent := fixedHeader + "\n" + scrollableList
 
-		// Show action button
-		lines = append(lines, "")
-		lines = append(lines, "Actions:")
-		lines = append(lines, r.Zone.Mark(ZoneJiraCreateBranch, ButtonStyle.Render("Create Branch (Enter)")))
+	return JiraResult{
+		FixedHeader:    fixedHeader,
+		ScrollableList: scrollableList,
+		FullContent:    fullContent,
 	}
-
-	return strings.Join(lines, "\n")
 }
 

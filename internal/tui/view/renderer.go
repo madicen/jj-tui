@@ -18,8 +18,12 @@ func New(z *zone.Manager) *Renderer {
 
 // GraphData contains data needed for commit graph rendering
 type GraphData struct {
-	Repository     *models.Repository
-	SelectedCommit int
+	Repository         *models.Repository
+	SelectedCommit     int
+	InRebaseMode       bool            // True when selecting rebase destination
+	RebaseSourceCommit int             // Index of commit being rebased
+	OpenPRBranches     map[string]bool // Map of branch names that have open PRs
+	CommitPRBranch     map[int]string  // Maps commit index to PR branch it can push to (including descendants)
 }
 
 // PRData contains data needed for PR rendering
@@ -29,11 +33,25 @@ type PRData struct {
 	GithubService bool // whether GitHub is connected
 }
 
+// PRResult contains the split rendering for PRs
+type PRResult struct {
+	FixedHeader    string // Details section that stays fixed
+	ScrollableList string // List that scrolls
+	FullContent    string // Full content for non-split views
+}
+
 // JiraData contains data needed for Jira rendering
 type JiraData struct {
 	Tickets        []JiraTicket
 	SelectedTicket int
 	JiraService    bool // whether Jira is connected
+}
+
+// JiraResult contains the split rendering for Jira
+type JiraResult struct {
+	FixedHeader    string // Details section that stays fixed
+	ScrollableList string // List that scrolls
+	FullContent    string // Full content for non-split views
 }
 
 // JiraTicket represents a Jira ticket for rendering
@@ -71,4 +89,18 @@ type CreatePRData struct {
 	Repository     *models.Repository
 	SelectedCommit int
 	GithubService  bool
+	TitleInput     string
+	BodyInput      string
+	HeadBranch     string
+	BaseBranch     string
+	FocusedField   int // 0=title, 1=body
+}
+
+// BookmarkData contains data needed for bookmark creation view
+type BookmarkData struct {
+	Repository        *models.Repository
+	CommitIndex       int
+	NameInput         string
+	ExistingBookmarks []string // List of existing bookmarks that can be moved
+	SelectedBookmark  int      // Index of selected existing bookmark (-1 for new)
 }

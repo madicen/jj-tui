@@ -29,7 +29,16 @@ const (
 	ActionCheckout ActionType = "checkout"
 	ActionEdit     ActionType = "edit"
 	ActionSquash   ActionType = "squash"
+	ActionRebase   ActionType = "rebase"
 	ActionHelp     ActionType = "help"
+)
+
+// SelectionMode indicates what the user is selecting commits for
+type SelectionMode int
+
+const (
+	SelectionNormal SelectionMode = iota // Normal selection
+	SelectionRebaseDestination           // Selecting destination for rebase
 )
 
 // ViewMode represents different views in the TUI
@@ -43,6 +52,7 @@ const (
 	ViewHelp
 	ViewCreatePR
 	ViewEditDescription
+	ViewCreateBookmark
 )
 
 func (v ViewMode) String() string {
@@ -61,6 +71,8 @@ func (v ViewMode) String() string {
 		return "create_pr"
 	case ViewEditDescription:
 		return "edit_description"
+	case ViewCreateBookmark:
+		return "create_bookmark"
 	default:
 		return "unknown"
 	}

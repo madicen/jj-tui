@@ -45,18 +45,31 @@ func NewService(owner, repo string) (*Service, error) {
 
 // CreatePullRequest creates a new pull request
 func (s *Service) CreatePullRequest(ctx context.Context, req *models.CreatePRRequest) (*models.GitHubPR, error) {
+	// For same-repo PRs, head can be just the branch name
+	// But some GitHub configurations require owner:branch format
+	headRef := req.HeadBranch
+	
 	newPR := &github.NewPullRequest{
 		Title:               github.String(req.Title),
-		Head:                github.String(req.HeadBranch),
+		Head:                github.String(headRef),
 		Base:                github.String(req.BaseBranch),
 		Body:                github.String(req.Body),
 		MaintainerCanModify: github.Bool(true),
 		Draft:               github.Bool(req.Draft),
 	}
 
-	pr, _, err := s.client.PullRequests.Create(ctx, s.owner, s.repo, newPR)
+	pr, resp, err := s.client.PullRequests.Create(ctx, s.owner, s.repo, newPR)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create pull request: %w", err)
+		// If we get a "not all refs" error, try with owner:branch format
+		if resp != nil && resp.StatusCode == 422 && strings.Contains(err.Error(), "refs") {
+			newPR.Head = github.String(s.owner + ":" + req.HeadBranch)
+			pr, _, err = s.client.PullRequests.Create(ctx, s.owner, s.repo, newPR)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create pull request (tried both formats): %w", err)
+			}
+		} else {
+			return nil, fmt.Errorf("failed to create pull request: %w", err)
+		}
 	}
 
 	return &models.GitHubPR{
@@ -179,6 +192,19 @@ func (s *Service) getPullRequestCommits(ctx context.Context, prNumber int) ([]st
 	}
 
 	return commitIDs, nil
+}
+
+// BranchExists checks if a branch exists on GitHub
+func (s *Service) BranchExists(ctx context.Context, branch string) (bool, error) {
+	_, resp, err := s.client.Repositories.GetBranch(ctx, s.owner, s.repo, branch, 0)
+	if err != nil {
+		if resp != nil && resp.StatusCode == 404 {
+			return false, nil
+		}
+		// Log more details for debugging
+		return false, fmt.Errorf("branch check failed for %s/%s branch %s: %w", s.owner, s.repo, branch, err)
+	}
+	return true, nil
 }
 
 // ParseGitHubURL extracts owner and repo from a GitHub URL

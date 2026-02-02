@@ -8,6 +8,28 @@ import (
 
 // handleKeyMsg handles keyboard input
 func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Handle error state first - always allow quit and retry
+	if m.err != nil {
+		switch msg.String() {
+		case "q", "ctrl+c":
+			return m, tea.Quit
+		case "r":
+			m.err = nil
+			m.viewMode = ViewCommitGraph
+			m.statusMessage = "Refreshing..."
+			m.loading = true
+			return m, m.loadRepository()
+		case "esc":
+			// Clear error and go back to graph
+			m.err = nil
+			m.viewMode = ViewCommitGraph
+			m.statusMessage = "Error dismissed"
+			return m, nil
+		}
+		// Ignore other keys when in error state
+		return m, nil
+	}
+
 	// Special handling for edit description view
 	if m.viewMode == ViewEditDescription {
 		return m.handleDescriptionEditKeyMsg(msg)
@@ -16,6 +38,29 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Special handling for settings view
 	if m.viewMode == ViewSettings {
 		return m.handleSettingsKeyMsg(msg)
+	}
+
+	// Special handling for PR creation view
+	if m.viewMode == ViewCreatePR {
+		return m.handleCreatePRKeyMsg(msg)
+	}
+
+	// Special handling for bookmark creation view
+	if m.viewMode == ViewCreateBookmark {
+		return m.handleCreateBookmarkKeyMsg(msg)
+	}
+
+	// Special handling for rebase mode
+	if m.selectionMode == SelectionRebaseDestination {
+		return m.handleRebaseModeKeyMsg(msg)
+	}
+
+	// Handle scroll keys - pass to viewport
+	switch msg.String() {
+	case "pgup", "pgdown", "ctrl+u", "ctrl+d", "home", "end", "ctrl+f", "ctrl+b":
+		var cmd tea.Cmd
+		m.viewport, cmd = m.viewport.Update(msg)
+		return m, cmd
 	}
 
 	switch msg.String() {
@@ -29,6 +74,8 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.githubService != nil {
 			m.statusMessage = "Loading PRs..."
 			return m, m.loadPRs()
+		} else {
+			m.statusMessage = "GitHub service not initialized"
 		}
 	case "i": // 'i' for issues (Jira) since 'j' is used for down navigation
 		m.viewMode = ViewJira
@@ -69,6 +116,10 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "r":
 		m.statusMessage = "Refreshing..."
 		m.loading = true
+		// Refresh repository and PRs (if on PR view or if GitHub is connected)
+		if m.viewMode == ViewPullRequests && m.githubService != nil {
+			return m, tea.Batch(m.loadRepository(), m.loadPRs())
+		}
 		return m, m.loadRepository()
 	case "esc":
 		if m.viewMode != ViewCommitGraph {
@@ -155,6 +206,182 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, m.abandonCommit()
 		}
+	case "b":
+		// Start rebase mode
+		if m.viewMode == ViewCommitGraph && m.selectedCommit >= 0 && m.jjService != nil && m.repository != nil {
+			commit := m.repository.Graph.Commits[m.selectedCommit]
+			if commit.Immutable {
+				m.statusMessage = "Cannot rebase: commit is immutable"
+				return m, nil
+			}
+			m.startRebaseMode()
+			return m, nil
+		}
+	case "c":
+		// Create PR from selected commit
+		if m.viewMode == ViewCommitGraph && m.selectedCommit >= 0 && m.jjService != nil && m.githubService != nil && m.repository != nil {
+			m.startCreatePR()
+			return m, nil
+		} else if m.githubService == nil {
+			m.statusMessage = "GitHub not connected. Configure in Settings (,)"
+			return m, nil
+		}
+	case "m":
+		// Create bookmark on selected commit
+		if m.viewMode == ViewCommitGraph && m.selectedCommit >= 0 && m.jjService != nil && m.repository != nil {
+			commit := m.repository.Graph.Commits[m.selectedCommit]
+			if commit.Immutable {
+				m.statusMessage = "Cannot create bookmark: commit is immutable"
+				return m, nil
+			}
+			m.startCreateBookmark()
+			return m, nil
+		}
+	case "u":
+		// Push updates to PR (for commits with PR branches or their descendants)
+		if m.viewMode == ViewCommitGraph && m.selectedCommit >= 0 && m.jjService != nil && m.repository != nil {
+			// Find the PR branch for this commit (could be on this commit or an ancestor)
+			prBranch := m.findPRBranchForCommit(m.selectedCommit)
+			if prBranch == "" {
+				m.statusMessage = "No open PR found for this commit or its ancestors"
+				return m, nil
+			}
+			commit := m.repository.Graph.Commits[m.selectedCommit]
+			// Check if we need to move the bookmark (commit doesn't have it directly)
+			needsMoveBookmark := true
+			for _, branch := range commit.Branches {
+				if branch == prBranch {
+					needsMoveBookmark = false
+					break
+				}
+			}
+			return m, m.pushToPR(prBranch, commit.ChangeID, needsMoveBookmark)
+		}
+	}
+	return m, nil
+}
+
+// handleCreateBookmarkKeyMsg handles keyboard input in bookmark creation mode
+func (m *Model) handleCreateBookmarkKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		// Cancel bookmark creation
+		m.viewMode = ViewCommitGraph
+		m.statusMessage = "Bookmark creation cancelled"
+		return m, nil
+	case "enter", "ctrl+s":
+		// Submit bookmark
+		if m.jjService != nil {
+			return m, m.submitBookmark()
+		}
+		return m, nil
+	case "j", "down":
+		// Navigate down in existing bookmarks list
+		if len(m.existingBookmarks) > 0 {
+			if m.selectedBookmarkIdx < len(m.existingBookmarks)-1 {
+				m.selectedBookmarkIdx++
+				m.bookmarkNameInput.Blur()
+			}
+		}
+		return m, nil
+	case "k", "up":
+		// Navigate up in existing bookmarks list (or to new bookmark input)
+		if m.selectedBookmarkIdx > -1 {
+			m.selectedBookmarkIdx--
+			if m.selectedBookmarkIdx == -1 {
+				m.bookmarkNameInput.Focus()
+			}
+		}
+		return m, nil
+	case "tab":
+		// Toggle between new bookmark input and existing bookmarks list
+		if m.selectedBookmarkIdx == -1 && len(m.existingBookmarks) > 0 {
+			m.selectedBookmarkIdx = 0
+			m.bookmarkNameInput.Blur()
+		} else {
+			m.selectedBookmarkIdx = -1
+			m.bookmarkNameInput.Focus()
+		}
+		return m, nil
+	}
+
+	// Only pass keys to input if we're in "new bookmark" mode
+	if m.selectedBookmarkIdx == -1 {
+		var cmd tea.Cmd
+		m.bookmarkNameInput, cmd = m.bookmarkNameInput.Update(msg)
+		return m, cmd
+	}
+
+	return m, nil
+}
+
+// handleCreatePRKeyMsg handles keyboard input in PR creation mode
+func (m *Model) handleCreatePRKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		// Cancel PR creation
+		m.viewMode = ViewCommitGraph
+		m.statusMessage = "PR creation cancelled"
+		return m, nil
+	case "ctrl+s":
+		// Submit PR
+		if m.githubService != nil && m.jjService != nil {
+			return m, m.submitPR()
+		}
+		return m, nil
+	case "tab", "down":
+		// Move to next field
+		if m.prFocusedField == 0 {
+			m.prFocusedField = 1
+			m.prTitleInput.Blur()
+			m.prBodyInput.Focus()
+		}
+		return m, nil
+	case "shift+tab", "up":
+		// Move to previous field
+		if m.prFocusedField == 1 {
+			m.prFocusedField = 0
+			m.prBodyInput.Blur()
+			m.prTitleInput.Focus()
+		}
+		return m, nil
+	}
+
+	// Pass other keys to the focused input
+	var cmd tea.Cmd
+	if m.prFocusedField == 0 {
+		m.prTitleInput, cmd = m.prTitleInput.Update(msg)
+	} else {
+		m.prBodyInput, cmd = m.prBodyInput.Update(msg)
+	}
+	return m, cmd
+}
+
+// handleRebaseModeKeyMsg handles keyboard input during rebase destination selection
+func (m *Model) handleRebaseModeKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc", "q":
+		// Cancel rebase mode
+		m.cancelRebaseMode()
+		return m, nil
+	case "j", "down":
+		// Move down in commit list
+		if m.repository != nil && m.selectedCommit < len(m.repository.Graph.Commits)-1 {
+			m.selectedCommit++
+		}
+		return m, nil
+	case "k", "up":
+		// Move up in commit list
+		if m.selectedCommit > 0 {
+			m.selectedCommit--
+		}
+		return m, nil
+	case "enter":
+		// Confirm rebase destination
+		if m.selectedCommit >= 0 && m.selectedCommit < len(m.repository.Graph.Commits) {
+			return m, m.performRebase(m.selectedCommit)
+		}
+		return m, nil
 	}
 	return m, nil
 }

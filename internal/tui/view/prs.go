@@ -7,8 +7,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// PullRequests renders the PR list view
-func (r *Renderer) PullRequests(data PRData) string {
+// PullRequests renders the PR list view with split header/list for scrolling
+func (r *Renderer) PullRequests(data PRData) PRResult {
 	if !data.GithubService {
 		noGitHub := []string{
 			TitleStyle.Render("GitHub Integration"),
@@ -22,17 +22,45 @@ func (r *Renderer) PullRequests(data PRData) string {
 			"",
 			"Press 'g' to return to the commit graph.",
 		}
-		return strings.Join(noGitHub, "\n")
+		content := strings.Join(noGitHub, "\n")
+		return PRResult{FullContent: content}
 	}
 
 	if data.Repository == nil || len(data.Repository.PRs) == 0 {
-		return "No pull requests found.\n\nPress 'r' to refresh."
+		content := "No pull requests found.\n\nPress 'r' to refresh."
+		return PRResult{FullContent: content}
 	}
 
-	var lines []string
-	lines = append(lines, TitleStyle.Render("Pull Requests"))
-	lines = append(lines, "")
+	// Build fixed header section
+	var headerLines []string
+	headerLines = append(headerLines, TitleStyle.Render("Pull Requests"))
+	headerLines = append(headerLines, "")
 
+	// Show selected PR details in the fixed header
+	if data.SelectedPR >= 0 && data.SelectedPR < len(data.Repository.PRs) {
+		pr := data.Repository.PRs[data.SelectedPR]
+		detailsBox := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(ColorPrimary).
+			Padding(0, 1).
+			Render(fmt.Sprintf(
+				"%s #%d: %s\n%s\nBase: %s ← Head: %s",
+				lipgloss.NewStyle().Bold(true).Render("Selected:"),
+				pr.Number,
+				pr.Title,
+				lipgloss.NewStyle().Foreground(ColorMuted).Render(pr.URL),
+				pr.BaseBranch,
+				pr.HeadBranch,
+			))
+		headerLines = append(headerLines, detailsBox)
+		headerLines = append(headerLines, "")
+	}
+
+	headerLines = append(headerLines, lipgloss.NewStyle().Foreground(ColorMuted).Render("Press Enter/o to open in browser"))
+	headerLines = append(headerLines, "")
+
+	// Build scrollable list section
+	var listLines []string
 	for i, pr := range data.Repository.PRs {
 		prefix := "  "
 		style := CommitStyle
@@ -61,19 +89,18 @@ func (r *Renderer) PullRequests(data PRData) string {
 			pr.Title,
 		)
 
-		lines = append(lines, r.Zone.Mark(ZonePR(i), style.Render(prLine)))
+		listLines = append(listLines, r.Zone.Mark(ZonePR(i), style.Render(prLine)))
 	}
 
-	// Show selected PR details
-	if data.SelectedPR >= 0 && data.SelectedPR < len(data.Repository.PRs) {
-		pr := data.Repository.PRs[data.SelectedPR]
-		lines = append(lines, "")
-		lines = append(lines, lipgloss.NewStyle().Bold(true).Render("Details:"))
-		lines = append(lines, fmt.Sprintf("  Base: %s ← Head: %s", pr.BaseBranch, pr.HeadBranch))
-		lines = append(lines, fmt.Sprintf("  URL: %s", pr.URL))
-	}
+	fixedHeader := strings.Join(headerLines, "\n")
+	scrollableList := strings.Join(listLines, "\n")
+	fullContent := fixedHeader + "\n" + scrollableList
 
-	return strings.Join(lines, "\n")
+	return PRResult{
+		FixedHeader:    fixedHeader,
+		ScrollableList: scrollableList,
+		FullContent:    fullContent,
+	}
 }
 
 // CreatePR renders the create PR view
@@ -84,24 +111,13 @@ func (r *Renderer) CreatePR(data CreatePRData) string {
 
 	if !data.GithubService {
 		lines = append(lines, "GitHub is not connected.")
-		lines = append(lines, "Please set GITHUB_TOKEN environment variable.")
+		lines = append(lines, "Please configure GitHub in Settings (press ',').")
 		lines = append(lines, "")
 		lines = append(lines, "Press Esc to go back.")
 		return strings.Join(lines, "\n")
 	}
 
-	// Find the current bookmark name for the selected commit
-	var branchName string
-	var commitSummary string
-	if data.Repository != nil && data.SelectedCommit >= 0 && data.SelectedCommit < len(data.Repository.Graph.Commits) {
-		commit := data.Repository.Graph.Commits[data.SelectedCommit]
-		commitSummary = commit.Summary
-		if len(commit.Branches) > 0 {
-			branchName = commit.Branches[0]
-		}
-	}
-
-	if branchName == "" {
+	if data.HeadBranch == "" {
 		lines = append(lines, "No bookmark found on the selected commit.")
 		lines = append(lines, "Create a bookmark first using jj bookmark create.")
 		lines = append(lines, "")
@@ -111,19 +127,40 @@ func (r *Renderer) CreatePR(data CreatePRData) string {
 		return strings.Join(lines, "\n")
 	}
 
-	lines = append(lines, fmt.Sprintf("Branch: %s", lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render(branchName)))
+	// Show branch info
+	lines = append(lines, fmt.Sprintf("Head: %s → Base: %s",
+		lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render(data.HeadBranch),
+		lipgloss.NewStyle().Bold(true).Foreground(ColorSecondary).Render(data.BaseBranch),
+	))
+	lines = append(lines, "")
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("Tab to switch fields, Ctrl+S to submit, Esc to cancel"))
+	lines = append(lines, "")
 
-	// Use branch name as default PR title
-	prTitle := branchName
-	if commitSummary != "" {
-		prTitle = commitSummary
+	// Title field
+	titleLabel := "Title:"
+	titleStyle := lipgloss.NewStyle()
+	if data.FocusedField == 0 {
+		titleStyle = titleStyle.Bold(true).Foreground(ColorPrimary)
 	}
-	lines = append(lines, fmt.Sprintf("Title: %s", prTitle))
-	lines = append(lines, fmt.Sprintf("Base: %s", "main"))
+	lines = append(lines, titleStyle.Render(titleLabel))
+	lines = append(lines, r.Zone.Mark(ZonePRTitle, "  "+data.TitleInput))
 	lines = append(lines, "")
-	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("(PR creation form coming soon)"))
+
+	// Body field
+	bodyLabel := "Description:"
+	bodyStyle := lipgloss.NewStyle()
+	if data.FocusedField == 1 {
+		bodyStyle = bodyStyle.Bold(true).Foreground(ColorPrimary)
+	}
+	lines = append(lines, bodyStyle.Render(bodyLabel))
+	lines = append(lines, r.Zone.Mark(ZonePRBody, "  "+data.BodyInput))
 	lines = append(lines, "")
-	lines = append(lines, "Press Esc to go back.")
+	lines = append(lines, "")
+
+	// Action buttons
+	submitButton := r.Zone.Mark(ZonePRSubmit, ButtonStyle.Render("Create PR (Ctrl+S)"))
+	cancelButton := r.Zone.Mark(ZonePRCancel, ButtonStyle.Render("Cancel (Esc)"))
+	lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Left, submitButton, " ", cancelButton))
 
 	return strings.Join(lines, "\n")
 }

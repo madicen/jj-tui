@@ -13,6 +13,7 @@ func (r *Renderer) Settings(data SettingsData) string {
 	lines = append(lines, "")
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("Configure your API credentials. Press Tab/↓ to move between fields."))
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("Press Ctrl+S or Enter on last field to save, Esc to cancel."))
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Italic(true).Render("Settings are saved to ~/.config/jj-tui/config.json"))
 	lines = append(lines, "")
 
 	// GitHub section
