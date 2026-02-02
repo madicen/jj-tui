@@ -16,8 +16,12 @@ func (r *Renderer) Help() string {
 	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("Enter/e"), HelpDescStyle.Render("Edit selected commit (jj edit)")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("d"), HelpDescStyle.Render("Edit commit description")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("s"), HelpDescStyle.Render("Squash commit into parent")))
+	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("b"), HelpDescStyle.Render("Rebase commit (select destination)")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("a"), HelpDescStyle.Render("Abandon commit")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("n"), HelpDescStyle.Render("Create new commit (jj new)")))
+	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("m"), HelpDescStyle.Render("Create bookmark on commit")))
+	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("c"), HelpDescStyle.Render("Create PR from commit (needs bookmark)")))
+	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("u"), HelpDescStyle.Render("Push updates to PR (update existing PR)")))
 
 	lines = append(lines, "")
 	lines = append(lines, TitleStyle.Render("Pull Request Shortcuts"))
@@ -56,6 +60,14 @@ func (r *Renderer) Help() string {
 	lines = append(lines, "  ● green   Open PR")
 	lines = append(lines, "  ● red     Closed PR")
 	lines = append(lines, "  ● purple  Merged PR")
+
+	lines = append(lines, "")
+	lines = append(lines, TitleStyle.Render("Scrolling"))
+	lines = append(lines, "")
+	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("PgUp/PgDn"), HelpDescStyle.Render("Scroll page up/down")))
+	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("Ctrl+U/D"), HelpDescStyle.Render("Scroll half page up/down")))
+	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("Home/End"), HelpDescStyle.Render("Scroll to top/bottom")))
+	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("Mouse"), HelpDescStyle.Render("Use scroll wheel to scroll")))
 
 	lines = append(lines, "")
 	lines = append(lines, TitleStyle.Render("Mouse"))

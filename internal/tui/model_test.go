@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen-utilities/jj-tui/v2/internal/github"
+	"github.com/madicen-utilities/jj-tui/v2/internal/jj"
 	"github.com/madicen-utilities/jj-tui/v2/internal/models"
 )
 
@@ -15,7 +16,7 @@ func newTestModel() *Model {
 	ctx := context.Background()
 	m := New(ctx)
 	m.width = 100
-	m.height = 30
+	m.height = 80 // Tall enough to show all content including help view
 	m.loading = false // Skip loading state for tests
 	m.SetRepository(&models.Repository{
 		Path: "/test/repo",
@@ -31,6 +32,10 @@ func newTestModel() *Model {
 		},
 	})
 	m.statusMessage = "Ready"
+
+	// Initialize viewport by processing a window size message
+	m.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
+
 	return m
 }
 
@@ -266,6 +271,8 @@ func TestWorkingCopyNodeAppearsInGraph(t *testing.T) {
 	m.width = 100
 	m.height = 30
 	m.loading = false
+	// Initialize viewport
+	m.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
 
 	// Set up repository with a working copy commit
 	workingCopyCommit := models.Commit{
@@ -317,6 +324,8 @@ func TestNewCommitAppearsAfterRefresh(t *testing.T) {
 	m.width = 100
 	m.height = 30
 	m.loading = false
+	// Initialize viewport
+	m.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
 
 	// Initial state: one commit
 	initialCommit := models.Commit{
@@ -392,6 +401,8 @@ func TestSilentRefreshUpdatesCommits(t *testing.T) {
 	m.width = 100
 	m.height = 30
 	m.loading = false
+	// Initialize viewport
+	m.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
 
 	// Start with 2 commits
 	m.SetRepository(&models.Repository{
@@ -734,6 +745,9 @@ func TestActionButtonsInCommitGraph(t *testing.T) {
 		if !containsString(view, "Squash (s)") {
 			t.Error("Expected Squash (s) button")
 		}
+		if !containsString(view, "Rebase (b)") {
+			t.Error("Expected Rebase (b) button")
+		}
 		if !containsString(view, "Abandon (a)") {
 			t.Error("Expected Abandon (a) button")
 		}
@@ -752,7 +766,7 @@ func TestActionButtonsInCommitGraph(t *testing.T) {
 		if !containsString(view, "New (n)") {
 			t.Error("Expected New (n) button to be visible even for immutable commit")
 		}
-		// But Edit, Describe, Squash should be hidden
+		// But Edit, Describe, Squash, Rebase should be hidden
 		if containsString(view, "Edit (e)") {
 			t.Error("Expected Edit (e) button to be hidden for immutable commit")
 		}
@@ -762,12 +776,123 @@ func TestActionButtonsInCommitGraph(t *testing.T) {
 		if containsString(view, "Squash (s)") {
 			t.Error("Expected Squash (s) button to be hidden for immutable commit")
 		}
+		if containsString(view, "Rebase (b)") {
+			t.Error("Expected Rebase (b) button to be hidden for immutable commit")
+		}
 		if containsString(view, "Abandon (a)") {
 			t.Error("Expected Abandon (a) button to be hidden for immutable commit")
 		}
 		// Should show immutable message
 		if !containsString(view, "immutable") {
 			t.Error("Expected immutable message")
+		}
+	})
+}
+
+// TestRebaseModeFlow verifies the rebase mode workflow
+func TestRebaseModeFlow(t *testing.T) {
+	t.Run("pressing b enters rebase mode", func(t *testing.T) {
+		m := newTestModel()
+		defer m.Close()
+
+		// Need a jjService for rebase to work (use a stub)
+		m.jjService = &jj.Service{RepoPath: "/test/repo"}
+
+		m.selectedCommit = 0
+		m.repository.Graph.Commits[0].Immutable = false
+
+		// Press 'b' to enter rebase mode
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}}
+		newModel, _ := m.Update(msg)
+		m = newModel.(*Model)
+
+		if m.selectionMode != SelectionRebaseDestination {
+			t.Error("Expected to enter rebase destination selection mode")
+		}
+		if m.rebaseSourceCommit != 0 {
+			t.Errorf("Expected rebase source to be 0, got %d", m.rebaseSourceCommit)
+		}
+	})
+
+	t.Run("rebase mode shows special UI", func(t *testing.T) {
+		m := newTestModel()
+		defer m.Close()
+
+		m.selectedCommit = 0
+		m.repository.Graph.Commits[0].Immutable = false
+		m.selectionMode = SelectionRebaseDestination
+		m.rebaseSourceCommit = 0
+
+		view := m.View()
+
+		if !containsString(view, "REBASE MODE") {
+			t.Error("Expected 'REBASE MODE' header in rebase mode")
+		}
+		if !containsString(view, "Select destination") {
+			t.Error("Expected 'Select destination' instruction in rebase mode")
+		}
+	})
+
+	t.Run("esc cancels rebase mode", func(t *testing.T) {
+		m := newTestModel()
+		defer m.Close()
+
+		m.selectedCommit = 0
+		m.selectionMode = SelectionRebaseDestination
+		m.rebaseSourceCommit = 0
+
+		// Press Esc to cancel
+		msg := tea.KeyMsg{Type: tea.KeyEsc}
+		newModel, _ := m.Update(msg)
+		m = newModel.(*Model)
+
+		if m.selectionMode != SelectionNormal {
+			t.Error("Expected to exit rebase mode on Esc")
+		}
+		if m.rebaseSourceCommit != -1 {
+			t.Error("Expected rebase source to be reset on cancel")
+		}
+	})
+
+	t.Run("cannot rebase immutable commit", func(t *testing.T) {
+		m := newTestModel()
+		defer m.Close()
+
+		// Need a jjService for the key handler to try rebase
+		m.jjService = &jj.Service{RepoPath: "/test/repo"}
+
+		m.selectedCommit = 0
+		m.repository.Graph.Commits[0].Immutable = true
+
+		// Press 'b' - should not enter rebase mode
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}}
+		newModel, _ := m.Update(msg)
+		m = newModel.(*Model)
+
+		if m.selectionMode != SelectionNormal {
+			t.Error("Should not enter rebase mode for immutable commit")
+		}
+		if !containsString(m.statusMessage, "immutable") {
+			t.Error("Expected immutable warning in status message")
+		}
+	})
+
+	t.Run("action buttons hidden in rebase mode", func(t *testing.T) {
+		m := newTestModel()
+		defer m.Close()
+
+		m.selectedCommit = 1 // Select destination
+		m.selectionMode = SelectionRebaseDestination
+		m.rebaseSourceCommit = 0
+
+		view := m.View()
+
+		// Action buttons should be hidden in rebase mode
+		if containsString(view, "New (n)") {
+			t.Error("Action buttons should be hidden in rebase mode")
+		}
+		if containsString(view, "Edit (e)") {
+			t.Error("Action buttons should be hidden in rebase mode")
 		}
 	})
 }

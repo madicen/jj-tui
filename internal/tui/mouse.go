@@ -69,6 +69,11 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 	if m.repository != nil {
 		for i := range m.repository.Graph.Commits {
 			if m.zone.Get(ZoneCommit(i)) == zoneInfo {
+				// If in rebase mode, clicking a commit selects it as destination
+				if m.selectionMode == SelectionRebaseDestination {
+					return m, m.performRebase(i)
+				}
+				// Normal selection
 				return m, func() tea.Msg {
 					return CommitSelectedMsg{
 						Index:    i,
@@ -120,6 +125,64 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 			return m, m.abandonCommit()
 		}
 	}
+	if m.zone.Get(ZoneActionRebase) == zoneInfo {
+		if m.selectedCommit >= 0 && m.jjService != nil && m.repository != nil {
+			commit := m.repository.Graph.Commits[m.selectedCommit]
+			if commit.Immutable {
+				m.statusMessage = "Cannot rebase: commit is immutable"
+				return m, nil
+			}
+			m.startRebaseMode()
+			return m, nil
+		}
+	}
+	if m.zone.Get(ZoneActionCreatePR) == zoneInfo {
+		if m.selectedCommit >= 0 && m.jjService != nil && m.githubService != nil && m.repository != nil {
+			m.startCreatePR()
+			return m, nil
+		} else if m.githubService == nil {
+			m.statusMessage = "GitHub not connected. Configure in Settings (,)"
+			return m, nil
+		}
+	}
+	if m.zone.Get(ZoneActionBookmark) == zoneInfo {
+		if m.selectedCommit >= 0 && m.jjService != nil && m.repository != nil {
+			commit := m.repository.Graph.Commits[m.selectedCommit]
+			if commit.Immutable {
+				m.statusMessage = "Cannot create bookmark: commit is immutable"
+				return m, nil
+			}
+			m.startCreateBookmark()
+			return m, nil
+		}
+	}
+	if m.zone.Get(ZoneActionPush) == zoneInfo {
+		if m.selectedCommit >= 0 && m.jjService != nil && m.repository != nil {
+			commit := m.repository.Graph.Commits[m.selectedCommit]
+			if len(commit.Branches) == 0 {
+				m.statusMessage = "Cannot push: commit has no bookmark"
+				return m, nil
+			}
+			// Find a branch with an open PR
+			var branchToPush string
+			for _, branch := range commit.Branches {
+				for _, pr := range m.repository.PRs {
+					if pr.State == "open" && pr.HeadBranch == branch {
+						branchToPush = branch
+						break
+					}
+				}
+				if branchToPush != "" {
+					break
+				}
+			}
+			if branchToPush == "" {
+				m.statusMessage = "No open PR found for this commit's bookmarks"
+				return m, nil
+			}
+			return m, m.pushBranch(branchToPush)
+		}
+	}
 
 	// Check PR zones
 	if m.repository != nil {
@@ -142,6 +205,52 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 			m.viewMode = ViewCommitGraph
 			m.editingCommitID = ""
 			m.statusMessage = "Description edit cancelled"
+			return m, nil
+		}
+	}
+
+	// Bookmark creation zones
+	if m.viewMode == ViewCreateBookmark {
+		if m.zone.Get(ZoneBookmarkName) == zoneInfo {
+			m.bookmarkNameInput.Focus()
+			return m, nil
+		}
+		if m.zone.Get(ZoneBookmarkSubmit) == zoneInfo {
+			if m.jjService != nil {
+				return m, m.submitBookmark()
+			}
+			return m, nil
+		}
+		if m.zone.Get(ZoneBookmarkCancel) == zoneInfo {
+			m.viewMode = ViewCommitGraph
+			m.statusMessage = "Bookmark creation cancelled"
+			return m, nil
+		}
+	}
+
+	// PR creation zones
+	if m.viewMode == ViewCreatePR {
+		if m.zone.Get(ZonePRTitle) == zoneInfo {
+			m.prFocusedField = 0
+			m.prTitleInput.Focus()
+			m.prBodyInput.Blur()
+			return m, nil
+		}
+		if m.zone.Get(ZonePRBody) == zoneInfo {
+			m.prFocusedField = 1
+			m.prTitleInput.Blur()
+			m.prBodyInput.Focus()
+			return m, nil
+		}
+		if m.zone.Get(ZonePRSubmit) == zoneInfo {
+			if m.githubService != nil && m.jjService != nil {
+				return m, m.submitPR()
+			}
+			return m, nil
+		}
+		if m.zone.Get(ZonePRCancel) == zoneInfo {
+			m.viewMode = ViewCommitGraph
+			m.statusMessage = "PR creation cancelled"
 			return m, nil
 		}
 	}

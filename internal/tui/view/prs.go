@@ -84,24 +84,13 @@ func (r *Renderer) CreatePR(data CreatePRData) string {
 
 	if !data.GithubService {
 		lines = append(lines, "GitHub is not connected.")
-		lines = append(lines, "Please set GITHUB_TOKEN environment variable.")
+		lines = append(lines, "Please configure GitHub in Settings (press ',').")
 		lines = append(lines, "")
 		lines = append(lines, "Press Esc to go back.")
 		return strings.Join(lines, "\n")
 	}
 
-	// Find the current bookmark name for the selected commit
-	var branchName string
-	var commitSummary string
-	if data.Repository != nil && data.SelectedCommit >= 0 && data.SelectedCommit < len(data.Repository.Graph.Commits) {
-		commit := data.Repository.Graph.Commits[data.SelectedCommit]
-		commitSummary = commit.Summary
-		if len(commit.Branches) > 0 {
-			branchName = commit.Branches[0]
-		}
-	}
-
-	if branchName == "" {
+	if data.HeadBranch == "" {
 		lines = append(lines, "No bookmark found on the selected commit.")
 		lines = append(lines, "Create a bookmark first using jj bookmark create.")
 		lines = append(lines, "")
@@ -111,19 +100,40 @@ func (r *Renderer) CreatePR(data CreatePRData) string {
 		return strings.Join(lines, "\n")
 	}
 
-	lines = append(lines, fmt.Sprintf("Branch: %s", lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render(branchName)))
+	// Show branch info
+	lines = append(lines, fmt.Sprintf("Head: %s → Base: %s",
+		lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render(data.HeadBranch),
+		lipgloss.NewStyle().Bold(true).Foreground(ColorSecondary).Render(data.BaseBranch),
+	))
+	lines = append(lines, "")
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("Tab to switch fields, Ctrl+S to submit, Esc to cancel"))
+	lines = append(lines, "")
 
-	// Use branch name as default PR title
-	prTitle := branchName
-	if commitSummary != "" {
-		prTitle = commitSummary
+	// Title field
+	titleLabel := "Title:"
+	titleStyle := lipgloss.NewStyle()
+	if data.FocusedField == 0 {
+		titleStyle = titleStyle.Bold(true).Foreground(ColorPrimary)
 	}
-	lines = append(lines, fmt.Sprintf("Title: %s", prTitle))
-	lines = append(lines, fmt.Sprintf("Base: %s", "main"))
+	lines = append(lines, titleStyle.Render(titleLabel))
+	lines = append(lines, r.Zone.Mark(ZonePRTitle, "  "+data.TitleInput))
 	lines = append(lines, "")
-	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("(PR creation form coming soon)"))
+
+	// Body field
+	bodyLabel := "Description:"
+	bodyStyle := lipgloss.NewStyle()
+	if data.FocusedField == 1 {
+		bodyStyle = bodyStyle.Bold(true).Foreground(ColorPrimary)
+	}
+	lines = append(lines, bodyStyle.Render(bodyLabel))
+	lines = append(lines, r.Zone.Mark(ZonePRBody, "  "+data.BodyInput))
 	lines = append(lines, "")
-	lines = append(lines, "Press Esc to go back.")
+	lines = append(lines, "")
+
+	// Action buttons
+	submitButton := r.Zone.Mark(ZonePRSubmit, ButtonStyle.Render("Create PR (Ctrl+S)"))
+	cancelButton := r.Zone.Mark(ZonePRCancel, ButtonStyle.Render("Cancel (Esc)"))
+	lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Left, submitButton, " ", cancelButton))
 
 	return strings.Join(lines, "\n")
 }

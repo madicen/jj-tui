@@ -2,10 +2,13 @@ package jira
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
-
-	"github.com/andygrunwald/go-jira"
+	"strings"
 )
 
 // Ticket represents a Jira issue
@@ -18,11 +21,12 @@ type Ticket struct {
 	Description string
 }
 
-// Service handles Jira API interactions
+// Service handles Jira API interactions using REST API v3
 type Service struct {
-	client   *jira.Client
 	baseURL  string
 	username string
+	token    string
+	client   *http.Client
 }
 
 // NewService creates a new Jira service
@@ -42,37 +46,88 @@ func NewService() (*Service, error) {
 		return nil, fmt.Errorf("JIRA_TOKEN environment variable not set")
 	}
 
-	tp := jira.BasicAuthTransport{
-		Username: username,
-		Password: token,
-	}
-
-	client, err := jira.NewClient(tp.Client(), baseURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Jira client: %w", err)
-	}
+	// Ensure baseURL doesn't have trailing slash
+	baseURL = strings.TrimSuffix(baseURL, "/")
 
 	return &Service{
-		client:   client,
 		baseURL:  baseURL,
 		username: username,
+		token:    token,
+		client:   &http.Client{},
 	}, nil
 }
 
-// GetAssignedTickets fetches tickets assigned to the current user
+// searchResponse represents the response from Jira search API v3
+type searchResponse struct {
+	Issues []struct {
+		Key    string `json:"key"`
+		Fields struct {
+			Summary     string `json:"summary"`
+			Description *struct {
+				Content []struct {
+					Content []struct {
+						Text string `json:"text"`
+					} `json:"content"`
+				} `json:"content"`
+			} `json:"description"`
+			Status *struct {
+				Name string `json:"name"`
+			} `json:"status"`
+			Priority *struct {
+				Name string `json:"name"`
+			} `json:"priority"`
+			IssueType *struct {
+				Name string `json:"name"`
+			} `json:"issuetype"`
+		} `json:"fields"`
+	} `json:"issues"`
+	Total int `json:"total"`
+}
+
+// doRequest performs an authenticated request to the Jira API
+func (s *Service) doRequest(ctx context.Context, method, endpoint string, body io.Reader) (*http.Response, error) {
+	reqURL := s.baseURL + endpoint
+
+	req, err := http.NewRequestWithContext(ctx, method, reqURL, body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.SetBasicAuth(s.username, s.token)
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+
+	return s.client.Do(req)
+}
+
+// GetAssignedTickets fetches tickets assigned to the current user using API v3
 func (s *Service) GetAssignedTickets(ctx context.Context) ([]Ticket, error) {
 	// JQL to find issues assigned to the current user that are not done
 	jql := fmt.Sprintf("assignee = \"%s\" AND status != Done ORDER BY updated DESC", s.username)
 
-	issues, _, err := s.client.Issue.Search(jql, &jira.SearchOptions{
-		MaxResults: 50,
-	})
+	// Use the new /rest/api/3/search/jql endpoint
+	// Must explicitly request fields - the v3 API returns minimal data by default
+	fields := "key,summary,status,priority,issuetype,description"
+	endpoint := "/rest/api/3/search/jql?jql=" + url.QueryEscape(jql) + "&maxResults=50&fields=" + fields
+
+	resp, err := s.doRequest(ctx, "GET", endpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search issues: %w", err)
 	}
+	defer resp.Body.Close()
 
-	tickets := make([]Ticket, 0, len(issues))
-	for _, issue := range issues {
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("Jira API error (status %d): %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var result searchResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	tickets := make([]Ticket, 0, len(result.Issues))
+	for _, issue := range result.Issues {
 		ticket := Ticket{
 			Key:     issue.Key,
 			Summary: issue.Fields.Summary,
@@ -84,11 +139,21 @@ func (s *Service) GetAssignedTickets(ctx context.Context) ([]Ticket, error) {
 		if issue.Fields.Priority != nil {
 			ticket.Priority = issue.Fields.Priority.Name
 		}
-		if issue.Fields.Type.Name != "" {
-			ticket.Type = issue.Fields.Type.Name
+		if issue.Fields.IssueType != nil {
+			ticket.Type = issue.Fields.IssueType.Name
 		}
-		if issue.Fields.Description != "" {
-			ticket.Description = issue.Fields.Description
+
+		// Extract description text from Atlassian Document Format (ADF)
+		if issue.Fields.Description != nil && len(issue.Fields.Description.Content) > 0 {
+			var descParts []string
+			for _, block := range issue.Fields.Description.Content {
+				for _, inline := range block.Content {
+					if inline.Text != "" {
+						descParts = append(descParts, inline.Text)
+					}
+				}
+			}
+			ticket.Description = strings.Join(descParts, " ")
 		}
 
 		tickets = append(tickets, ticket)
@@ -97,11 +162,48 @@ func (s *Service) GetAssignedTickets(ctx context.Context) ([]Ticket, error) {
 	return tickets, nil
 }
 
+// issueResponse represents a single issue from Jira API v3
+type issueResponse struct {
+	Key    string `json:"key"`
+	Fields struct {
+		Summary     string `json:"summary"`
+		Description *struct {
+			Content []struct {
+				Content []struct {
+					Text string `json:"text"`
+				} `json:"content"`
+			} `json:"content"`
+		} `json:"description"`
+		Status *struct {
+			Name string `json:"name"`
+		} `json:"status"`
+		Priority *struct {
+			Name string `json:"name"`
+		} `json:"priority"`
+		IssueType *struct {
+			Name string `json:"name"`
+		} `json:"issuetype"`
+	} `json:"fields"`
+}
+
 // GetTicket fetches a single ticket by key
 func (s *Service) GetTicket(ctx context.Context, key string) (*Ticket, error) {
-	issue, _, err := s.client.Issue.Get(key, nil)
+	endpoint := "/rest/api/3/issue/" + key
+
+	resp, err := s.doRequest(ctx, "GET", endpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get issue %s: %w", key, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("Jira API error (status %d): %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var issue issueResponse
+	if err := json.NewDecoder(resp.Body).Decode(&issue); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
 	ticket := &Ticket{
@@ -115,11 +217,21 @@ func (s *Service) GetTicket(ctx context.Context, key string) (*Ticket, error) {
 	if issue.Fields.Priority != nil {
 		ticket.Priority = issue.Fields.Priority.Name
 	}
-	if issue.Fields.Type.Name != "" {
-		ticket.Type = issue.Fields.Type.Name
+	if issue.Fields.IssueType != nil {
+		ticket.Type = issue.Fields.IssueType.Name
 	}
-	if issue.Fields.Description != "" {
-		ticket.Description = issue.Fields.Description
+
+	// Extract description text from Atlassian Document Format (ADF)
+	if issue.Fields.Description != nil && len(issue.Fields.Description.Content) > 0 {
+		var descParts []string
+		for _, block := range issue.Fields.Description.Content {
+			for _, inline := range block.Content {
+				if inline.Text != "" {
+					descParts = append(descParts, inline.Text)
+				}
+			}
+		}
+		ticket.Description = strings.Join(descParts, " ")
 	}
 
 	return ticket, nil

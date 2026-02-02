@@ -18,8 +18,11 @@ func New(z *zone.Manager) *Renderer {
 
 // GraphData contains data needed for commit graph rendering
 type GraphData struct {
-	Repository     *models.Repository
-	SelectedCommit int
+	Repository         *models.Repository
+	SelectedCommit     int
+	InRebaseMode       bool            // True when selecting rebase destination
+	RebaseSourceCommit int             // Index of commit being rebased
+	OpenPRBranches     map[string]bool // Map of branch names that have open PRs
 }
 
 // PRData contains data needed for PR rendering
@@ -71,4 +74,16 @@ type CreatePRData struct {
 	Repository     *models.Repository
 	SelectedCommit int
 	GithubService  bool
+	TitleInput     string
+	BodyInput      string
+	HeadBranch     string
+	BaseBranch     string
+	FocusedField   int // 0=title, 1=body
+}
+
+// BookmarkData contains data needed for bookmark creation view
+type BookmarkData struct {
+	Repository  *models.Repository
+	CommitIndex int
+	NameInput   string
 }

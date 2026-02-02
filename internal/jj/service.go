@@ -118,6 +118,13 @@ func (s *Service) CreateNewBranch(ctx context.Context, branchName string) error 
 	return s.runJJ(ctx, args...)
 }
 
+// CreateBookmarkOnCommit creates a bookmark on a specific commit
+func (s *Service) CreateBookmarkOnCommit(ctx context.Context, bookmarkName, commitID string) error {
+	// jj bookmark create <name> -r <revision>
+	args := []string{"bookmark", "create", bookmarkName, "-r", commitID}
+	return s.runJJ(ctx, args...)
+}
+
 // SquashCommit squashes a commit into its parent
 // After squashing, it moves to the squash result (the parent that received the changes)
 func (s *Service) SquashCommit(ctx context.Context, commitID string) error {
@@ -167,6 +174,13 @@ func (s *Service) NewCommit(ctx context.Context) error {
 // AbandonCommit abandons a commit, removing it from the repository
 func (s *Service) AbandonCommit(ctx context.Context, commitID string) error {
 	args := []string{"abandon", commitID}
+	return s.runJJ(ctx, args...)
+}
+
+// RebaseCommit rebases a commit onto a destination commit
+func (s *Service) RebaseCommit(ctx context.Context, sourceCommitID, destCommitID string) error {
+	// jj rebase -r <source> -d <destination>
+	args := []string{"rebase", "-r", sourceCommitID, "-d", destCommitID}
 	return s.runJJ(ctx, args...)
 }
 
@@ -228,9 +242,61 @@ func (s *Service) GetCurrentBranch(ctx context.Context) (string, error) {
 }
 
 // PushToGit pushes the current branch to the git remote
-func (s *Service) PushToGit(ctx context.Context, branch string) error {
-	args := []string{"git", "push", "--bookmark", branch}
-	return s.runJJ(ctx, args...)
+// Returns the push output for debugging
+func (s *Service) PushToGit(ctx context.Context, branch string) (string, error) {
+	// First verify the bookmark exists
+	out, err := s.runJJOutput(ctx, "bookmark", "list", "--all")
+	if err != nil {
+		return "", fmt.Errorf("failed to list bookmarks: %w", err)
+	}
+
+	// Check if our bookmark is in the list
+	bookmarkExists := false
+	for _, line := range strings.Split(out, "\n") {
+		// Bookmark list format: "bookmarkname: revision"
+		// or just "bookmarkname" if it's at the working copy
+		// May have * suffix for current bookmark
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) > 0 {
+			name := strings.TrimSpace(parts[0])
+			// Strip * suffix (indicates current bookmark)
+			name = strings.TrimSuffix(name, "*")
+			// Strip any @remote suffix
+			if idx := strings.Index(name, "@"); idx > 0 {
+				name = name[:idx]
+			}
+			if name == branch {
+				bookmarkExists = true
+				break
+			}
+		}
+	}
+
+	if !bookmarkExists {
+		return "", fmt.Errorf("bookmark '%s' does not exist. Create it first with 'm' (Bookmark)", branch)
+	}
+
+	// --allow-new permits creating new remote bookmarks
+	// Use runJJOutput to capture any output/errors
+	args := []string{"git", "push", "--bookmark", branch, "--allow-new"}
+	pushOut, err := s.runJJOutput(ctx, args...)
+	if err != nil {
+		return pushOut, fmt.Errorf("push failed: %w", err)
+	}
+
+	// Also run a direct git push to ensure the branch is synced
+	// This helps when jj's git integration has timing issues
+	gitPushCmd := exec.CommandContext(ctx, "git", "push", "origin", branch)
+	gitPushCmd.Dir = s.RepoPath
+	gitOut, gitErr := gitPushCmd.CombinedOutput()
+	if gitErr != nil {
+		// If git push fails with "up to date", that's fine
+		if !strings.Contains(string(gitOut), "up-to-date") && !strings.Contains(string(gitOut), "Everything up-to-date") {
+			pushOut += "\nGit push output: " + string(gitOut)
+		}
+	}
+
+	return pushOut, nil
 }
 
 // getCommitGraph retrieves the commit graph with real jj data
@@ -318,9 +384,30 @@ func (s *Service) getCommitGraph(ctx context.Context) (*models.CommitGraph, erro
 		}
 
 		// Parse branches/bookmarks
+		// Strip @remote suffixes (e.g., "main@origin" -> "main")
+		// Strip * suffix (indicates current bookmark)
 		var branches []string
 		if branchesStr != "" {
-			branches = strings.Split(branchesStr, ",")
+			for _, b := range strings.Split(branchesStr, ",") {
+				b = strings.TrimSpace(b)
+				// Remove * suffix (current bookmark indicator)
+				b = strings.TrimSuffix(b, "*")
+				// Remove @remote suffix if present (e.g., "feature@origin" -> "feature")
+				if idx := strings.Index(b, "@"); idx > 0 {
+					b = b[:idx]
+				}
+				// Avoid duplicates
+				found := false
+				for _, existing := range branches {
+					if existing == b {
+						found = true
+						break
+					}
+				}
+				if !found && b != "" {
+					branches = append(branches, b)
+				}
+			}
 		}
 
 		// Parse date

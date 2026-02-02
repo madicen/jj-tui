@@ -6,10 +6,21 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/madicen-utilities/jj-tui/v2/internal/config"
 	"github.com/madicen-utilities/jj-tui/v2/internal/tui"
 )
 
 func main() {
+	// Load saved configuration
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Printf("Warning: Could not load config: %v\n", err)
+		cfg = &config.Config{}
+	}
+
+	// Apply saved config to environment (env vars take precedence)
+	cfg.ApplyToEnvironment()
+
 	// Initialize the TUI application
 	ctx := context.Background()
 

@@ -20,10 +20,14 @@ func (m *Model) View() string {
 	content := m.renderContent()
 	statusBar := m.renderStatusBar()
 
+	// Put content in viewport for scrolling
+	m.viewport.SetContent(content)
+	viewportContent := m.viewport.View()
+
 	v := lipgloss.JoinVertical(
 		lipgloss.Left,
 		header,
-		content,
+		viewportContent,
 		statusBar,
 	)
 
@@ -75,8 +79,6 @@ func (m *Model) renderTab(label string, active bool) string {
 
 // renderContent renders the main content based on view mode
 func (m *Model) renderContent() string {
-	contentHeight := m.height - 3 // header + status bar
-
 	var content string
 
 	if m.err != nil {
@@ -99,23 +101,39 @@ func (m *Model) renderContent() string {
 			content = m.renderCreatePR()
 		case ViewEditDescription:
 			content = m.renderEditDescription()
+		case ViewCreateBookmark:
+			content = m.renderCreateBookmark()
 		}
 	}
 
-	return ContentStyle.Height(contentHeight).Width(m.width).Render(content)
+	// Don't apply height constraint - viewport handles scrolling
+	return ContentStyle.Width(m.width).Render(content)
 }
 
 // renderError renders an error message
 func (m *Model) renderError() string {
 	style := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555"))
-	return style.Render(fmt.Sprintf("Error: %v\n\nPress 'r' to retry or 'q' to quit.", m.err))
+	return style.Render(fmt.Sprintf("Error: %v\n\nPress 'r' to retry, 'Esc' to dismiss, or 'q' to quit.", m.err))
 }
 
 // renderCommitGraph renders the commit graph view using the view package
 func (m *Model) renderCommitGraph() string {
+	// Build a map of branches that have open PRs
+	openPRBranches := make(map[string]bool)
+	if m.repository != nil {
+		for _, pr := range m.repository.PRs {
+			if pr.State == "open" {
+				openPRBranches[pr.HeadBranch] = true
+			}
+		}
+	}
+
 	return m.renderer().Graph(view.GraphData{
-		Repository:     m.repository,
-		SelectedCommit: m.selectedCommit,
+		Repository:         m.repository,
+		SelectedCommit:     m.selectedCommit,
+		InRebaseMode:       m.selectionMode == SelectionRebaseDestination,
+		RebaseSourceCommit: m.rebaseSourceCommit,
+		OpenPRBranches:     openPRBranches,
 	})
 }
 
@@ -174,8 +192,22 @@ func (m *Model) renderHelp() string {
 func (m *Model) renderCreatePR() string {
 	return m.renderer().CreatePR(view.CreatePRData{
 		Repository:     m.repository,
-		SelectedCommit: m.selectedCommit,
+		SelectedCommit: m.prCommitIndex,
 		GithubService:  m.githubService != nil,
+		TitleInput:     m.prTitleInput.View(),
+		BodyInput:      m.prBodyInput.View(),
+		HeadBranch:     m.prHeadBranch,
+		BaseBranch:     m.prBaseBranch,
+		FocusedField:   m.prFocusedField,
+	})
+}
+
+// renderCreateBookmark renders the bookmark creation view using the view package
+func (m *Model) renderCreateBookmark() string {
+	return m.renderer().Bookmark(view.BookmarkData{
+		Repository:  m.repository,
+		CommitIndex: m.bookmarkCommitIdx,
+		NameInput:   m.bookmarkNameInput.View(),
 	})
 }
 
@@ -195,6 +227,13 @@ func (m *Model) renderStatusBar() string {
 		status = "⏳ " + status
 	}
 
+	// Show scroll position if content is scrollable
+	scrollIndicator := ""
+	if m.viewportReady && m.viewport.TotalLineCount() > m.viewport.Height {
+		scrollPercent := m.viewport.ScrollPercent() * 100
+		scrollIndicator = fmt.Sprintf(" [%.0f%%]", scrollPercent)
+	}
+
 	// Build shortcuts with zone markers (only global actions)
 	shortcuts := []string{
 		m.zone.Mark(ZoneActionQuit, "q:quit"),
@@ -205,13 +244,13 @@ func (m *Model) renderStatusBar() string {
 	shortcutsStr := lipgloss.JoinHorizontal(lipgloss.Left, shortcuts...)
 
 	// Layout: status on left, shortcuts on right
-	padding := m.width - lipgloss.Width(status) - lipgloss.Width(shortcutsStr) - 2
+	padding := m.width - lipgloss.Width(status) - lipgloss.Width(scrollIndicator) - lipgloss.Width(shortcutsStr) - 2
 	if padding < 0 {
 		padding = 0
 	}
 
 	return StatusBarStyle.Width(m.width).Render(
-		status + strings.Repeat(" ", padding) + shortcutsStr,
+		status + scrollIndicator + strings.Repeat(" ", padding) + shortcutsStr,
 	)
 }
 

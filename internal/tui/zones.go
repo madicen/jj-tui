@@ -24,11 +24,28 @@ const (
 	ZoneActionEdit     = "zone:action:edit"
 	ZoneActionDescribe = "zone:action:describe"
 	ZoneActionSquash   = "zone:action:squash"
+	ZoneActionRebase   = "zone:action:rebase"
 	ZoneActionAbandon  = "zone:action:abandon"
 
 	// Description editor zones
 	ZoneDescSave   = "zone:desc:save"
 	ZoneDescCancel = "zone:desc:cancel"
+
+	// PR creation zones
+	ZonePRTitle        = "zone:pr:title"
+	ZonePRBody         = "zone:pr:body"
+	ZonePRSubmit       = "zone:pr:submit"
+	ZonePRCancel       = "zone:pr:cancel"
+	ZoneActionCreatePR = "zone:action:createpr"
+
+	// Bookmark creation zones
+	ZoneBookmarkName   = "zone:bookmark:name"
+	ZoneBookmarkSubmit = "zone:bookmark:submit"
+	ZoneBookmarkCancel = "zone:bookmark:cancel"
+	ZoneActionBookmark = "zone:action:bookmark"
+
+	// Push action zone
+	ZoneActionPush = "zone:action:push"
 
 	// Jira action zones
 	ZoneJiraCreateBranch = "zone:jira:createbranch"
