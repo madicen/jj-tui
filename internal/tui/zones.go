@@ -74,3 +74,8 @@ func ZoneJiraTicket(index int) string {
 	return fmt.Sprintf("zone:jira:ticket:%d", index)
 }
 
+// ZoneExistingBookmark returns the zone ID for an existing bookmark at the given index
+func ZoneExistingBookmark(index int) string {
+	return fmt.Sprintf("zone:bookmark:existing:%d", index)
+}
+

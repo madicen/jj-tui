@@ -35,9 +35,46 @@ func (r *Renderer) Jira(data JiraData) string {
 	var lines []string
 	lines = append(lines, TitleStyle.Render("Assigned Jira Tickets"))
 	lines = append(lines, "")
-	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("Press Enter to create a branch from the selected ticket"))
+
+	// Show selected ticket details at the TOP (fixed section)
+	if data.SelectedTicket >= 0 && data.SelectedTicket < len(data.Tickets) {
+		ticket := data.Tickets[data.SelectedTicket]
+
+		// Build details content
+		var detailLines []string
+		detailLines = append(detailLines, fmt.Sprintf("%s %s",
+			lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render(ticket.Key),
+			ticket.Summary,
+		))
+		detailLines = append(detailLines, fmt.Sprintf("Type: %s  |  Priority: %s  |  Status: %s",
+			ticket.Type, ticket.Priority, ticket.Status,
+		))
+		if ticket.Description != "" {
+			// Truncate description if too long
+			desc := ticket.Description
+			if len(desc) > 150 {
+				desc = desc[:150] + "..."
+			}
+			detailLines = append(detailLines, lipgloss.NewStyle().Foreground(ColorMuted).Render(desc))
+		}
+
+		detailsBox := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(ColorPrimary).
+			Padding(0, 1).
+			Render(strings.Join(detailLines, "\n"))
+		lines = append(lines, detailsBox)
+		lines = append(lines, "")
+
+		// Action button right after details
+		lines = append(lines, r.Zone.Mark(ZoneJiraCreateBranch, ButtonStyle.Render("Create Branch (Enter)")))
+		lines = append(lines, "")
+	}
+
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("Select a ticket to create a branch:"))
 	lines = append(lines, "")
 
+	// Ticket list (scrollable section)
 	for i, ticket := range data.Tickets {
 		prefix := "  "
 		style := CommitStyle
@@ -67,28 +104,6 @@ func (r *Renderer) Jira(data JiraData) string {
 		)
 
 		lines = append(lines, r.Zone.Mark(ZoneJiraTicket(i), style.Render(ticketLine)))
-	}
-
-	// Show selected ticket details
-	if data.SelectedTicket >= 0 && data.SelectedTicket < len(data.Tickets) {
-		ticket := data.Tickets[data.SelectedTicket]
-		lines = append(lines, "")
-		lines = append(lines, lipgloss.NewStyle().Bold(true).Render("Details:"))
-		lines = append(lines, fmt.Sprintf("  Type: %s", ticket.Type))
-		lines = append(lines, fmt.Sprintf("  Priority: %s", ticket.Priority))
-		if ticket.Description != "" {
-			// Truncate description if too long
-			desc := ticket.Description
-			if len(desc) > 200 {
-				desc = desc[:200] + "..."
-			}
-			lines = append(lines, fmt.Sprintf("  Description: %s", desc))
-		}
-
-		// Show action button
-		lines = append(lines, "")
-		lines = append(lines, "Actions:")
-		lines = append(lines, r.Zone.Mark(ZoneJiraCreateBranch, ButtonStyle.Render("Create Branch (Enter)")))
 	}
 
 	return strings.Join(lines, "\n")

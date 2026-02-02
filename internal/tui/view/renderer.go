@@ -23,6 +23,7 @@ type GraphData struct {
 	InRebaseMode       bool            // True when selecting rebase destination
 	RebaseSourceCommit int             // Index of commit being rebased
 	OpenPRBranches     map[string]bool // Map of branch names that have open PRs
+	CommitPRBranch     map[int]string  // Maps commit index to PR branch it can push to (including descendants)
 }
 
 // PRData contains data needed for PR rendering
@@ -83,7 +84,9 @@ type CreatePRData struct {
 
 // BookmarkData contains data needed for bookmark creation view
 type BookmarkData struct {
-	Repository  *models.Repository
-	CommitIndex int
-	NameInput   string
+	Repository        *models.Repository
+	CommitIndex       int
+	NameInput         string
+	ExistingBookmarks []string // List of existing bookmarks that can be moved
+	SelectedBookmark  int      // Index of selected existing bookmark (-1 for new)
 }

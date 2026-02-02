@@ -149,26 +149,27 @@ func (r *Renderer) Graph(data GraphData) string {
 				r.Zone.Mark(ZoneActionAbandon, ButtonStyle.Render("Abandon (a)")),
 				r.Zone.Mark(ZoneActionBookmark, ButtonStyle.Render("Bookmark (m)")),
 			)
-			// Check if any of the commit's bookmarks have an open PR
-			hasOpenPR := false
-			if len(commit.Branches) > 0 && data.OpenPRBranches != nil {
-				for _, branch := range commit.Branches {
-					if data.OpenPRBranches[branch] {
-						hasOpenPR = true
-						break
-					}
-				}
+
+			// Check if this commit can push to a PR (either has the bookmark or is a descendant)
+			prBranch := ""
+			if data.CommitPRBranch != nil {
+				prBranch = data.CommitPRBranch[data.SelectedCommit]
 			}
-			// Add Create PR button if commit has a bookmark but no open PR
-			if len(commit.Branches) > 0 && !hasOpenPR {
+
+			if prBranch != "" {
+				// This commit (or an ancestor) has an open PR - show Push button
+				buttonLabel := "Push (u)"
+				if len(commit.Branches) == 0 {
+					// This is a descendant without the bookmark - indicate we'll move the bookmark
+					buttonLabel = "Push to PR (u)"
+				}
+				actionButtons = append(actionButtons,
+					r.Zone.Mark(ZoneActionPush, ButtonStyle.Render(buttonLabel)),
+				)
+			} else if len(commit.Branches) > 0 {
+				// Has a bookmark but no open PR - show Create PR button
 				actionButtons = append(actionButtons,
 					r.Zone.Mark(ZoneActionCreatePR, ButtonStyle.Render("Create PR (c)")),
-				)
-			}
-			// Add Push button if commit has a bookmark with an open PR
-			if hasOpenPR {
-				actionButtons = append(actionButtons,
-					r.Zone.Mark(ZoneActionPush, ButtonStyle.Render("Push (u)")),
 				)
 			}
 			lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Left, actionButtons...))

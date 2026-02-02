@@ -290,12 +290,69 @@ func (m *Model) startCreateBookmark() {
 	m.bookmarkNameInput.Focus()
 	m.bookmarkNameInput.Width = m.width - 10
 
+	// Collect existing bookmarks from all commits (excluding ones already on this commit)
+	existingOnCommit := make(map[string]bool)
+	for _, b := range commit.Branches {
+		existingOnCommit[b] = true
+	}
+
+	bookmarkSet := make(map[string]bool)
+	for _, c := range m.repository.Graph.Commits {
+		for _, b := range c.Branches {
+			// Don't include bookmarks that are already on this commit
+			if !existingOnCommit[b] {
+				bookmarkSet[b] = true
+			}
+		}
+	}
+
+	// Convert to sorted slice
+	m.existingBookmarks = make([]string, 0, len(bookmarkSet))
+	for b := range bookmarkSet {
+		m.existingBookmarks = append(m.existingBookmarks, b)
+	}
+	// Sort alphabetically
+	for i := 0; i < len(m.existingBookmarks); i++ {
+		for j := i + 1; j < len(m.existingBookmarks); j++ {
+			if m.existingBookmarks[i] > m.existingBookmarks[j] {
+				m.existingBookmarks[i], m.existingBookmarks[j] = m.existingBookmarks[j], m.existingBookmarks[i]
+			}
+		}
+	}
+
+	m.selectedBookmarkIdx = -1 // Start with "new bookmark" selected
+
 	m.viewMode = ViewCreateBookmark
-	m.statusMessage = fmt.Sprintf("Creating bookmark on %s", commit.ShortID)
+	m.statusMessage = fmt.Sprintf("Create or move bookmark on %s", commit.ShortID)
 }
 
-// submitBookmark creates the bookmark on the selected commit
+// submitBookmark creates or moves a bookmark on the selected commit
 func (m *Model) submitBookmark() tea.Cmd {
+	commit := m.repository.Graph.Commits[m.bookmarkCommitIdx]
+	commitID := commit.ChangeID
+
+	// Check if we're moving an existing bookmark or creating a new one
+	if m.selectedBookmarkIdx >= 0 && m.selectedBookmarkIdx < len(m.existingBookmarks) {
+		// Moving an existing bookmark
+		bookmarkName := m.existingBookmarks[m.selectedBookmarkIdx]
+		m.statusMessage = fmt.Sprintf("Moving bookmark '%s'...", bookmarkName)
+
+		return func() tea.Msg {
+			ctx := context.Background()
+
+			if err := m.jjService.MoveBookmark(ctx, bookmarkName, commitID); err != nil {
+				return errorMsg{err: fmt.Errorf("failed to move bookmark: %w", err)}
+			}
+
+			return bookmarkCreatedOnCommitMsg{
+				bookmarkName: bookmarkName,
+				commitID:     commitID,
+				wasMoved:     true,
+			}
+		}
+	}
+
+	// Creating a new bookmark
 	bookmarkName := strings.TrimSpace(m.bookmarkNameInput.Value())
 
 	if bookmarkName == "" {
@@ -311,9 +368,6 @@ func (m *Model) submitBookmark() tea.Cmd {
 		}
 	}
 
-	commit := m.repository.Graph.Commits[m.bookmarkCommitIdx]
-	commitID := commit.ChangeID
-
 	m.statusMessage = fmt.Sprintf("Creating bookmark '%s'...", bookmarkName)
 
 	return func() tea.Msg {
@@ -326,16 +380,28 @@ func (m *Model) submitBookmark() tea.Cmd {
 		return bookmarkCreatedOnCommitMsg{
 			bookmarkName: bookmarkName,
 			commitID:     commitID,
+			wasMoved:     false,
 		}
 	}
 }
 
-// pushBranch pushes a branch to update an existing PR
-func (m *Model) pushBranch(branch string) tea.Cmd {
-	m.statusMessage = fmt.Sprintf("Pushing %s...", branch)
+// pushToPR pushes updates to a PR, moving the bookmark if necessary
+func (m *Model) pushToPR(branch string, commitID string, moveBookmark bool) tea.Cmd {
+	if moveBookmark {
+		m.statusMessage = fmt.Sprintf("Moving %s to include new commits and pushing...", branch)
+	} else {
+		m.statusMessage = fmt.Sprintf("Pushing %s...", branch)
+	}
 
 	return func() tea.Msg {
 		ctx := context.Background()
+
+		// If needed, move the bookmark to include this commit
+		if moveBookmark {
+			if err := m.jjService.MoveBookmark(ctx, branch, commitID); err != nil {
+				return errorMsg{err: fmt.Errorf("failed to move bookmark %s: %w", branch, err)}
+			}
+		}
 
 		// Push the branch to GitHub
 		pushOutput, err := m.jjService.PushToGit(ctx, branch)
@@ -348,6 +414,63 @@ func (m *Model) pushBranch(branch string) tea.Cmd {
 			pushOutput: pushOutput,
 		}
 	}
+}
+
+// findPRBranchForCommit finds the PR branch that this commit can push to
+// (either the commit has the branch directly, or it's a descendant of a commit with the branch)
+func (m *Model) findPRBranchForCommit(commitIndex int) string {
+	if m.repository == nil || commitIndex < 0 || commitIndex >= len(m.repository.Graph.Commits) {
+		return ""
+	}
+
+	// Build set of open PR branches
+	openPRBranches := make(map[string]bool)
+	for _, pr := range m.repository.PRs {
+		if pr.State == "open" {
+			openPRBranches[pr.HeadBranch] = true
+		}
+	}
+
+	// Build commit ID to index map
+	commitIDToIndex := make(map[string]int)
+	for i, commit := range m.repository.Graph.Commits {
+		commitIDToIndex[commit.ID] = i
+		commitIDToIndex[commit.ChangeID] = i
+	}
+
+	// Check this commit and traverse ancestors to find a PR branch
+	visited := make(map[int]bool)
+	queue := []int{commitIndex}
+
+	for len(queue) > 0 {
+		idx := queue[0]
+		queue = queue[1:]
+
+		if visited[idx] {
+			continue
+		}
+		visited[idx] = true
+
+		commit := m.repository.Graph.Commits[idx]
+
+		// Check if this commit has a PR branch
+		for _, branch := range commit.Branches {
+			if openPRBranches[branch] {
+				return branch
+			}
+		}
+
+		// Add parents to queue
+		for _, parentID := range commit.Parents {
+			if parentIdx, ok := commitIDToIndex[parentID]; ok {
+				if !visited[parentIdx] {
+					queue = append(queue, parentIdx)
+				}
+			}
+		}
+	}
+
+	return ""
 }
 
 // saveSettings saves the settings and reinitializes services

@@ -33,6 +33,30 @@ func (r *Renderer) PullRequests(data PRData) string {
 	lines = append(lines, TitleStyle.Render("Pull Requests"))
 	lines = append(lines, "")
 
+	// Show selected PR details at the TOP (fixed section)
+	if data.SelectedPR >= 0 && data.SelectedPR < len(data.Repository.PRs) {
+		pr := data.Repository.PRs[data.SelectedPR]
+		detailsBox := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(ColorPrimary).
+			Padding(0, 1).
+			Render(fmt.Sprintf(
+				"%s #%d: %s\n%s\nBase: %s ← Head: %s",
+				lipgloss.NewStyle().Bold(true).Render("Selected:"),
+				pr.Number,
+				pr.Title,
+				lipgloss.NewStyle().Foreground(ColorMuted).Render(pr.URL),
+				pr.BaseBranch,
+				pr.HeadBranch,
+			))
+		lines = append(lines, detailsBox)
+		lines = append(lines, "")
+	}
+
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("Press Enter/o to open in browser"))
+	lines = append(lines, "")
+
+	// PR list (scrollable section)
 	for i, pr := range data.Repository.PRs {
 		prefix := "  "
 		style := CommitStyle
@@ -62,15 +86,6 @@ func (r *Renderer) PullRequests(data PRData) string {
 		)
 
 		lines = append(lines, r.Zone.Mark(ZonePR(i), style.Render(prLine)))
-	}
-
-	// Show selected PR details
-	if data.SelectedPR >= 0 && data.SelectedPR < len(data.Repository.PRs) {
-		pr := data.Repository.PRs[data.SelectedPR]
-		lines = append(lines, "")
-		lines = append(lines, lipgloss.NewStyle().Bold(true).Render("Details:"))
-		lines = append(lines, fmt.Sprintf("  Base: %s ← Head: %s", pr.BaseBranch, pr.HeadBranch))
-		lines = append(lines, fmt.Sprintf("  URL: %s", pr.URL))
 	}
 
 	return strings.Join(lines, "\n")

@@ -128,12 +128,54 @@ func (m *Model) renderCommitGraph() string {
 		}
 	}
 
+	// Build a map of commit index -> PR branch name for commits that can push to a PR
+	// This includes commits with the bookmark AND their descendants
+	commitPRBranch := make(map[int]string)
+	if m.repository != nil && len(m.repository.Graph.Commits) > 0 {
+		// First, find commits that directly have PR bookmarks
+		commitIDToIndex := make(map[string]int)
+		for i, commit := range m.repository.Graph.Commits {
+			commitIDToIndex[commit.ID] = i
+			commitIDToIndex[commit.ChangeID] = i
+			// Check if this commit has a PR bookmark
+			for _, branch := range commit.Branches {
+				if openPRBranches[branch] {
+					commitPRBranch[i] = branch
+					break
+				}
+			}
+		}
+
+		// Now propagate PR branch info to descendants (commits whose parents have PR branches)
+		// We iterate multiple times to handle chains of descendants
+		changed := true
+		for changed {
+			changed = false
+			for i, commit := range m.repository.Graph.Commits {
+				if commitPRBranch[i] != "" {
+					continue // Already has a PR branch
+				}
+				// Check if any parent has a PR branch
+				for _, parentID := range commit.Parents {
+					if parentIdx, ok := commitIDToIndex[parentID]; ok {
+						if branch := commitPRBranch[parentIdx]; branch != "" {
+							commitPRBranch[i] = branch
+							changed = true
+							break
+						}
+					}
+				}
+			}
+		}
+	}
+
 	return m.renderer().Graph(view.GraphData{
 		Repository:         m.repository,
 		SelectedCommit:     m.selectedCommit,
 		InRebaseMode:       m.selectionMode == SelectionRebaseDestination,
 		RebaseSourceCommit: m.rebaseSourceCommit,
 		OpenPRBranches:     openPRBranches,
+		CommitPRBranch:     commitPRBranch,
 	})
 }
 
@@ -205,9 +247,11 @@ func (m *Model) renderCreatePR() string {
 // renderCreateBookmark renders the bookmark creation view using the view package
 func (m *Model) renderCreateBookmark() string {
 	return m.renderer().Bookmark(view.BookmarkData{
-		Repository:  m.repository,
-		CommitIndex: m.bookmarkCommitIdx,
-		NameInput:   m.bookmarkNameInput.View(),
+		Repository:        m.repository,
+		CommitIndex:       m.bookmarkCommitIdx,
+		NameInput:         m.bookmarkNameInput.View(),
+		ExistingBookmarks: m.existingBookmarks,
+		SelectedBookmark:  m.selectedBookmarkIdx,
 	})
 }
 

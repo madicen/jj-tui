@@ -40,6 +40,11 @@ const (
 	ZoneActionPush = "zone:action:push"
 )
 
+// ZoneExistingBookmark returns the zone ID for an existing bookmark at the given index
+func ZoneExistingBookmark(index int) string {
+	return fmt.Sprintf("zone:bookmark:existing:%d", index)
+}
+
 // ZoneCommit returns the zone ID for a commit at the given index
 func ZoneCommit(index int) string {
 	return fmt.Sprintf("zone:commit:%d", index)

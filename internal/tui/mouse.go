@@ -158,29 +158,22 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 	}
 	if m.zone.Get(ZoneActionPush) == zoneInfo {
 		if m.selectedCommit >= 0 && m.jjService != nil && m.repository != nil {
-			commit := m.repository.Graph.Commits[m.selectedCommit]
-			if len(commit.Branches) == 0 {
-				m.statusMessage = "Cannot push: commit has no bookmark"
+			// Find the PR branch for this commit (could be on this commit or an ancestor)
+			prBranch := m.findPRBranchForCommit(m.selectedCommit)
+			if prBranch == "" {
+				m.statusMessage = "No open PR found for this commit or its ancestors"
 				return m, nil
 			}
-			// Find a branch with an open PR
-			var branchToPush string
+			commit := m.repository.Graph.Commits[m.selectedCommit]
+			// Check if we need to move the bookmark (commit doesn't have it directly)
+			needsMoveBookmark := true
 			for _, branch := range commit.Branches {
-				for _, pr := range m.repository.PRs {
-					if pr.State == "open" && pr.HeadBranch == branch {
-						branchToPush = branch
-						break
-					}
-				}
-				if branchToPush != "" {
+				if branch == prBranch {
+					needsMoveBookmark = false
 					break
 				}
 			}
-			if branchToPush == "" {
-				m.statusMessage = "No open PR found for this commit's bookmarks"
-				return m, nil
-			}
-			return m, m.pushBranch(branchToPush)
+			return m, m.pushToPR(prBranch, commit.ChangeID, needsMoveBookmark)
 		}
 	}
 
@@ -211,7 +204,17 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 
 	// Bookmark creation zones
 	if m.viewMode == ViewCreateBookmark {
+		// Check for clicks on existing bookmarks
+		for i := range m.existingBookmarks {
+			if m.zone.Get(ZoneExistingBookmark(i)) == zoneInfo {
+				m.selectedBookmarkIdx = i
+				m.bookmarkNameInput.Blur()
+				return m, nil
+			}
+		}
+
 		if m.zone.Get(ZoneBookmarkName) == zoneInfo {
+			m.selectedBookmarkIdx = -1 // Switch to new bookmark mode
 			m.bookmarkNameInput.Focus()
 			return m, nil
 		}

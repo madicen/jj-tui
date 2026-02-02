@@ -125,6 +125,13 @@ func (s *Service) CreateBookmarkOnCommit(ctx context.Context, bookmarkName, comm
 	return s.runJJ(ctx, args...)
 }
 
+// MoveBookmark moves an existing bookmark to a different commit
+func (s *Service) MoveBookmark(ctx context.Context, bookmarkName, commitID string) error {
+	// jj bookmark set <name> -r <revision>
+	args := []string{"bookmark", "set", bookmarkName, "-r", commitID}
+	return s.runJJ(ctx, args...)
+}
+
 // SquashCommit squashes a commit into its parent
 // After squashing, it moves to the squash result (the parent that received the changes)
 func (s *Service) SquashCommit(ctx context.Context, commitID string) error {

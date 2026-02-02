@@ -234,31 +234,24 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 	case "u":
-		// Push updates to PR (for commits with bookmarks that have open PRs)
+		// Push updates to PR (for commits with PR branches or their descendants)
 		if m.viewMode == ViewCommitGraph && m.selectedCommit >= 0 && m.jjService != nil && m.repository != nil {
-			commit := m.repository.Graph.Commits[m.selectedCommit]
-			if len(commit.Branches) == 0 {
-				m.statusMessage = "Cannot push: commit has no bookmark"
+			// Find the PR branch for this commit (could be on this commit or an ancestor)
+			prBranch := m.findPRBranchForCommit(m.selectedCommit)
+			if prBranch == "" {
+				m.statusMessage = "No open PR found for this commit or its ancestors"
 				return m, nil
 			}
-			// Find a branch with an open PR
-			var branchToPush string
+			commit := m.repository.Graph.Commits[m.selectedCommit]
+			// Check if we need to move the bookmark (commit doesn't have it directly)
+			needsMoveBookmark := true
 			for _, branch := range commit.Branches {
-				for _, pr := range m.repository.PRs {
-					if pr.State == "open" && pr.HeadBranch == branch {
-						branchToPush = branch
-						break
-					}
-				}
-				if branchToPush != "" {
+				if branch == prBranch {
+					needsMoveBookmark = false
 					break
 				}
 			}
-			if branchToPush == "" {
-				m.statusMessage = "No open PR found for this commit's bookmarks"
-				return m, nil
-			}
-			return m, m.pushBranch(branchToPush)
+			return m, m.pushToPR(prBranch, commit.ChangeID, needsMoveBookmark)
 		}
 	}
 	return m, nil
@@ -278,12 +271,44 @@ func (m *Model) handleCreateBookmarkKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 			return m, m.submitBookmark()
 		}
 		return m, nil
+	case "j", "down":
+		// Navigate down in existing bookmarks list
+		if len(m.existingBookmarks) > 0 {
+			if m.selectedBookmarkIdx < len(m.existingBookmarks)-1 {
+				m.selectedBookmarkIdx++
+				m.bookmarkNameInput.Blur()
+			}
+		}
+		return m, nil
+	case "k", "up":
+		// Navigate up in existing bookmarks list (or to new bookmark input)
+		if m.selectedBookmarkIdx > -1 {
+			m.selectedBookmarkIdx--
+			if m.selectedBookmarkIdx == -1 {
+				m.bookmarkNameInput.Focus()
+			}
+		}
+		return m, nil
+	case "tab":
+		// Toggle between new bookmark input and existing bookmarks list
+		if m.selectedBookmarkIdx == -1 && len(m.existingBookmarks) > 0 {
+			m.selectedBookmarkIdx = 0
+			m.bookmarkNameInput.Blur()
+		} else {
+			m.selectedBookmarkIdx = -1
+			m.bookmarkNameInput.Focus()
+		}
+		return m, nil
 	}
 
-	// Pass other keys to the input
-	var cmd tea.Cmd
-	m.bookmarkNameInput, cmd = m.bookmarkNameInput.Update(msg)
-	return m, cmd
+	// Only pass keys to input if we're in "new bookmark" mode
+	if m.selectedBookmarkIdx == -1 {
+		var cmd tea.Cmd
+		m.bookmarkNameInput, cmd = m.bookmarkNameInput.Update(msg)
+		return m, cmd
+	}
+
+	return m, nil
 }
 
 // handleCreatePRKeyMsg handles keyboard input in PR creation mode

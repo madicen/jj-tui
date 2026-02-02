@@ -95,8 +95,10 @@ type Model struct {
 	prCommitIndex  int // Index of commit PR is being created from
 
 	// Bookmark creation state
-	bookmarkNameInput textinput.Model
-	bookmarkCommitIdx int // Index of commit to create bookmark on
+	bookmarkNameInput   textinput.Model
+	bookmarkCommitIdx   int      // Index of commit to create bookmark on
+	existingBookmarks   []string // List of existing bookmarks
+	selectedBookmarkIdx int      // Index of selected existing bookmark (-1 for new)
 }
 
 // Messages for async operations
@@ -152,10 +154,11 @@ type branchPushedMsg struct {
 	pushOutput string
 }
 
-// bookmarkCreatedOnCommitMsg is sent when a bookmark is created on a commit
+// bookmarkCreatedOnCommitMsg is sent when a bookmark is created or moved on a commit
 type bookmarkCreatedOnCommitMsg struct {
 	bookmarkName string
 	commitID     string
+	wasMoved     bool // true if bookmark was moved, false if newly created
 }
 
 // silentRepositoryLoadedMsg is for background refreshes that don't update the status
@@ -233,20 +236,21 @@ func New(ctx context.Context) *Model {
 	bookmarkName.Width = 50
 
 	return &Model{
-		ctx:               ctx,
-		zone:              zone.New(),
-		viewMode:          ViewCommitGraph,
-		selectedCommit:    -1,
-		statusMessage:     "Initializing...",
-		loading:           true,
-		descriptionInput:  ta,
-		settingsInputs:    settingsInputs,
-		prTitleInput:      prTitle,
-		prBodyInput:       prBody,
-		prBaseBranch:      "main",
-		prCommitIndex:     -1,
-		bookmarkNameInput: bookmarkName,
-		bookmarkCommitIdx: -1,
+		ctx:                 ctx,
+		zone:                zone.New(),
+		viewMode:            ViewCommitGraph,
+		selectedCommit:      -1,
+		statusMessage:       "Initializing...",
+		loading:             true,
+		descriptionInput:    ta,
+		settingsInputs:      settingsInputs,
+		prTitleInput:        prTitle,
+		prBodyInput:         prBody,
+		prBaseBranch:        "main",
+		prCommitIndex:       -1,
+		bookmarkNameInput:   bookmarkName,
+		bookmarkCommitIdx:   -1,
+		selectedBookmarkIdx: -1,
 	}
 }
 
@@ -463,9 +467,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case bookmarkCreatedOnCommitMsg:
 		m.viewMode = ViewCommitGraph
-		m.statusMessage = fmt.Sprintf("Bookmark '%s' created", msg.bookmarkName)
-		// Reload repository to show the new bookmark
-		return m, m.loadRepository()
+		if msg.wasMoved {
+			m.statusMessage = fmt.Sprintf("Bookmark '%s' moved", msg.bookmarkName)
+		} else {
+			m.statusMessage = fmt.Sprintf("Bookmark '%s' created", msg.bookmarkName)
+		}
+		// Reload repository AND PRs to update action buttons
+		return m, tea.Batch(m.loadRepository(), m.loadPRs())
 
 	case tickMsg:
 		// Auto-refresh: reload repository data silently (but not while editing, creating PR, or creating bookmark)
