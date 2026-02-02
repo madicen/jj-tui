@@ -135,6 +135,22 @@ func (m *Model) loadJiraTickets() tea.Cmd {
 	}
 }
 
+// loadChangedFiles loads the changed files for a commit
+func (m *Model) loadChangedFiles(commitID string) tea.Cmd {
+	if m.jjService == nil || commitID == "" {
+		return nil
+	}
+
+	return func() tea.Msg {
+		files, err := m.jjService.GetChangedFiles(context.Background(), commitID)
+		if err != nil {
+			// Silently ignore errors for changed files
+			return changedFilesLoadedMsg{commitID: commitID, files: nil}
+		}
+		return changedFilesLoadedMsg{commitID: commitID, files: files}
+	}
+}
+
 // startBookmarkFromJiraTicket opens the bookmark creation screen pre-populated with the Jira ticket key
 func (m *Model) startBookmarkFromJiraTicket(ticket jira.Ticket) {
 	// Format bookmark name as "KEY-Title" with spaces replaced by hyphens

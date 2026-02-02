@@ -137,6 +137,11 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			if m.repository != nil && m.selectedCommit < len(m.repository.Graph.Commits)-1 {
 				m.selectedCommit++
+				// Load changed files for the newly selected commit
+				commit := m.repository.Graph.Commits[m.selectedCommit]
+				m.changedFilesCommitID = commit.ChangeID
+				m.changedFiles = nil
+				return m, m.loadChangedFiles(commit.ChangeID)
 			}
 		}
 	case "k", "up":
@@ -149,8 +154,13 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.selectedTicket--
 			}
 		} else {
-			if m.selectedCommit > 0 {
+			if m.selectedCommit > 0 && m.repository != nil {
 				m.selectedCommit--
+				// Load changed files for the newly selected commit
+				commit := m.repository.Graph.Commits[m.selectedCommit]
+				m.changedFilesCommitID = commit.ChangeID
+				m.changedFiles = nil
+				return m, m.loadChangedFiles(commit.ChangeID)
 			}
 		}
 	case "o":

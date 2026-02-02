@@ -67,6 +67,10 @@ type Model struct {
 	err            error
 	loading        bool
 
+	// Changed files for selected commit
+	changedFiles         []jj.ChangedFile
+	changedFilesCommitID string // Which commit the files are for
+
 	// Viewport for scrollable content
 	viewport      viewport.Model
 	viewportReady bool
@@ -168,6 +172,12 @@ type bookmarkCreatedOnCommitMsg struct {
 // bookmarkDeletedMsg is sent when a bookmark is deleted
 type bookmarkDeletedMsg struct {
 	bookmarkName string
+}
+
+// changedFilesLoadedMsg is sent when changed files for a commit are loaded
+type changedFilesLoadedMsg struct {
+	commitID string
+	files    []jj.ChangedFile
 }
 
 // silentRepositoryLoadedMsg is for background refreshes that don't update the status
@@ -347,6 +357,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Auto-select first commit if none selected
 		if m.selectedCommit == -1 && len(msg.repository.Graph.Commits) > 0 {
 			m.selectedCommit = 0
+			// Load changed files for the auto-selected commit
+			commit := msg.repository.Graph.Commits[0]
+			m.changedFilesCommitID = commit.ChangeID
+			return m, tea.Batch(m.tickCmd(), m.loadChangedFiles(commit.ChangeID))
 		}
 		return m, m.tickCmd() // Continue auto-refresh timer
 
@@ -417,9 +431,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.jiraService != nil {
 			m.statusMessage += " (Jira connected)"
 		}
-		// Auto-select first commit if none selected
+		// Auto-select first commit if none selected and load its changed files
 		if m.selectedCommit == -1 && len(msg.repository.Graph.Commits) > 0 {
 			m.selectedCommit = 0
+			commit := msg.repository.Graph.Commits[0]
+			m.changedFilesCommitID = commit.ChangeID
+			return m, tea.Batch(m.tickCmd(), m.loadChangedFiles(commit.ChangeID))
 		}
 		return m, m.tickCmd()
 
@@ -488,6 +505,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusMessage = fmt.Sprintf("Bookmark '%s' deleted", msg.bookmarkName)
 		// Reload repository to update the view
 		return m, tea.Batch(m.loadRepository(), m.loadPRs())
+
+	case changedFilesLoadedMsg:
+		// Only update if the files are for the currently selected commit
+		if msg.commitID == m.changedFilesCommitID {
+			m.changedFiles = msg.files
+		}
+		return m, nil
 		// Reload repository AND PRs to update action buttons
 		return m, tea.Batch(m.loadRepository(), m.loadPRs())
 
@@ -526,6 +550,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case CommitSelectedMsg:
 		m.selectedCommit = msg.Index
+		// Load changed files for the selected commit
+		if m.repository != nil && msg.Index >= 0 && msg.Index < len(m.repository.Graph.Commits) {
+			commit := m.repository.Graph.Commits[msg.Index]
+			m.changedFilesCommitID = commit.ChangeID
+			m.changedFiles = nil // Clear old files while loading
+			return m, m.loadChangedFiles(commit.ChangeID)
+		}
 		return m, nil
 
 	case ActionMsg:

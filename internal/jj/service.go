@@ -96,6 +96,40 @@ func (s *Service) GetCommitDescription(ctx context.Context, commitID string) (st
 	return strings.TrimSpace(out), nil
 }
 
+// ChangedFile represents a file changed in a commit
+type ChangedFile struct {
+	Path   string // File path
+	Status string // M=modified, A=added, D=deleted, R=renamed
+}
+
+// GetChangedFiles gets the list of changed files for a commit
+func (s *Service) GetChangedFiles(ctx context.Context, commitID string) ([]ChangedFile, error) {
+	// Use jj diff --summary to get a list of changed files
+	out, err := s.runJJOutput(ctx, "diff", "--summary", "-r", commitID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get changed files: %w", err)
+	}
+
+	var files []ChangedFile
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		// Format is: "M path/to/file" or "A path/to/file" etc.
+		parts := strings.SplitN(line, " ", 2)
+		if len(parts) >= 2 {
+			files = append(files, ChangedFile{
+				Status: parts[0],
+				Path:   parts[1],
+			})
+		}
+	}
+
+	return files, nil
+}
+
 // IsCommitMutable checks if a commit can be modified
 func (s *Service) IsCommitMutable(ctx context.Context, commitID string) bool {
 	// Try a no-op describe to see if the commit is mutable

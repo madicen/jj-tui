@@ -16,6 +16,12 @@ func New(z *zone.Manager) *Renderer {
 	return &Renderer{Zone: z}
 }
 
+// ChangedFile represents a file changed in a commit
+type ChangedFile struct {
+	Path   string
+	Status string // M=modified, A=added, D=deleted
+}
+
 // GraphData contains data needed for commit graph rendering
 type GraphData struct {
 	Repository         *models.Repository
@@ -24,6 +30,8 @@ type GraphData struct {
 	RebaseSourceCommit int             // Index of commit being rebased
 	OpenPRBranches     map[string]bool // Map of branch names that have open PRs
 	CommitPRBranch     map[int]string  // Maps commit index to PR branch it can push to (including descendants)
+	CommitBookmark     map[int]string  // Maps commit index to bookmark it can create a PR with (including descendants)
+	ChangedFiles       []ChangedFile   // Changed files for the selected commit
 }
 
 // PRData contains data needed for PR rendering
