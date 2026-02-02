@@ -1,8 +1,6 @@
 package tui
 
 import (
-	"fmt"
-
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 )
@@ -274,8 +272,8 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 	if m.zone.Get(ZoneJiraCreateBranch) == zoneInfo {
 		if m.viewMode == ViewJira && m.selectedTicket >= 0 && m.selectedTicket < len(m.jiraTickets) && m.jjService != nil {
 			ticket := m.jiraTickets[m.selectedTicket]
-			m.statusMessage = fmt.Sprintf("Creating branch from %s...", ticket.Key)
-			return m, m.createBranchFromTicket(ticket)
+			m.startBookmarkFromJiraTicket(ticket)
+			return m, nil
 		}
 	}
 

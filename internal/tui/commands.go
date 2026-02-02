@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -134,34 +135,49 @@ func (m *Model) loadJiraTickets() tea.Cmd {
 	}
 }
 
-// createBranchFromTicket creates a new branch from a Jira ticket
-func (m *Model) createBranchFromTicket(ticket jira.Ticket) tea.Cmd {
-	return func() tea.Msg {
-		ctx := context.Background()
+// startBookmarkFromJiraTicket opens the bookmark creation screen pre-populated with the Jira ticket key
+func (m *Model) startBookmarkFromJiraTicket(ticket jira.Ticket) {
+	// Format bookmark name as "KEY-Title" with spaces replaced by hyphens
+	// and invalid characters removed
+	bookmarkName := formatBookmarkName(ticket.Key, ticket.Summary)
+	m.bookmarkNameInput.SetValue(bookmarkName)
+	m.bookmarkNameInput.Focus()
+	m.bookmarkNameInput.Width = m.width - 10
 
-		// Create branch name from ticket key (e.g., "PROJ-123")
-		branchName := strings.ToLower(ticket.Key)
+	// Mark that this is coming from Jira (will create new branch from main)
+	m.bookmarkFromJira = true
+	m.bookmarkJiraTicketKey = ticket.Key
+	m.bookmarkJiraTicketTitle = ticket.Summary // Store the ticket summary for PR title
+	m.bookmarkCommitIdx = -1                   // -1 means create new branch from main
+	m.existingBookmarks = nil                  // Don't show existing bookmarks for Jira flow
+	m.selectedBookmarkIdx = -1
 
-		// Create a new commit with jj new
-		if err := m.jjService.NewCommit(ctx); err != nil {
-			return errorMsg{err: fmt.Errorf("failed to create new commit: %w", err)}
-		}
+	m.viewMode = ViewCreateBookmark
+	m.statusMessage = fmt.Sprintf("Create bookmark for %s (will create new branch from main)", ticket.Key)
+}
 
-		// Create a bookmark with the ticket key as the name
-		if err := m.jjService.CreateNewBranch(ctx, branchName); err != nil {
-			return errorMsg{err: fmt.Errorf("failed to create bookmark: %w", err)}
-		}
+// formatBookmarkName creates a valid bookmark name from a Jira ticket key and summary
+// Format: "KEY-Title" with spaces replaced by hyphens and invalid chars removed
+func formatBookmarkName(key, summary string) string {
+	// Replace spaces with hyphens
+	title := strings.ReplaceAll(summary, " ", "-")
 
-		// Set the description to the ticket summary
-		description := fmt.Sprintf("%s: %s", ticket.Key, ticket.Summary)
-		if err := m.jjService.DescribeCommit(ctx, "@", description); err != nil {
-			return errorMsg{err: fmt.Errorf("failed to set description: %w", err)}
-		}
+	// Remove any characters that aren't valid for bookmark names
+	// Valid: a-z, A-Z, 0-9, -, _, /
+	invalidChars := regexp.MustCompile(`[^a-zA-Z0-9\-_/]`)
+	title = invalidChars.ReplaceAllString(title, "")
 
-		return bookmarkCreatedMsg{
-			ticketKey:  ticket.Key,
-			branchName: branchName,
-		}
+	// Remove multiple consecutive hyphens
+	multipleHyphens := regexp.MustCompile(`-+`)
+	title = multipleHyphens.ReplaceAllString(title, "-")
+
+	// Trim leading/trailing hyphens from title
+	title = strings.Trim(title, "-")
+
+	// Combine key and title
+	if title != "" {
+		return key + "-" + title
 	}
+	return key
 }
 

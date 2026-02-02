@@ -171,11 +171,11 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, openURL(pr.URL)
 			}
 		}
-		// In Jira view, create branch from ticket
+		// In Jira view, start bookmark creation from ticket
 		if m.viewMode == ViewJira && m.selectedTicket >= 0 && m.selectedTicket < len(m.jiraTickets) && m.jjService != nil {
 			ticket := m.jiraTickets[m.selectedTicket]
-			m.statusMessage = fmt.Sprintf("Creating branch from %s...", ticket.Key)
-			return m, m.createBranchFromTicket(ticket)
+			m.startBookmarkFromJiraTicket(ticket)
+			return m, nil
 		}
 		// In commit view, edit selected commit (jj edit)
 		if m.viewMode == ViewCommitGraph && m.selectedCommit >= 0 && m.jjService != nil && m.repository != nil {

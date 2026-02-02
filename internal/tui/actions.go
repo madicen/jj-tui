@@ -199,10 +199,10 @@ func (m *Model) startCreatePR() {
 	m.prBaseBranch = "main"
 	m.prFocusedField = 0
 
-	// Default title to branch name or commit summary
+	// Default title: use the stored "KEY - Title" if we have a Jira mapping, otherwise just the branch name
 	defaultTitle := m.prHeadBranch
-	if commit.Summary != "" && commit.Summary != "(no description)" {
-		defaultTitle = commit.Summary
+	if jiraPRTitle, ok := m.jiraBookmarkTitles[m.prHeadBranch]; ok {
+		defaultTitle = jiraPRTitle
 	}
 	m.prTitleInput.SetValue(defaultTitle)
 	m.prTitleInput.Focus()
@@ -328,6 +328,11 @@ func (m *Model) startCreateBookmark() {
 
 // submitBookmark creates or moves a bookmark on the selected commit
 func (m *Model) submitBookmark() tea.Cmd {
+	// Special handling for Jira flow: create new branch from main
+	if m.bookmarkFromJira {
+		return m.submitBookmarkFromJira()
+	}
+
 	commit := m.repository.Graph.Commits[m.bookmarkCommitIdx]
 	commitID := commit.ChangeID
 
@@ -380,6 +385,52 @@ func (m *Model) submitBookmark() tea.Cmd {
 		return bookmarkCreatedOnCommitMsg{
 			bookmarkName: bookmarkName,
 			commitID:     commitID,
+			wasMoved:     false,
+		}
+	}
+}
+
+// submitBookmarkFromJira creates a new branch from main with the Jira ticket as bookmark
+// and rebases the current work onto it
+func (m *Model) submitBookmarkFromJira() tea.Cmd {
+	bookmarkName := strings.TrimSpace(m.bookmarkNameInput.Value())
+
+	if bookmarkName == "" {
+		m.statusMessage = "Bookmark name is required"
+		return nil
+	}
+
+	// Validate bookmark name
+	for _, r := range bookmarkName {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '/') {
+			m.statusMessage = "Invalid bookmark name. Use letters, numbers, -, _, or /"
+			return nil
+		}
+	}
+
+	m.statusMessage = fmt.Sprintf("Creating branch '%s' from main...", bookmarkName)
+
+	// Save the Jira PR title mapping (formatted as "KEY - Title")
+	if m.bookmarkJiraTicketTitle != "" && m.bookmarkJiraTicketKey != "" {
+		m.jiraBookmarkTitles[bookmarkName] = m.bookmarkJiraTicketKey + " - " + m.bookmarkJiraTicketTitle
+	}
+
+	// Reset Jira state
+	m.bookmarkFromJira = false
+	m.bookmarkJiraTicketKey = ""
+	m.bookmarkJiraTicketTitle = ""
+
+	return func() tea.Msg {
+		ctx := context.Background()
+
+		// Create the branch from main with the bookmark
+		if err := m.jjService.CreateBranchFromMain(ctx, bookmarkName); err != nil {
+			return errorMsg{err: fmt.Errorf("failed to create branch from main: %w", err)}
+		}
+
+		return bookmarkCreatedOnCommitMsg{
+			bookmarkName: bookmarkName,
+			commitID:     "main",
 			wasMoved:     false,
 		}
 	}
