@@ -53,8 +53,8 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 	if m.zone.Get(ZoneActionRefresh) == zoneInfo {
 		m.statusMessage = "Refreshing..."
 		m.loading = true
-		// Refresh repository and PRs (if on PR view or if GitHub is connected)
-		if m.viewMode == ViewPullRequests && m.githubService != nil {
+		// Always refresh PRs too if GitHub is connected (needed for Update PR button on graph)
+		if m.githubService != nil {
 			return m, tea.Batch(m.loadRepository(), m.loadPRs())
 		}
 		return m, m.loadRepository()
@@ -156,6 +156,16 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 			}
 			m.startCreateBookmark()
 			return m, nil
+		}
+	}
+	if m.zone.Get(ZoneActionDelBookmark) == zoneInfo {
+		if m.selectedCommit >= 0 && m.jjService != nil && m.repository != nil {
+			commit := m.repository.Graph.Commits[m.selectedCommit]
+			if len(commit.Branches) == 0 {
+				m.statusMessage = "No bookmark on this commit to delete"
+				return m, nil
+			}
+			return m, m.deleteBookmark()
 		}
 	}
 	if m.zone.Get(ZoneActionPush) == zoneInfo {

@@ -116,8 +116,8 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "r":
 		m.statusMessage = "Refreshing..."
 		m.loading = true
-		// Refresh repository and PRs (if on PR view or if GitHub is connected)
-		if m.viewMode == ViewPullRequests && m.githubService != nil {
+		// Always refresh PRs too if GitHub is connected (needed for Update PR button on graph)
+		if m.githubService != nil {
 			return m, tea.Batch(m.loadRepository(), m.loadPRs())
 		}
 		return m, m.loadRepository()
@@ -137,6 +137,11 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			if m.repository != nil && m.selectedCommit < len(m.repository.Graph.Commits)-1 {
 				m.selectedCommit++
+				// Load changed files for the newly selected commit
+				commit := m.repository.Graph.Commits[m.selectedCommit]
+				m.changedFilesCommitID = commit.ChangeID
+				m.changedFiles = nil
+				return m, m.loadChangedFiles(commit.ChangeID)
 			}
 		}
 	case "k", "up":
@@ -149,8 +154,13 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.selectedTicket--
 			}
 		} else {
-			if m.selectedCommit > 0 {
+			if m.selectedCommit > 0 && m.repository != nil {
 				m.selectedCommit--
+				// Load changed files for the newly selected commit
+				commit := m.repository.Graph.Commits[m.selectedCommit]
+				m.changedFilesCommitID = commit.ChangeID
+				m.changedFiles = nil
+				return m, m.loadChangedFiles(commit.ChangeID)
 			}
 		}
 	case "o":
@@ -236,6 +246,16 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			m.startCreateBookmark()
 			return m, nil
+		}
+	case "x":
+		// Delete bookmark from selected commit
+		if m.viewMode == ViewCommitGraph && m.selectedCommit >= 0 && m.jjService != nil && m.repository != nil {
+			commit := m.repository.Graph.Commits[m.selectedCommit]
+			if len(commit.Branches) == 0 {
+				m.statusMessage = "No bookmark on this commit to delete"
+				return m, nil
+			}
+			return m, m.deleteBookmark()
 		}
 	case "u":
 		// Push updates to PR (for commits with PR branches or their descendants)

@@ -187,17 +187,30 @@ func (m *Model) startCreatePR() {
 
 	commit := m.repository.Graph.Commits[m.selectedCommit]
 
-	// Check if commit has a bookmark (branch)
-	if len(commit.Branches) == 0 {
-		m.statusMessage = "No bookmark on commit. Create one first with jj bookmark create."
-		return
+	// Find the bookmark - either directly on this commit or from an ancestor
+	var headBranch string
+	var needsMoveBookmark bool
+
+	if len(commit.Branches) > 0 {
+		// Commit has a bookmark directly
+		headBranch = commit.Branches[0]
+		needsMoveBookmark = false
+	} else {
+		// Need to find a bookmark from ancestors
+		headBranch = m.findBookmarkForCommit(m.selectedCommit)
+		if headBranch == "" {
+			m.statusMessage = "No bookmark found. Create one first with 'm'."
+			return
+		}
+		needsMoveBookmark = true
 	}
 
 	// Set up the PR creation form
 	m.prCommitIndex = m.selectedCommit
-	m.prHeadBranch = commit.Branches[0]
+	m.prHeadBranch = headBranch
 	m.prBaseBranch = "main"
 	m.prFocusedField = 0
+	m.prNeedsMoveBookmark = needsMoveBookmark
 
 	// Default title: use the stored "KEY - Title" if we have a Jira mapping, otherwise just the branch name
 	defaultTitle := m.prHeadBranch
@@ -217,7 +230,55 @@ func (m *Model) startCreatePR() {
 	m.prBodyInput.SetHeight(m.height - 15)
 
 	m.viewMode = ViewCreatePR
-	m.statusMessage = "Creating PR for " + m.prHeadBranch
+	if needsMoveBookmark {
+		m.statusMessage = fmt.Sprintf("Creating PR for %s (will move bookmark to include all commits)", m.prHeadBranch)
+	} else {
+		m.statusMessage = "Creating PR for " + m.prHeadBranch
+	}
+}
+
+// findBookmarkForCommit finds a bookmark from ancestors of the given commit
+func (m *Model) findBookmarkForCommit(commitIdx int) string {
+	if m.repository == nil || commitIdx < 0 || commitIdx >= len(m.repository.Graph.Commits) {
+		return ""
+	}
+
+	// Build a map of commit ID to index
+	commitIDToIndex := make(map[string]int)
+	for i, commit := range m.repository.Graph.Commits {
+		commitIDToIndex[commit.ID] = i
+		commitIDToIndex[commit.ChangeID] = i
+	}
+
+	// BFS to find an ancestor with a bookmark
+	visited := make(map[int]bool)
+	queue := []int{commitIdx}
+
+	for len(queue) > 0 {
+		idx := queue[0]
+		queue = queue[1:]
+
+		if visited[idx] {
+			continue
+		}
+		visited[idx] = true
+
+		commit := m.repository.Graph.Commits[idx]
+
+		// Check if this commit has a bookmark
+		if len(commit.Branches) > 0 {
+			return commit.Branches[0]
+		}
+
+		// Add parents to queue
+		for _, parentID := range commit.Parents {
+			if parentIdx, ok := commitIDToIndex[parentID]; ok {
+				queue = append(queue, parentIdx)
+			}
+		}
+	}
+
+	return ""
 }
 
 // submitPR pushes the branch and creates the PR
@@ -226,18 +287,32 @@ func (m *Model) submitPR() tea.Cmd {
 	body := strings.TrimSpace(m.prBodyInput.Value())
 	headBranch := m.prHeadBranch
 	baseBranch := m.prBaseBranch
+	needsMoveBookmark := m.prNeedsMoveBookmark
+	commitIndex := m.prCommitIndex
 
 	if title == "" {
 		m.statusMessage = "Title is required"
 		return nil
 	}
 
-	m.statusMessage = fmt.Sprintf("Pushing %s and creating PR...", headBranch)
+	if needsMoveBookmark {
+		m.statusMessage = fmt.Sprintf("Moving bookmark %s and creating PR...", headBranch)
+	} else {
+		m.statusMessage = fmt.Sprintf("Pushing %s and creating PR...", headBranch)
+	}
 
 	return func() tea.Msg {
 		ctx := context.Background()
 
-		// First, push the branch to GitHub
+		// If we need to move the bookmark to include all commits
+		if needsMoveBookmark && m.repository != nil && commitIndex >= 0 && commitIndex < len(m.repository.Graph.Commits) {
+			commit := m.repository.Graph.Commits[commitIndex]
+			if err := m.jjService.MoveBookmark(ctx, headBranch, commit.ChangeID); err != nil {
+				return errorMsg{err: fmt.Errorf("failed to move bookmark %s: %w", headBranch, err)}
+			}
+		}
+
+		// Push the branch to GitHub
 		pushOutput, err := m.jjService.PushToGit(ctx, headBranch)
 		if err != nil {
 			return errorMsg{err: fmt.Errorf("failed to push branch: %w\nOutput: %s", err, pushOutput)}
@@ -433,6 +508,36 @@ func (m *Model) submitBookmarkFromJira() tea.Cmd {
 			commitID:     "main",
 			wasMoved:     false,
 		}
+	}
+}
+
+// deleteBookmark deletes a bookmark from the selected commit
+func (m *Model) deleteBookmark() tea.Cmd {
+	if m.repository == nil || m.selectedCommit < 0 || m.selectedCommit >= len(m.repository.Graph.Commits) {
+		m.statusMessage = "No commit selected"
+		return nil
+	}
+
+	commit := m.repository.Graph.Commits[m.selectedCommit]
+
+	if len(commit.Branches) == 0 {
+		m.statusMessage = "No bookmark on this commit to delete"
+		return nil
+	}
+
+	// For now, delete the first bookmark on the commit
+	// TODO: If multiple bookmarks, show a selection UI
+	bookmarkName := commit.Branches[0]
+	m.statusMessage = fmt.Sprintf("Deleting bookmark '%s'...", bookmarkName)
+
+	return func() tea.Msg {
+		ctx := context.Background()
+
+		if err := m.jjService.DeleteBookmark(ctx, bookmarkName); err != nil {
+			return errorMsg{err: fmt.Errorf("failed to delete bookmark: %w", err)}
+		}
+
+		return bookmarkDeletedMsg{bookmarkName: bookmarkName}
 	}
 }
 

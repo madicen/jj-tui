@@ -67,6 +67,10 @@ type Model struct {
 	err            error
 	loading        bool
 
+	// Changed files for selected commit
+	changedFiles         []jj.ChangedFile
+	changedFilesCommitID string // Which commit the files are for
+
 	// Viewport for scrollable content
 	viewport      viewport.Model
 	viewportReady bool
@@ -87,12 +91,13 @@ type Model struct {
 	settingsFocusedField int
 
 	// PR creation state
-	prTitleInput   textinput.Model
-	prBodyInput    textarea.Model
-	prBaseBranch   string
-	prHeadBranch   string
-	prFocusedField int // 0=title, 1=body
-	prCommitIndex  int // Index of commit PR is being created from
+	prTitleInput        textinput.Model
+	prBodyInput         textarea.Model
+	prBaseBranch        string
+	prHeadBranch        string
+	prFocusedField      int  // 0=title, 1=body
+	prCommitIndex       int  // Index of commit PR is being created from
+	prNeedsMoveBookmark bool // True if we need to move the bookmark to include all commits
 
 	// Bookmark creation state
 	bookmarkNameInput       textinput.Model
@@ -163,6 +168,17 @@ type bookmarkCreatedOnCommitMsg struct {
 	bookmarkName string
 	commitID     string
 	wasMoved     bool // true if bookmark was moved, false if newly created
+}
+
+// bookmarkDeletedMsg is sent when a bookmark is deleted
+type bookmarkDeletedMsg struct {
+	bookmarkName string
+}
+
+// changedFilesLoadedMsg is sent when changed files for a commit are loaded
+type changedFilesLoadedMsg struct {
+	commitID string
+	files    []jj.ChangedFile
 }
 
 // silentRepositoryLoadedMsg is for background refreshes that don't update the status
@@ -342,6 +358,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Auto-select first commit if none selected
 		if m.selectedCommit == -1 && len(msg.repository.Graph.Commits) > 0 {
 			m.selectedCommit = 0
+			// Load changed files for the auto-selected commit
+			commit := msg.repository.Graph.Commits[0]
+			m.changedFilesCommitID = commit.ChangeID
+			return m, tea.Batch(m.tickCmd(), m.loadChangedFiles(commit.ChangeID))
 		}
 		return m, m.tickCmd() // Continue auto-refresh timer
 
@@ -412,11 +432,25 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.jiraService != nil {
 			m.statusMessage += " (Jira connected)"
 		}
-		// Auto-select first commit if none selected
+
+		// Build commands to run after initialization
+		var cmds []tea.Cmd
+		cmds = append(cmds, m.tickCmd())
+
+		// Load PRs on startup if GitHub is connected (needed for Update PR button)
+		if m.githubService != nil {
+			cmds = append(cmds, m.loadPRs())
+		}
+
+		// Auto-select first commit if none selected and load its changed files
 		if m.selectedCommit == -1 && len(msg.repository.Graph.Commits) > 0 {
 			m.selectedCommit = 0
+			commit := msg.repository.Graph.Commits[0]
+			m.changedFilesCommitID = commit.ChangeID
+			cmds = append(cmds, m.loadChangedFiles(commit.ChangeID))
 		}
-		return m, m.tickCmd()
+
+		return m, tea.Batch(cmds...)
 
 	case prsLoadedMsg:
 		if m.repository != nil {
@@ -477,6 +511,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.statusMessage = fmt.Sprintf("Bookmark '%s' created", msg.bookmarkName)
 		}
+
+	case bookmarkDeletedMsg:
+		m.viewMode = ViewCommitGraph
+		m.statusMessage = fmt.Sprintf("Bookmark '%s' deleted", msg.bookmarkName)
+		// Reload repository to update the view
+		return m, tea.Batch(m.loadRepository(), m.loadPRs())
+
+	case changedFilesLoadedMsg:
+		// Only update if the files are for the currently selected commit
+		if msg.commitID == m.changedFilesCommitID {
+			m.changedFiles = msg.files
+		}
+		return m, nil
 		// Reload repository AND PRs to update action buttons
 		return m, tea.Batch(m.loadRepository(), m.loadPRs())
 
@@ -515,6 +562,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case CommitSelectedMsg:
 		m.selectedCommit = msg.Index
+		// Load changed files for the selected commit
+		if m.repository != nil && msg.Index >= 0 && msg.Index < len(m.repository.Graph.Commits) {
+			commit := m.repository.Graph.Commits[msg.Index]
+			m.changedFilesCommitID = commit.ChangeID
+			m.changedFiles = nil // Clear old files while loading
+			return m, m.loadChangedFiles(commit.ChangeID)
+		}
 		return m, nil
 
 	case ActionMsg:

@@ -98,13 +98,13 @@ func (m *Model) renderHeader() string {
 		title += " " + lipgloss.NewStyle().Foreground(colorMuted).Render(m.repository.Path)
 	}
 
-	// Create tabs wrapped in zones
+	// Create tabs wrapped in zones (with keyboard shortcuts)
 	tabs := []string{
-		m.zone.Mark(ZoneTabGraph, m.renderTab("Graph", m.viewMode == ViewCommitGraph)),
-		m.zone.Mark(ZoneTabPRs, m.renderTab("PRs", m.viewMode == ViewPullRequests)),
-		m.zone.Mark(ZoneTabJira, m.renderTab("Jira", m.viewMode == ViewJira)),
-		m.zone.Mark(ZoneTabSettings, m.renderTab("Settings", m.viewMode == ViewSettings)),
-		m.zone.Mark(ZoneTabHelp, m.renderTab("Help", m.viewMode == ViewHelp)),
+		m.zone.Mark(ZoneTabGraph, m.renderTab("Graph (g)", m.viewMode == ViewCommitGraph)),
+		m.zone.Mark(ZoneTabPRs, m.renderTab("PRs (p)", m.viewMode == ViewPullRequests)),
+		m.zone.Mark(ZoneTabJira, m.renderTab("Jira (i)", m.viewMode == ViewJira)),
+		m.zone.Mark(ZoneTabSettings, m.renderTab("Settings (,)", m.viewMode == ViewSettings)),
+		m.zone.Mark(ZoneTabHelp, m.renderTab("Help (h)", m.viewMode == ViewHelp)),
 	}
 
 	tabsStr := lipgloss.JoinHorizontal(lipgloss.Left, tabs...)
@@ -239,6 +239,54 @@ func (m *Model) renderCommitGraph() string {
 		}
 	}
 
+	// Build a map of commit index -> bookmark name for commits that can create a PR
+	// This includes commits with bookmarks (that don't have open PRs) AND their descendants
+	commitBookmark := make(map[int]string)
+	if m.repository != nil && len(m.repository.Graph.Commits) > 0 {
+		commitIDToIndex := make(map[string]int)
+		for i, commit := range m.repository.Graph.Commits {
+			commitIDToIndex[commit.ID] = i
+			commitIDToIndex[commit.ChangeID] = i
+			// Check if this commit has a bookmark without an open PR
+			for _, branch := range commit.Branches {
+				if !openPRBranches[branch] {
+					commitBookmark[i] = branch
+					break
+				}
+			}
+		}
+
+		// Propagate bookmark info to descendants
+		changed := true
+		for changed {
+			changed = false
+			for i, commit := range m.repository.Graph.Commits {
+				if commitBookmark[i] != "" || commitPRBranch[i] != "" {
+					continue // Already has a bookmark or PR branch
+				}
+				// Check if any parent has a bookmark (without PR)
+				for _, parentID := range commit.Parents {
+					if parentIdx, ok := commitIDToIndex[parentID]; ok {
+						if branch := commitBookmark[parentIdx]; branch != "" {
+							commitBookmark[i] = branch
+							changed = true
+							break
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Convert changed files to view format
+	var changedFiles []view.ChangedFile
+	for _, f := range m.changedFiles {
+		changedFiles = append(changedFiles, view.ChangedFile{
+			Path:   f.Path,
+			Status: f.Status,
+		})
+	}
+
 	return m.renderer().Graph(view.GraphData{
 		Repository:         m.repository,
 		SelectedCommit:     m.selectedCommit,
@@ -246,6 +294,8 @@ func (m *Model) renderCommitGraph() string {
 		RebaseSourceCommit: m.rebaseSourceCommit,
 		OpenPRBranches:     openPRBranches,
 		CommitPRBranch:     commitPRBranch,
+		CommitBookmark:     commitBookmark,
+		ChangedFiles:       changedFiles,
 	})
 }
 
