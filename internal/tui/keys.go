@@ -175,7 +175,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Open ticket URL in browser (Tickets view only)
 		if m.viewMode == ViewJira && m.ticketService != nil && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
 			ticket := m.ticketList[m.selectedTicket]
-			ticketURL := m.ticketService.GetTicketURL(ticket.Key)
+			ticketURL := m.ticketService.GetTicketURL(ticket)
 			m.statusMessage = fmt.Sprintf("Opening %s...", ticket.Key)
 			return m, openURL(ticketURL)
 		}

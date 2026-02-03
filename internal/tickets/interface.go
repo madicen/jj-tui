@@ -6,12 +6,13 @@ import "context"
 // Ticket represents a generic ticket from any provider
 type Ticket struct {
 	Key         string // Full ID used for API calls and URLs
-	DisplayKey  string // Short ID for display (e.g., "#51" for Codecks, "PROJ-123" for Jira)
+	DisplayKey  string // Short ID for display (e.g., "$12u" for Codecks, "PROJ-123" for Jira)
 	Summary     string
 	Status      string
 	Priority    string
 	Type        string
 	Description string
+	DeckID      string // Codecks: deck ID for URL construction
 }
 
 // Service is the interface that all ticket providers must implement
@@ -23,7 +24,7 @@ type Service interface {
 	GetTicket(ctx context.Context, key string) (*Ticket, error)
 
 	// GetTicketURL returns the browser URL for a ticket
-	GetTicketURL(ticketKey string) string
+	GetTicketURL(ticket Ticket) string
 
 	// GetProviderName returns the name of the ticket provider (e.g., "Jira", "Codecks")
 	GetProviderName() string

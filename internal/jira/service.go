@@ -232,8 +232,8 @@ func (s *Service) GetTicket(ctx context.Context, key string) (*tickets.Ticket, e
 }
 
 // GetTicketURL returns the browser URL for a ticket
-func (s *Service) GetTicketURL(ticketKey string) string {
-	return s.baseURL + "/browse/" + ticketKey
+func (s *Service) GetTicketURL(ticket tickets.Ticket) string {
+	return s.baseURL + "/browse/" + ticket.Key
 }
 
 // GetBaseURL returns the Jira base URL

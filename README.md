@@ -13,7 +13,7 @@ A modern Terminal User Interface (TUI) for managing [Jujutsu](https://github.com
 - **Changed Files View**: See files modified in the selected commit with a nested folder structure
 - **Keyboard & Mouse Support**: Full keyboard navigation with zone-based mouse support for clickable UI elements
 - **GitHub Integration**: Create and manage GitHub Pull Requests directly from the TUI
-- **Jira Integration**: View assigned tickets and create branches from Jira issues with auto-populated names
+- **Ticket Integration**: View assigned tickets from Jira or Codecks and create branches with auto-populated names
 - **Commit Management**: Edit, squash, describe, abandon, rebase, and manage commits with simple key presses
 - **Bookmark Management**: Create, move, and delete bookmarks on commits
 - **Immutable Commit Detection**: Automatically detects and protects immutable commits (pushed to remote)
@@ -101,10 +101,11 @@ jj-tui /path/to/your/jj/repo
 - `Enter`, `e`: Open PR in browser
 - `Ctrl+r`: Refresh PR list
 
-### Tickets (Jira) View
+### Tickets View (Jira / Codecks)
 
 - `↑/↓`, `j/k`: Navigate tickets
 - `Enter`: Create branch from selected ticket
+- `o`: Open ticket in browser
 - `Ctrl+r`: Refresh ticket list
 
 ### Settings View
@@ -171,6 +172,41 @@ Get your API token from: https://id.atlassian.com/manage-profile/security/api-to
    - Rebases your current work onto the new branch
    - Pre-populates PR title with "PROJ-123 - Ticket Summary" when you create a PR
 
+## Codecks Integration
+
+[Codecks](https://www.codecks.io/) is a project management tool designed for game developers. To use Codecks features, set your credentials:
+
+```bash
+export CODECKS_SUBDOMAIN=your-account-name
+export CODECKS_TOKEN=your_auth_token
+export CODECKS_PROJECT=Optional-Project-Name  # Optional: filter cards by project
+```
+
+### Getting Your Codecks Token
+
+1. Log in to Codecks in your browser
+2. Open browser Developer Tools (F12)
+3. Go to Application → Cookies → `https://your-account.codecks.io`
+4. Copy the value of the `at` cookie - this is your auth token
+
+### Codecks Workflow
+
+1. Press `t` to open the Tickets view
+2. Navigate through your assigned cards with `j/k` or arrow keys
+3. Press `o` to open the card in your browser
+4. Press `Enter` to create a branch from the selected card
+   - Creates a new commit branched from main
+   - Creates a bookmark with the short ID (e.g., `12u-add-feature-name`)
+   - Automatically prepopulates commit descriptions with the card's short ID (e.g., `$12u`)
+   - Pre-populates PR title with "$12u - Card Title" when you create a PR
+
+### Codecks Features
+
+- **Short IDs**: Cards display their Codecks short ID (e.g., `$12u`) for easy reference
+- **Project Filtering**: Optionally filter cards to a specific project
+- **Archive Filtering**: Archived and deleted cards are automatically hidden
+- **Direct Links**: Open cards directly in Codecks from the TUI
+
 ## Configuration
 
 The application automatically detects:
@@ -193,6 +229,10 @@ jj-tui/
 │   │   └── service.go
 │   ├── jira/               # Jira API integration
 │   │   └── service.go
+│   ├── codecks/            # Codecks API integration
+│   │   └── service.go
+│   ├── tickets/            # Generic ticket service interface
+│   │   └── interface.go
 │   ├── models/             # Data models
 │   │   └── commit.go
 │   └── tui/                # Terminal UI components
@@ -279,10 +319,12 @@ The application supports these key user workflows:
 - Update PRs by pushing new commits
 - Push from descendant commits (bookmark auto-moves)
 
-### 5. Jira Integration
-- View assigned Jira tickets
+### 5. Ticket Integration (Jira & Codecks)
+- View assigned tickets from Jira or Codecks cards
 - Create branches from tickets with auto-named bookmarks
-- PR titles auto-populated from Jira ticket info
+- PR titles auto-populated from ticket info
+- Commit descriptions pre-populated with ticket IDs (Codecks)
+- Open tickets directly in browser
 
 ### 6. Repository Monitoring
 - Real-time repository state updates
