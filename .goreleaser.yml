@@ -59,7 +59,7 @@ changelog:
       - Merge pull request
       - Merge branch
 
-homebrew:
+brews:
   - name: jj-tui
     repository:
       owner: madicen
