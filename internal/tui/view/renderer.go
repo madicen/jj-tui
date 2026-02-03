@@ -48,11 +48,12 @@ type PRResult struct {
 	FullContent    string // Full content for non-split views
 }
 
-// JiraData contains data needed for Jira rendering
+// JiraData contains data needed for Jira/Tickets rendering
 type JiraData struct {
 	Tickets        []JiraTicket
 	SelectedTicket int
-	JiraService    bool // whether Jira is connected
+	JiraService    bool   // whether a ticket service is connected
+	ProviderName   string // name of the ticket provider (e.g., "Jira", "Codecks")
 }
 
 // JiraResult contains the split rendering for Jira
@@ -65,6 +66,7 @@ type JiraResult struct {
 // JiraTicket represents a Jira ticket for rendering
 type JiraTicket struct {
 	Key         string
+	DisplayKey  string // Short key for display (e.g., "#51" for Codecks, "PROJ-123" for Jira)
 	Summary     string
 	Status      string
 	Type        string

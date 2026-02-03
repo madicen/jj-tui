@@ -15,9 +15,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal/github"
-	"github.com/madicen/jj-tui/internal/jira"
 	"github.com/madicen/jj-tui/internal/jj"
 	"github.com/madicen/jj-tui/internal/models"
+	"github.com/madicen/jj-tui/internal/tickets"
 )
 
 // openURL opens a URL in the default browser
@@ -42,6 +42,13 @@ func openURL(url string) tea.Cmd {
 // Auto-refresh interval
 const autoRefreshInterval = 2 * time.Second
 
+// isSelectedCommitValid returns true if selectedCommit points to a valid commit
+func (m *Model) isSelectedCommitValid() bool {
+	return m.repository != nil &&
+		m.selectedCommit >= 0 &&
+		m.selectedCommit < len(m.repository.Graph.Commits)
+}
+
 // tickMsg is sent on each timer tick for auto-refresh
 type tickMsg time.Time
 
@@ -53,7 +60,7 @@ type Model struct {
 	zone          *zone.Manager
 	jjService     *jj.Service
 	githubService *github.Service
-	jiraService   *jira.Service
+	ticketService tickets.Service // Generic ticket service (Jira, Codecks, etc.)
 	repository    *models.Repository
 
 	// UI state
@@ -79,8 +86,8 @@ type Model struct {
 	selectionMode      SelectionMode
 	rebaseSourceCommit int // Index of commit being rebased
 
-	// Jira state
-	jiraTickets []jira.Ticket
+	// Ticket state (Jira, Codecks, etc.)
+	ticketList []tickets.Ticket
 
 	// Description editing
 	descriptionInput textarea.Model
@@ -104,10 +111,12 @@ type Model struct {
 	bookmarkCommitIdx       int               // Index of commit to create bookmark on (-1 for new branch from main)
 	existingBookmarks       []string          // List of existing bookmarks
 	selectedBookmarkIdx     int               // Index of selected existing bookmark (-1 for new)
-	bookmarkFromJira        bool              // True if creating bookmark from Jira ticket
-	bookmarkJiraTicketKey   string            // Jira ticket key if creating from Jira
-	bookmarkJiraTicketTitle string            // Jira ticket summary if creating from Jira
-	jiraBookmarkTitles      map[string]string // Maps bookmark names to formatted PR titles ("KEY - Title")
+	bookmarkFromJira           bool              // True if creating bookmark from Jira ticket
+	bookmarkJiraTicketKey      string            // Jira ticket key if creating from Jira
+	bookmarkJiraTicketTitle    string            // Jira ticket summary if creating from Jira
+	bookmarkTicketDisplayKey   string            // Short display key (e.g., "$12u" for Codecks) for commit messages
+	jiraBookmarkTitles         map[string]string // Maps bookmark names to formatted PR titles ("KEY - Title")
+	ticketBookmarkDisplayKeys  map[string]string // Maps bookmark names to ticket short IDs for commit messages
 }
 
 // Messages for async operations
@@ -122,7 +131,8 @@ type editCompletedMsg struct {
 type servicesInitializedMsg struct {
 	jjService     *jj.Service
 	githubService *github.Service
-	jiraService   *jira.Service
+	ticketService tickets.Service
+	ticketError   error // Error from ticket service initialization (for debugging)
 	repository    *models.Repository
 }
 
@@ -130,8 +140,8 @@ type prsLoadedMsg struct {
 	prs []models.GitHubPR
 }
 
-type jiraTicketsLoadedMsg struct {
-	tickets []jira.Ticket
+type ticketsLoadedMsg struct {
+	tickets []tickets.Ticket
 }
 
 type bookmarkCreatedMsg struct {
@@ -140,8 +150,9 @@ type bookmarkCreatedMsg struct {
 }
 
 type settingsSavedMsg struct {
-	githubConnected bool
-	jiraConnected   bool
+	githubConnected  bool
+	ticketService    tickets.Service
+	ticketProvider   string // "jira", "codecks", or ""
 }
 
 type errorMsg struct {
@@ -202,7 +213,7 @@ func New(ctx context.Context) *Model {
 	ta.SetHeight(5)
 
 	// Create settings inputs
-	settingsInputs := make([]textinput.Model, 4)
+	settingsInputs := make([]textinput.Model, 7)
 
 	// GitHub Token
 	settingsInputs[0] = textinput.New()
@@ -235,6 +246,29 @@ func New(ctx context.Context) *Model {
 	settingsInputs[3].EchoMode = textinput.EchoPassword
 	settingsInputs[3].EchoCharacter = '•'
 	settingsInputs[3].SetValue(os.Getenv("JIRA_TOKEN"))
+
+	// Codecks Subdomain
+	settingsInputs[4] = textinput.New()
+	settingsInputs[4].Placeholder = "your-team (from your-team.codecks.io)"
+	settingsInputs[4].CharLimit = 100
+	settingsInputs[4].Width = 50
+	settingsInputs[4].SetValue(os.Getenv("CODECKS_SUBDOMAIN"))
+
+	// Codecks Token
+	settingsInputs[5] = textinput.New()
+	settingsInputs[5].Placeholder = "Codecks API Token (from browser cookie 'at')"
+	settingsInputs[5].CharLimit = 256
+	settingsInputs[5].Width = 50
+	settingsInputs[5].EchoMode = textinput.EchoPassword
+	settingsInputs[5].EchoCharacter = '•'
+	settingsInputs[5].SetValue(os.Getenv("CODECKS_TOKEN"))
+
+	// Codecks Project (optional filter)
+	settingsInputs[6] = textinput.New()
+	settingsInputs[6].Placeholder = "Project name (optional, filters cards)"
+	settingsInputs[6].CharLimit = 100
+	settingsInputs[6].Width = 50
+	settingsInputs[6].SetValue(os.Getenv("CODECKS_PROJECT"))
 
 	// PR title input
 	prTitle := textinput.New()
@@ -271,7 +305,8 @@ func New(ctx context.Context) *Model {
 		bookmarkNameInput:   bookmarkName,
 		bookmarkCommitIdx:   -1,
 		selectedBookmarkIdx: -1,
-		jiraBookmarkTitles:  make(map[string]string),
+		jiraBookmarkTitles:        make(map[string]string),
+		ticketBookmarkDisplayKeys: make(map[string]string),
 	}
 }
 
@@ -421,7 +456,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case servicesInitializedMsg:
 		m.jjService = msg.jjService
 		m.githubService = msg.githubService
-		m.jiraService = msg.jiraService
+		m.ticketService = msg.ticketService
 		m.repository = msg.repository
 		m.loading = false
 		m.err = nil
@@ -429,8 +464,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.githubService != nil {
 			m.statusMessage += " (GitHub connected)"
 		}
-		if m.jiraService != nil {
-			m.statusMessage += " (Jira connected)"
+		if m.ticketService != nil {
+			m.statusMessage += fmt.Sprintf(" (%s connected)", m.ticketService.GetProviderName())
+		} else if msg.ticketError != nil {
+			m.statusMessage += fmt.Sprintf(" (Tickets error: %v)", msg.ticketError)
 		}
 
 		// Build commands to run after initialization
@@ -461,9 +498,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case jiraTicketsLoadedMsg:
-		m.jiraTickets = msg.tickets
-		m.statusMessage = fmt.Sprintf("Loaded %d Jira tickets", len(msg.tickets))
+	case ticketsLoadedMsg:
+		m.ticketList = msg.tickets
+		providerName := "tickets"
+		if m.ticketService != nil {
+			providerName = m.ticketService.GetProviderName() + " tickets"
+		}
+		m.statusMessage = fmt.Sprintf("Loaded %d %s", len(msg.tickets), providerName)
 		if len(msg.tickets) > 0 && m.selectedTicket < 0 {
 			m.selectedTicket = 0
 		}
@@ -478,12 +519,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case settingsSavedMsg:
 		m.viewMode = ViewCommitGraph
+		m.ticketService = msg.ticketService
 		var status []string
 		if msg.githubConnected {
 			status = append(status, "GitHub")
 		}
-		if msg.jiraConnected {
-			status = append(status, "Jira")
+		if msg.ticketProvider != "" {
+			status = append(status, msg.ticketProvider)
 		}
 		if len(status) > 0 {
 			m.statusMessage = fmt.Sprintf("Settings saved. Connected: %s", strings.Join(status, ", "))
@@ -547,6 +589,46 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if description == "(no description)" {
 				description = ""
 			}
+
+			// If description is empty, check if commit has a ticket-associated bookmark
+			// and prepopulate with the short ID
+			if description == "" && m.repository != nil {
+				// Find the commit index
+				commitIdx := -1
+				for i, commit := range m.repository.Graph.Commits {
+					if commit.ChangeID == msg.commitID {
+						commitIdx = i
+						break
+					}
+				}
+
+				if commitIdx >= 0 {
+					// First check bookmarks directly on this commit
+					commit := m.repository.Graph.Commits[commitIdx]
+					var foundShortID string
+					for _, branch := range commit.Branches {
+						if shortID, ok := m.ticketBookmarkDisplayKeys[branch]; ok {
+							foundShortID = shortID
+							break
+						}
+					}
+
+					// If not found, check ancestor bookmarks
+					if foundShortID == "" {
+						ancestorBookmark := m.findBookmarkForCommit(commitIdx)
+						if ancestorBookmark != "" {
+							if shortID, ok := m.ticketBookmarkDisplayKeys[ancestorBookmark]; ok {
+								foundShortID = shortID
+							}
+						}
+					}
+
+					if foundShortID != "" {
+						description = foundShortID + " "
+					}
+				}
+			}
+
 			m.descriptionInput.SetValue(description)
 			m.descriptionInput.Focus()
 			m.statusMessage = "Editing description (Ctrl+S to save, Esc to cancel)"

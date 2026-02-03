@@ -3,15 +3,18 @@ package tui
 import (
 	"context"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/madicen/jj-tui/internal/codecks"
 	"github.com/madicen/jj-tui/internal/github"
 	"github.com/madicen/jj-tui/internal/jira"
 	"github.com/madicen/jj-tui/internal/jj"
 	"github.com/madicen/jj-tui/internal/models"
+	"github.com/madicen/jj-tui/internal/tickets"
 )
 
 // tickCmd returns a command that sends a tick after the refresh interval
@@ -51,19 +54,54 @@ func (m *Model) initializeServices() tea.Cmd {
 			}
 		}
 
-		// Try to create Jira service (optional - won't fail if env vars not set)
-		var jiraSvc *jira.Service
-		if jira.IsConfigured() {
-			jiraSvc, _ = jira.NewService() // Ignore error
-		}
+		// Try to create ticket service based on configured provider
+		ticketSvc, ticketErr := createTicketService()
 
 		return servicesInitializedMsg{
 			jjService:     jjSvc,
 			githubService: ghSvc,
-			jiraService:   jiraSvc,
+			ticketService: ticketSvc,
+			ticketError:   ticketErr,
 			repository:    repo,
 		}
 	}
+}
+
+// createTicketService creates the appropriate ticket service based on configuration
+// Priority: explicit TICKET_PROVIDER env var, then Codecks if configured, then Jira if configured
+func createTicketService() (tickets.Service, error) {
+	provider := os.Getenv("TICKET_PROVIDER")
+
+	switch provider {
+	case "codecks":
+		if codecks.IsConfigured() {
+			return codecks.NewService()
+		}
+		return nil, fmt.Errorf("TICKET_PROVIDER=codecks but CODECKS_SUBDOMAIN or CODECKS_TOKEN not set")
+	case "jira":
+		if jira.IsConfigured() {
+			return jira.NewService()
+		}
+		return nil, fmt.Errorf("TICKET_PROVIDER=jira but Jira env vars not set")
+	default:
+		// Auto-detect: try Codecks first (if configured), then Jira
+		if codecks.IsConfigured() {
+			svc, err := codecks.NewService()
+			if err != nil {
+				// Codecks configured but failed to connect - return the error
+				return nil, fmt.Errorf("Codecks: %w", err)
+			}
+			return svc, nil
+		}
+		if jira.IsConfigured() {
+			svc, err := jira.NewService()
+			if err != nil {
+				return nil, fmt.Errorf("Jira: %w", err)
+			}
+			return svc, nil
+		}
+	}
+	return nil, nil // No ticket service configured
 }
 
 // loadRepository loads/refreshes repository data
@@ -118,20 +156,23 @@ func (m *Model) loadPRs() tea.Cmd {
 	}
 }
 
-// loadJiraTickets loads Jira tickets assigned to the user
-func (m *Model) loadJiraTickets() tea.Cmd {
-	if m.jiraService == nil {
+// loadTickets loads tickets from the configured ticket service
+func (m *Model) loadTickets() tea.Cmd {
+	if m.ticketService == nil {
 		return func() tea.Msg {
-			return jiraTicketsLoadedMsg{tickets: []jira.Ticket{}}
+			return ticketsLoadedMsg{tickets: []tickets.Ticket{}}
 		}
 	}
 
+	// Capture service reference for the closure
+	svc := m.ticketService
+
 	return func() tea.Msg {
-		tickets, err := m.jiraService.GetAssignedTickets(context.Background())
+		ticketList, err := svc.GetAssignedTickets(context.Background())
 		if err != nil {
-			return errorMsg{err: fmt.Errorf("failed to load Jira tickets: %w", err)}
+			return errorMsg{err: fmt.Errorf("failed to load tickets: %w", err)}
 		}
-		return jiraTicketsLoadedMsg{tickets: tickets}
+		return ticketsLoadedMsg{tickets: ticketList}
 	}
 }
 
@@ -151,36 +192,49 @@ func (m *Model) loadChangedFiles(commitID string) tea.Cmd {
 	}
 }
 
-// startBookmarkFromJiraTicket opens the bookmark creation screen pre-populated with the Jira ticket key
-func (m *Model) startBookmarkFromJiraTicket(ticket jira.Ticket) {
+// startBookmarkFromTicket opens the bookmark creation screen pre-populated with the ticket key
+func (m *Model) startBookmarkFromTicket(ticket tickets.Ticket) {
+	// Use DisplayKey (short ID) if available, otherwise fall back to Key
+	keyForBookmark := ticket.Key
+	if ticket.DisplayKey != "" {
+		keyForBookmark = ticket.DisplayKey
+	}
+
 	// Format bookmark name as "KEY-Title" with spaces replaced by hyphens
 	// and invalid characters removed
-	bookmarkName := formatBookmarkName(ticket.Key, ticket.Summary)
+	bookmarkName := formatBookmarkName(keyForBookmark, ticket.Summary)
 	m.bookmarkNameInput.SetValue(bookmarkName)
 	m.bookmarkNameInput.Focus()
 	m.bookmarkNameInput.Width = m.width - 10
 
-	// Mark that this is coming from Jira (will create new branch from main)
-	m.bookmarkFromJira = true
+	// Mark that this is coming from ticket service (will create new branch from main)
+	m.bookmarkFromJira = true // Reusing this flag for any ticket provider
 	m.bookmarkJiraTicketKey = ticket.Key
 	m.bookmarkJiraTicketTitle = ticket.Summary // Store the ticket summary for PR title
-	m.bookmarkCommitIdx = -1                   // -1 means create new branch from main
-	m.existingBookmarks = nil                  // Don't show existing bookmarks for Jira flow
+	m.bookmarkTicketDisplayKey = ticket.DisplayKey // Store short ID for commit messages
+	m.bookmarkCommitIdx = -1                       // -1 means create new branch from main
+	m.existingBookmarks = nil                      // Don't show existing bookmarks for ticket flow
 	m.selectedBookmarkIdx = -1
 
 	m.viewMode = ViewCreateBookmark
 	m.statusMessage = fmt.Sprintf("Create bookmark for %s (will create new branch from main)", ticket.Key)
 }
 
-// formatBookmarkName creates a valid bookmark name from a Jira ticket key and summary
+// formatBookmarkName creates a valid bookmark name from a ticket key and summary
 // Format: "KEY-Title" with spaces replaced by hyphens and invalid chars removed
 func formatBookmarkName(key, summary string) string {
-	// Replace spaces with hyphens
-	title := strings.ReplaceAll(summary, " ", "-")
-
 	// Remove any characters that aren't valid for bookmark names
 	// Valid: a-z, A-Z, 0-9, -, _, /
 	invalidChars := regexp.MustCompile(`[^a-zA-Z0-9\-_/]`)
+
+	// Sanitize the key (e.g., strip "$" from Codecks short IDs like "$12u")
+	sanitizedKey := invalidChars.ReplaceAllString(key, "")
+	sanitizedKey = strings.Trim(sanitizedKey, "-")
+
+	// Replace spaces with hyphens in title
+	title := strings.ReplaceAll(summary, " ", "-")
+
+	// Remove invalid characters from title
 	title = invalidChars.ReplaceAllString(title, "")
 
 	// Remove multiple consecutive hyphens
@@ -191,9 +245,13 @@ func formatBookmarkName(key, summary string) string {
 	title = strings.Trim(title, "-")
 
 	// Combine key and title
-	if title != "" {
-		return key + "-" + title
+	if sanitizedKey != "" && title != "" {
+		return sanitizedKey + "-" + title
+	} else if sanitizedKey != "" {
+		return sanitizedKey
+	} else if title != "" {
+		return title
 	}
-	return key
+	return "bookmark"
 }
 

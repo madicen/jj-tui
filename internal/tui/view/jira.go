@@ -7,25 +7,26 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Jira renders the Jira tickets view with split header/list for scrolling
+// Jira renders the tickets view with split header/list for scrolling
 func (r *Renderer) Jira(data JiraData) JiraResult {
 	if !data.JiraService {
-		noJira := []string{
-			TitleStyle.Render("Jira Integration"),
+		noTickets := []string{
+			TitleStyle.Render("Ticket Integration"),
 			"",
-			"Jira is not connected. To enable Jira functionality:",
+			"No ticket service is connected. Configure either Jira or Codecks in Settings (,):",
 			"",
-			"1. Set your Jira credentials:",
+			"Jira Setup:",
 			"   export JIRA_URL=https://your-domain.atlassian.net",
 			"   export JIRA_USER=your-email@example.com",
 			"   export JIRA_TOKEN=your_api_token",
 			"",
-			"2. Get your API token from:",
-			"   https://id.atlassian.com/manage-profile/security/api-tokens",
+			"Codecks Setup:",
+			"   export CODECKS_SUBDOMAIN=your-team",
+			"   export CODECKS_TOKEN=your_token  # (from browser 'at' cookie)",
 			"",
-			"Press 'g' to return to the commit graph.",
+			"Press ',' to open Settings, or 'g' to return to the commit graph.",
 		}
-		content := strings.Join(noJira, "\n")
+		content := strings.Join(noTickets, "\n")
 		return JiraResult{FullContent: content}
 	}
 
@@ -36,17 +37,27 @@ func (r *Renderer) Jira(data JiraData) JiraResult {
 
 	// Build fixed header section
 	var headerLines []string
-	headerLines = append(headerLines, TitleStyle.Render("Assigned Jira Tickets"))
+	title := "Assigned Tickets"
+	if data.ProviderName != "" {
+		title = fmt.Sprintf("Assigned %s Tickets", data.ProviderName)
+	}
+	headerLines = append(headerLines, TitleStyle.Render(title))
 	headerLines = append(headerLines, "")
 
 	// Show selected ticket details in the fixed header
 	if data.SelectedTicket >= 0 && data.SelectedTicket < len(data.Tickets) {
 		ticket := data.Tickets[data.SelectedTicket]
 
+		// Use DisplayKey if available, otherwise fall back to Key
+		displayKey := ticket.DisplayKey
+		if displayKey == "" {
+			displayKey = ticket.Key
+		}
+
 		// Build details content
 		var detailLines []string
 		detailLines = append(detailLines, fmt.Sprintf("%s %s",
-			lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render(ticket.Key),
+			lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render(displayKey),
 			ticket.Summary,
 		))
 		detailLines = append(detailLines, fmt.Sprintf("Type: %s  |  Priority: %s  |  Status: %s",
@@ -69,8 +80,10 @@ func (r *Renderer) Jira(data JiraData) JiraResult {
 		headerLines = append(headerLines, detailsBox)
 		headerLines = append(headerLines, "")
 
-		// Action button in header
-		headerLines = append(headerLines, r.Zone.Mark(ZoneJiraCreateBranch, ButtonStyle.Render("Create Branch (Enter)")))
+		// Action buttons in header
+		createBranchBtn := r.Zone.Mark(ZoneJiraCreateBranch, ButtonStyle.Render("Create Branch (Enter)"))
+		openBrowserBtn := r.Zone.Mark(ZoneJiraOpenBrowser, ButtonStyle.Render("Open in Browser (o)"))
+		headerLines = append(headerLines, createBranchBtn+"  "+openBrowserBtn)
 		headerLines = append(headerLines, "")
 	}
 
@@ -87,22 +100,29 @@ func (r *Renderer) Jira(data JiraData) JiraResult {
 			style = CommitSelectedStyle
 		}
 
-		// Status indicator with color
+		// Status indicator with color (supports both Jira and Codecks statuses)
 		var statusStyle lipgloss.Style
 		switch strings.ToLower(ticket.Status) {
-		case "to do", "open", "backlog":
+		case "to do", "open", "backlog", "not started":
 			statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#6272A4"))
-		case "in progress", "in review":
+		case "in progress", "in review", "started":
 			statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFB86C"))
 		case "done", "closed", "resolved":
 			statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B"))
+		case "blocked":
+			statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555"))
 		default:
 			statusStyle = lipgloss.NewStyle().Foreground(ColorMuted)
 		}
 
+		// Use DisplayKey if available, otherwise fall back to Key
+		displayKey := ticket.DisplayKey
+		if displayKey == "" {
+			displayKey = ticket.Key
+		}
 		ticketLine := fmt.Sprintf("%s%s %s %s",
 			prefix,
-			lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render(ticket.Key),
+			lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render(displayKey),
 			statusStyle.Render("["+ticket.Status+"]"),
 			ticket.Summary,
 		)

@@ -11,9 +11,19 @@ import (
 // Config holds the persistent configuration
 type Config struct {
 	GitHubToken string `json:"github_token,omitempty"`
-	JiraURL     string `json:"jira_url,omitempty"`
-	JiraUser    string `json:"jira_user,omitempty"`
-	JiraToken   string `json:"jira_token,omitempty"`
+
+	// Ticket provider selection: "jira" or "codecks"
+	TicketProvider string `json:"ticket_provider,omitempty"`
+
+	// Jira settings
+	JiraURL   string `json:"jira_url,omitempty"`
+	JiraUser  string `json:"jira_user,omitempty"`
+	JiraToken string `json:"jira_token,omitempty"`
+
+	// Codecks settings
+	CodecksSubdomain string `json:"codecks_subdomain,omitempty"`
+	CodecksToken     string `json:"codecks_token,omitempty"`
+	CodecksProject   string `json:"codecks_project,omitempty"` // Optional: filter by project name
 }
 
 // configDir returns the config directory path
@@ -104,6 +114,15 @@ func (c *Config) ApplyToEnvironment() {
 	if c.JiraToken != "" && os.Getenv("JIRA_TOKEN") == "" {
 		os.Setenv("JIRA_TOKEN", c.JiraToken)
 	}
+	if c.CodecksSubdomain != "" && os.Getenv("CODECKS_SUBDOMAIN") == "" {
+		os.Setenv("CODECKS_SUBDOMAIN", c.CodecksSubdomain)
+	}
+	if c.CodecksToken != "" && os.Getenv("CODECKS_TOKEN") == "" {
+		os.Setenv("CODECKS_TOKEN", c.CodecksToken)
+	}
+	if c.CodecksProject != "" && os.Getenv("CODECKS_PROJECT") == "" {
+		os.Setenv("CODECKS_PROJECT", c.CodecksProject)
+	}
 }
 
 // UpdateFromEnvironment updates config with current environment values
@@ -120,6 +139,15 @@ func (c *Config) UpdateFromEnvironment() {
 	if token := os.Getenv("JIRA_TOKEN"); token != "" {
 		c.JiraToken = token
 	}
+	if subdomain := os.Getenv("CODECKS_SUBDOMAIN"); subdomain != "" {
+		c.CodecksSubdomain = subdomain
+	}
+	if token := os.Getenv("CODECKS_TOKEN"); token != "" {
+		c.CodecksToken = token
+	}
+	if project := os.Getenv("CODECKS_PROJECT"); project != "" {
+		c.CodecksProject = project
+	}
 }
 
 // HasGitHub returns true if GitHub is configured
@@ -130,5 +158,25 @@ func (c *Config) HasGitHub() bool {
 // HasJira returns true if Jira is fully configured
 func (c *Config) HasJira() bool {
 	return c.JiraURL != "" && c.JiraUser != "" && c.JiraToken != ""
+}
+
+// HasCodecks returns true if Codecks is fully configured
+func (c *Config) HasCodecks() bool {
+	return c.CodecksSubdomain != "" && c.CodecksToken != ""
+}
+
+// GetTicketProvider returns the configured ticket provider, defaulting based on what's configured
+func (c *Config) GetTicketProvider() string {
+	if c.TicketProvider != "" {
+		return c.TicketProvider
+	}
+	// Auto-detect based on what's configured
+	if c.HasCodecks() {
+		return "codecks"
+	}
+	if c.HasJira() {
+		return "jira"
+	}
+	return ""
 }
 

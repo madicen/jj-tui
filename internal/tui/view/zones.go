@@ -12,13 +12,17 @@ const (
 	ZoneActionAbandon   = "zone:action:abandon"
 
 	ZoneJiraCreateBranch = "zone:jira:createbranch"
+	ZoneJiraOpenBrowser  = "zone:jira:openbrowser"
 
-	ZoneSettingsGitHubToken = "zone:settings:github_token"
-	ZoneSettingsJiraURL     = "zone:settings:jira_url"
-	ZoneSettingsJiraUser    = "zone:settings:jira_user"
-	ZoneSettingsJiraToken   = "zone:settings:jira_token"
-	ZoneSettingsSave        = "zone:settings:save"
-	ZoneSettingsCancel      = "zone:settings:cancel"
+	ZoneSettingsGitHubToken      = "zone:settings:github_token"
+	ZoneSettingsJiraURL          = "zone:settings:jira_url"
+	ZoneSettingsJiraUser         = "zone:settings:jira_user"
+	ZoneSettingsJiraToken        = "zone:settings:jira_token"
+	ZoneSettingsCodecksSubdomain = "zone:settings:codecks_subdomain"
+	ZoneSettingsCodecksToken     = "zone:settings:codecks_token"
+	ZoneSettingsCodecksProject   = "zone:settings:codecks_project"
+	ZoneSettingsSave             = "zone:settings:save"
+	ZoneSettingsCancel           = "zone:settings:cancel"
 
 	ZoneDescSave   = "zone:desc:save"
 	ZoneDescCancel = "zone:desc:cancel"

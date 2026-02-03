@@ -8,9 +8,11 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/madicen/jj-tui/internal/codecks"
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/jira"
 	"github.com/madicen/jj-tui/internal/models"
+	"github.com/madicen/jj-tui/internal/tickets"
 )
 
 // createNewCommit creates a new commit
@@ -30,6 +32,9 @@ func (m *Model) createNewCommit() tea.Cmd {
 
 // checkoutCommit checks out (edits) the selected commit
 func (m *Model) checkoutCommit() tea.Cmd {
+	if !m.isSelectedCommitValid() {
+		return nil
+	}
 	commit := m.repository.Graph.Commits[m.selectedCommit]
 	return func() tea.Msg {
 		if err := m.jjService.CheckoutCommit(context.Background(), commit.ChangeID); err != nil {
@@ -47,6 +52,9 @@ func (m *Model) checkoutCommit() tea.Cmd {
 
 // squashCommit squashes the selected commit into its parent
 func (m *Model) squashCommit() tea.Cmd {
+	if !m.isSelectedCommitValid() {
+		return nil
+	}
 	commit := m.repository.Graph.Commits[m.selectedCommit]
 	m.statusMessage = fmt.Sprintf("Squashing %s...", commit.ShortID)
 	return func() tea.Msg {
@@ -64,6 +72,9 @@ func (m *Model) squashCommit() tea.Cmd {
 
 // abandonCommit abandons the selected commit
 func (m *Model) abandonCommit() tea.Cmd {
+	if !m.isSelectedCommitValid() {
+		return nil
+	}
 	commit := m.repository.Graph.Commits[m.selectedCommit]
 	m.statusMessage = fmt.Sprintf("Abandoning %s...", commit.ShortID)
 	return func() tea.Msg {
@@ -81,6 +92,9 @@ func (m *Model) abandonCommit() tea.Cmd {
 
 // startRebaseMode enters rebase selection mode
 func (m *Model) startRebaseMode() {
+	if !m.isSelectedCommitValid() {
+		return
+	}
 	commit := m.repository.Graph.Commits[m.selectedCommit]
 	m.selectionMode = SelectionRebaseDestination
 	m.rebaseSourceCommit = m.selectedCommit
@@ -485,15 +499,26 @@ func (m *Model) submitBookmarkFromJira() tea.Cmd {
 
 	m.statusMessage = fmt.Sprintf("Creating branch '%s' from main...", bookmarkName)
 
-	// Save the Jira PR title mapping (formatted as "KEY - Title")
+	// Save the PR title mapping (formatted as "KEY - Title")
+	// Use the display key (short ID like "$12u") if available, otherwise use the full key
 	if m.bookmarkJiraTicketTitle != "" && m.bookmarkJiraTicketKey != "" {
-		m.jiraBookmarkTitles[bookmarkName] = m.bookmarkJiraTicketKey + " - " + m.bookmarkJiraTicketTitle
+		keyForTitle := m.bookmarkJiraTicketKey
+		if m.bookmarkTicketDisplayKey != "" {
+			keyForTitle = m.bookmarkTicketDisplayKey
+		}
+		m.jiraBookmarkTitles[bookmarkName] = keyForTitle + " - " + m.bookmarkJiraTicketTitle
 	}
 
-	// Reset Jira state
+	// Save the ticket short ID for commit message prepopulation
+	if m.bookmarkTicketDisplayKey != "" {
+		m.ticketBookmarkDisplayKeys[bookmarkName] = m.bookmarkTicketDisplayKey
+	}
+
+	// Reset ticket state
 	m.bookmarkFromJira = false
 	m.bookmarkJiraTicketKey = ""
 	m.bookmarkJiraTicketTitle = ""
+	m.bookmarkTicketDisplayKey = ""
 
 	return func() tea.Msg {
 		ctx := context.Background()
@@ -632,10 +657,24 @@ func (m *Model) findPRBranchForCommit(commitIndex int) string {
 // saveSettings saves the settings and reinitializes services
 func (m *Model) saveSettings() tea.Cmd {
 	// Get values from inputs
+	// Index mapping:
+	// 0: GitHub Token
+	// 1: Jira URL
+	// 2: Jira User
+	// 3: Jira Token
+	// 4: Codecks Subdomain
+	// 5: Codecks Token
 	githubToken := strings.TrimSpace(m.settingsInputs[0].Value())
 	jiraURL := strings.TrimSpace(m.settingsInputs[1].Value())
 	jiraUser := strings.TrimSpace(m.settingsInputs[2].Value())
 	jiraToken := strings.TrimSpace(m.settingsInputs[3].Value())
+
+	var codecksSubdomain, codecksToken, codecksProject string
+	if len(m.settingsInputs) > 6 {
+		codecksSubdomain = strings.TrimSpace(m.settingsInputs[4].Value())
+		codecksToken = strings.TrimSpace(m.settingsInputs[5].Value())
+		codecksProject = strings.TrimSpace(m.settingsInputs[6].Value())
+	}
 
 	return func() tea.Msg {
 		// Set environment variables for the current process
@@ -651,33 +690,59 @@ func (m *Model) saveSettings() tea.Cmd {
 		if jiraToken != "" {
 			os.Setenv("JIRA_TOKEN", jiraToken)
 		}
+		if codecksSubdomain != "" {
+			os.Setenv("CODECKS_SUBDOMAIN", codecksSubdomain)
+		}
+		if codecksToken != "" {
+			os.Setenv("CODECKS_TOKEN", codecksToken)
+		}
+		if codecksProject != "" {
+			os.Setenv("CODECKS_PROJECT", codecksProject)
+		} else {
+			os.Unsetenv("CODECKS_PROJECT") // Clear filter if empty
+		}
+
+		// Determine ticket provider based on what's configured
+		var ticketProvider string
+		if codecksSubdomain != "" && codecksToken != "" {
+			ticketProvider = "codecks"
+		} else if jiraURL != "" && jiraUser != "" && jiraToken != "" {
+			ticketProvider = "jira"
+		}
 
 		// Save to config file for persistence across restarts
 		cfg := &config.Config{
-			GitHubToken: githubToken,
-			JiraURL:     jiraURL,
-			JiraUser:    jiraUser,
-			JiraToken:   jiraToken,
+			GitHubToken:      githubToken,
+			TicketProvider:   ticketProvider,
+			JiraURL:          jiraURL,
+			JiraUser:         jiraUser,
+			JiraToken:        jiraToken,
+			CodecksSubdomain: codecksSubdomain,
+			CodecksToken:     codecksToken,
+			CodecksProject:   codecksProject,
 		}
 		// Ignore save errors - settings will still work for current session
 		_ = cfg.Save()
 
-		var githubConnected, jiraConnected bool
+		var githubConnected bool
+		var ticketSvc tickets.Service
 
 		// Try to initialize GitHub service
 		if githubToken != "" {
-			// GitHub service needs owner/repo info, so we'll check if token is set
 			githubConnected = true
 		}
 
-		// Try to initialize Jira service
-		if jiraURL != "" && jiraUser != "" && jiraToken != "" {
-			jiraConnected = jira.IsConfigured()
+		// Try to initialize ticket service based on provider
+		if ticketProvider == "codecks" && codecks.IsConfigured() {
+			ticketSvc, _ = codecks.NewService()
+		} else if ticketProvider == "jira" && jira.IsConfigured() {
+			ticketSvc, _ = jira.NewService()
 		}
 
 		return settingsSavedMsg{
 			githubConnected: githubConnected,
-			jiraConnected:   jiraConnected,
+			ticketService:   ticketSvc,
+			ticketProvider:  ticketProvider,
 		}
 	}
 }
