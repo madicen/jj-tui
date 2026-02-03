@@ -105,7 +105,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "d":
 		// Edit description of selected commit
-		if m.viewMode == ViewCommitGraph && m.selectedCommit >= 0 && m.jjService != nil && m.repository != nil {
+		if m.viewMode == ViewCommitGraph && m.isSelectedCommitValid() && m.jjService != nil {
 			commit := m.repository.Graph.Commits[m.selectedCommit]
 			if commit.Immutable {
 				m.statusMessage = "Cannot edit description: commit is immutable"
@@ -195,7 +195,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		// In commit view, edit selected commit (jj edit)
-		if m.viewMode == ViewCommitGraph && m.selectedCommit >= 0 && m.jjService != nil && m.repository != nil {
+		if m.viewMode == ViewCommitGraph && m.isSelectedCommitValid() && m.jjService != nil {
 			commit := m.repository.Graph.Commits[m.selectedCommit]
 			if commit.Immutable {
 				m.statusMessage = "Cannot edit: commit is immutable"
@@ -205,7 +205,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "s":
 		// Squash selected commit
-		if m.selectedCommit >= 0 && m.jjService != nil && m.repository != nil {
+		if m.isSelectedCommitValid() && m.jjService != nil {
 			commit := m.repository.Graph.Commits[m.selectedCommit]
 			if commit.Immutable {
 				m.statusMessage = "Cannot squash: commit is immutable"
@@ -215,7 +215,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "a":
 		// Abandon selected commit
-		if m.viewMode == ViewCommitGraph && m.selectedCommit >= 0 && m.jjService != nil && m.repository != nil {
+		if m.viewMode == ViewCommitGraph && m.isSelectedCommitValid() && m.jjService != nil {
 			commit := m.repository.Graph.Commits[m.selectedCommit]
 			if commit.Immutable {
 				m.statusMessage = "Cannot abandon: commit is immutable"
@@ -225,7 +225,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "r":
 		// Start rebase mode
-		if m.viewMode == ViewCommitGraph && m.selectedCommit >= 0 && m.jjService != nil && m.repository != nil {
+		if m.viewMode == ViewCommitGraph && m.isSelectedCommitValid() && m.jjService != nil {
 			commit := m.repository.Graph.Commits[m.selectedCommit]
 			if commit.Immutable {
 				m.statusMessage = "Cannot rebase: commit is immutable"
@@ -236,7 +236,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "c":
 		// Create PR from selected commit
-		if m.viewMode == ViewCommitGraph && m.selectedCommit >= 0 && m.jjService != nil && m.githubService != nil && m.repository != nil {
+		if m.viewMode == ViewCommitGraph && m.isSelectedCommitValid() && m.jjService != nil && m.githubService != nil {
 			m.startCreatePR()
 			return m, nil
 		} else if m.githubService == nil {
@@ -245,7 +245,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "b":
 		// Create bookmark on selected commit
-		if m.viewMode == ViewCommitGraph && m.selectedCommit >= 0 && m.jjService != nil && m.repository != nil {
+		if m.viewMode == ViewCommitGraph && m.isSelectedCommitValid() && m.jjService != nil {
 			commit := m.repository.Graph.Commits[m.selectedCommit]
 			if commit.Immutable {
 				m.statusMessage = "Cannot create bookmark: commit is immutable"
@@ -256,7 +256,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "x":
 		// Delete bookmark from selected commit
-		if m.viewMode == ViewCommitGraph && m.selectedCommit >= 0 && m.jjService != nil && m.repository != nil {
+		if m.viewMode == ViewCommitGraph && m.isSelectedCommitValid() && m.jjService != nil {
 			commit := m.repository.Graph.Commits[m.selectedCommit]
 			if len(commit.Branches) == 0 {
 				m.statusMessage = "No bookmark on this commit to delete"
@@ -266,7 +266,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "u":
 		// Push updates to PR (for commits with PR branches or their descendants)
-		if m.viewMode == ViewCommitGraph && m.selectedCommit >= 0 && m.jjService != nil && m.repository != nil {
+		if m.viewMode == ViewCommitGraph && m.isSelectedCommitValid() && m.jjService != nil {
 			// Find the PR branch for this commit (could be on this commit or an ancestor)
 			prBranch := m.findPRBranchForCommit(m.selectedCommit)
 			if prBranch == "" {

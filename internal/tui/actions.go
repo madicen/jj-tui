@@ -30,6 +30,9 @@ func (m *Model) createNewCommit() tea.Cmd {
 
 // checkoutCommit checks out (edits) the selected commit
 func (m *Model) checkoutCommit() tea.Cmd {
+	if !m.isSelectedCommitValid() {
+		return nil
+	}
 	commit := m.repository.Graph.Commits[m.selectedCommit]
 	return func() tea.Msg {
 		if err := m.jjService.CheckoutCommit(context.Background(), commit.ChangeID); err != nil {
@@ -47,6 +50,9 @@ func (m *Model) checkoutCommit() tea.Cmd {
 
 // squashCommit squashes the selected commit into its parent
 func (m *Model) squashCommit() tea.Cmd {
+	if !m.isSelectedCommitValid() {
+		return nil
+	}
 	commit := m.repository.Graph.Commits[m.selectedCommit]
 	m.statusMessage = fmt.Sprintf("Squashing %s...", commit.ShortID)
 	return func() tea.Msg {
@@ -64,6 +70,9 @@ func (m *Model) squashCommit() tea.Cmd {
 
 // abandonCommit abandons the selected commit
 func (m *Model) abandonCommit() tea.Cmd {
+	if !m.isSelectedCommitValid() {
+		return nil
+	}
 	commit := m.repository.Graph.Commits[m.selectedCommit]
 	m.statusMessage = fmt.Sprintf("Abandoning %s...", commit.ShortID)
 	return func() tea.Msg {
@@ -81,6 +90,9 @@ func (m *Model) abandonCommit() tea.Cmd {
 
 // startRebaseMode enters rebase selection mode
 func (m *Model) startRebaseMode() {
+	if !m.isSelectedCommitValid() {
+		return
+	}
 	commit := m.repository.Graph.Commits[m.selectedCommit]
 	m.selectionMode = SelectionRebaseDestination
 	m.rebaseSourceCommit = m.selectedCommit

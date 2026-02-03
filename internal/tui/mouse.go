@@ -90,7 +90,7 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 
 	// Check commit action zones (only for mutable commits)
 	if m.zone.Get(ZoneActionCheckout) == zoneInfo {
-		if m.selectedCommit >= 0 && m.jjService != nil && m.repository != nil {
+		if m.isSelectedCommitValid() && m.jjService != nil {
 			commit := m.repository.Graph.Commits[m.selectedCommit]
 			if commit.Immutable {
 				m.statusMessage = "Cannot edit: commit is immutable"
@@ -100,7 +100,7 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 		}
 	}
 	if m.zone.Get(ZoneActionSquash) == zoneInfo {
-		if m.selectedCommit >= 0 && m.jjService != nil && m.repository != nil {
+		if m.isSelectedCommitValid() && m.jjService != nil {
 			commit := m.repository.Graph.Commits[m.selectedCommit]
 			if commit.Immutable {
 				m.statusMessage = "Cannot squash: commit is immutable"
@@ -110,7 +110,7 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 		}
 	}
 	if m.zone.Get(ZoneActionDescribe) == zoneInfo {
-		if m.selectedCommit >= 0 && m.jjService != nil && m.repository != nil {
+		if m.isSelectedCommitValid() && m.jjService != nil {
 			commit := m.repository.Graph.Commits[m.selectedCommit]
 			if commit.Immutable {
 				m.statusMessage = "Cannot edit description: commit is immutable"
@@ -120,7 +120,7 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 		}
 	}
 	if m.zone.Get(ZoneActionAbandon) == zoneInfo {
-		if m.selectedCommit >= 0 && m.jjService != nil && m.repository != nil {
+		if m.isSelectedCommitValid() && m.jjService != nil {
 			commit := m.repository.Graph.Commits[m.selectedCommit]
 			if commit.Immutable {
 				m.statusMessage = "Cannot abandon: commit is immutable"
@@ -130,7 +130,7 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 		}
 	}
 	if m.zone.Get(ZoneActionRebase) == zoneInfo {
-		if m.selectedCommit >= 0 && m.jjService != nil && m.repository != nil {
+		if m.isSelectedCommitValid() && m.jjService != nil {
 			commit := m.repository.Graph.Commits[m.selectedCommit]
 			if commit.Immutable {
 				m.statusMessage = "Cannot rebase: commit is immutable"
@@ -141,7 +141,7 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 		}
 	}
 	if m.zone.Get(ZoneActionCreatePR) == zoneInfo {
-		if m.selectedCommit >= 0 && m.jjService != nil && m.githubService != nil && m.repository != nil {
+		if m.isSelectedCommitValid() && m.jjService != nil && m.githubService != nil {
 			m.startCreatePR()
 			return m, nil
 		} else if m.githubService == nil {
@@ -150,7 +150,7 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 		}
 	}
 	if m.zone.Get(ZoneActionBookmark) == zoneInfo {
-		if m.selectedCommit >= 0 && m.jjService != nil && m.repository != nil {
+		if m.isSelectedCommitValid() && m.jjService != nil {
 			commit := m.repository.Graph.Commits[m.selectedCommit]
 			if commit.Immutable {
 				m.statusMessage = "Cannot create bookmark: commit is immutable"
@@ -161,7 +161,7 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 		}
 	}
 	if m.zone.Get(ZoneActionDelBookmark) == zoneInfo {
-		if m.selectedCommit >= 0 && m.jjService != nil && m.repository != nil {
+		if m.isSelectedCommitValid() && m.jjService != nil {
 			commit := m.repository.Graph.Commits[m.selectedCommit]
 			if len(commit.Branches) == 0 {
 				m.statusMessage = "No bookmark on this commit to delete"
@@ -171,7 +171,7 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 		}
 	}
 	if m.zone.Get(ZoneActionPush) == zoneInfo {
-		if m.selectedCommit >= 0 && m.jjService != nil && m.repository != nil {
+		if m.isSelectedCommitValid() && m.jjService != nil {
 			// Find the PR branch for this commit (could be on this commit or an ancestor)
 			prBranch := m.findPRBranchForCommit(m.selectedCommit)
 			if prBranch == "" {
@@ -349,7 +349,7 @@ func (m *Model) handleAction(action ActionType) (tea.Model, tea.Cmd) {
 	case ActionNewPR:
 		m.viewMode = ViewCreatePR
 	case ActionCheckout, ActionEdit:
-		if m.selectedCommit >= 0 && m.jjService != nil && m.repository != nil {
+		if m.isSelectedCommitValid() && m.jjService != nil {
 			commit := m.repository.Graph.Commits[m.selectedCommit]
 			if commit.Immutable {
 				m.statusMessage = "Cannot edit: commit is immutable"
@@ -358,7 +358,7 @@ func (m *Model) handleAction(action ActionType) (tea.Model, tea.Cmd) {
 			return m, m.checkoutCommit()
 		}
 	case ActionSquash:
-		if m.selectedCommit >= 0 && m.jjService != nil && m.repository != nil {
+		if m.isSelectedCommitValid() && m.jjService != nil {
 			commit := m.repository.Graph.Commits[m.selectedCommit]
 			if commit.Immutable {
 				m.statusMessage = "Cannot squash: commit is immutable"

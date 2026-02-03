@@ -42,6 +42,13 @@ func openURL(url string) tea.Cmd {
 // Auto-refresh interval
 const autoRefreshInterval = 2 * time.Second
 
+// isSelectedCommitValid returns true if selectedCommit points to a valid commit
+func (m *Model) isSelectedCommitValid() bool {
+	return m.repository != nil &&
+		m.selectedCommit >= 0 &&
+		m.selectedCommit < len(m.repository.Graph.Commits)
+}
+
 // tickMsg is sent on each timer tick for auto-refresh
 type tickMsg time.Time
 
