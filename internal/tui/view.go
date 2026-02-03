@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/madicen-utilities/jj-tui/v2/internal/models"
-	"github.com/madicen-utilities/jj-tui/v2/internal/tui/view"
+	"github.com/madicen/jj-tui/internal/models"
+	"github.com/madicen/jj-tui/internal/tui/view"
 )
 
 // View implements tea.Model
@@ -102,7 +102,7 @@ func (m *Model) renderHeader() string {
 	tabs := []string{
 		m.zone.Mark(ZoneTabGraph, m.renderTab("Graph (g)", m.viewMode == ViewCommitGraph)),
 		m.zone.Mark(ZoneTabPRs, m.renderTab("PRs (p)", m.viewMode == ViewPullRequests)),
-		m.zone.Mark(ZoneTabJira, m.renderTab("Jira (i)", m.viewMode == ViewJira)),
+		m.zone.Mark(ZoneTabJira, m.renderTab("Tickets (t)", m.viewMode == ViewJira)),
 		m.zone.Mark(ZoneTabSettings, m.renderTab("Settings (,)", m.viewMode == ViewSettings)),
 		m.zone.Mark(ZoneTabHelp, m.renderTab("Help (h)", m.viewMode == ViewHelp)),
 	}
@@ -183,7 +183,7 @@ func (m *Model) renderSplitContent() (string, string) {
 // renderError renders an error message
 func (m *Model) renderError() string {
 	style := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555"))
-	return style.Render(fmt.Sprintf("Error: %v\n\nPress 'r' to retry, 'Esc' to dismiss, or 'q' to quit.", m.err))
+	return style.Render(fmt.Sprintf("Error: %v\n\nPress Ctrl+r to retry, Esc to dismiss, or Ctrl+q to quit.", m.err))
 }
 
 // renderCommitGraph renders the commit graph view using the view package
@@ -435,9 +435,9 @@ func (m *Model) renderStatusBar() string {
 
 	// Build shortcuts with zone markers (only global actions)
 	shortcuts := []string{
-		m.zone.Mark(ZoneActionQuit, "q:quit"),
+		m.zone.Mark(ZoneActionQuit, "ctrl+q:quit"),
 		" ",
-		m.zone.Mark(ZoneActionRefresh, "r:refresh"),
+		m.zone.Mark(ZoneActionRefresh, "ctrl+r:refresh"),
 	}
 
 	shortcutsStr := lipgloss.JoinHorizontal(lipgloss.Left, shortcuts...)

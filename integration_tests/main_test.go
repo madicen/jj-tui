@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/madicen-utilities/jj-tui/v2/internal/jj"
-	"github.com/madicen-utilities/jj-tui/v2/internal/models"
+	"github.com/madicen/jj-tui/internal/jj"
+	"github.com/madicen/jj-tui/internal/models"
 )
 
 // TestRepository manages a test jj repository

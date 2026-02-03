@@ -8,9 +8,9 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/madicen-utilities/jj-tui/v2/internal/config"
-	"github.com/madicen-utilities/jj-tui/v2/internal/jira"
-	"github.com/madicen-utilities/jj-tui/v2/internal/models"
+	"github.com/madicen/jj-tui/internal/config"
+	"github.com/madicen/jj-tui/internal/jira"
+	"github.com/madicen/jj-tui/internal/models"
 )
 
 // createNewCommit creates a new commit

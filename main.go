@@ -6,8 +6,8 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/madicen-utilities/jj-tui/v2/internal/config"
-	"github.com/madicen-utilities/jj-tui/v2/internal/tui"
+	"github.com/madicen/jj-tui/internal/config"
+	"github.com/madicen/jj-tui/internal/tui"
 )
 
 func main() {

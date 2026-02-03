@@ -1,6 +1,8 @@
-module github.com/madicen-utilities/jj-tui/v2
+module github.com/madicen/jj-tui
 
-go 1.24.3
+go 1.24.0
+
+toolchain go1.24.3
 
 require (
 	github.com/charmbracelet/bubbles v0.21.0
