@@ -74,6 +74,49 @@ func (r *Renderer) Settings(data SettingsData) string {
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Get from: https://id.atlassian.com/manage-profile/security/api-tokens"))
 	lines = append(lines, "")
 
+	// Codecks section
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("Codecks"))
+	lines = append(lines, "")
+
+	// Codecks Subdomain field
+	codecksSubdomainLabel := "  Subdomain:"
+	codecksSubdomainStyle := lipgloss.NewStyle()
+	if data.FocusedField == 4 {
+		codecksSubdomainStyle = codecksSubdomainStyle.Bold(true).Foreground(ColorPrimary)
+	}
+	lines = append(lines, codecksSubdomainStyle.Render(codecksSubdomainLabel))
+	if len(data.Inputs) > 4 {
+		lines = append(lines, r.Zone.Mark(ZoneSettingsCodecksSubdomain, "  "+data.Inputs[4].View))
+	}
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Your team name (e.g., 'myteam' from myteam.codecks.io)"))
+	lines = append(lines, "")
+
+	// Codecks Token field
+	codecksTokenLabel := "  Token:"
+	codecksTokenStyle := lipgloss.NewStyle()
+	if data.FocusedField == 5 {
+		codecksTokenStyle = codecksTokenStyle.Bold(true).Foreground(ColorPrimary)
+	}
+	lines = append(lines, codecksTokenStyle.Render(codecksTokenLabel))
+	if len(data.Inputs) > 5 {
+		lines = append(lines, r.Zone.Mark(ZoneSettingsCodecksToken, "  "+data.Inputs[5].View))
+	}
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Extract 'at' cookie from browser (see https://manual.codecks.io/api/)"))
+	lines = append(lines, "")
+
+	// Codecks Project field (optional filter)
+	codecksProjectLabel := "  Project:"
+	codecksProjectStyle := lipgloss.NewStyle()
+	if data.FocusedField == 6 {
+		codecksProjectStyle = codecksProjectStyle.Bold(true).Foreground(ColorPrimary)
+	}
+	lines = append(lines, codecksProjectStyle.Render(codecksProjectLabel))
+	if len(data.Inputs) > 6 {
+		lines = append(lines, r.Zone.Mark(ZoneSettingsCodecksProject, "  "+data.Inputs[6].View))
+	}
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Optional: Filter cards by project name"))
+	lines = append(lines, "")
+
 	// Connection status
 	lines = append(lines, "")
 	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("Connection Status:"))
@@ -83,10 +126,12 @@ func (r *Renderer) Settings(data SettingsData) string {
 		lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("  ○ GitHub not connected"))
 	}
 	if data.JiraService {
-		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B")).Render("  ✓ Jira connected"))
+		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B")).Render("  ✓ Tickets connected"))
 	} else {
-		lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("  ○ Jira not connected"))
+		lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("  ○ Tickets not connected"))
 	}
+	lines = append(lines, "")
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Italic(true).Render("  Note: Configure either Jira OR Codecks for ticket integration"))
 
 	lines = append(lines, "")
 	lines = append(lines, "")

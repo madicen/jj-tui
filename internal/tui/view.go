@@ -343,11 +343,12 @@ func (m *Model) renderJiraSplit() (string, string) {
 
 // getJiraResult returns the JiraResult for rendering
 func (m *Model) getJiraResult() view.JiraResult {
-	// Convert jira.Ticket to view.JiraTicket
-	tickets := make([]view.JiraTicket, len(m.jiraTickets))
-	for i, t := range m.jiraTickets {
-		tickets[i] = view.JiraTicket{
+	// Convert tickets.Ticket to view.JiraTicket
+	ticketViews := make([]view.JiraTicket, len(m.ticketList))
+	for i, t := range m.ticketList {
+		ticketViews[i] = view.JiraTicket{
 			Key:         t.Key,
+			DisplayKey:  t.DisplayKey,
 			Summary:     t.Summary,
 			Status:      t.Status,
 			Type:        t.Type,
@@ -356,16 +357,16 @@ func (m *Model) getJiraResult() view.JiraResult {
 		}
 	}
 
-	var jiraBaseURL string
-	if m.jiraService != nil {
-		jiraBaseURL = m.jiraService.GetBaseURL()
+	var providerName string
+	if m.ticketService != nil {
+		providerName = m.ticketService.GetProviderName()
 	}
 
 	return m.renderer().Jira(view.JiraData{
-		Tickets:        tickets,
+		Tickets:        ticketViews,
 		SelectedTicket: m.selectedTicket,
-		JiraService:    m.jiraService != nil,
-		JiraBaseURL:    jiraBaseURL,
+		JiraService:    m.ticketService != nil,
+		ProviderName:   providerName,
 	})
 }
 
@@ -380,7 +381,7 @@ func (m *Model) renderSettings() string {
 		Inputs:        inputs,
 		FocusedField:  m.settingsFocusedField,
 		GithubService: m.githubService != nil,
-		JiraService:   m.jiraService != nil,
+		JiraService:   m.ticketService != nil,
 	})
 }
 

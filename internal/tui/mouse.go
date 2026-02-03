@@ -22,9 +22,9 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 	}
 	if m.zone.Get(ZoneTabJira) == zoneInfo {
 		m.viewMode = ViewJira
-		if m.jiraService != nil {
-			m.statusMessage = "Loading Jira tickets..."
-			return m, m.loadJiraTickets()
+		if m.ticketService != nil {
+			m.statusMessage = "Loading tickets..."
+			return m, m.loadTickets()
 		}
 		return m, nil
 	}
@@ -272,28 +272,28 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Check Jira ticket zones
-	for i := range m.jiraTickets {
+	// Check ticket zones
+	for i := range m.ticketList {
 		if m.zone.Get(ZoneJiraTicket(i)) == zoneInfo {
 			m.selectedTicket = i
 			return m, nil
 		}
 	}
 
-	// Check Jira create branch button
+	// Check ticket create branch button
 	if m.zone.Get(ZoneJiraCreateBranch) == zoneInfo {
-		if m.viewMode == ViewJira && m.selectedTicket >= 0 && m.selectedTicket < len(m.jiraTickets) && m.jjService != nil {
-			ticket := m.jiraTickets[m.selectedTicket]
-			m.startBookmarkFromJiraTicket(ticket)
+		if m.viewMode == ViewJira && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) && m.jjService != nil {
+			ticket := m.ticketList[m.selectedTicket]
+			m.startBookmarkFromTicket(ticket)
 			return m, nil
 		}
 	}
 
-	// Check Jira open in browser button
+	// Check ticket open in browser button
 	if m.zone.Get(ZoneJiraOpenBrowser) == zoneInfo {
-		if m.viewMode == ViewJira && m.jiraService != nil && m.selectedTicket >= 0 && m.selectedTicket < len(m.jiraTickets) {
-			ticket := m.jiraTickets[m.selectedTicket]
-			ticketURL := m.jiraService.GetTicketURL(ticket.Key)
+		if m.viewMode == ViewJira && m.ticketService != nil && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
+			ticket := m.ticketList[m.selectedTicket]
+			ticketURL := m.ticketService.GetTicketURL(ticket.Key)
 			m.statusMessage = fmt.Sprintf("Opening %s...", ticket.Key)
 			return m, openURL(ticketURL)
 		}
@@ -306,6 +306,9 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 			ZoneSettingsJiraURL,
 			ZoneSettingsJiraUser,
 			ZoneSettingsJiraToken,
+			ZoneSettingsCodecksSubdomain,
+			ZoneSettingsCodecksToken,
+			ZoneSettingsCodecksProject,
 		}
 		for i, zoneID := range settingsZones {
 			if m.zone.Get(zoneID) == zoneInfo {

@@ -80,9 +80,9 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "t": // 't' for tickets
 		m.viewMode = ViewJira
 		// Load tickets when switching to Tickets view
-		if m.jiraService != nil {
+		if m.ticketService != nil {
 			m.statusMessage = "Loading tickets..."
-			return m, m.loadJiraTickets()
+			return m, m.loadTickets()
 		}
 	case ",": // ',' for settings (like many apps use comma for settings)
 		m.viewMode = ViewSettings
@@ -131,7 +131,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.selectedPR++
 			}
 		} else if m.viewMode == ViewJira {
-			if m.selectedTicket < len(m.jiraTickets)-1 {
+			if m.selectedTicket < len(m.ticketList)-1 {
 				m.selectedTicket++
 			}
 		} else {
@@ -172,10 +172,10 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, openURL(pr.URL)
 			}
 		}
-		// Open Jira ticket URL in browser (Jira view only)
-		if m.viewMode == ViewJira && m.jiraService != nil && m.selectedTicket >= 0 && m.selectedTicket < len(m.jiraTickets) {
-			ticket := m.jiraTickets[m.selectedTicket]
-			ticketURL := m.jiraService.GetTicketURL(ticket.Key)
+		// Open ticket URL in browser (Tickets view only)
+		if m.viewMode == ViewJira && m.ticketService != nil && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
+			ticket := m.ticketList[m.selectedTicket]
+			ticketURL := m.ticketService.GetTicketURL(ticket.Key)
 			m.statusMessage = fmt.Sprintf("Opening %s...", ticket.Key)
 			return m, openURL(ticketURL)
 		}
@@ -188,10 +188,10 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, openURL(pr.URL)
 			}
 		}
-		// In Jira view, start bookmark creation from ticket
-		if m.viewMode == ViewJira && m.selectedTicket >= 0 && m.selectedTicket < len(m.jiraTickets) && m.jjService != nil {
-			ticket := m.jiraTickets[m.selectedTicket]
-			m.startBookmarkFromJiraTicket(ticket)
+		// In Tickets view, start bookmark creation from ticket
+		if m.viewMode == ViewJira && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) && m.jjService != nil {
+			ticket := m.ticketList[m.selectedTicket]
+			m.startBookmarkFromTicket(ticket)
 			return m, nil
 		}
 		// In commit view, edit selected commit (jj edit)

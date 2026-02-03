@@ -9,17 +9,9 @@ import (
 	"net/url"
 	"os"
 	"strings"
-)
 
-// Ticket represents a Jira issue
-type Ticket struct {
-	Key         string
-	Summary     string
-	Status      string
-	Priority    string
-	Type        string
-	Description string
-}
+	"github.com/madicen/jj-tui/internal/tickets"
+)
 
 // Service handles Jira API interactions using REST API v3
 type Service struct {
@@ -101,7 +93,7 @@ func (s *Service) doRequest(ctx context.Context, method, endpoint string, body i
 }
 
 // GetAssignedTickets fetches tickets assigned to the current user using API v3
-func (s *Service) GetAssignedTickets(ctx context.Context) ([]Ticket, error) {
+func (s *Service) GetAssignedTickets(ctx context.Context) ([]tickets.Ticket, error) {
 	// JQL to find issues assigned to the current user that are not done
 	jql := fmt.Sprintf("assignee = \"%s\" AND status != Done ORDER BY updated DESC", s.username)
 
@@ -126,11 +118,12 @@ func (s *Service) GetAssignedTickets(ctx context.Context) ([]Ticket, error) {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	tickets := make([]Ticket, 0, len(result.Issues))
+	ticketList := make([]tickets.Ticket, 0, len(result.Issues))
 	for _, issue := range result.Issues {
-		ticket := Ticket{
-			Key:     issue.Key,
-			Summary: issue.Fields.Summary,
+		ticket := tickets.Ticket{
+			Key:        issue.Key,
+			DisplayKey: issue.Key, // For Jira, display key is the same as the key (e.g., "PROJ-123")
+			Summary:    issue.Fields.Summary,
 		}
 
 		if issue.Fields.Status != nil {
@@ -156,10 +149,10 @@ func (s *Service) GetAssignedTickets(ctx context.Context) ([]Ticket, error) {
 			ticket.Description = strings.Join(descParts, " ")
 		}
 
-		tickets = append(tickets, ticket)
+		ticketList = append(ticketList, ticket)
 	}
 
-	return tickets, nil
+	return ticketList, nil
 }
 
 // issueResponse represents a single issue from Jira API v3
@@ -187,7 +180,7 @@ type issueResponse struct {
 }
 
 // GetTicket fetches a single ticket by key
-func (s *Service) GetTicket(ctx context.Context, key string) (*Ticket, error) {
+func (s *Service) GetTicket(ctx context.Context, key string) (*tickets.Ticket, error) {
 	endpoint := "/rest/api/3/issue/" + key
 
 	resp, err := s.doRequest(ctx, "GET", endpoint, nil)
@@ -206,9 +199,10 @@ func (s *Service) GetTicket(ctx context.Context, key string) (*Ticket, error) {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	ticket := &Ticket{
-		Key:     issue.Key,
-		Summary: issue.Fields.Summary,
+	ticket := &tickets.Ticket{
+		Key:        issue.Key,
+		DisplayKey: issue.Key, // For Jira, display key is the same as the key
+		Summary:    issue.Fields.Summary,
 	}
 
 	if issue.Fields.Status != nil {
@@ -245,6 +239,11 @@ func (s *Service) GetTicketURL(ticketKey string) string {
 // GetBaseURL returns the Jira base URL
 func (s *Service) GetBaseURL() string {
 	return s.baseURL
+}
+
+// GetProviderName returns the name of this provider
+func (s *Service) GetProviderName() string {
+	return "Jira"
 }
 
 // IsConfigured returns true if Jira environment variables are set
