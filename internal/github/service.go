@@ -16,7 +16,7 @@ import (
 )
 
 // OAuth App Client ID for jj-tui
-const GitHubClientID = "Ov23lirYaAMOuoAhhw7W"
+const GitHubClientID = "Iv23liEpah7dINFx13j6"
 
 // DeviceCodeResponse represents the response from GitHub's device code endpoint
 type DeviceCodeResponse struct {

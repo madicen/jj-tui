@@ -501,8 +501,9 @@ func (m *Model) renderGitHubLogin() string {
 			Bold(true).
 			Foreground(lipgloss.Color("#F0F6FC")).
 			Background(lipgloss.Color("#238636")).
-			Padding(1, 3)
-		lines = append(lines, "   "+codeStyle.Render(m.githubUserCode))
+			Padding(1, 3).
+			MarginLeft(3)
+		lines = append(lines, codeStyle.Render(m.githubUserCode))
 		lines = append(lines, "")
 		lines = append(lines, "")
 
