@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
+	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/github"
 	"github.com/madicen/jj-tui/internal/jj"
 	"github.com/madicen/jj-tui/internal/models"
@@ -117,6 +118,12 @@ type Model struct {
 	bookmarkTicketDisplayKey   string            // Short display key (e.g., "$12u" for Codecks) for commit messages
 	jiraBookmarkTitles         map[string]string // Maps bookmark names to formatted PR titles ("KEY - Title")
 	ticketBookmarkDisplayKeys  map[string]string // Maps bookmark names to ticket short IDs for commit messages
+
+	// GitHub Device Flow state
+	githubDeviceCode     string // Device code for polling
+	githubUserCode       string // Code user needs to enter
+	githubVerificationURL string // URL user needs to visit
+	githubLoginPolling   bool   // True if currently polling for token
 }
 
 // Messages for async operations
@@ -157,6 +164,22 @@ type settingsSavedMsg struct {
 
 type errorMsg struct {
 	err error
+}
+
+// GitHub Device Flow messages
+type githubDeviceFlowStartedMsg struct {
+	deviceCode      string
+	userCode        string
+	verificationURL string
+	interval        int
+}
+
+type githubLoginSuccessMsg struct {
+	token string
+}
+
+type githubLoginPollMsg struct {
+	interval int // Polling interval in seconds
 }
 
 type descriptionSavedMsg struct {
@@ -533,6 +556,39 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMessage = "Settings saved"
 		}
 		// Reinitialize services with new credentials
+		return m, m.initializeServices()
+
+	case githubDeviceFlowStartedMsg:
+		m.githubDeviceCode = msg.deviceCode
+		m.githubUserCode = msg.userCode
+		m.githubVerificationURL = msg.verificationURL
+		m.githubLoginPolling = true
+		m.viewMode = ViewGitHubLogin
+		m.statusMessage = "Waiting for GitHub authorization..."
+		// Start polling for the token
+		return m, tea.Batch(
+			openURL(msg.verificationURL),
+			m.pollGitHubToken(msg.interval),
+		)
+
+	case githubLoginPollMsg:
+		if m.githubLoginPolling {
+			return m, m.pollGitHubToken(msg.interval)
+		}
+		return m, nil
+
+	case githubLoginSuccessMsg:
+		m.githubLoginPolling = false
+		m.githubDeviceCode = ""
+		m.githubUserCode = ""
+		m.viewMode = ViewSettings
+		m.statusMessage = "GitHub login successful!"
+		// Save the token to config
+		cfg, _ := config.Load()
+		cfg.GitHubToken = msg.token
+		_ = cfg.Save()
+		cfg.ApplyToEnvironment()
+		// Reinitialize services
 		return m, m.initializeServices()
 
 	case prCreatedMsg:

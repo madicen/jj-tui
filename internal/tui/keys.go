@@ -50,6 +50,19 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleCreateBookmarkKeyMsg(msg)
 	}
 
+	// Special handling for GitHub login view
+	if m.viewMode == ViewGitHubLogin {
+		if msg.String() == "esc" {
+			m.githubLoginPolling = false
+			m.githubDeviceCode = ""
+			m.githubUserCode = ""
+			m.viewMode = ViewSettings
+			m.statusMessage = "GitHub login cancelled"
+			return m, nil
+		}
+		return m, nil
+	}
+
 	// Special handling for rebase mode
 	if m.selectionMode == SelectionRebaseDestination {
 		return m.handleRebaseModeKeyMsg(msg)

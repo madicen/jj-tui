@@ -134,11 +134,27 @@ Settings are saved to `~/.config/jj-tui/config.json` and persist across sessions
 
 ## GitHub Integration
 
-To use GitHub features, set your GitHub token:
+There are two ways to authenticate with GitHub:
+
+### Option 1: Browser Login (Recommended)
+
+1. Press `,` to open Settings
+2. Click **Login with GitHub**
+3. Your browser will open to GitHub's authorization page
+4. Enter the code shown in the TUI
+5. Authorize the application
+
+Your token is automatically saved and persists across sessions.
+
+### Option 2: Personal Access Token
+
+Set your GitHub token as an environment variable:
 
 ```bash
 export GITHUB_TOKEN=your_github_personal_access_token
 ```
+
+Or enter it manually in Settings.
 
 The application will automatically detect GitHub remotes and enable PR functionality.
 

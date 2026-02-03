@@ -79,6 +79,14 @@ var deckMetadata = make(map[string]deckMeta)
 
 // loadProjects fetches and caches the project list and deck mappings
 func (s *Service) loadProjects(ctx context.Context) error {
+	// Clear existing maps to prevent duplication on re-initialization
+	projectDecks = make(map[string][]string)
+	deckToProject = make(map[string]string)
+	archivedProjects = make(map[string]bool)
+	deletedDecks = make(map[string]bool)
+	deckMetadata = make(map[string]deckMeta)
+	s.projectIDs = make(map[string]string)
+
 	// Query projects with their decks, including archived projects and deleted deck status
 	// Also fetch deck metadata (accountSeq, title) for URL construction
 	query := map[string]interface{}{

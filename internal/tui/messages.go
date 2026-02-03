@@ -53,6 +53,7 @@ const (
 	ViewCreatePR
 	ViewEditDescription
 	ViewCreateBookmark
+	ViewGitHubLogin // GitHub Device Flow login
 )
 
 func (v ViewMode) String() string {
@@ -73,6 +74,8 @@ func (v ViewMode) String() string {
 		return "edit_description"
 	case ViewCreateBookmark:
 		return "create_bookmark"
+	case ViewGitHubLogin:
+		return "github_login"
 	default:
 		return "unknown"
 	}
