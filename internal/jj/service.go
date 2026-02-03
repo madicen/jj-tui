@@ -251,8 +251,13 @@ func (s *Service) SquashCommit(ctx context.Context, commitID string) error {
 }
 
 // NewCommit creates a new empty commit after the current working copy
-func (s *Service) NewCommit(ctx context.Context) error {
+// NewCommit creates a new commit. If parentCommitID is provided, creates a child of that commit.
+// Otherwise creates a new commit on top of the current working copy.
+func (s *Service) NewCommit(ctx context.Context, parentCommitID string) error {
 	args := []string{"new"}
+	if parentCommitID != "" {
+		args = append(args, parentCommitID)
+	}
 	return s.runJJ(ctx, args...)
 }
 
