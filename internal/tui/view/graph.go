@@ -11,7 +11,7 @@ import (
 // Graph renders the commit graph view
 func (r *Renderer) Graph(data GraphData) string {
 	if data.Repository == nil || len(data.Repository.Graph.Commits) == 0 {
-		return "No commits found. Press 'r' to refresh."
+		return "No commits found. Press Ctrl+r to refresh."
 	}
 
 	var lines []string
@@ -152,9 +152,9 @@ func (r *Renderer) Graph(data GraphData) string {
 				r.Zone.Mark(ZoneActionCheckout, ButtonStyle.Render("Edit (e)")),
 				r.Zone.Mark(ZoneActionDescribe, ButtonStyle.Render("Describe (d)")),
 				r.Zone.Mark(ZoneActionSquash, ButtonStyle.Render("Squash (s)")),
-				r.Zone.Mark(ZoneActionRebase, ButtonStyle.Render("Rebase (b)")),
+				r.Zone.Mark(ZoneActionRebase, ButtonStyle.Render("Rebase (r)")),
 				r.Zone.Mark(ZoneActionAbandon, ButtonStyle.Render("Abandon (a)")),
-				r.Zone.Mark(ZoneActionBookmark, ButtonStyle.Render("Bookmark (m)")),
+				r.Zone.Mark(ZoneActionBookmark, ButtonStyle.Render("Bookmark (b)")),
 			)
 
 			// Show delete bookmark button if commit has bookmarks

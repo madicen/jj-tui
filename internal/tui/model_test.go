@@ -536,11 +536,11 @@ func TestStatusBarContent(t *testing.T) {
 
 	view := m.View()
 
-	if !containsString(view, "q:quit") {
-		t.Error("Status bar should contain 'q:quit'")
+	if !containsString(view, "ctrl+q:quit") {
+		t.Error("Status bar should contain 'ctrl+q:quit'")
 	}
-	if !containsString(view, "r:refresh") {
-		t.Error("Status bar should contain 'r:refresh'")
+	if !containsString(view, "ctrl+r:refresh") {
+		t.Error("Status bar should contain 'ctrl+r:refresh'")
 	}
 }
 
@@ -745,8 +745,8 @@ func TestActionButtonsInCommitGraph(t *testing.T) {
 		if !containsString(view, "Squash (s)") {
 			t.Error("Expected Squash (s) button")
 		}
-		if !containsString(view, "Rebase (b)") {
-			t.Error("Expected Rebase (b) button")
+		if !containsString(view, "Rebase (r)") {
+			t.Error("Expected Rebase (r) button")
 		}
 		if !containsString(view, "Abandon (a)") {
 			t.Error("Expected Abandon (a) button")
@@ -776,8 +776,8 @@ func TestActionButtonsInCommitGraph(t *testing.T) {
 		if containsString(view, "Squash (s)") {
 			t.Error("Expected Squash (s) button to be hidden for immutable commit")
 		}
-		if containsString(view, "Rebase (b)") {
-			t.Error("Expected Rebase (b) button to be hidden for immutable commit")
+		if containsString(view, "Rebase (r)") {
+			t.Error("Expected Rebase (r) button to be hidden for immutable commit")
 		}
 		if containsString(view, "Abandon (a)") {
 			t.Error("Expected Abandon (a) button to be hidden for immutable commit")
@@ -791,7 +791,7 @@ func TestActionButtonsInCommitGraph(t *testing.T) {
 
 // TestRebaseModeFlow verifies the rebase mode workflow
 func TestRebaseModeFlow(t *testing.T) {
-	t.Run("pressing b enters rebase mode", func(t *testing.T) {
+	t.Run("pressing r enters rebase mode", func(t *testing.T) {
 		m := newTestModel()
 		defer m.Close()
 
@@ -801,8 +801,8 @@ func TestRebaseModeFlow(t *testing.T) {
 		m.selectedCommit = 0
 		m.repository.Graph.Commits[0].Immutable = false
 
-		// Press 'b' to enter rebase mode
-		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}}
+		// Press 'r' to enter rebase mode
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}}
 		newModel, _ := m.Update(msg)
 		m = newModel.(*Model)
 

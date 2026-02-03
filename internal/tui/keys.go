@@ -11,9 +11,9 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Handle error state first - always allow quit and retry
 	if m.err != nil {
 		switch msg.String() {
-		case "q", "ctrl+c":
+		case "ctrl+q", "ctrl+c":
 			return m, tea.Quit
-		case "r":
+		case "ctrl+r":
 			m.err = nil
 			m.viewMode = ViewCommitGraph
 			m.statusMessage = "Refreshing..."
@@ -64,7 +64,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg.String() {
-	case "q", "ctrl+c":
+	case "ctrl+q", "ctrl+c":
 		return m, tea.Quit
 	case "g":
 		m.viewMode = ViewCommitGraph
@@ -113,7 +113,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return m.startEditingDescription(commit)
 		}
-	case "r":
+	case "ctrl+r":
 		m.statusMessage = "Refreshing..."
 		m.loading = true
 		// Always refresh PRs too if GitHub is connected (needed for Update PR button on graph)
@@ -216,7 +216,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, m.abandonCommit()
 		}
-	case "b":
+	case "r":
 		// Start rebase mode
 		if m.viewMode == ViewCommitGraph && m.selectedCommit >= 0 && m.jjService != nil && m.repository != nil {
 			commit := m.repository.Graph.Commits[m.selectedCommit]
@@ -236,7 +236,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.statusMessage = "GitHub not connected. Configure in Settings (,)"
 			return m, nil
 		}
-	case "m":
+	case "b":
 		// Create bookmark on selected commit
 		if m.viewMode == ViewCommitGraph && m.selectedCommit >= 0 && m.jjService != nil && m.repository != nil {
 			commit := m.repository.Graph.Commits[m.selectedCommit]

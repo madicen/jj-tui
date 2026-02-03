@@ -30,7 +30,7 @@ func (r *Renderer) Jira(data JiraData) JiraResult {
 	}
 
 	if len(data.Tickets) == 0 {
-		content := "No assigned tickets found.\n\nPress 'r' to refresh."
+		content := "No assigned tickets found.\n\nPress Ctrl+r to refresh."
 		return JiraResult{FullContent: content}
 	}
 

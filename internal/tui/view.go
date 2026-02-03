@@ -183,7 +183,7 @@ func (m *Model) renderSplitContent() (string, string) {
 // renderError renders an error message
 func (m *Model) renderError() string {
 	style := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555"))
-	return style.Render(fmt.Sprintf("Error: %v\n\nPress 'r' to retry, 'Esc' to dismiss, or 'q' to quit.", m.err))
+	return style.Render(fmt.Sprintf("Error: %v\n\nPress Ctrl+r to retry, Esc to dismiss, or Ctrl+q to quit.", m.err))
 }
 
 // renderCommitGraph renders the commit graph view using the view package
@@ -435,9 +435,9 @@ func (m *Model) renderStatusBar() string {
 
 	// Build shortcuts with zone markers (only global actions)
 	shortcuts := []string{
-		m.zone.Mark(ZoneActionQuit, "q:quit"),
+		m.zone.Mark(ZoneActionQuit, "ctrl+q:quit"),
 		" ",
-		m.zone.Mark(ZoneActionRefresh, "r:refresh"),
+		m.zone.Mark(ZoneActionRefresh, "ctrl+r:refresh"),
 	}
 
 	shortcutsStr := lipgloss.JoinHorizontal(lipgloss.Left, shortcuts...)

@@ -27,7 +27,7 @@ func (r *Renderer) PullRequests(data PRData) PRResult {
 	}
 
 	if data.Repository == nil || len(data.Repository.PRs) == 0 {
-		content := "No pull requests found.\n\nPress 'r' to refresh."
+		content := "No pull requests found.\n\nPress Ctrl+r to refresh."
 		return PRResult{FullContent: content}
 	}
 
