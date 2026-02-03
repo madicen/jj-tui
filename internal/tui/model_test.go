@@ -39,14 +39,6 @@ func newTestModel() *Model {
 	return m
 }
 
-// executeCmd executes a tea.Cmd and returns the message
-func executeCmd(cmd tea.Cmd) tea.Msg {
-	if cmd == nil {
-		return nil
-	}
-	return cmd()
-}
-
 // TestTabSelectedMsgChangesView verifies that TabSelectedMsg changes the view
 func TestTabSelectedMsgChangesView(t *testing.T) {
 	tests := []struct {

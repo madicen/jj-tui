@@ -36,8 +36,8 @@ func NewTestRepository(t *testing.T) *TestRepository {
 	}
 
 	// Set up basic git config
-	repo.runCommand("jj", "config", "set", "--repo", "user.name", "Test User")
-	repo.runCommand("jj", "config", "set", "--repo", "user.email", "test@example.com")
+	_ = repo.runCommand("jj", "config", "set", "--repo", "user.name", "Test User")
+	_ = repo.runCommand("jj", "config", "set", "--repo", "user.email", "test@example.com")
 
 	return repo
 }
@@ -297,7 +297,7 @@ func BenchmarkRepositoryLoad(b *testing.B) {
 		filename := fmt.Sprintf("file%d.txt", i)
 		content := fmt.Sprintf("Content %d", i)
 		message := fmt.Sprintf("Commit %d", i)
-		repo.commitFile(filename, content, message)
+		_ = repo.commitFile(filename, content, message)
 	}
 
 	ctx := context.Background()
