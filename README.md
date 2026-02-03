@@ -2,6 +2,11 @@
 
 A modern Terminal User Interface (TUI) for managing [Jujutsu](https://github.com/martinvonz/jj) repositories. Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lip Gloss](https://github.com/charmbracelet/lipgloss) for an intuitive and beautiful command-line experience.
 
+<img width="1501" height="442" alt="image" src="https://github.com/user-attachments/assets/b28b8e77-3cf6-4be4-82da-abb38b16441d" />
+<img width="1495" height="441" alt="image" src="https://github.com/user-attachments/assets/d833b853-08a9-40df-aebc-62b0c4ec7b74" />
+<img width="1497" height="440" alt="image" src="https://github.com/user-attachments/assets/a2d7d142-a449-4a4f-8b01-46d9e377d81f" />
+
+
 ## Features
 
 - **Visual Commit Graph**: Navigate and visualize your commit history with tree structure
