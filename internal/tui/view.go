@@ -154,6 +154,8 @@ func (m *Model) renderContent() string {
 			content = m.renderEditDescription()
 		case ViewCreateBookmark:
 			content = m.renderCreateBookmark()
+		case ViewGitHubLogin:
+			content = m.renderGitHubLogin()
 		}
 	}
 
@@ -475,6 +477,47 @@ func (m *Model) GetSelectedCommit() int {
 // GetStatusMessage returns the status message
 func (m *Model) GetStatusMessage() string {
 	return m.statusMessage
+}
+
+// renderGitHubLogin renders the GitHub Device Flow login screen
+func (m *Model) renderGitHubLogin() string {
+	var lines []string
+
+	lines = append(lines, view.TitleStyle.Render("GitHub Login"))
+	lines = append(lines, "")
+	lines = append(lines, "")
+
+	if m.githubUserCode != "" {
+		lines = append(lines, lipgloss.NewStyle().Bold(true).Render("1. Visit this URL in your browser:"))
+		lines = append(lines, "")
+		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#58A6FF")).Render("   "+m.githubVerificationURL))
+		lines = append(lines, "")
+		lines = append(lines, "")
+		lines = append(lines, lipgloss.NewStyle().Bold(true).Render("2. Enter this code:"))
+		lines = append(lines, "")
+
+		// Display the user code prominently
+		codeStyle := lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("#F0F6FC")).
+			Background(lipgloss.Color("#238636")).
+			Padding(1, 3)
+		lines = append(lines, "   "+codeStyle.Render(m.githubUserCode))
+		lines = append(lines, "")
+		lines = append(lines, "")
+
+		if m.githubLoginPolling {
+			lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#8B949E")).Italic(true).Render("   Waiting for authorization..."))
+		}
+	} else {
+		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#8B949E")).Render("   Starting GitHub login..."))
+	}
+
+	lines = append(lines, "")
+	lines = append(lines, "")
+	lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#8B949E")).Render("Press Esc to cancel"))
+
+	return strings.Join(lines, "\n")
 }
 
 // GetRepository returns the repository

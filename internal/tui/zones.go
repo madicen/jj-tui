@@ -53,15 +53,23 @@ const (
 	ZoneJiraOpenBrowser  = "zone:jira:openbrowser"
 
 	// Settings zones
-	ZoneSettingsGitHubToken      = "zone:settings:github_token"
-	ZoneSettingsJiraURL          = "zone:settings:jira_url"
-	ZoneSettingsJiraUser         = "zone:settings:jira_user"
-	ZoneSettingsJiraToken        = "zone:settings:jira_token"
-	ZoneSettingsCodecksSubdomain = "zone:settings:codecks_subdomain"
-	ZoneSettingsCodecksToken     = "zone:settings:codecks_token"
-	ZoneSettingsCodecksProject   = "zone:settings:codecks_project"
-	ZoneSettingsSave             = "zone:settings:save"
-	ZoneSettingsCancel           = "zone:settings:cancel"
+	ZoneSettingsGitHubToken           = "zone:settings:github_token"
+	ZoneSettingsGitHubTokenClear      = "zone:settings:github_token_clear"
+	ZoneSettingsGitHubLogin           = "zone:settings:github_login"
+	ZoneSettingsJiraURL               = "zone:settings:jira_url"
+	ZoneSettingsJiraURLClear          = "zone:settings:jira_url_clear"
+	ZoneSettingsJiraUser              = "zone:settings:jira_user"
+	ZoneSettingsJiraUserClear         = "zone:settings:jira_user_clear"
+	ZoneSettingsJiraToken             = "zone:settings:jira_token"
+	ZoneSettingsJiraTokenClear        = "zone:settings:jira_token_clear"
+	ZoneSettingsCodecksSubdomain      = "zone:settings:codecks_subdomain"
+	ZoneSettingsCodecksSubdomainClear = "zone:settings:codecks_subdomain_clear"
+	ZoneSettingsCodecksToken          = "zone:settings:codecks_token"
+	ZoneSettingsCodecksTokenClear     = "zone:settings:codecks_token_clear"
+	ZoneSettingsCodecksProject        = "zone:settings:codecks_project"
+	ZoneSettingsCodecksProjectClear   = "zone:settings:codecks_project_clear"
+	ZoneSettingsSave                  = "zone:settings:save"
+	ZoneSettingsCancel                = "zone:settings:cancel"
 )
 
 // ZoneCommit returns the zone ID for a commit at the given index

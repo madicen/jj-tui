@@ -262,3 +262,44 @@ func formatBookmarkName(key, summary string) string {
 	return "bookmark"
 }
 
+// startGitHubLogin initiates the GitHub Device Flow authentication
+func (m *Model) startGitHubLogin() tea.Cmd {
+	return func() tea.Msg {
+		deviceResp, err := github.StartDeviceFlow()
+		if err != nil {
+			return errorMsg{err: fmt.Errorf("failed to start GitHub login: %w", err)}
+		}
+		return githubDeviceFlowStartedMsg{
+			deviceCode:      deviceResp.DeviceCode,
+			userCode:        deviceResp.UserCode,
+			verificationURL: deviceResp.VerificationURI,
+			interval:        deviceResp.Interval,
+		}
+	}
+}
+
+// pollGitHubToken polls GitHub for the access token
+func (m *Model) pollGitHubToken(interval int) tea.Cmd {
+	return tea.Tick(time.Duration(interval)*time.Second, func(t time.Time) tea.Msg {
+		if m.githubDeviceCode == "" {
+			return nil
+		}
+
+		token, err := github.PollForToken(m.githubDeviceCode)
+		if err != nil {
+			if err.Error() == "slow_down" {
+				// Increase interval and continue polling
+				return githubLoginPollMsg{interval: interval + 5}
+			}
+			return errorMsg{err: fmt.Errorf("GitHub login failed: %w", err)}
+		}
+
+		if token != "" {
+			return githubLoginSuccessMsg{token: token}
+		}
+
+		// Still waiting for user authorization
+		return githubLoginPollMsg{interval: interval}
+	})
+}
+

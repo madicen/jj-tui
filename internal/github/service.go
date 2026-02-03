@@ -2,14 +2,39 @@ package github
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/google/go-github/v66/github"
 	"github.com/madicen/jj-tui/internal/models"
 	"golang.org/x/oauth2"
 )
+
+// OAuth App Client ID for jj-tui
+const GitHubClientID = "Ov23lirYaAMOuoAhhw7W"
+
+// DeviceCodeResponse represents the response from GitHub's device code endpoint
+type DeviceCodeResponse struct {
+	DeviceCode      string `json:"device_code"`
+	UserCode        string `json:"user_code"`
+	VerificationURI string `json:"verification_uri"`
+	ExpiresIn       int    `json:"expires_in"`
+	Interval        int    `json:"interval"`
+}
+
+// TokenResponse represents the response from GitHub's token endpoint
+type TokenResponse struct {
+	AccessToken string `json:"access_token"`
+	TokenType   string `json:"token_type"`
+	Scope       string `json:"scope"`
+	Error       string `json:"error"`
+	ErrorDesc   string `json:"error_description"`
+}
 
 // Service handles GitHub API interactions
 type Service struct {
@@ -208,16 +233,16 @@ func (s *Service) BranchExists(ctx context.Context, branch string) (bool, error)
 }
 
 // ParseGitHubURL extracts owner and repo from a GitHub URL
-func ParseGitHubURL(url string) (owner, repo string, err error) {
+func ParseGitHubURL(remoteURL string) (owner, repo string, err error) {
 	// Handle various GitHub URL formats
-	url = strings.TrimSpace(url)
+	remoteURL = strings.TrimSpace(remoteURL)
 	
 	// Remove .git suffix
-	url = strings.TrimSuffix(url, ".git")
+	remoteURL = strings.TrimSuffix(remoteURL, ".git")
 	
 	// Handle HTTPS URLs
-	if strings.HasPrefix(url, "https://github.com/") {
-		path := strings.TrimPrefix(url, "https://github.com/")
+	if strings.HasPrefix(remoteURL, "https://github.com/") {
+		path := strings.TrimPrefix(remoteURL, "https://github.com/")
 		parts := strings.Split(path, "/")
 		if len(parts) >= 2 {
 			return parts[0], parts[1], nil
@@ -225,13 +250,118 @@ func ParseGitHubURL(url string) (owner, repo string, err error) {
 	}
 	
 	// Handle SSH URLs
-	if strings.HasPrefix(url, "git@github.com:") {
-		path := strings.TrimPrefix(url, "git@github.com:")
+	if strings.HasPrefix(remoteURL, "git@github.com:") {
+		path := strings.TrimPrefix(remoteURL, "git@github.com:")
 		parts := strings.Split(path, "/")
 		if len(parts) >= 2 {
 			return parts[0], parts[1], nil
 		}
 	}
 	
-	return "", "", fmt.Errorf("invalid GitHub URL: %s", url)
+	return "", "", fmt.Errorf("invalid GitHub URL: %s", remoteURL)
+}
+
+// StartDeviceFlow initiates the GitHub Device Flow authentication
+// Returns the device code response containing the user code and verification URL
+func StartDeviceFlow() (*DeviceCodeResponse, error) {
+	data := url.Values{}
+	data.Set("client_id", GitHubClientID)
+	data.Set("scope", "repo")
+
+	req, err := http.NewRequest("POST", "https://github.com/login/device/code", strings.NewReader(data.Encode()))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start device flow: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var deviceResp DeviceCodeResponse
+	if err := json.NewDecoder(resp.Body).Decode(&deviceResp); err != nil {
+		return nil, fmt.Errorf("failed to parse device code response: %w", err)
+	}
+
+	return &deviceResp, nil
+}
+
+// PollForToken polls GitHub for the access token after user authorization
+// Returns the access token on success, or an error
+// This should be called in a loop with the interval from DeviceCodeResponse
+func PollForToken(deviceCode string) (string, error) {
+	data := url.Values{}
+	data.Set("client_id", GitHubClientID)
+	data.Set("device_code", deviceCode)
+	data.Set("grant_type", "urn:ietf:params:oauth:grant-type:device_code")
+
+	req, err := http.NewRequest("POST", "https://github.com/login/oauth/access_token", strings.NewReader(data.Encode()))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to poll for token: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var tokenResp TokenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+		return "", fmt.Errorf("failed to parse token response: %w", err)
+	}
+
+	// Check for errors
+	if tokenResp.Error != "" {
+		switch tokenResp.Error {
+		case "authorization_pending":
+			// User hasn't authorized yet, keep polling
+			return "", nil
+		case "slow_down":
+			// We're polling too fast, caller should increase interval
+			return "", fmt.Errorf("slow_down")
+		case "expired_token":
+			return "", fmt.Errorf("device code expired, please try again")
+		case "access_denied":
+			return "", fmt.Errorf("access denied by user")
+		default:
+			return "", fmt.Errorf("auth error: %s - %s", tokenResp.Error, tokenResp.ErrorDesc)
+		}
+	}
+
+	if tokenResp.AccessToken != "" {
+		return tokenResp.AccessToken, nil
+	}
+
+	return "", nil
+}
+
+// NewServiceWithToken creates a new GitHub service with a provided token
+func NewServiceWithToken(owner, repo, token string) (*Service, error) {
+	if token == "" {
+		return nil, fmt.Errorf("GitHub token is required")
+	}
+
+	// Create OAuth2 token source
+	ts := oauth2.StaticTokenSource(
+		&oauth2.Token{AccessToken: token},
+	)
+	tc := oauth2.NewClient(context.Background(), ts)
+
+	// Create GitHub client
+	client := github.NewClient(tc)
+
+	return &Service{
+		client: client,
+		owner:  owner,
+		repo:   repo,
+		token:  token,
+	}, nil
 }

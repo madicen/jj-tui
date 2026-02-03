@@ -301,6 +301,39 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 
 	// Settings input field clicks
 	if m.viewMode == ViewSettings {
+		// GitHub login button
+		if m.zone.Get(ZoneSettingsGitHubLogin) == zoneInfo {
+			m.statusMessage = "Starting GitHub login..."
+			return m, m.startGitHubLogin()
+		}
+
+		// Clear buttons for each field
+		clearZones := []string{
+			ZoneSettingsGitHubTokenClear,
+			ZoneSettingsJiraURLClear,
+			ZoneSettingsJiraUserClear,
+			ZoneSettingsJiraTokenClear,
+			ZoneSettingsCodecksSubdomainClear,
+			ZoneSettingsCodecksTokenClear,
+			ZoneSettingsCodecksProjectClear,
+		}
+		for i, zoneID := range clearZones {
+			if m.zone.Get(zoneID) == zoneInfo {
+				if i < len(m.settingsInputs) {
+					m.settingsInputs[i].SetValue("")
+					m.settingsInputs[i].Focus()
+					m.settingsFocusedField = i
+					// Blur other inputs
+					for j := range m.settingsInputs {
+						if j != i {
+							m.settingsInputs[j].Blur()
+						}
+					}
+				}
+				return m, nil
+			}
+		}
+
 		settingsZones := []string{
 			ZoneSettingsGitHubToken,
 			ZoneSettingsJiraURL,
