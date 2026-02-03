@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/madicen-utilities/jj-tui/v2/internal/models"
+	"github.com/madicen/jj-tui/internal/models"
 )
 
 // Service handles jujutsu command execution

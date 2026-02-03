@@ -18,16 +18,38 @@ A modern Terminal User Interface (TUI) for managing [Jujutsu](https://github.com
 ## Prerequisites
 
 - [Jujutsu (jj)](https://github.com/martinvonz/jj) installed and available in your PATH
-- Go 1.21+ for building from source
 - A jujutsu repository to work with
 
 ## Installation
 
+### Homebrew (macOS/Linux)
+
+```bash
+brew install madicen/tap/jj-tui
+```
+
+### Go Install
+
+If you have Go 1.21+ installed:
+
+```bash
+go install github.com/madicen/jj-tui@latest
+```
+
+### Download Binary
+
+Download pre-built binaries from the [GitHub Releases](https://github.com/madicen/jj-tui/releases) page.
+
+Available for:
+- **macOS** (Intel & Apple Silicon)
+- **Linux** (amd64 & arm64)
+- **Windows** (amd64 & arm64)
+
 ### From Source
 
 ```bash
+git clone https://github.com/madicen/jj-tui.git
 cd jj-tui
-go mod tidy
 go build -o jj-tui .
 ```
 
@@ -35,10 +57,10 @@ go build -o jj-tui .
 
 ```bash
 # From within a jujutsu repository
-./jj-tui
+jj-tui
 
 # Or specify a repository path
-./jj-tui /path/to/your/jj/repo
+jj-tui /path/to/your/jj/repo
 ```
 
 ## Usage

@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/madicen-utilities/jj-tui/v2/internal/models"
-	"github.com/madicen-utilities/jj-tui/v2/internal/tui/view"
+	"github.com/madicen/jj-tui/internal/models"
+	"github.com/madicen/jj-tui/internal/tui/view"
 )
 
 // View implements tea.Model

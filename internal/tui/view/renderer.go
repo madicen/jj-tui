@@ -3,7 +3,7 @@ package view
 
 import (
 	zone "github.com/lrstanley/bubblezone"
-	"github.com/madicen-utilities/jj-tui/v2/internal/models"
+	"github.com/madicen/jj-tui/internal/models"
 )
 
 // Renderer provides rendering capabilities with zone support

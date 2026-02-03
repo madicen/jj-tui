@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/google/go-github/v66/github"
-	"github.com/madicen-utilities/jj-tui/v2/internal/models"
+	"github.com/madicen/jj-tui/internal/models"
 	"golang.org/x/oauth2"
 )
 

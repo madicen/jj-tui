@@ -1,0 +1,85 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+
+project_name: jj-tui
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: jj-tui
+    main: .
+    binary: jj-tui
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - id: default
+    format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- .Arch }}
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - README.md
+      - LICENSE*
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - Merge pull request
+      - Merge branch
+
+brews:
+  - name: jj-tui
+    repository:
+      owner: madicen
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/madicen/jj-tui"
+    description: "A modern Terminal User Interface for managing Jujutsu repositories"
+    license: "MIT"
+    dependencies:
+      - name: jj
+        type: optional
+    install: |
+      bin.install "jj-tui"
+    test: |
+      system "#{bin}/jj-tui", "--help"
+
+release:
+  github:
+    owner: madicen
+    name: jj-tui
+  draft: false
+  prerelease: auto
+  name_template: "v{{ .Version }}"
+

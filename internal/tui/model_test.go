@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/madicen-utilities/jj-tui/v2/internal/github"
-	"github.com/madicen-utilities/jj-tui/v2/internal/jj"
-	"github.com/madicen-utilities/jj-tui/v2/internal/models"
+	"github.com/madicen/jj-tui/internal/github"
+	"github.com/madicen/jj-tui/internal/jj"
+	"github.com/madicen/jj-tui/internal/models"
 )
 
 // Helper to create a test model with sample data (bypasses jj service)

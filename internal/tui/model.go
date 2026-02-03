@@ -14,10 +14,10 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
-	"github.com/madicen-utilities/jj-tui/v2/internal/github"
-	"github.com/madicen-utilities/jj-tui/v2/internal/jira"
-	"github.com/madicen-utilities/jj-tui/v2/internal/jj"
-	"github.com/madicen-utilities/jj-tui/v2/internal/models"
+	"github.com/madicen/jj-tui/internal/github"
+	"github.com/madicen/jj-tui/internal/jira"
+	"github.com/madicen/jj-tui/internal/jj"
+	"github.com/madicen/jj-tui/internal/models"
 )
 
 // openURL opens a URL in the default browser
