@@ -499,9 +499,14 @@ func (m *Model) submitBookmarkFromJira() tea.Cmd {
 
 	m.statusMessage = fmt.Sprintf("Creating branch '%s' from main...", bookmarkName)
 
-	// Save the Jira PR title mapping (formatted as "KEY - Title")
+	// Save the PR title mapping (formatted as "KEY - Title")
+	// Use the display key (short ID like "$12u") if available, otherwise use the full key
 	if m.bookmarkJiraTicketTitle != "" && m.bookmarkJiraTicketKey != "" {
-		m.jiraBookmarkTitles[bookmarkName] = m.bookmarkJiraTicketKey + " - " + m.bookmarkJiraTicketTitle
+		keyForTitle := m.bookmarkJiraTicketKey
+		if m.bookmarkTicketDisplayKey != "" {
+			keyForTitle = m.bookmarkTicketDisplayKey
+		}
+		m.jiraBookmarkTitles[bookmarkName] = keyForTitle + " - " + m.bookmarkJiraTicketTitle
 	}
 
 	// Save the ticket short ID for commit message prepopulation
