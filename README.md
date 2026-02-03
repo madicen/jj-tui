@@ -36,15 +36,37 @@ brew install madicen/tap/jj-tui
 
 ### Go Install
 
-If you have Go 1.21+ installed:
+If you have Go 1.24+ installed:
 
 ```bash
 go install github.com/madicen/jj-tui@latest
 ```
 
-### Download Binary
+### Download Binary (Linux/macOS)
 
-Download pre-built binaries from the [GitHub Releases](https://github.com/madicen/jj-tui/releases) page.
+Download and install the latest release with one command:
+
+**Linux (amd64):**
+```bash
+curl -sL $(curl -s https://api.github.com/repos/madicen/jj-tui/releases/latest | grep browser_download_url | grep linux_amd64 | cut -d '"' -f 4) | tar xz && sudo mv jj-tui /usr/local/bin/
+```
+
+**Linux (arm64):**
+```bash
+curl -sL $(curl -s https://api.github.com/repos/madicen/jj-tui/releases/latest | grep browser_download_url | grep linux_arm64 | cut -d '"' -f 4) | tar xz && sudo mv jj-tui /usr/local/bin/
+```
+
+**macOS (Apple Silicon):**
+```bash
+curl -sL $(curl -s https://api.github.com/repos/madicen/jj-tui/releases/latest | grep browser_download_url | grep darwin_arm64 | cut -d '"' -f 4) | tar xz && sudo mv jj-tui /usr/local/bin/
+```
+
+**macOS (Intel):**
+```bash
+curl -sL $(curl -s https://api.github.com/repos/madicen/jj-tui/releases/latest | grep browser_download_url | grep darwin_amd64 | cut -d '"' -f 4) | tar xz && sudo mv jj-tui /usr/local/bin/
+```
+
+Or download manually from the [GitHub Releases](https://github.com/madicen/jj-tui/releases) page.
 
 Available for:
 - **macOS** (Intel & Apple Silicon)
@@ -52,6 +74,8 @@ Available for:
 - **Windows** (amd64 & arm64)
 
 ### From Source
+
+Requires Go 1.24+:
 
 ```bash
 git clone https://github.com/madicen/jj-tui.git
