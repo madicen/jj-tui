@@ -28,7 +28,8 @@ builds:
 
 archives:
   - id: default
-    format: tar.gz
+    formats:
+      - tar.gz
     name_template: >-
       {{ .ProjectName }}_
       {{- .Version }}_
@@ -36,7 +37,8 @@ archives:
       {{- .Arch }}
     format_overrides:
       - goos: windows
-        format: zip
+        formats:
+          - zip
     files:
       - README.md
       - LICENSE*
@@ -57,7 +59,7 @@ changelog:
       - Merge pull request
       - Merge branch
 
-brews:
+homebrew:
   - name: jj-tui
     repository:
       owner: madicen
