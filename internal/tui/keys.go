@@ -77,11 +77,11 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			m.statusMessage = "GitHub service not initialized"
 		}
-	case "i": // 'i' for issues (Jira) since 'j' is used for down navigation
+	case "t": // 't' for tickets
 		m.viewMode = ViewJira
-		// Load tickets when switching to Jira view
+		// Load tickets when switching to Tickets view
 		if m.jiraService != nil {
-			m.statusMessage = "Loading Jira tickets..."
+			m.statusMessage = "Loading tickets..."
 			return m, m.loadJiraTickets()
 		}
 	case ",": // ',' for settings (like many apps use comma for settings)

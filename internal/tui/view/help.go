@@ -44,7 +44,7 @@ func (r *Renderer) Help() string {
 	lines = append(lines, "")
 	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("g"), HelpDescStyle.Render("Go to commit graph")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("p"), HelpDescStyle.Render("Go to pull requests")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("i"), HelpDescStyle.Render("Go to Jira issues")))
+	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("t"), HelpDescStyle.Render("Go to Tickets")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render(","), HelpDescStyle.Render("Open settings")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("h/?"), HelpDescStyle.Render("Show this help")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("r"), HelpDescStyle.Render("Refresh")))
@@ -52,7 +52,7 @@ func (r *Renderer) Help() string {
 	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("q"), HelpDescStyle.Render("Quit")))
 
 	lines = append(lines, "")
-	lines = append(lines, TitleStyle.Render("Jira Shortcuts"))
+	lines = append(lines, TitleStyle.Render("Tickets Shortcuts"))
 	lines = append(lines, "")
 	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("j/↓"), HelpDescStyle.Render("Move down")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("k/↑"), HelpDescStyle.Render("Move up")))

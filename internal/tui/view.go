@@ -102,7 +102,7 @@ func (m *Model) renderHeader() string {
 	tabs := []string{
 		m.zone.Mark(ZoneTabGraph, m.renderTab("Graph (g)", m.viewMode == ViewCommitGraph)),
 		m.zone.Mark(ZoneTabPRs, m.renderTab("PRs (p)", m.viewMode == ViewPullRequests)),
-		m.zone.Mark(ZoneTabJira, m.renderTab("Jira (i)", m.viewMode == ViewJira)),
+		m.zone.Mark(ZoneTabJira, m.renderTab("Tickets (t)", m.viewMode == ViewJira)),
 		m.zone.Mark(ZoneTabSettings, m.renderTab("Settings (,)", m.viewMode == ViewSettings)),
 		m.zone.Mark(ZoneTabHelp, m.renderTab("Help (h)", m.viewMode == ViewHelp)),
 	}
