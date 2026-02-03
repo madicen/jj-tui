@@ -17,8 +17,17 @@ import (
 
 // createNewCommit creates a new commit
 func (m *Model) createNewCommit() tea.Cmd {
+	// Get the selected commit's change ID to create a new commit as its child
+	parentCommitID := ""
+	if m.isSelectedCommitValid() {
+		commit := m.repository.Graph.Commits[m.selectedCommit]
+		if !commit.Immutable {
+			parentCommitID = commit.ChangeID
+		}
+	}
+
 	return func() tea.Msg {
-		if err := m.jjService.NewCommit(context.Background()); err != nil {
+		if err := m.jjService.NewCommit(context.Background(), parentCommitID); err != nil {
 			return errorMsg{err: fmt.Errorf("failed to create commit: %w", err)}
 		}
 		// Reload repository after change

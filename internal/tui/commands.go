@@ -174,9 +174,9 @@ func (m *Model) loadTickets() tea.Cmd {
 			return errorMsg{err: fmt.Errorf("failed to load tickets: %w", err)}
 		}
 
-		// Sort tickets by DisplayKey for consistent ordering
+		// Sort tickets by DisplayKey descending (most recent first)
 		sort.Slice(ticketList, func(i, j int) bool {
-			return ticketList[i].DisplayKey < ticketList[j].DisplayKey
+			return ticketList[i].DisplayKey > ticketList[j].DisplayKey
 		})
 
 		return ticketsLoadedMsg{tickets: ticketList}
