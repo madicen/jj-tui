@@ -720,16 +720,24 @@ func (m *Model) saveSettings() tea.Cmd {
 		}
 
 		// Save to config file for persistence across restarts
-		cfg := &config.Config{
-			GitHubToken:      githubToken,
-			TicketProvider:   ticketProvider,
-			JiraURL:          jiraURL,
-			JiraUser:         jiraUser,
-			JiraToken:        jiraToken,
-			CodecksSubdomain: codecksSubdomain,
-			CodecksToken:     codecksToken,
-			CodecksProject:   codecksProject,
+		// Load existing config to preserve values not in the form (like browser-obtained GitHub token)
+		cfg, _ := config.Load()
+		if cfg == nil {
+			cfg = &config.Config{}
 		}
+
+		// Only update GitHub token if user entered one manually (preserve browser-obtained token)
+		if githubToken != "" {
+			cfg.GitHubToken = githubToken
+		}
+		cfg.TicketProvider = ticketProvider
+		cfg.JiraURL = jiraURL
+		cfg.JiraUser = jiraUser
+		cfg.JiraToken = jiraToken
+		cfg.CodecksSubdomain = codecksSubdomain
+		cfg.CodecksToken = codecksToken
+		cfg.CodecksProject = codecksProject
+
 		// Ignore save errors - settings will still work for current session
 		_ = cfg.Save()
 
