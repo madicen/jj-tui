@@ -524,8 +524,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.changedFiles = msg.files
 		}
 		return m, nil
-		// Reload repository AND PRs to update action buttons
-		return m, tea.Batch(m.loadRepository(), m.loadPRs())
 
 	case tickMsg:
 		// Auto-refresh: reload repository data silently (but not while editing, creating PR, or creating bookmark)
