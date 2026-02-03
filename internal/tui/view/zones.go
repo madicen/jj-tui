@@ -12,6 +12,7 @@ const (
 	ZoneActionAbandon   = "zone:action:abandon"
 
 	ZoneJiraCreateBranch = "zone:jira:createbranch"
+	ZoneJiraOpenBrowser  = "zone:jira:openbrowser"
 
 	ZoneSettingsGitHubToken = "zone:settings:github_token"
 	ZoneSettingsJiraURL     = "zone:settings:jira_url"

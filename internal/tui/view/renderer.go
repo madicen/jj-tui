@@ -52,7 +52,8 @@ type PRResult struct {
 type JiraData struct {
 	Tickets        []JiraTicket
 	SelectedTicket int
-	JiraService    bool // whether Jira is connected
+	JiraService    bool   // whether Jira is connected
+	JiraBaseURL    string // base URL for constructing ticket links
 }
 
 // JiraResult contains the split rendering for Jira

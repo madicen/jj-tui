@@ -69,8 +69,10 @@ func (r *Renderer) Jira(data JiraData) JiraResult {
 		headerLines = append(headerLines, detailsBox)
 		headerLines = append(headerLines, "")
 
-		// Action button in header
-		headerLines = append(headerLines, r.Zone.Mark(ZoneJiraCreateBranch, ButtonStyle.Render("Create Branch (Enter)")))
+		// Action buttons in header
+		createBranchBtn := r.Zone.Mark(ZoneJiraCreateBranch, ButtonStyle.Render("Create Branch (Enter)"))
+		openBrowserBtn := r.Zone.Mark(ZoneJiraOpenBrowser, ButtonStyle.Render("Open in Browser (o)"))
+		headerLines = append(headerLines, createBranchBtn+"  "+openBrowserBtn)
 		headerLines = append(headerLines, "")
 	}
 

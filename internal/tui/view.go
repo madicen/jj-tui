@@ -356,10 +356,16 @@ func (m *Model) getJiraResult() view.JiraResult {
 		}
 	}
 
+	var jiraBaseURL string
+	if m.jiraService != nil {
+		jiraBaseURL = m.jiraService.GetBaseURL()
+	}
+
 	return m.renderer().Jira(view.JiraData{
 		Tickets:        tickets,
 		SelectedTicket: m.selectedTicket,
 		JiraService:    m.jiraService != nil,
+		JiraBaseURL:    jiraBaseURL,
 	})
 }
 

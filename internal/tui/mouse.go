@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"fmt"
+
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 )
@@ -284,6 +286,16 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 			ticket := m.jiraTickets[m.selectedTicket]
 			m.startBookmarkFromJiraTicket(ticket)
 			return m, nil
+		}
+	}
+
+	// Check Jira open in browser button
+	if m.zone.Get(ZoneJiraOpenBrowser) == zoneInfo {
+		if m.viewMode == ViewJira && m.jiraService != nil && m.selectedTicket >= 0 && m.selectedTicket < len(m.jiraTickets) {
+			ticket := m.jiraTickets[m.selectedTicket]
+			ticketURL := m.jiraService.GetTicketURL(ticket.Key)
+			m.statusMessage = fmt.Sprintf("Opening %s...", ticket.Key)
+			return m, openURL(ticketURL)
 		}
 	}
 

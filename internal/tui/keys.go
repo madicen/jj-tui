@@ -172,6 +172,13 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, openURL(pr.URL)
 			}
 		}
+		// Open Jira ticket URL in browser (Jira view only)
+		if m.viewMode == ViewJira && m.jiraService != nil && m.selectedTicket >= 0 && m.selectedTicket < len(m.jiraTickets) {
+			ticket := m.jiraTickets[m.selectedTicket]
+			ticketURL := m.jiraService.GetTicketURL(ticket.Key)
+			m.statusMessage = fmt.Sprintf("Opening %s...", ticket.Key)
+			return m, openURL(ticketURL)
+		}
 	case "enter", "e":
 		// In PR view, open the PR in browser
 		if m.viewMode == ViewPullRequests && m.repository != nil && m.selectedPR >= 0 && m.selectedPR < len(m.repository.PRs) {

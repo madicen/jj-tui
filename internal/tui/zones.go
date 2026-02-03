@@ -50,6 +50,7 @@ const (
 
 	// Jira action zones
 	ZoneJiraCreateBranch = "zone:jira:createbranch"
+	ZoneJiraOpenBrowser  = "zone:jira:openbrowser"
 
 	// Settings zones
 	ZoneSettingsGitHubToken = "zone:settings:github_token"

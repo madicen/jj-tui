@@ -237,6 +237,16 @@ func (s *Service) GetTicket(ctx context.Context, key string) (*Ticket, error) {
 	return ticket, nil
 }
 
+// GetTicketURL returns the browser URL for a ticket
+func (s *Service) GetTicketURL(ticketKey string) string {
+	return s.baseURL + "/browse/" + ticketKey
+}
+
+// GetBaseURL returns the Jira base URL
+func (s *Service) GetBaseURL() string {
+	return s.baseURL
+}
+
 // IsConfigured returns true if Jira environment variables are set
 func IsConfigured() bool {
 	return os.Getenv("JIRA_URL") != "" &&
