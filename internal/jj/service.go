@@ -134,10 +134,7 @@ func (s *Service) GetChangedFiles(ctx context.Context, commitID string) ([]Chang
 func (s *Service) IsCommitMutable(ctx context.Context, commitID string) bool {
 	// Try a no-op describe to see if the commit is mutable
 	_, err := s.runJJOutput(ctx, "log", "-r", commitID, "--no-graph", "-T", "if(immutable, \"immutable\", \"mutable\")")
-	if err != nil {
-		return false
-	}
-	return true
+	return err == nil
 }
 
 // CheckoutCommit checks out a specific commit (uses jj edit)
