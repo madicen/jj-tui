@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -172,6 +173,12 @@ func (m *Model) loadTickets() tea.Cmd {
 		if err != nil {
 			return errorMsg{err: fmt.Errorf("failed to load tickets: %w", err)}
 		}
+
+		// Sort tickets by DisplayKey for consistent ordering
+		sort.Slice(ticketList, func(i, j int) bool {
+			return ticketList[i].DisplayKey < ticketList[j].DisplayKey
+		})
+
 		return ticketsLoadedMsg{tickets: ticketList}
 	}
 }

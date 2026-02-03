@@ -10,6 +10,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
+	"strings"
 
 	"github.com/madicen/jj-tui/internal/tickets"
 )
@@ -66,9 +68,19 @@ var archivedProjects = make(map[string]bool)
 // deletedDecks tracks which deck IDs are deleted
 var deletedDecks = make(map[string]bool)
 
+// deckMeta stores deck metadata for URL construction
+type deckMeta struct {
+	seq   int
+	title string
+}
+
+// deckMetadata maps deck ID to its metadata
+var deckMetadata = make(map[string]deckMeta)
+
 // loadProjects fetches and caches the project list and deck mappings
 func (s *Service) loadProjects(ctx context.Context) error {
 	// Query projects with their decks, including archived projects and deleted deck status
+	// Also fetch deck metadata (accountSeq, title) for URL construction
 	query := map[string]interface{}{
 		"query": map[string]interface{}{
 			"_root": []interface{}{
@@ -79,7 +91,7 @@ func (s *Service) loadProjects(ctx context.Context) error {
 							"projects": []interface{}{
 								"id", "name",
 								map[string]interface{}{
-									"decks": []string{"id", "isDeleted"},
+									"decks": []string{"id", "isDeleted", "accountSeq", "title"},
 								},
 							},
 						},
@@ -117,13 +129,23 @@ func (s *Service) loadProjects(ctx context.Context) error {
 		}
 	}
 
-	// Track deleted decks from deck data
+	// Track deleted decks and store deck metadata for URL construction
 	if decksMap, ok := rawResult["deck"].(map[string]interface{}); ok {
 		for deckID, deckData := range decksMap {
 			if deck, ok := deckData.(map[string]interface{}); ok {
 				if isDeleted, ok := deck["isDeleted"].(bool); ok && isDeleted {
 					deletedDecks[deckID] = true
 				}
+				// Store deck metadata for URL construction
+				seq := 0
+				if seqFloat, ok := deck["accountSeq"].(float64); ok {
+					seq = int(seqFloat)
+				}
+				title := ""
+				if t, ok := deck["title"].(string); ok {
+					title = t
+				}
+				deckMetadata[deckID] = deckMeta{seq: seq, title: title}
 			}
 		}
 	}
@@ -237,7 +259,7 @@ func (s *Service) getAllCards(ctx context.Context) ([]tickets.Ticket, error) {
 				map[string]interface{}{
 					"account": []interface{}{
 						map[string]interface{}{
-							"cards": []string{"title", "status", "priority", "content", "accountSeq", "visibility"},
+							"cards": []string{"title", "status", "priority", "content", "accountSeq", "visibility", "deck"},
 						},
 					},
 				},
@@ -290,6 +312,7 @@ func (s *Service) getAllCards(ctx context.Context) ([]tickets.Ticket, error) {
 			Priority:    mapCodecksPriority(getString(cardMap, "priority")),
 			Type:        "Card",
 			Description: getString(cardMap, "content"),
+			DeckID:      getString(cardMap, "deck"),
 		})
 	}
 
@@ -375,6 +398,7 @@ func (s *Service) getCardsFromDeck(ctx context.Context, deckID string) ([]ticket
 			Priority:    mapCodecksPriority(getString(cardMap, "priority")),
 			Type:        "Card",
 			Description: getString(cardMap, "content"),
+			DeckID:      deckID, // Already known from the query
 		})
 	}
 
@@ -395,6 +419,24 @@ func getInt(m map[string]interface{}, key string) int {
 		return int(v)
 	}
 	return 0
+}
+
+// slugify converts a string to a URL-friendly slug
+// Example: "Add Codecks support to jj-tui" -> "add-codecks-support-to-jj-tui"
+func slugify(s string) string {
+	// Convert to lowercase
+	s = strings.ToLower(s)
+	// Replace spaces with hyphens
+	s = strings.ReplaceAll(s, " ", "-")
+	// Remove any characters that aren't alphanumeric or hyphens
+	invalidChars := regexp.MustCompile(`[^a-z0-9\-]`)
+	s = invalidChars.ReplaceAllString(s, "")
+	// Remove multiple consecutive hyphens
+	multipleHyphens := regexp.MustCompile(`-+`)
+	s = multipleHyphens.ReplaceAllString(s, "-")
+	// Trim leading/trailing hyphens
+	s = strings.Trim(s, "-")
+	return s
 }
 
 // encodeShortID converts an accountSeq number to Codecks' short ID format
@@ -475,7 +517,7 @@ func (s *Service) GetTicket(ctx context.Context, key string) (*tickets.Ticket, e
 	query := map[string]interface{}{
 		"query": map[string]interface{}{
 			fmt.Sprintf("card(%s)", key): []string{
-				"title", "content", "status", "priority", "accountSeq", "visibility",
+				"title", "content", "status", "priority", "accountSeq", "visibility", "deck",
 			},
 		},
 	}
@@ -519,12 +561,28 @@ func (s *Service) GetTicket(ctx context.Context, key string) (*tickets.Ticket, e
 		Priority:    mapCodecksPriority(getString(cardData, "priority")),
 		Type:        "Card",
 		Description: getString(cardData, "content"),
+		DeckID:      getString(cardData, "deck"),
 	}, nil
 }
 
 // GetTicketURL returns the browser URL for a card
-func (s *Service) GetTicketURL(ticketKey string) string {
-	return fmt.Sprintf("https://%s.codecks.io/card/%s", s.subdomain, ticketKey)
+// URL format: https://{subdomain}.codecks.io/decks/{deckSeq}-{deckSlug}/card/{shortId}-{cardSlug}
+func (s *Service) GetTicketURL(ticket tickets.Ticket) string {
+	// Get deck metadata for URL construction
+	deckSlug := ""
+	if meta, ok := deckMetadata[ticket.DeckID]; ok && meta.seq > 0 {
+		deckSlug = fmt.Sprintf("%d-%s", meta.seq, slugify(meta.title))
+	}
+
+	// Get the short ID without the "$" prefix
+	shortID := strings.TrimPrefix(ticket.DisplayKey, "$")
+	cardSlug := fmt.Sprintf("%s-%s", shortID, slugify(ticket.Summary))
+
+	// If we have deck info, use the full URL; otherwise fallback to simple URL
+	if deckSlug != "" {
+		return fmt.Sprintf("https://%s.codecks.io/decks/%s/card/%s", s.subdomain, deckSlug, cardSlug)
+	}
+	return fmt.Sprintf("https://%s.codecks.io/card/%s", s.subdomain, cardSlug)
 }
 
 // GetProviderName returns the name of this provider

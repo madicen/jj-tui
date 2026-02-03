@@ -293,7 +293,7 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 	if m.zone.Get(ZoneJiraOpenBrowser) == zoneInfo {
 		if m.viewMode == ViewJira && m.ticketService != nil && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
 			ticket := m.ticketList[m.selectedTicket]
-			ticketURL := m.ticketService.GetTicketURL(ticket.Key)
+			ticketURL := m.ticketService.GetTicketURL(ticket)
 			m.statusMessage = fmt.Sprintf("Opening %s...", ticket.Key)
 			return m, openURL(ticketURL)
 		}
