@@ -167,10 +167,14 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.viewMode == ViewPullRequests {
 			if m.repository != nil && m.selectedPR < len(m.repository.PRs)-1 {
 				m.selectedPR++
+				// Scroll viewport to keep selection visible
+				m.ensureSelectionVisible(m.selectedPR)
 			}
 		} else if m.viewMode == ViewJira {
 			if m.selectedTicket < len(m.ticketList)-1 {
 				m.selectedTicket++
+				// Scroll viewport to keep selection visible
+				m.ensureSelectionVisible(m.selectedTicket)
 			}
 		} else if m.viewMode == ViewCommitGraph {
 			if !m.graphFocused {
@@ -194,10 +198,14 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.viewMode == ViewPullRequests {
 			if m.selectedPR > 0 {
 				m.selectedPR--
+				// Scroll viewport to keep selection visible
+				m.ensureSelectionVisible(m.selectedPR)
 			}
 		} else if m.viewMode == ViewJira {
 			if m.selectedTicket > 0 {
 				m.selectedTicket--
+				// Scroll viewport to keep selection visible
+				m.ensureSelectionVisible(m.selectedTicket)
 			}
 		} else if m.viewMode == ViewCommitGraph {
 			if !m.graphFocused {

@@ -102,3 +102,33 @@ func (m *Model) Close() {
 	}
 }
 
+// ensureSelectionVisible scrolls the viewport to keep the selected line visible
+// This is called after keyboard navigation changes the selection
+func (m *Model) ensureSelectionVisible(selectedLine int) {
+	viewportHeight := m.viewport.Height
+	if viewportHeight <= 0 {
+		return
+	}
+
+	// If selection is above visible area, scroll up
+	if selectedLine < m.viewport.YOffset {
+		m.viewport.YOffset = selectedLine
+	}
+	// If selection is below visible area, scroll down
+	if selectedLine >= m.viewport.YOffset+viewportHeight {
+		m.viewport.YOffset = selectedLine - viewportHeight + 1
+	}
+
+	// Clamp to valid range
+	maxOffset := m.viewport.TotalLineCount() - viewportHeight
+	if maxOffset < 0 {
+		maxOffset = 0
+	}
+	if m.viewport.YOffset > maxOffset {
+		m.viewport.YOffset = maxOffset
+	}
+	if m.viewport.YOffset < 0 {
+		m.viewport.YOffset = 0
+	}
+}
+
