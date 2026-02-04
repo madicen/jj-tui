@@ -19,6 +19,7 @@ import (
 	"github.com/madicen/jj-tui/internal/jj"
 	"github.com/madicen/jj-tui/internal/models"
 	"github.com/madicen/jj-tui/internal/tickets"
+	"github.com/madicen/jj-tui/internal/tui/actions"
 )
 
 // openURL opens a URL in the default browser
@@ -58,8 +59,8 @@ func (m *Model) calculateSplitViewHeight() int {
 	}
 
 	// Estimate header heights (same as in View())
-	headerHeight := 1  // Tab bar
-	statusHeight := 1  // Status bar
+	headerHeight := 1 // Tab bar
+	statusHeight := 1 // Status bar
 
 	// Estimate fixed header height for split views
 	// This is an approximation - the actual height is calculated during rendering
@@ -137,22 +138,22 @@ type Model struct {
 	prNeedsMoveBookmark bool // True if we need to move the bookmark to include all commits
 
 	// Bookmark creation state
-	bookmarkNameInput       textinput.Model
-	bookmarkCommitIdx       int               // Index of commit to create bookmark on (-1 for new branch from main)
-	existingBookmarks       []string          // List of existing bookmarks
-	selectedBookmarkIdx     int               // Index of selected existing bookmark (-1 for new)
-	bookmarkFromJira           bool              // True if creating bookmark from Jira ticket
-	bookmarkJiraTicketKey      string            // Jira ticket key if creating from Jira
-	bookmarkJiraTicketTitle    string            // Jira ticket summary if creating from Jira
-	bookmarkTicketDisplayKey   string            // Short display key (e.g., "$12u" for Codecks) for commit messages
-	jiraBookmarkTitles         map[string]string // Maps bookmark names to formatted PR titles ("KEY - Title")
-	ticketBookmarkDisplayKeys  map[string]string // Maps bookmark names to ticket short IDs for commit messages
+	bookmarkNameInput         textinput.Model
+	bookmarkCommitIdx         int               // Index of commit to create bookmark on (-1 for new branch from main)
+	existingBookmarks         []string          // List of existing bookmarks
+	selectedBookmarkIdx       int               // Index of selected existing bookmark (-1 for new)
+	bookmarkFromJira          bool              // True if creating bookmark from Jira ticket
+	bookmarkJiraTicketKey     string            // Jira ticket key if creating from Jira
+	bookmarkJiraTicketTitle   string            // Jira ticket summary if creating from Jira
+	bookmarkTicketDisplayKey  string            // Short display key (e.g., "$12u" for Codecks) for commit messages
+	jiraBookmarkTitles        map[string]string // Maps bookmark names to formatted PR titles ("KEY - Title")
+	ticketBookmarkDisplayKeys map[string]string // Maps bookmark names to ticket short IDs for commit messages
 
 	// GitHub Device Flow state
-	githubDeviceCode     string // Device code for polling
-	githubUserCode       string // Code user needs to enter
+	githubDeviceCode      string // Device code for polling
+	githubUserCode        string // Code user needs to enter
 	githubVerificationURL string // URL user needs to visit
-	githubLoginPolling   bool   // True if currently polling for token
+	githubLoginPolling    bool   // True if currently polling for token
 }
 
 // Messages for async operations
@@ -204,7 +205,7 @@ func ErrorMsg(err error) errorMsg {
 	return errorMsg{err: err}
 }
 
-type jjInitSuccessMsg struct {}
+type jjInitSuccessMsg struct{}
 
 // GitHub Device Flow messages
 type githubDeviceFlowStartedMsg struct {
@@ -611,14 +612,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Don't continue auto-refresh on error - let user dismiss or manually refresh
 		return m, nil
 
-	case clipboardCopiedMsg:
-		if msg.success {
-			m.statusMessage = "Error copied to clipboard!"
-		} else {
-			m.statusMessage = fmt.Sprintf("Failed to copy: %v", msg.err)
-		}
-		return m, nil
-
 	case jjInitSuccessMsg:
 		m.notJJRepo = false
 		// Don't clear m.err here - let errors persist until user dismisses them
@@ -875,6 +868,51 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ActionMsg:
 		return m.handleAction(msg.Action)
+
+	// Handle messages from actions package
+	case actions.RepositoryLoadedMsg:
+		return m.Update(repositoryLoadedMsg{repository: msg.Repository})
+
+	case actions.EditCompletedMsg:
+		return m.Update(editCompletedMsg{repository: msg.Repository})
+
+	case actions.ErrorMsg:
+		return m.Update(errorMsg{err: msg.Err})
+
+	case actions.DescriptionLoadedMsg:
+		return m.Update(descriptionLoadedMsg{commitID: msg.CommitID, description: msg.Description})
+
+	case actions.DescriptionSavedMsg:
+		return m.Update(descriptionSavedMsg{commitID: msg.CommitID})
+
+	case actions.PRCreatedMsg:
+		return m.Update(prCreatedMsg{pr: msg.PR})
+
+	case actions.BranchPushedMsg:
+		return m.Update(branchPushedMsg{branch: msg.Branch, pushOutput: msg.PushOutput})
+
+	case actions.BookmarkCreatedMsg:
+		return m.Update(bookmarkCreatedOnCommitMsg{bookmarkName: msg.BookmarkName, commitID: msg.CommitID, wasMoved: msg.WasMoved})
+
+	case actions.BookmarkDeletedMsg:
+		return m.Update(bookmarkDeletedMsg{bookmarkName: msg.BookmarkName})
+
+	case actions.ClipboardCopiedMsg:
+		if msg.Success {
+			m.statusMessage = "Error copied to clipboard!"
+		} else {
+			m.statusMessage = fmt.Sprintf("Failed to copy: %v", msg.Err)
+		}
+		return m, nil
+
+	case actions.SettingsSavedMsg:
+		return m.Update(settingsSavedMsg{
+			githubConnected: msg.GitHubConnected,
+			ticketService:   msg.TicketService,
+			ticketProvider:  msg.TicketProvider,
+			savedLocal:      msg.SavedLocal,
+			err:             msg.Err,
+		})
 	}
 
 	return m, nil
