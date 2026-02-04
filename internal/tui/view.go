@@ -115,10 +115,18 @@ func (m *Model) View() string {
 			filesHeight = 3
 		}
 
-		// Set up graph viewport - only update content if not loading (preserve previous content)
+		// Set up graph viewport
 		m.viewport.Height = graphHeight
-		if !m.loading && graphResult.GraphContent != "" {
+		
+		// Always set content if we have valid graph content (even during loading, to avoid stale content from other views)
+		if graphResult.GraphContent != "" {
+			// Save scroll position during loading refresh
+			savedYOffset := m.viewport.YOffset
 			m.viewport.SetContent(graphResult.GraphContent)
+			if m.loading {
+				// Restore scroll position during loading to prevent jitter
+				m.viewport.YOffset = savedYOffset
+			}
 		}
 
 		// Set up files viewport - show placeholder if no files yet
@@ -127,11 +135,13 @@ func (m *Model) View() string {
 		if filesContent == "" {
 			filesContent = lipgloss.NewStyle().Foreground(lipgloss.Color("#666666")).Render("  Loading changed files...")
 		}
-		if !m.loading || m.filesViewport.TotalLineCount() == 0 {
-			m.filesViewport.SetContent(filesContent)
+		savedFilesOffset := m.filesViewport.YOffset
+		m.filesViewport.SetContent(filesContent)
+		if m.loading {
+			m.filesViewport.YOffset = savedFilesOffset
 		}
 
-		// Ensure selected commit is visible in graph viewport
+		// Ensure selected commit is visible in graph viewport (only when not loading)
 		if m.selectedCommit >= 0 && !m.loading {
 			// Account for the focus indicator header line
 			adjustedCommit := m.selectedCommit + 1
