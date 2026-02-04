@@ -671,19 +671,28 @@ func (m *Model) saveSettings() tea.Cmd {
 	// 1: Jira URL
 	// 2: Jira User
 	// 3: Jira Token
-	// 4: Codecks Subdomain
-	// 5: Codecks Token
+	// 4: Jira Excluded Statuses
+	// 5: Codecks Subdomain
+	// 6: Codecks Token
+	// 7: Codecks Project
+	// 8: Codecks Excluded Statuses
 	githubToken := strings.TrimSpace(m.settingsInputs[0].Value())
 	jiraURL := strings.TrimSpace(m.settingsInputs[1].Value())
 	jiraUser := strings.TrimSpace(m.settingsInputs[2].Value())
 	jiraToken := strings.TrimSpace(m.settingsInputs[3].Value())
+	jiraExcludedStatuses := strings.TrimSpace(m.settingsInputs[4].Value())
 
-	var codecksSubdomain, codecksToken, codecksProject string
-	if len(m.settingsInputs) > 6 {
-		codecksSubdomain = strings.TrimSpace(m.settingsInputs[4].Value())
-		codecksToken = strings.TrimSpace(m.settingsInputs[5].Value())
-		codecksProject = strings.TrimSpace(m.settingsInputs[6].Value())
+	var codecksSubdomain, codecksToken, codecksProject, codecksExcludedStatuses string
+	if len(m.settingsInputs) > 8 {
+		codecksSubdomain = strings.TrimSpace(m.settingsInputs[5].Value())
+		codecksToken = strings.TrimSpace(m.settingsInputs[6].Value())
+		codecksProject = strings.TrimSpace(m.settingsInputs[7].Value())
+		codecksExcludedStatuses = strings.TrimSpace(m.settingsInputs[8].Value())
 	}
+
+	// Capture toggle states
+	showMerged := m.settingsShowMerged
+	showClosed := m.settingsShowClosed
 
 	return func() tea.Msg {
 		// Set environment variables for the current process
@@ -730,13 +739,20 @@ func (m *Model) saveSettings() tea.Cmd {
 		if githubToken != "" {
 			cfg.GitHubToken = githubToken
 		}
+
+		// Save GitHub filter toggles
+		cfg.GitHubShowMerged = &showMerged
+		cfg.GitHubShowClosed = &showClosed
+
 		cfg.TicketProvider = ticketProvider
 		cfg.JiraURL = jiraURL
 		cfg.JiraUser = jiraUser
 		cfg.JiraToken = jiraToken
+		cfg.JiraExcludedStatuses = jiraExcludedStatuses
 		cfg.CodecksSubdomain = codecksSubdomain
 		cfg.CodecksToken = codecksToken
 		cfg.CodecksProject = codecksProject
+		cfg.CodecksExcludedStatuses = codecksExcludedStatuses
 
 		// Ignore save errors - settings will still work for current session
 		_ = cfg.Save()
@@ -766,18 +782,24 @@ func (m *Model) saveSettings() tea.Cmd {
 
 // saveSettingsLocal saves settings to the local .jj-tui.json file in the current directory
 func (m *Model) saveSettingsLocal() tea.Cmd {
-	// Get values from inputs (same as saveSettings)
+	// Get values from inputs (same index mapping as saveSettings)
 	githubToken := strings.TrimSpace(m.settingsInputs[0].Value())
 	jiraURL := strings.TrimSpace(m.settingsInputs[1].Value())
 	jiraUser := strings.TrimSpace(m.settingsInputs[2].Value())
 	jiraToken := strings.TrimSpace(m.settingsInputs[3].Value())
+	jiraExcludedStatuses := strings.TrimSpace(m.settingsInputs[4].Value())
 
-	var codecksSubdomain, codecksToken, codecksProject string
-	if len(m.settingsInputs) > 6 {
-		codecksSubdomain = strings.TrimSpace(m.settingsInputs[4].Value())
-		codecksToken = strings.TrimSpace(m.settingsInputs[5].Value())
-		codecksProject = strings.TrimSpace(m.settingsInputs[6].Value())
+	var codecksSubdomain, codecksToken, codecksProject, codecksExcludedStatuses string
+	if len(m.settingsInputs) > 8 {
+		codecksSubdomain = strings.TrimSpace(m.settingsInputs[5].Value())
+		codecksToken = strings.TrimSpace(m.settingsInputs[6].Value())
+		codecksProject = strings.TrimSpace(m.settingsInputs[7].Value())
+		codecksExcludedStatuses = strings.TrimSpace(m.settingsInputs[8].Value())
 	}
+
+	// Capture toggle states
+	showMerged := m.settingsShowMerged
+	showClosed := m.settingsShowClosed
 
 	return func() tea.Msg {
 		// Set environment variables for the current process
@@ -813,10 +835,14 @@ func (m *Model) saveSettingsLocal() tea.Cmd {
 			ticketProvider = "jira"
 		}
 
-		// Create config with only the fields that should be saved locally
+		// Create config with the fields that should be saved locally
 		cfg := &config.Config{
-			TicketProvider:   ticketProvider,
-			CodecksProject:   codecksProject,
+			TicketProvider:          ticketProvider,
+			GitHubShowMerged:        &showMerged,
+			GitHubShowClosed:        &showClosed,
+			JiraExcludedStatuses:    jiraExcludedStatuses,
+			CodecksProject:          codecksProject,
+			CodecksExcludedStatuses: codecksExcludedStatuses,
 		}
 
 		// Only include credentials if the user explicitly entered them

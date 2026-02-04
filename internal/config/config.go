@@ -12,18 +12,24 @@ import (
 type Config struct {
 	GitHubToken string `json:"github_token,omitempty"`
 
+	// GitHub filter settings
+	GitHubShowMerged *bool `json:"github_show_merged,omitempty"` // nil = true (show by default)
+	GitHubShowClosed *bool `json:"github_show_closed,omitempty"` // nil = true (show by default)
+
 	// Ticket provider selection: "jira" or "codecks"
 	TicketProvider string `json:"ticket_provider,omitempty"`
 
 	// Jira settings
-	JiraURL   string `json:"jira_url,omitempty"`
-	JiraUser  string `json:"jira_user,omitempty"`
-	JiraToken string `json:"jira_token,omitempty"`
+	JiraURL              string `json:"jira_url,omitempty"`
+	JiraUser             string `json:"jira_user,omitempty"`
+	JiraToken            string `json:"jira_token,omitempty"`
+	JiraExcludedStatuses string `json:"jira_excluded_statuses,omitempty"` // Comma-separated statuses to hide
 
 	// Codecks settings
-	CodecksSubdomain string `json:"codecks_subdomain,omitempty"`
-	CodecksToken     string `json:"codecks_token,omitempty"`
-	CodecksProject   string `json:"codecks_project,omitempty"` // Optional: filter by project name
+	CodecksSubdomain        string `json:"codecks_subdomain,omitempty"`
+	CodecksToken            string `json:"codecks_token,omitempty"`
+	CodecksProject          string `json:"codecks_project,omitempty"`          // Optional: filter by project name
+	CodecksExcludedStatuses string `json:"codecks_excluded_statuses,omitempty"` // Comma-separated statuses to hide
 
 	// Internal: tracks where the config was loaded from
 	loadedFrom string `json:"-"`
@@ -81,6 +87,12 @@ func mergeConfig(dest, source *Config) {
 	if source.GitHubToken != "" {
 		dest.GitHubToken = source.GitHubToken
 	}
+	if source.GitHubShowMerged != nil {
+		dest.GitHubShowMerged = source.GitHubShowMerged
+	}
+	if source.GitHubShowClosed != nil {
+		dest.GitHubShowClosed = source.GitHubShowClosed
+	}
 	if source.TicketProvider != "" {
 		dest.TicketProvider = source.TicketProvider
 	}
@@ -93,6 +105,9 @@ func mergeConfig(dest, source *Config) {
 	if source.JiraToken != "" {
 		dest.JiraToken = source.JiraToken
 	}
+	if source.JiraExcludedStatuses != "" {
+		dest.JiraExcludedStatuses = source.JiraExcludedStatuses
+	}
 	if source.CodecksSubdomain != "" {
 		dest.CodecksSubdomain = source.CodecksSubdomain
 	}
@@ -101,6 +116,9 @@ func mergeConfig(dest, source *Config) {
 	}
 	if source.CodecksProject != "" {
 		dest.CodecksProject = source.CodecksProject
+	}
+	if source.CodecksExcludedStatuses != "" {
+		dest.CodecksExcludedStatuses = source.CodecksExcludedStatuses
 	}
 }
 
@@ -269,6 +287,22 @@ func (c *Config) UpdateFromEnvironment() {
 // HasGitHub returns true if GitHub is configured
 func (c *Config) HasGitHub() bool {
 	return c.GitHubToken != ""
+}
+
+// ShowMergedPRs returns whether to show merged PRs (defaults to true)
+func (c *Config) ShowMergedPRs() bool {
+	if c.GitHubShowMerged == nil {
+		return true
+	}
+	return *c.GitHubShowMerged
+}
+
+// ShowClosedPRs returns whether to show closed PRs (defaults to true)
+func (c *Config) ShowClosedPRs() bool {
+	if c.GitHubShowClosed == nil {
+		return true
+	}
+	return *c.GitHubShowClosed
 }
 
 // HasJira returns true if Jira is fully configured

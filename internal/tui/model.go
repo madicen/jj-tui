@@ -121,6 +121,11 @@ type Model struct {
 	// Settings inputs
 	settingsInputs       []textinput.Model
 	settingsFocusedField int
+	settingsTab          int // 0=GitHub, 1=Jira, 2=Codecks
+
+	// Settings toggle states (for GitHub filters)
+	settingsShowMerged bool
+	settingsShowClosed bool
 
 	// PR creation state
 	prTitleInput        textinput.Model
@@ -265,10 +270,13 @@ func New(ctx context.Context) *Model {
 	ta.SetWidth(60)
 	ta.SetHeight(5)
 
-	// Create settings inputs
-	settingsInputs := make([]textinput.Model, 7)
+	// Load config for initial values
+	cfg, _ := config.Load()
 
-	// GitHub Token
+	// Create settings inputs
+	settingsInputs := make([]textinput.Model, 9)
+
+	// GitHub Token (index 0)
 	settingsInputs[0] = textinput.New()
 	settingsInputs[0].Placeholder = "GitHub Personal Access Token"
 	settingsInputs[0].CharLimit = 256 // GitHub PATs can be long
@@ -277,21 +285,21 @@ func New(ctx context.Context) *Model {
 	settingsInputs[0].EchoCharacter = '•'
 	settingsInputs[0].SetValue(os.Getenv("GITHUB_TOKEN"))
 
-	// Jira URL
+	// Jira URL (index 1)
 	settingsInputs[1] = textinput.New()
 	settingsInputs[1].Placeholder = "https://your-domain.atlassian.net"
 	settingsInputs[1].CharLimit = 100
 	settingsInputs[1].Width = 50
 	settingsInputs[1].SetValue(os.Getenv("JIRA_URL"))
 
-	// Jira User
+	// Jira User (index 2)
 	settingsInputs[2] = textinput.New()
 	settingsInputs[2].Placeholder = "your-email@example.com"
 	settingsInputs[2].CharLimit = 100
 	settingsInputs[2].Width = 50
 	settingsInputs[2].SetValue(os.Getenv("JIRA_USER"))
 
-	// Jira Token
+	// Jira Token (index 3)
 	settingsInputs[3] = textinput.New()
 	settingsInputs[3].Placeholder = "Jira API Token"
 	settingsInputs[3].CharLimit = 256 // Atlassian tokens can be 150+ chars
@@ -300,28 +308,54 @@ func New(ctx context.Context) *Model {
 	settingsInputs[3].EchoCharacter = '•'
 	settingsInputs[3].SetValue(os.Getenv("JIRA_TOKEN"))
 
-	// Codecks Subdomain
+	// Jira Excluded Statuses (index 4)
 	settingsInputs[4] = textinput.New()
-	settingsInputs[4].Placeholder = "your-team (from your-team.codecks.io)"
-	settingsInputs[4].CharLimit = 100
+	settingsInputs[4].Placeholder = "Done, Won't Do, Cancelled (comma-separated)"
+	settingsInputs[4].CharLimit = 200
 	settingsInputs[4].Width = 50
-	settingsInputs[4].SetValue(os.Getenv("CODECKS_SUBDOMAIN"))
+	if cfg != nil {
+		settingsInputs[4].SetValue(cfg.JiraExcludedStatuses)
+	}
 
-	// Codecks Token
+	// Codecks Subdomain (index 5)
 	settingsInputs[5] = textinput.New()
-	settingsInputs[5].Placeholder = "Codecks API Token (from browser cookie 'at')"
-	settingsInputs[5].CharLimit = 256
+	settingsInputs[5].Placeholder = "your-team (from your-team.codecks.io)"
+	settingsInputs[5].CharLimit = 100
 	settingsInputs[5].Width = 50
-	settingsInputs[5].EchoMode = textinput.EchoPassword
-	settingsInputs[5].EchoCharacter = '•'
-	settingsInputs[5].SetValue(os.Getenv("CODECKS_TOKEN"))
+	settingsInputs[5].SetValue(os.Getenv("CODECKS_SUBDOMAIN"))
 
-	// Codecks Project (optional filter)
+	// Codecks Token (index 6)
 	settingsInputs[6] = textinput.New()
-	settingsInputs[6].Placeholder = "Project name (optional, filters cards)"
-	settingsInputs[6].CharLimit = 100
+	settingsInputs[6].Placeholder = "Codecks API Token (from browser cookie 'at')"
+	settingsInputs[6].CharLimit = 256
 	settingsInputs[6].Width = 50
-	settingsInputs[6].SetValue(os.Getenv("CODECKS_PROJECT"))
+	settingsInputs[6].EchoMode = textinput.EchoPassword
+	settingsInputs[6].EchoCharacter = '•'
+	settingsInputs[6].SetValue(os.Getenv("CODECKS_TOKEN"))
+
+	// Codecks Project (index 7)
+	settingsInputs[7] = textinput.New()
+	settingsInputs[7].Placeholder = "Project name (optional, filters cards)"
+	settingsInputs[7].CharLimit = 100
+	settingsInputs[7].Width = 50
+	settingsInputs[7].SetValue(os.Getenv("CODECKS_PROJECT"))
+
+	// Codecks Excluded Statuses (index 8)
+	settingsInputs[8] = textinput.New()
+	settingsInputs[8].Placeholder = "done, archived (comma-separated)"
+	settingsInputs[8].CharLimit = 200
+	settingsInputs[8].Width = 50
+	if cfg != nil {
+		settingsInputs[8].SetValue(cfg.CodecksExcludedStatuses)
+	}
+
+	// Initialize toggle states from config
+	showMerged := true
+	showClosed := true
+	if cfg != nil {
+		showMerged = cfg.ShowMergedPRs()
+		showClosed = cfg.ShowClosedPRs()
+	}
 
 	// PR title input
 	prTitle := textinput.New()
@@ -343,21 +377,23 @@ func New(ctx context.Context) *Model {
 	bookmarkName.Width = 50
 
 	return &Model{
-		ctx:                 ctx,
-		zone:                zone.New(),
-		viewMode:            ViewCommitGraph,
-		selectedCommit:      -1,
-		statusMessage:       "Initializing...",
-		loading:             true,
-		descriptionInput:    ta,
-		settingsInputs:      settingsInputs,
-		prTitleInput:        prTitle,
-		prBodyInput:         prBody,
-		prBaseBranch:        "main",
-		prCommitIndex:       -1,
-		bookmarkNameInput:   bookmarkName,
-		bookmarkCommitIdx:   -1,
-		selectedBookmarkIdx: -1,
+		ctx:                       ctx,
+		zone:                      zone.New(),
+		viewMode:                  ViewCommitGraph,
+		selectedCommit:            -1,
+		statusMessage:             "Initializing...",
+		loading:                   true,
+		descriptionInput:          ta,
+		settingsInputs:            settingsInputs,
+		settingsShowMerged:        showMerged,
+		settingsShowClosed:        showClosed,
+		prTitleInput:              prTitle,
+		prBodyInput:               prBody,
+		prBaseBranch:              "main",
+		prCommitIndex:             -1,
+		bookmarkNameInput:         bookmarkName,
+		bookmarkCommitIdx:         -1,
+		selectedBookmarkIdx:       -1,
 		jiraBookmarkTitles:        make(map[string]string),
 		ticketBookmarkDisplayKeys: make(map[string]string),
 	}

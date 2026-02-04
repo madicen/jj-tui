@@ -307,21 +307,49 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 
 	// Settings input field clicks
 	if m.viewMode == ViewSettings {
+		// Settings sub-tabs
+		if m.zone.Get(ZoneSettingsTabGitHub) == zoneInfo {
+			m.settingsTab = 0
+			return m, nil
+		}
+		if m.zone.Get(ZoneSettingsTabJira) == zoneInfo {
+			m.settingsTab = 1
+			return m, nil
+		}
+		if m.zone.Get(ZoneSettingsTabCodecks) == zoneInfo {
+			m.settingsTab = 2
+			return m, nil
+		}
+
 		// GitHub login button
 		if m.zone.Get(ZoneSettingsGitHubLogin) == zoneInfo {
 			m.statusMessage = "Starting GitHub login..."
 			return m, m.startGitHubLogin()
 		}
 
-		// Clear buttons for each field
+		// GitHub filter toggles
+		if m.zone.Get(ZoneSettingsGitHubShowMerged) == zoneInfo {
+			m.settingsShowMerged = !m.settingsShowMerged
+			return m, nil
+		}
+		if m.zone.Get(ZoneSettingsGitHubShowClosed) == zoneInfo {
+			m.settingsShowClosed = !m.settingsShowClosed
+			return m, nil
+		}
+
+		// Clear buttons for each field (in order of input indices)
+		// 0=GitHub Token, 1=Jira URL, 2=Jira User, 3=Jira Token, 4=Jira Excluded,
+		// 5=Codecks Subdomain, 6=Codecks Token, 7=Codecks Project, 8=Codecks Excluded
 		clearZones := []string{
-			ZoneSettingsGitHubTokenClear,
-			ZoneSettingsJiraURLClear,
-			ZoneSettingsJiraUserClear,
-			ZoneSettingsJiraTokenClear,
-			ZoneSettingsCodecksSubdomainClear,
-			ZoneSettingsCodecksTokenClear,
-			ZoneSettingsCodecksProjectClear,
+			ZoneSettingsGitHubTokenClear,      // 0
+			ZoneSettingsJiraURLClear,          // 1
+			ZoneSettingsJiraUserClear,         // 2
+			ZoneSettingsJiraTokenClear,        // 3
+			ZoneSettingsJiraExcludedClear,     // 4
+			ZoneSettingsCodecksSubdomainClear, // 5
+			ZoneSettingsCodecksTokenClear,     // 6
+			ZoneSettingsCodecksProjectClear,   // 7
+			ZoneSettingsCodecksExcludedClear,  // 8
 		}
 		for i, zoneID := range clearZones {
 			if m.zone.Get(zoneID) == zoneInfo {
@@ -340,14 +368,17 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 			}
 		}
 
+		// Input field zones (in order of input indices)
 		settingsZones := []string{
-			ZoneSettingsGitHubToken,
-			ZoneSettingsJiraURL,
-			ZoneSettingsJiraUser,
-			ZoneSettingsJiraToken,
-			ZoneSettingsCodecksSubdomain,
-			ZoneSettingsCodecksToken,
-			ZoneSettingsCodecksProject,
+			ZoneSettingsGitHubToken,      // 0
+			ZoneSettingsJiraURL,          // 1
+			ZoneSettingsJiraUser,         // 2
+			ZoneSettingsJiraToken,        // 3
+			ZoneSettingsJiraExcluded,     // 4
+			ZoneSettingsCodecksSubdomain, // 5
+			ZoneSettingsCodecksToken,     // 6
+			ZoneSettingsCodecksProject,   // 7
+			ZoneSettingsCodecksExcluded,  // 8
 		}
 		for i, zoneID := range settingsZones {
 			if m.zone.Get(zoneID) == zoneInfo {

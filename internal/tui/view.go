@@ -434,6 +434,9 @@ func (m *Model) renderSettings() string {
 		JiraService:    m.ticketService != nil,
 		HasLocalConfig: hasLocalConfig,
 		ConfigSource:   configSource,
+		ActiveTab:      view.SettingsTab(m.settingsTab),
+		ShowMergedPRs:  m.settingsShowMerged,
+		ShowClosedPRs:  m.settingsShowClosed,
 	})
 }
 

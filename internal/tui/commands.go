@@ -12,6 +12,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen/jj-tui/internal/codecks"
+	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/github"
 	"github.com/madicen/jj-tui/internal/jira"
 	"github.com/madicen/jj-tui/internal/jj"
@@ -159,6 +160,28 @@ func (m *Model) loadPRs() tea.Cmd {
 		if err != nil {
 			return errorMsg{err: fmt.Errorf("failed to load PRs: %w", err)}
 		}
+
+		// Apply PR filters from config
+		cfg, _ := config.Load()
+		if cfg != nil {
+			var filtered []models.GitHubPR
+			showMerged := cfg.ShowMergedPRs()
+			showClosed := cfg.ShowClosedPRs()
+
+			for _, pr := range prs {
+				// Skip merged PRs if not showing them
+				if !showMerged && pr.State == "merged" {
+					continue
+				}
+				// Skip closed PRs if not showing them
+				if !showClosed && pr.State == "closed" {
+					continue
+				}
+				filtered = append(filtered, pr)
+			}
+			prs = filtered
+		}
+
 		return prsLoadedMsg{prs: prs}
 	}
 }
@@ -178,6 +201,40 @@ func (m *Model) loadTickets() tea.Cmd {
 		ticketList, err := svc.GetAssignedTickets(context.Background())
 		if err != nil {
 			return errorMsg{err: fmt.Errorf("failed to load tickets: %w", err)}
+		}
+
+		// Apply status filters from config
+		cfg, _ := config.Load()
+		if cfg != nil {
+			// Build excluded statuses set based on provider
+			excludedStatuses := make(map[string]bool)
+			var excludedStr string
+			if svc.GetProviderName() == "Jira" {
+				excludedStr = cfg.JiraExcludedStatuses
+			} else if svc.GetProviderName() == "Codecks" {
+				excludedStr = cfg.CodecksExcludedStatuses
+			}
+
+			if excludedStr != "" {
+				for _, status := range strings.Split(excludedStr, ",") {
+					status = strings.TrimSpace(strings.ToLower(status))
+					if status != "" {
+						excludedStatuses[status] = true
+					}
+				}
+			}
+
+			// Filter tickets
+			if len(excludedStatuses) > 0 {
+				var filtered []tickets.Ticket
+				for _, ticket := range ticketList {
+					statusLower := strings.ToLower(ticket.Status)
+					if !excludedStatuses[statusLower] {
+						filtered = append(filtered, ticket)
+					}
+				}
+				ticketList = filtered
+			}
 		}
 
 		// Sort tickets by DisplayKey descending (most recent first)

@@ -74,14 +74,28 @@ type JiraTicket struct {
 	Description string
 }
 
+// SettingsTab represents the active tab within settings
+type SettingsTab int
+
+const (
+	SettingsTabGitHub SettingsTab = iota
+	SettingsTabJira
+	SettingsTabCodecks
+)
+
 // SettingsData contains data needed for settings rendering
 type SettingsData struct {
-	Inputs        []InputView
-	FocusedField  int
-	GithubService bool
-	JiraService   bool
-	HasLocalConfig bool   // True if .jj-tui.json exists in current directory
-	ConfigSource   string // Path to the currently loaded config
+	Inputs         []InputView
+	FocusedField   int
+	GithubService  bool
+	JiraService    bool
+	HasLocalConfig bool        // True if .jj-tui.json exists in current directory
+	ConfigSource   string      // Path to the currently loaded config
+	ActiveTab      SettingsTab // Which settings tab is active
+
+	// GitHub filter toggles
+	ShowMergedPRs bool
+	ShowClosedPRs bool
 }
 
 // InputView represents a text input for rendering
