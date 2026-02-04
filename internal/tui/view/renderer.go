@@ -80,6 +80,8 @@ type SettingsData struct {
 	FocusedField  int
 	GithubService bool
 	JiraService   bool
+	HasLocalConfig bool   // True if .jj-tui.json exists in current directory
+	ConfigSource   string // Path to the currently loaded config
 }
 
 // InputView represents a text input for rendering

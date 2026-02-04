@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/models"
 	"github.com/madicen/jj-tui/internal/tui/view"
 )
@@ -44,6 +45,21 @@ func (m *Model) View() string {
 
 			// Put only the scrollable list in the viewport
 			m.viewport.SetContent(scrollableList)
+
+			// Ensure the selected item is visible by adjusting YOffset
+			var selectedLine int
+			if m.viewMode == ViewPullRequests {
+				selectedLine = m.selectedPR
+			} else if m.viewMode == ViewJira {
+				selectedLine = m.selectedTicket
+			}
+			// Scroll to keep selected item in view
+			if selectedLine < m.viewport.YOffset {
+				m.viewport.YOffset = selectedLine
+			} else if selectedLine >= m.viewport.YOffset+availableHeight {
+				m.viewport.YOffset = selectedLine - availableHeight + 1
+			}
+
 			viewportContent := m.viewport.View()
 
 			// Restore original viewport height
@@ -379,11 +395,21 @@ func (m *Model) renderSettings() string {
 		inputs[i] = view.InputView{View: input.View()}
 	}
 
+	// Check for local config
+	hasLocalConfig := config.HasLocalConfig()
+	cfg, _ := config.Load()
+	var configSource string
+	if cfg != nil {
+		configSource = cfg.LoadedFrom()
+	}
+
 	return m.renderer().Settings(view.SettingsData{
-		Inputs:        inputs,
-		FocusedField:  m.settingsFocusedField,
-		GithubService: m.githubService != nil,
-		JiraService:   m.ticketService != nil,
+		Inputs:         inputs,
+		FocusedField:   m.settingsFocusedField,
+		GithubService:  m.githubService != nil,
+		JiraService:    m.ticketService != nil,
+		HasLocalConfig: hasLocalConfig,
+		ConfigSource:   configSource,
 	})
 }
 

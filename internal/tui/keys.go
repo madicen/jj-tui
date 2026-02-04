@@ -477,8 +477,11 @@ func (m *Model) handleSettingsKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		// Save settings
+		// Save settings to global config
 		return m, m.saveSettings()
+	case "ctrl+l":
+		// Save settings to local .jj-tui.json
+		return m, m.saveSettingsLocal()
 	case "tab", "down":
 		// Move to next field
 		m.settingsFocusedField = (m.settingsFocusedField + 1) % len(m.settingsInputs)

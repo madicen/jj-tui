@@ -357,9 +357,14 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		// Save button
+		// Save button (global)
 		if m.zone.Get(ZoneSettingsSave) == zoneInfo {
 			return m, m.saveSettings()
+		}
+
+		// Save Local button
+		if m.zone.Get(ZoneSettingsSaveLocal) == zoneInfo {
+			return m, m.saveSettingsLocal()
 		}
 
 		// Cancel button

@@ -30,6 +30,7 @@ const (
 	ZoneSettingsCodecksProject        = "zone:settings:codecks_project"
 	ZoneSettingsCodecksProjectClear   = "zone:settings:codecks_project_clear"
 	ZoneSettingsSave                  = "zone:settings:save"
+	ZoneSettingsSaveLocal             = "zone:settings:save_local"
 	ZoneSettingsCancel                = "zone:settings:cancel"
 
 	ZoneDescSave   = "zone:desc:save"
