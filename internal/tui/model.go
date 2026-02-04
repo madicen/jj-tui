@@ -438,6 +438,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		headerHeight := 1
 		statusHeight := 1
 		contentHeight := m.height - headerHeight - statusHeight
+		if contentHeight < 1 {
+			contentHeight = 1
+		}
 
 		if !m.viewportReady {
 			m.viewport = viewport.New(m.width, contentHeight)
@@ -446,7 +449,37 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.viewport.Width = m.width
 			m.viewport.Height = contentHeight
+
+			// Reset scroll position if it's now beyond valid bounds
+			totalLines := m.viewport.TotalLineCount()
+			maxOffset := totalLines - contentHeight
+			if maxOffset < 0 {
+				maxOffset = 0
+			}
+			if m.viewport.YOffset > maxOffset {
+				m.viewport.YOffset = maxOffset
+			}
 		}
+
+		// Resize text areas to fit new window width
+		inputWidth := m.width - 20 // Leave margin for borders/padding
+		if inputWidth < 30 {
+			inputWidth = 30
+		}
+		if inputWidth > 80 {
+			inputWidth = 80 // Cap at reasonable max
+		}
+
+		m.descriptionInput.SetWidth(inputWidth)
+		m.prBodyInput.SetWidth(inputWidth)
+		m.prTitleInput.Width = inputWidth
+		m.bookmarkNameInput.Width = inputWidth
+
+		// Resize settings inputs
+		for i := range m.settingsInputs {
+			m.settingsInputs[i].Width = inputWidth - 10
+		}
+
 		return m, nil
 
 	case tea.KeyMsg:
