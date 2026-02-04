@@ -83,6 +83,81 @@ func (m *Model) View() string {
 				statusBar,
 			)
 		}
+	} else if m.viewMode == ViewCommitGraph {
+		// Graph view with split panes: graph (scrollable) | actions (fixed) | files (scrollable)
+		graphResult := m.getGraphResult()
+
+		headerHeight := strings.Count(header, "\n") + 1
+		statusHeight := strings.Count(statusBar, "\n") + 1
+		separatorLines := 2 // Two separator lines between sections
+		paddingLines := 1   // Padding after header
+
+		// Use a minimum actions height during loading to keep layout stable
+		actionsContent := graphResult.ActionsBar
+		if actionsContent == "" {
+			actionsContent = "Actions:"
+		}
+		actionsHeight := strings.Count(actionsContent, "\n") + 1
+
+		// Calculate available height for the two scrollable panes
+		availableHeight := m.height - headerHeight - statusHeight - actionsHeight - separatorLines - paddingLines
+		if availableHeight < 6 {
+			availableHeight = 6
+		}
+
+		// Split height: 60% for graph, 40% for files
+		graphHeight := (availableHeight * 60) / 100
+		filesHeight := availableHeight - graphHeight
+		if graphHeight < 3 {
+			graphHeight = 3
+		}
+		if filesHeight < 3 {
+			filesHeight = 3
+		}
+
+		// Set up graph viewport - only update content if not loading (preserve previous content)
+		m.viewport.Height = graphHeight
+		if !m.loading && graphResult.GraphContent != "" {
+			m.viewport.SetContent(graphResult.GraphContent)
+		}
+
+		// Set up files viewport - show placeholder if no files yet
+		m.filesViewport.Height = filesHeight
+		filesContent := graphResult.FilesContent
+		if filesContent == "" {
+			filesContent = lipgloss.NewStyle().Foreground(lipgloss.Color("#666666")).Render("  Loading changed files...")
+		}
+		if !m.loading || m.filesViewport.TotalLineCount() == 0 {
+			m.filesViewport.SetContent(filesContent)
+		}
+
+		// Ensure selected commit is visible in graph viewport
+		if m.selectedCommit >= 0 && !m.loading {
+			// Account for the focus indicator header line
+			adjustedCommit := m.selectedCommit + 1
+			if adjustedCommit < m.viewport.YOffset {
+				m.viewport.YOffset = adjustedCommit
+			} else if adjustedCommit >= m.viewport.YOffset+graphHeight {
+				m.viewport.YOffset = adjustedCommit - graphHeight + 1
+			}
+		}
+
+		// Simple separator line
+		separator := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#444444")).
+			Render(strings.Repeat("─", m.width-2))
+
+		v = lipgloss.JoinVertical(
+			lipgloss.Left,
+			header,
+			"", // Padding line after header
+			m.viewport.View(),
+			separator,
+			actionsContent,
+			separator,
+			m.filesViewport.View(),
+			statusBar,
+		)
 	} else {
 		// Normal views: put all content in viewport
 		content := m.renderContent()
@@ -227,8 +302,13 @@ func (m *Model) renderError() string {
 	return errorStyle.Render(fmt.Sprintf("Error: %v\n\nPress Ctrl+r to retry, Esc to dismiss, or Ctrl+q to quit.", m.err))
 }
 
-// renderCommitGraph renders the commit graph view using the view package
-func (m *Model) renderCommitGraph() string {
+// getGraphResult returns the GraphResult for the commit graph view
+func (m *Model) getGraphResult() view.GraphResult {
+	return m.renderer().Graph(m.buildGraphData())
+}
+
+// buildGraphData builds the GraphData for the commit graph
+func (m *Model) buildGraphData() view.GraphData {
 	// Build a map of branches that have open PRs
 	openPRBranches := make(map[string]bool)
 	if m.repository != nil {
@@ -328,7 +408,7 @@ func (m *Model) renderCommitGraph() string {
 		})
 	}
 
-	return m.renderer().Graph(view.GraphData{
+	return view.GraphData{
 		Repository:         m.repository,
 		SelectedCommit:     m.selectedCommit,
 		InRebaseMode:       m.selectionMode == SelectionRebaseDestination,
@@ -337,7 +417,13 @@ func (m *Model) renderCommitGraph() string {
 		CommitPRBranch:     commitPRBranch,
 		CommitBookmark:     commitBookmark,
 		ChangedFiles:       changedFiles,
-	})
+		GraphFocused:       m.graphFocused,
+	}
+}
+
+// renderCommitGraph renders the commit graph view using the view package
+func (m *Model) renderCommitGraph() string {
+	return m.renderer().Graph(m.buildGraphData()).FullContent
 }
 
 // renderPullRequests renders the PR list view using the view package

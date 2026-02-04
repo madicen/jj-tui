@@ -104,9 +104,11 @@ type Model struct {
 	changedFiles         []jj.ChangedFile
 	changedFilesCommitID string // Which commit the files are for
 
-	// Viewport for scrollable content
-	viewport      viewport.Model
-	viewportReady bool
+	// Viewports for scrollable content
+	viewport       viewport.Model // Main viewport (graph or other content)
+	filesViewport  viewport.Model // Secondary viewport for changed files in graph view
+	viewportReady  bool
+	graphFocused   bool // True if graph viewport has focus, false if files viewport
 
 	// Rebase mode state
 	selectionMode      SelectionMode
@@ -446,10 +448,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.viewportReady {
 			m.viewport = viewport.New(m.width, contentHeight)
 			m.viewport.MouseWheelEnabled = true
+			m.filesViewport = viewport.New(m.width, contentHeight)
+			m.filesViewport.MouseWheelEnabled = true
+			m.graphFocused = true // Start with graph focused
 			m.viewportReady = true
 		} else {
 			m.viewport.Width = m.width
 			m.viewport.Height = contentHeight
+			m.filesViewport.Width = m.width
+			m.filesViewport.Height = contentHeight
 
 			// Reset scroll position if it's now beyond valid bounds
 			totalLines := m.viewport.TotalLineCount()

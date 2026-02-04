@@ -153,6 +153,16 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.viewMode != ViewCommitGraph {
 			m.viewMode = ViewCommitGraph
 		}
+	case "tab":
+		// Switch focus between graph and files panes in graph view
+		if m.viewMode == ViewCommitGraph {
+			m.graphFocused = !m.graphFocused
+			if m.graphFocused {
+				m.statusMessage = "Graph pane focused"
+			} else {
+				m.statusMessage = "Files pane focused"
+			}
+		}
 	case "j", "down":
 		if m.viewMode == ViewPullRequests {
 			if m.repository != nil && m.selectedPR < len(m.repository.PRs)-1 {
@@ -162,14 +172,22 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.selectedTicket < len(m.ticketList)-1 {
 				m.selectedTicket++
 			}
-		} else {
-			if m.repository != nil && m.selectedCommit < len(m.repository.Graph.Commits)-1 {
-				m.selectedCommit++
-				// Load changed files for the newly selected commit
-				commit := m.repository.Graph.Commits[m.selectedCommit]
-				m.changedFilesCommitID = commit.ChangeID
-				m.changedFiles = nil
-				return m, m.loadChangedFiles(commit.ChangeID)
+		} else if m.viewMode == ViewCommitGraph {
+			if !m.graphFocused {
+				// Scroll files pane down (if there are files)
+				if len(m.changedFiles) > 0 {
+					m.filesViewport.LineDown(1)
+				}
+			} else {
+				// Navigate commits in graph pane
+				if m.repository != nil && m.selectedCommit < len(m.repository.Graph.Commits)-1 {
+					m.selectedCommit++
+					// Load changed files for the newly selected commit
+					commit := m.repository.Graph.Commits[m.selectedCommit]
+					m.changedFilesCommitID = commit.ChangeID
+					m.changedFiles = nil
+					return m, m.loadChangedFiles(commit.ChangeID)
+				}
 			}
 		}
 	case "k", "up":
@@ -181,14 +199,22 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.selectedTicket > 0 {
 				m.selectedTicket--
 			}
-		} else {
-			if m.selectedCommit > 0 && m.repository != nil {
-				m.selectedCommit--
-				// Load changed files for the newly selected commit
-				commit := m.repository.Graph.Commits[m.selectedCommit]
-				m.changedFilesCommitID = commit.ChangeID
-				m.changedFiles = nil
-				return m, m.loadChangedFiles(commit.ChangeID)
+		} else if m.viewMode == ViewCommitGraph {
+			if !m.graphFocused {
+				// Scroll files pane up (if there are files)
+				if len(m.changedFiles) > 0 {
+					m.filesViewport.LineUp(1)
+				}
+			} else {
+				// Navigate commits in graph pane
+				if m.selectedCommit > 0 && m.repository != nil {
+					m.selectedCommit--
+					// Load changed files for the newly selected commit
+					commit := m.repository.Graph.Commits[m.selectedCommit]
+					m.changedFilesCommitID = commit.ChangeID
+					m.changedFiles = nil
+					return m, m.loadChangedFiles(commit.ChangeID)
+				}
 			}
 		}
 	case "o":

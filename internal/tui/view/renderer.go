@@ -32,6 +32,15 @@ type GraphData struct {
 	CommitPRBranch     map[int]string  // Maps commit index to PR branch it can push to (including descendants)
 	CommitBookmark     map[int]string  // Maps commit index to bookmark it can create a PR with (including descendants)
 	ChangedFiles       []ChangedFile   // Changed files for the selected commit
+	GraphFocused       bool            // True if graph pane has focus
+}
+
+// GraphResult contains the split rendering for commit graph view
+type GraphResult struct {
+	GraphContent string // Commit graph (scrollable)
+	ActionsBar   string // Actions buttons (fixed in middle)
+	FilesContent string // Changed files (scrollable)
+	FullContent  string // Full content for non-split views
 }
 
 // PRData contains data needed for PR rendering
