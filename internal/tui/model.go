@@ -495,7 +495,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			oldPRs = m.repository.PRs
 		}
 		m.repository = msg.repository
-		m.repository.PRs = oldPRs // Restore PRs
+		m.repository.PRs = oldPRs // Restore PRs temporarily
 		m.loading = false
 		// Don't clear m.err here - let errors persist until dismissed
 		if m.jjService == nil {
@@ -504,15 +504,25 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.jjService = jjSvc
 		}
 		m.statusMessage = fmt.Sprintf("Loaded %d commits", len(msg.repository.Graph.Commits))
+
+		// Build commands to run
+		var cmds []tea.Cmd
+		cmds = append(cmds, m.tickCmd())
+
+		// Also refresh PRs when GitHub is connected (needed for Update PR button)
+		if m.githubService != nil {
+			cmds = append(cmds, m.loadPRs())
+		}
+
 		// Auto-select first commit if none selected
 		if m.selectedCommit == -1 && len(msg.repository.Graph.Commits) > 0 {
 			m.selectedCommit = 0
 			// Load changed files for the auto-selected commit
 			commit := msg.repository.Graph.Commits[0]
 			m.changedFilesCommitID = commit.ChangeID
-			return m, tea.Batch(m.tickCmd(), m.loadChangedFiles(commit.ChangeID))
+			cmds = append(cmds, m.loadChangedFiles(commit.ChangeID))
 		}
-		return m, m.tickCmd() // Continue auto-refresh timer
+		return m, tea.Batch(cmds...)
 
 	case editCompletedMsg:
 		// Preserve PRs from previous repository
@@ -521,7 +531,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			oldPRs = m.repository.PRs
 		}
 		m.repository = msg.repository
-		m.repository.PRs = oldPRs // Restore PRs
+		m.repository.PRs = oldPRs // Restore PRs temporarily
 		m.loading = false
 		// Don't clear m.err here - let errors persist until dismissed
 		// Find and select the working copy commit
@@ -532,7 +542,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.statusMessage = "Now editing working copy"
-		return m, m.tickCmd()
+
+		// Build commands to run
+		var cmds []tea.Cmd
+		cmds = append(cmds, m.tickCmd())
+
+		// Also refresh PRs when GitHub is connected (needed for Update PR button)
+		if m.githubService != nil {
+			cmds = append(cmds, m.loadPRs())
+		}
+
+		return m, tea.Batch(cmds...)
 
 	case silentRepositoryLoadedMsg:
 		// Background refresh - update data without changing status
