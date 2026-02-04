@@ -48,6 +48,9 @@ const (
 	// Push action zone
 	ZoneActionPush = "zone:action:push"
 
+	// Init button zone (shown when not in a jj repo)
+	ZoneActionJJInit = "zone:action:jj_init"
+
 	// Jira action zones
 	ZoneJiraCreateBranch = "zone:jira:createbranch"
 	ZoneJiraOpenBrowser  = "zone:jira:openbrowser"

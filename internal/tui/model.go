@@ -96,6 +96,8 @@ type Model struct {
 	statusMessage  string
 	err            error
 	loading        bool
+	notJJRepo      bool   // true if error is "not a jj repository"
+	currentPath    string // path where we're running (for jj init)
 
 	// Changed files for selected commit
 	changedFiles         []jj.ChangedFile
@@ -187,8 +189,12 @@ type settingsSavedMsg struct {
 }
 
 type errorMsg struct {
-	err error
+	err         error
+	notJJRepo   bool   // true if the error is "not a jj repository"
+	currentPath string // the path where we tried to find a jj repo
 }
+
+type jjInitSuccessMsg struct {}
 
 // GitHub Device Flow messages
 type githubDeviceFlowStartedMsg struct {
@@ -524,9 +530,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case errorMsg:
 		m.err = msg.err
+		m.notJJRepo = msg.notJJRepo
+		m.currentPath = msg.currentPath
 		m.loading = false
 		m.statusMessage = fmt.Sprintf("Error: %v", msg.err)
 		return m, m.tickCmd() // Continue auto-refresh even on error
+	
+	case jjInitSuccessMsg:
+		m.notJJRepo = false
+		m.err = nil
+		m.statusMessage = "Repository initialized! Loading..."
+		return m, m.initializeServices()
 
 	case servicesInitializedMsg:
 		m.jjService = msg.jjService

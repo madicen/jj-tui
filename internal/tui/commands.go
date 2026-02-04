@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"regexp"
 	"sort"
 	"strings"
@@ -30,10 +31,15 @@ func (m *Model) initializeServices() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
 
+		// Get current directory for error reporting
+		cwd, _ := os.Getwd()
+
 		// Try to create jj service
 		jjSvc, err := jj.NewService("")
 		if err != nil {
-			return errorMsg{err: err}
+			// Check if this is a "not a jj repository" error
+			notJJRepo := strings.Contains(err.Error(), "not a jujutsu repository")
+			return errorMsg{err: err, notJJRepo: notJJRepo, currentPath: cwd}
 		}
 
 		// Load repository data
@@ -301,5 +307,21 @@ func (m *Model) pollGitHubToken(interval int) tea.Cmd {
 		// Still waiting for user authorization
 		return githubLoginPollMsg{interval: interval}
 	})
+}
+
+// runJJInit runs jj git init to initialize a new repository
+func (m *Model) runJJInit() tea.Cmd {
+	return func() tea.Msg {
+		// Run jj git init in the current directory
+		cmd := exec.Command("jj", "git", "init")
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return errorMsg{
+				err:       fmt.Errorf("failed to initialize repository: %s", strings.TrimSpace(string(output))),
+				notJJRepo: true,
+			}
+		}
+		return jjInitSuccessMsg{}
+	}
 }
 

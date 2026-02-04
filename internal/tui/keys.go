@@ -25,6 +25,12 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.viewMode = ViewCommitGraph
 			m.statusMessage = "Error dismissed"
 			return m, nil
+		case "i":
+			// Initialize jj repo if not already one
+			if m.notJJRepo {
+				m.statusMessage = "Initializing repository..."
+				return m, m.runJJInit()
+			}
 		}
 		// Ignore other keys when in error state
 		return m, nil

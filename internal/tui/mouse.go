@@ -13,6 +13,12 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Check for JJ init button (shown when not in a jj repo)
+	if m.zone.Get(ZoneActionJJInit) == zoneInfo && m.notJJRepo {
+		m.statusMessage = "Initializing repository..."
+		return m, m.runJJInit()
+	}
+
 	// Check tab zones
 	if m.zone.Get(ZoneTabGraph) == zoneInfo {
 		return m, func() tea.Msg { return TabSelectedMsg{Tab: ViewCommitGraph} }

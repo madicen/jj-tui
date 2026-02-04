@@ -200,8 +200,32 @@ func (m *Model) renderSplitContent() (string, string) {
 
 // renderError renders an error message
 func (m *Model) renderError() string {
-	style := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555"))
-	return style.Render(fmt.Sprintf("Error: %v\n\nPress Ctrl+r to retry, Esc to dismiss, or Ctrl+q to quit.", m.err))
+	errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555"))
+	
+	// Special handling for "not a jj repo" error - show init button
+	if m.notJJRepo {
+		var lines []string
+		lines = append(lines, view.TitleStyle.Render("Not a Jujutsu Repository"))
+		lines = append(lines, "")
+		lines = append(lines, errorStyle.Render(fmt.Sprintf("Directory: %s", m.currentPath)))
+		lines = append(lines, "")
+		lines = append(lines, "This directory is not initialized as a Jujutsu repository.")
+		lines = append(lines, "")
+		lines = append(lines, lipgloss.NewStyle().Bold(true).Render("Would you like to initialize it?"))
+		lines = append(lines, "")
+		
+		// Init button
+		initButton := m.zone.Mark(ZoneActionJJInit, view.ButtonStyle.Background(lipgloss.Color("#238636")).Render("Initialize Repository (i)"))
+		lines = append(lines, initButton)
+		lines = append(lines, "")
+		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#8B949E")).Render("This will run: jj git init"))
+		lines = append(lines, "")
+		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#8B949E")).Render("Press Ctrl+q to quit"))
+		
+		return strings.Join(lines, "\n")
+	}
+	
+	return errorStyle.Render(fmt.Sprintf("Error: %v\n\nPress Ctrl+r to retry, Esc to dismiss, or Ctrl+q to quit.", m.err))
 }
 
 // renderCommitGraph renders the commit graph view using the view package
