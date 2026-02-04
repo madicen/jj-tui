@@ -176,7 +176,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if !m.graphFocused {
 				// Scroll files pane down (if there are files)
 				if len(m.changedFiles) > 0 {
-					m.filesViewport.LineDown(1)
+					m.filesViewport.ScrollDown(1)
 				}
 			} else {
 				// Navigate commits in graph pane
@@ -203,7 +203,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if !m.graphFocused {
 				// Scroll files pane up (if there are files)
 				if len(m.changedFiles) > 0 {
-					m.filesViewport.LineUp(1)
+					m.filesViewport.ScrollUp(1)
 				}
 			} else {
 				// Navigate commits in graph pane
@@ -344,6 +344,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // handleCreateBookmarkKeyMsg handles keyboard input in bookmark creation mode
 func (m *Model) handleCreateBookmarkKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Handle universal keys first
 	switch msg.String() {
 	case "esc":
 		// Cancel bookmark creation
@@ -354,24 +355,6 @@ func (m *Model) handleCreateBookmarkKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 		// Submit bookmark
 		if m.jjService != nil {
 			return m, m.submitBookmark()
-		}
-		return m, nil
-	case "j", "down":
-		// Navigate down in existing bookmarks list
-		if len(m.existingBookmarks) > 0 {
-			if m.selectedBookmarkIdx < len(m.existingBookmarks)-1 {
-				m.selectedBookmarkIdx++
-				m.bookmarkNameInput.Blur()
-			}
-		}
-		return m, nil
-	case "k", "up":
-		// Navigate up in existing bookmarks list (or to new bookmark input)
-		if m.selectedBookmarkIdx > -1 {
-			m.selectedBookmarkIdx--
-			if m.selectedBookmarkIdx == -1 {
-				m.bookmarkNameInput.Focus()
-			}
 		}
 		return m, nil
 	case "tab":
@@ -386,11 +369,32 @@ func (m *Model) handleCreateBookmarkKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 		return m, nil
 	}
 
-	// Only pass keys to input if we're in "new bookmark" mode
+	// If we're in "new bookmark" mode (input focused), pass all other keys to input
 	if m.selectedBookmarkIdx == -1 {
 		var cmd tea.Cmd
 		m.bookmarkNameInput, cmd = m.bookmarkNameInput.Update(msg)
 		return m, cmd
+	}
+
+	// Navigation only applies when in existing bookmarks list mode
+	switch msg.String() {
+	case "j", "down":
+		// Navigate down in existing bookmarks list
+		if len(m.existingBookmarks) > 0 {
+			if m.selectedBookmarkIdx < len(m.existingBookmarks)-1 {
+				m.selectedBookmarkIdx++
+			}
+		}
+		return m, nil
+	case "k", "up":
+		// Navigate up in existing bookmarks list (or to new bookmark input)
+		if m.selectedBookmarkIdx > -1 {
+			m.selectedBookmarkIdx--
+			if m.selectedBookmarkIdx == -1 {
+				m.bookmarkNameInput.Focus()
+			}
+		}
+		return m, nil
 	}
 
 	return m, nil

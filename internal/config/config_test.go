@@ -174,10 +174,10 @@ func TestHasLocalConfig(t *testing.T) {
 	
 	// Save current directory
 	origDir, _ := os.Getwd()
-	defer os.Chdir(origDir)
+	defer func() { _ = os.Chdir(origDir) }()
 	
 	// Change to temp directory
-	os.Chdir(tempDir)
+	_ = os.Chdir(tempDir)
 	
 	// Initially should not have local config
 	if HasLocalConfig() {

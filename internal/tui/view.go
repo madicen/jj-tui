@@ -170,6 +170,15 @@ func (m *Model) View() string {
 		)
 	} else {
 		// Normal views: put all content in viewport
+		// Reset viewport height to full available space (may have been reduced by graph view)
+		headerHeight := strings.Count(header, "\n") + 1
+		statusHeight := strings.Count(statusBar, "\n") + 1
+		fullContentHeight := m.height - headerHeight - statusHeight
+		if fullContentHeight < 1 {
+			fullContentHeight = 1
+		}
+		m.viewport.Height = fullContentHeight
+
 		content := m.renderContent()
 		m.viewport.SetContent(content)
 		viewportContent := m.viewport.View()
