@@ -6,11 +6,20 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/madicen/jj-tui/internal/github"
 	"github.com/madicen/jj-tui/internal/jj"
 	"github.com/madicen/jj-tui/internal/models"
+	"github.com/madicen/jj-tui/internal/testutil"
+	"github.com/madicen/jj-tui/internal/tui"
 )
+
+// =============================================================================
+// Test Repository Helpers
+// =============================================================================
 
 // TestRepository manages a test jj repository
 type TestRepository struct {
@@ -71,6 +80,51 @@ func (r *TestRepository) commitFile(filename, content, message string) error {
 	}
 	return r.runCommand("jj", "commit", "-m", message)
 }
+
+// =============================================================================
+// TUI Test Helpers
+// =============================================================================
+
+// newTestModel creates a new TUI model for testing
+func newTestModel() *tui.Model {
+	ctx := context.Background()
+	m := tui.New(ctx)
+	m.SetDimensions(100, 80)
+	m.SetLoading(false)
+	m.SetRepository(&models.Repository{
+		Path: "/test/repo",
+		Graph: models.CommitGraph{
+			Commits: []models.Commit{
+				{ID: "abc123456789", ShortID: "abc1", ChangeID: "abc1", Summary: "First commit"},
+				{ID: "def456789012", ShortID: "def4", ChangeID: "def4", Summary: "Second commit"},
+				{ID: "ghi789012345", ShortID: "ghi7", ChangeID: "ghi7", Summary: "Third commit", IsWorking: true},
+			},
+		},
+		PRs: []models.GitHubPR{
+			{Number: 1, Title: "Test PR", State: "open"},
+		},
+	})
+
+	// Initialize viewport by processing a window size message
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 80})
+
+	return m
+}
+
+// updateModel is a helper that casts the update result back to *Model
+func updateModel(m *tui.Model, msg tea.Msg) *tui.Model {
+	newModel, _ := m.Update(msg)
+	return newModel.(*tui.Model)
+}
+
+// containsString checks if s contains substr
+func containsString(s, substr string) bool {
+	return strings.Contains(s, substr)
+}
+
+// =============================================================================
+// JJ Service Integration Tests
+// =============================================================================
 
 // TestJJServiceBasicOperations tests basic jj service operations
 func TestJJServiceBasicOperations(t *testing.T) {
@@ -194,6 +248,10 @@ func TestCommitGraphVisualization(t *testing.T) {
 	}
 }
 
+// =============================================================================
+// PR Workflow Tests
+// =============================================================================
+
 // TestPRWorkflow tests the PR creation workflow
 func TestPRWorkflow(t *testing.T) {
 	// This test focuses on the data structures and workflow
@@ -282,6 +340,329 @@ func TestRepositoryState(t *testing.T) {
 		t.Errorf("Expected commit1 to have 1 connection, got %d", len(repo.Graph.Connections["commit1"]))
 	}
 }
+
+// =============================================================================
+// TUI Journey Tests
+// =============================================================================
+
+// TestJourney_BrowseCommitsAndSwitchViews tests the basic navigation flow
+func TestJourney_BrowseCommitsAndSwitchViews(t *testing.T) {
+	m := newTestModel()
+	defer m.Close()
+
+	// Step 1: Start in commit graph view
+	if m.GetViewMode() != tui.ViewCommitGraph {
+		t.Fatalf("Expected to start in ViewCommitGraph, got %v", m.GetViewMode())
+	}
+
+	// Step 2: Switch to PRs view with 'p'
+	m = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")})
+	if m.GetViewMode() != tui.ViewPullRequests {
+		t.Errorf("Expected ViewPullRequests after pressing p, got %v", m.GetViewMode())
+	}
+
+	// Step 3: Switch to Tickets view with 't'
+	m = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")})
+	if m.GetViewMode() != tui.ViewJira {
+		t.Errorf("Expected ViewJira after pressing t, got %v", m.GetViewMode())
+	}
+
+	// Step 4: Switch to Help view with 'h'
+	m = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
+	if m.GetViewMode() != tui.ViewHelp {
+		t.Errorf("Expected ViewHelp after pressing h, got %v", m.GetViewMode())
+	}
+
+	// Step 5: Return to Graph with 'g'
+	m = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g")})
+	if m.GetViewMode() != tui.ViewCommitGraph {
+		t.Errorf("Expected ViewCommitGraph after pressing g, got %v", m.GetViewMode())
+	}
+}
+
+// TestJourney_PRStateColors tests that PR states are correctly rendered
+func TestJourney_PRStateColors(t *testing.T) {
+	m := newTestModel()
+	defer m.Close()
+
+	// Set up repository with PRs of different states
+	m.GetRepository().PRs = []models.GitHubPR{
+		{Number: 1, Title: "Open PR", State: "open"},
+		{Number: 2, Title: "Merged PR", State: "merged"},
+		{Number: 3, Title: "Closed PR", State: "closed"},
+	}
+
+	// Switch to PR view
+	m.SetViewMode(tui.ViewPullRequests)
+	m.SetGitHubService(&github.Service{})
+
+	view := m.View()
+
+	// Verify all PRs are displayed
+	if !containsString(view, "Open PR") {
+		t.Error("View should contain 'Open PR'")
+	}
+	if !containsString(view, "Merged PR") {
+		t.Error("View should contain 'Merged PR'")
+	}
+	if !containsString(view, "Closed PR") {
+		t.Error("View should contain 'Closed PR'")
+	}
+
+	// The view should contain the colored indicators (●)
+	if !containsString(view, "●") {
+		t.Error("View should contain status indicators")
+	}
+}
+
+// TestJourney_TicketsViewWithProvider tests the tickets view with different providers
+func TestJourney_TicketsViewWithProvider(t *testing.T) {
+	tests := []struct {
+		name        string
+		mockService *testutil.MockTicketService
+		expectTitle string
+	}{
+		{
+			name:        "JiraProvider",
+			mockService: testutil.NewMockJiraService(),
+			expectTitle: "Jira",
+		},
+		{
+			name:        "CodecksProvider",
+			mockService: testutil.NewMockCodecksService(),
+			expectTitle: "Codecks",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestModel()
+			defer m.Close()
+
+			// Set up the mock ticket service
+			m.SetTicketService(tt.mockService)
+			m.SetTicketList(tt.mockService.Tickets)
+			m.SetViewMode(tui.ViewJira)
+
+			view := m.View()
+
+			// Verify the provider name is shown
+			if !containsString(view, tt.expectTitle) {
+				t.Errorf("View should contain provider name '%s'", tt.expectTitle)
+			}
+
+			// Verify tickets are displayed
+			for _, ticket := range tt.mockService.Tickets {
+				if !containsString(view, ticket.Summary) {
+					t.Errorf("View should contain ticket summary '%s'", ticket.Summary)
+				}
+			}
+		})
+	}
+}
+
+// TestJourney_TicketNavigation tests navigating through tickets
+func TestJourney_TicketNavigation(t *testing.T) {
+	m := newTestModel()
+	defer m.Close()
+
+	mockService := testutil.NewMockJiraService()
+	m.SetTicketService(mockService)
+	m.SetTicketList(mockService.Tickets)
+	m.SetViewMode(tui.ViewJira)
+	m.SetSelectedTicket(0)
+
+	// Navigate down through tickets
+	m = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	if m.GetSelectedTicket() != 1 {
+		t.Errorf("Expected selectedTicket=1, got %d", m.GetSelectedTicket())
+	}
+
+	m = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	if m.GetSelectedTicket() != 2 {
+		t.Errorf("Expected selectedTicket=2, got %d", m.GetSelectedTicket())
+	}
+
+	// Boundary check - should not go past last ticket
+	m = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	if m.GetSelectedTicket() != 2 {
+		t.Errorf("Expected selectedTicket=2 (at boundary), got %d", m.GetSelectedTicket())
+	}
+
+	// Navigate back up
+	m = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+	if m.GetSelectedTicket() != 1 {
+		t.Errorf("Expected selectedTicket=1, got %d", m.GetSelectedTicket())
+	}
+}
+
+// TestJourney_PRNavigation tests navigating through PRs
+func TestJourney_PRNavigation(t *testing.T) {
+	m := newTestModel()
+	defer m.Close()
+
+	m.GetRepository().PRs = []models.GitHubPR{
+		{Number: 1, Title: "PR 1", State: "open"},
+		{Number: 2, Title: "PR 2", State: "open"},
+		{Number: 3, Title: "PR 3", State: "merged"},
+	}
+	m.SetGitHubService(&github.Service{})
+	m.SetViewMode(tui.ViewPullRequests)
+	m.SetSelectedPR(0)
+
+	// Navigate down
+	m = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	if m.GetSelectedPR() != 1 {
+		t.Errorf("Expected selectedPR=1, got %d", m.GetSelectedPR())
+	}
+
+	// Navigate to end
+	m = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	if m.GetSelectedPR() != 2 {
+		t.Errorf("Expected selectedPR=2, got %d", m.GetSelectedPR())
+	}
+
+	// Boundary check
+	m = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	if m.GetSelectedPR() != 2 {
+		t.Errorf("Expected selectedPR=2 (at boundary), got %d", m.GetSelectedPR())
+	}
+
+	// Navigate back to start
+	m = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+	m = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+	if m.GetSelectedPR() != 0 {
+		t.Errorf("Expected selectedPR=0, got %d", m.GetSelectedPR())
+	}
+
+	// Boundary check at top
+	m = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+	if m.GetSelectedPR() != 0 {
+		t.Errorf("Expected selectedPR=0 (at boundary), got %d", m.GetSelectedPR())
+	}
+}
+
+// TestJourney_ErrorHandling tests error state handling
+func TestJourney_ErrorHandling(t *testing.T) {
+	m := newTestModel()
+	defer m.Close()
+
+	// Simulate an error by updating with an error message
+	m = updateModel(m, tui.ErrorMsg(fmt.Errorf("test error")))
+
+	if m.GetError() == nil {
+		t.Error("Expected error to be set")
+	}
+
+	view := m.View()
+	if !containsString(view, "Error") {
+		t.Error("View should show error message")
+	}
+
+	// Press Esc to dismiss
+	m = updateModel(m, tea.KeyMsg{Type: tea.KeyEsc})
+
+	if m.GetError() != nil {
+		t.Error("Error should be cleared after Esc")
+	}
+}
+
+// TestJourney_SettingsView tests the settings view
+func TestJourney_SettingsView(t *testing.T) {
+	m := newTestModel()
+	defer m.Close()
+
+	// Switch to settings
+	m = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(",")})
+	if m.GetViewMode() != tui.ViewSettings {
+		t.Fatalf("Expected ViewSettings, got %v", m.GetViewMode())
+	}
+
+	view := m.View()
+
+	// Check for key UI elements
+	if !containsString(view, "Settings") {
+		t.Error("Settings view should show title")
+	}
+	if !containsString(view, "GitHub") {
+		t.Error("Settings view should show GitHub tab")
+	}
+	if !containsString(view, "Jira") {
+		t.Error("Settings view should show Jira tab")
+	}
+	if !containsString(view, "Codecks") {
+		t.Error("Settings view should show Codecks tab")
+	}
+	if !containsString(view, "Save") {
+		t.Error("Settings view should show Save button")
+	}
+
+	// Test field navigation with Tab
+	initialField := m.GetSettingsFocusedField()
+	m = updateModel(m, tea.KeyMsg{Type: tea.KeyTab})
+	if m.GetSettingsFocusedField() == initialField {
+		t.Error("Tab should move to next field")
+	}
+
+	// Test cancel with Esc
+	m = updateModel(m, tea.KeyMsg{Type: tea.KeyEsc})
+	if m.GetViewMode() != tui.ViewCommitGraph {
+		t.Error("Esc should return to commit graph")
+	}
+}
+
+// TestJourney_HelpView tests the help view
+func TestJourney_HelpView(t *testing.T) {
+	m := newTestModel()
+	defer m.Close()
+
+	// Switch to help
+	m = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
+	if m.GetViewMode() != tui.ViewHelp {
+		t.Fatalf("Expected ViewHelp, got %v", m.GetViewMode())
+	}
+
+	view := m.View()
+
+	// Check for key help content
+	if !containsString(view, "Shortcuts") {
+		t.Error("Help view should show shortcuts")
+	}
+	if !containsString(view, "Graph") {
+		t.Error("Help view should mention Graph shortcuts")
+	}
+	if !containsString(view, "Pull Request") {
+		t.Error("Help view should mention PR shortcuts")
+	}
+	if !containsString(view, "Tickets") {
+		t.Error("Help view should mention Tickets shortcuts")
+	}
+}
+
+// TestJourney_ImmutableCommitProtection tests that immutable commits can't be modified
+func TestJourney_ImmutableCommitProtection(t *testing.T) {
+	m := newTestModel()
+	defer m.Close()
+
+	// Mark the first commit as immutable
+	repo := m.GetRepository()
+	repo.Graph.Commits[0].Immutable = true
+
+	// Select the immutable commit
+	m = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")}) // Select first commit
+	m = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")}) // Back to top
+
+	view := m.View()
+
+	// Should show immutable message instead of action buttons
+	if containsString(view, "Edit (e)") && repo.Graph.Commits[m.GetSelectedCommit()].Immutable {
+		t.Error("Edit button should not appear for immutable commit")
+	}
+}
+
+// =============================================================================
+// Benchmarks
+// =============================================================================
 
 // BenchmarkRepositoryLoad benchmarks repository loading
 func BenchmarkRepositoryLoad(b *testing.B) {

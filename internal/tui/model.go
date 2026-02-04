@@ -199,6 +199,11 @@ type errorMsg struct {
 	currentPath string // the path where we tried to find a jj repo
 }
 
+// ErrorMsg creates an error message for testing purposes
+func ErrorMsg(err error) errorMsg {
+	return errorMsg{err: err}
+}
+
 type jjInitSuccessMsg struct {}
 
 // GitHub Device Flow messages
