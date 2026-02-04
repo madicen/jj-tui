@@ -152,11 +152,19 @@ func (s *Service) GetPullRequests(ctx context.Context) ([]models.GitHubPR, error
 		}
 
 		for _, pr := range prs {
+			// Determine the actual state - GitHub API returns "closed" for both
+			// closed and merged PRs. Check MergedAt (populated in list responses)
+			// or Merged field to detect merged PRs.
+			state := pr.GetState()
+			if state == "closed" && (pr.MergedAt != nil || pr.GetMerged()) {
+				state = "merged"
+			}
+			
 			allPRs = append(allPRs, models.GitHubPR{
 				Number:     pr.GetNumber(),
 				Title:      pr.GetTitle(),
 				URL:        pr.GetHTMLURL(),
-				State:      pr.GetState(),
+				State:      state,
 				BaseBranch: pr.GetBase().GetRef(),
 				HeadBranch: pr.GetHead().GetRef(),
 			})
