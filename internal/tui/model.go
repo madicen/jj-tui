@@ -51,28 +51,6 @@ func (m *Model) isSelectedCommitValid() bool {
 		m.selectedCommit < len(m.repository.Graph.Commits)
 }
 
-// calculateSplitViewHeight calculates the available height for the scrollable list
-// in PR and Jira views (which have a fixed header section)
-func (m *Model) calculateSplitViewHeight() int {
-	if m.width == 0 || m.height == 0 {
-		return 0
-	}
-
-	// Estimate header heights (same as in View())
-	headerHeight := 1 // Tab bar
-	statusHeight := 1 // Status bar
-
-	// Estimate fixed header height for split views
-	// This is an approximation - the actual height is calculated during rendering
-	fixedHeaderLines := 10 // Details box + instructions for PR/Tickets view
-
-	availableHeight := m.height - headerHeight - statusHeight - fixedHeaderLines
-	if availableHeight < 3 {
-		availableHeight = 3
-	}
-	return availableHeight
-}
-
 // tickMsg is sent on each timer tick for auto-refresh
 type tickMsg time.Time
 
@@ -496,34 +474,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseMsg:
 		// Handle mouse wheel scrolling
 		if msg.Action == tea.MouseActionPress && (msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown) {
-			// For PR and Jira views, we need to handle scrolling with the reduced viewport height
-			if m.viewMode == ViewPullRequests || m.viewMode == ViewJira {
-				// Calculate the available height for the scrollable list
-				availableHeight := m.calculateSplitViewHeight()
-				if availableHeight > 0 {
-					// Get the total content lines
-					totalLines := m.viewport.TotalLineCount()
-					maxOffset := totalLines - availableHeight
-					if maxOffset < 0 {
-						maxOffset = 0
-					}
-
-					// Scroll up or down
-					if msg.Button == tea.MouseButtonWheelUp {
-						m.viewport.YOffset -= 3
-						if m.viewport.YOffset < 0 {
-							m.viewport.YOffset = 0
-						}
-					} else {
-						m.viewport.YOffset += 3
-						if m.viewport.YOffset > maxOffset {
-							m.viewport.YOffset = maxOffset
-						}
-					}
-					return m, nil
-				}
-			}
-			// Default viewport scrolling for other views
+			// Let the viewport handle scrolling directly - it knows its own height
 			var cmd tea.Cmd
 			m.viewport, cmd = m.viewport.Update(msg)
 			return m, cmd

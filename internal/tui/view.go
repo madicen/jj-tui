@@ -25,6 +25,14 @@ func (m *Model) View() string {
 	if m.viewMode == ViewPullRequests || m.viewMode == ViewJira {
 		fixedHeader, scrollableList := m.renderSplitContent()
 
+		// Calculate full content height first (may have been reduced by graph view)
+		headerHeight := strings.Count(header, "\n") + 1
+		statusHeight := strings.Count(statusBar, "\n") + 1
+		fullContentHeight := m.height - headerHeight - statusHeight
+		if fullContentHeight < 1 {
+			fullContentHeight = 1
+		}
+
 		if scrollableList != "" {
 			// Render the fixed header with styling
 			styledFixedHeader := ContentStyle.Width(m.width).Render(fixedHeader)
@@ -32,11 +40,8 @@ func (m *Model) View() string {
 			// Calculate how many lines the fixed header takes
 			fixedHeaderLines := strings.Count(styledFixedHeader, "\n") + 1
 
-			// Temporarily reduce viewport height for the split view
-			originalHeight := m.viewport.Height
-			headerHeight := strings.Count(header, "\n") + 1
-			statusHeight := strings.Count(statusBar, "\n") + 1
-			availableHeight := m.height - headerHeight - statusHeight - fixedHeaderLines
+			// Calculate viewport height for the split view
+			availableHeight := fullContentHeight - fixedHeaderLines
 			if availableHeight < 3 {
 				availableHeight = 3 // Minimum height
 			}
@@ -61,9 +66,6 @@ func (m *Model) View() string {
 
 			viewportContent := m.viewport.View()
 
-			// Restore original viewport height
-			m.viewport.Height = originalHeight
-
 			v = lipgloss.JoinVertical(
 				lipgloss.Left,
 				header,
@@ -73,6 +75,8 @@ func (m *Model) View() string {
 			)
 		} else {
 			// No split content (e.g., error message or empty state)
+			// Reset viewport to full height for non-split display
+			m.viewport.Height = fullContentHeight
 			m.viewport.SetContent(fixedHeader)
 			viewportContent := m.viewport.View()
 

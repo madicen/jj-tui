@@ -889,3 +889,124 @@ func TestRebaseModeFlow(t *testing.T) {
 	})
 }
 
+// TestMouseScrollingOnViews tests that mouse scrolling works correctly on different views
+func TestMouseScrollingOnViews(t *testing.T) {
+	// Helper to create test model with many PRs for scrolling
+	createModelWithManyPRs := func() *Model {
+		m := newTestModel()
+		// Use a smaller height to make scrolling necessary with fewer PRs
+		m.height = 30
+		// Re-initialize viewport with new height
+		m.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
+		// Add many PRs so there's content to scroll
+		var prs []models.GitHubPR
+		for i := 0; i < 50; i++ {
+			prs = append(prs, models.GitHubPR{
+				Number: i + 1,
+				Title:  fmt.Sprintf("Test PR %d", i+1),
+				State:  "open",
+			})
+		}
+		m.repository.PRs = prs
+		return m
+	}
+
+	t.Run("mouse scroll works on PR view", func(t *testing.T) {
+		m := createModelWithManyPRs()
+		defer m.Close()
+
+		// Switch to PR view
+		m.viewMode = ViewPullRequests
+		m.githubService = &github.Service{} // Enable GitHub to show PR list
+
+		// Render view to initialize viewport with content
+		m.View()
+
+		initialOffset := m.viewport.YOffset
+
+		// Ensure there's content to scroll (total lines > height)
+		if m.viewport.TotalLineCount() <= m.viewport.Height {
+			t.Skipf("Not enough content to scroll: %d lines, %d height", m.viewport.TotalLineCount(), m.viewport.Height)
+		}
+
+		// Simulate mouse wheel scroll down
+		scrollDownMsg := tea.MouseMsg{
+			Action: tea.MouseActionPress,
+			Button: tea.MouseButtonWheelDown,
+			X:      50,
+			Y:      10,
+		}
+		newModel, _ := m.Update(scrollDownMsg)
+		m = newModel.(*Model)
+
+		// Offset should have increased (scrolled down)
+		if m.viewport.YOffset <= initialOffset {
+			t.Errorf("Expected YOffset to increase after scroll down, got %d (was %d)", m.viewport.YOffset, initialOffset)
+		}
+
+		// Now scroll back up
+		afterScrollDown := m.viewport.YOffset
+		scrollUpMsg := tea.MouseMsg{
+			Action: tea.MouseActionPress,
+			Button: tea.MouseButtonWheelUp,
+			X:      50,
+			Y:      10,
+		}
+		newModel, _ = m.Update(scrollUpMsg)
+		m = newModel.(*Model)
+
+		// Offset should have decreased (scrolled up)
+		if m.viewport.YOffset >= afterScrollDown {
+			t.Errorf("Expected YOffset to decrease after scroll up, got %d (was %d)", m.viewport.YOffset, afterScrollDown)
+		}
+	})
+
+	t.Run("mouse scroll respects bounds", func(t *testing.T) {
+		m := createModelWithManyPRs()
+		defer m.Close()
+
+		// Switch to PR view
+		m.viewMode = ViewPullRequests
+		m.githubService = &github.Service{}
+
+		// Render view to initialize viewport
+		m.View()
+
+		// Try scrolling up when already at top - should stay at 0
+		m.viewport.YOffset = 0
+		scrollUpMsg := tea.MouseMsg{
+			Action: tea.MouseActionPress,
+			Button: tea.MouseButtonWheelUp,
+			X:      50,
+			Y:      10,
+		}
+		newModel, _ := m.Update(scrollUpMsg)
+		m = newModel.(*Model)
+
+		if m.viewport.YOffset < 0 {
+			t.Errorf("YOffset should not go negative, got %d", m.viewport.YOffset)
+		}
+	})
+
+	t.Run("viewport height is correct after switching from graph to PRs", func(t *testing.T) {
+		m := createModelWithManyPRs()
+		defer m.Close()
+
+		// Start on Graph view
+		m.viewMode = ViewCommitGraph
+		m.View() // Render to set up graph viewport heights
+
+		// Switch to PR view
+		m.viewMode = ViewPullRequests
+		m.githubService = &github.Service{}
+		m.View() // Render PR view
+
+		// Viewport height should be reasonable (not the reduced graph height)
+		// The full content height should be at least height - header - statusbar
+		minExpectedHeight := m.height - 10 // Account for header, status, fixed header in split view
+		if m.viewport.Height < minExpectedHeight/2 {
+			t.Errorf("Viewport height %d seems too small after switching from graph (expected at least %d)", m.viewport.Height, minExpectedHeight/2)
+		}
+	})
+}
+
