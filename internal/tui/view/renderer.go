@@ -32,6 +32,15 @@ type GraphData struct {
 	CommitPRBranch     map[int]string  // Maps commit index to PR branch it can push to (including descendants)
 	CommitBookmark     map[int]string  // Maps commit index to bookmark it can create a PR with (including descendants)
 	ChangedFiles       []ChangedFile   // Changed files for the selected commit
+	GraphFocused       bool            // True if graph pane has focus
+}
+
+// GraphResult contains the split rendering for commit graph view
+type GraphResult struct {
+	GraphContent string // Commit graph (scrollable)
+	ActionsBar   string // Actions buttons (fixed in middle)
+	FilesContent string // Changed files (scrollable)
+	FullContent  string // Full content for non-split views
 }
 
 // PRData contains data needed for PR rendering
@@ -74,14 +83,28 @@ type JiraTicket struct {
 	Description string
 }
 
+// SettingsTab represents the active tab within settings
+type SettingsTab int
+
+const (
+	SettingsTabGitHub SettingsTab = iota
+	SettingsTabJira
+	SettingsTabCodecks
+)
+
 // SettingsData contains data needed for settings rendering
 type SettingsData struct {
-	Inputs        []InputView
-	FocusedField  int
-	GithubService bool
-	JiraService   bool
-	HasLocalConfig bool   // True if .jj-tui.json exists in current directory
-	ConfigSource   string // Path to the currently loaded config
+	Inputs         []InputView
+	FocusedField   int
+	GithubService  bool
+	JiraService    bool
+	HasLocalConfig bool        // True if .jj-tui.json exists in current directory
+	ConfigSource   string      // Path to the currently loaded config
+	ActiveTab      SettingsTab // Which settings tab is active
+
+	// GitHub filter toggles
+	ShowMergedPRs bool
+	ShowClosedPRs bool
 }
 
 // InputView represents a text input for rendering

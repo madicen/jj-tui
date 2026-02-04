@@ -8,13 +8,17 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Graph renders the commit graph view
-func (r *Renderer) Graph(data GraphData) string {
+// Graph renders the commit graph view with split panes
+func (r *Renderer) Graph(data GraphData) GraphResult {
 	if data.Repository == nil || len(data.Repository.Graph.Commits) == 0 {
-		return "No commits found. Press Ctrl+r to refresh."
+		return GraphResult{
+			FullContent: "No commits found. Press Ctrl+r to refresh.",
+		}
 	}
 
-	var lines []string
+	var graphLines []string
+	var actionLines []string
+	var fileLines []string
 
 	// Style for graph lines (muted color)
 	graphStyle := lipgloss.NewStyle().Foreground(ColorMuted)
@@ -34,8 +38,8 @@ func (r *Renderer) Graph(data GraphData) string {
 			Foreground(lipgloss.Color("#FFAA00")).
 			Bold(true).
 			Render("🔀 REBASE MODE - Select destination commit (Esc to cancel)")
-		lines = append(lines, rebaseHeader)
-		lines = append(lines, "")
+		graphLines = append(graphLines, rebaseHeader)
+		graphLines = append(graphLines, "")
 	}
 
 	for i, commit := range data.Repository.Graph.Commits {
@@ -106,27 +110,30 @@ func (r *Renderer) Graph(data GraphData) string {
 		)
 
 		// Wrap in zone for click detection
-		lines = append(lines, r.Zone.Mark(ZoneCommit(i), style.Render(commitLine)))
+		graphLines = append(graphLines, r.Zone.Mark(ZoneCommit(i), style.Render(commitLine)))
 
 		// Render graph connector lines after this commit (if any)
 		for _, graphLine := range commit.GraphLines {
 			// These are the lines between commits (like │, ├─╯, etc.)
 			// Add spacing to align with commit lines
 			paddedLine := "  " + graphStyle.Render(graphLine)
-			lines = append(lines, paddedLine)
+			graphLines = append(graphLines, paddedLine)
 		}
 	}
 
 	// Don't show action buttons in rebase mode - user is selecting destination
 	if data.InRebaseMode {
-		lines = append(lines, "")
-		lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("Press Enter or click to select destination, Esc to cancel"))
-		return strings.Join(lines, "\n")
+		graphLines = append(graphLines, "")
+		graphLines = append(graphLines, lipgloss.NewStyle().Foreground(ColorMuted).Render("Press Enter or click to select destination, Esc to cancel"))
+		graphContent := strings.Join(graphLines, "\n")
+		return GraphResult{
+			GraphContent: graphContent,
+			FullContent:  graphContent,
+		}
 	}
 
 	// Add action buttons
-	lines = append(lines, "")
-	lines = append(lines, "Actions:")
+	actionLines = append(actionLines, "Actions:")
 
 	// Always show "New" action
 	actionButtons := []string{
@@ -144,9 +151,9 @@ func (r *Renderer) Graph(data GraphData) string {
 					r.Zone.Mark(ZoneActionDelBookmark, ButtonStyle.Render("Del Bookmark (x)")),
 				)
 			}
-			lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Left, actionButtons...))
-			lines = append(lines, "")
-			lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("◆ Selected commit is immutable (pushed to remote)"))
+			actionLines = append(actionLines, lipgloss.JoinHorizontal(lipgloss.Left, actionButtons...))
+			actionLines = append(actionLines, "")
+			actionLines = append(actionLines, lipgloss.NewStyle().Foreground(ColorMuted).Render("◆ Selected commit is immutable (pushed to remote)"))
 		} else {
 			actionButtons = append(actionButtons,
 				r.Zone.Mark(ZoneActionCheckout, ButtonStyle.Render("Edit (e)")),
@@ -193,28 +200,54 @@ func (r *Renderer) Graph(data GraphData) string {
 						// This is a descendant - indicate we'll move the bookmark to include all commits
 						buttonLabel = fmt.Sprintf("Create PR [%s] (c)", createPRBranch)
 					}
-					actionButtons = append(actionButtons,
-						r.Zone.Mark(ZoneActionCreatePR, ButtonStyle.Render(buttonLabel)),
-					)
-				}
+			actionButtons = append(actionButtons,
+					r.Zone.Mark(ZoneActionCreatePR, ButtonStyle.Render(buttonLabel)),
+				)
 			}
-			lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Left, actionButtons...))
 		}
-	} else {
-		lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Left, actionButtons...))
+		actionLines = append(actionLines, lipgloss.JoinHorizontal(lipgloss.Left, actionButtons...))
 	}
+} else {
+	actionLines = append(actionLines, lipgloss.JoinHorizontal(lipgloss.Left, actionButtons...))
+}
 
-	// Show changed files for selected commit in a tree structure
-	if len(data.ChangedFiles) > 0 {
-		lines = append(lines, "")
-		lines = append(lines, lipgloss.NewStyle().Bold(true).Render("Changed Files:"))
-
-		// Build and render the file tree
-		fileLines := renderFileTree(data.ChangedFiles)
-		lines = append(lines, fileLines...)
+// Build changed files section with focus indicator
+if len(data.ChangedFiles) > 0 {
+	focusIndicator := "  "
+	if !data.GraphFocused {
+		focusIndicator = "► "
 	}
+	fileLines = append(fileLines, lipgloss.NewStyle().Bold(true).Render(focusIndicator+"Changed Files (Tab to switch):"))
 
-	return strings.Join(lines, "\n")
+	// Build and render the file tree
+	treeLines := renderFileTree(data.ChangedFiles)
+	fileLines = append(fileLines, treeLines...)
+}
+
+// Build full content for backward compatibility
+var allLines []string
+allLines = append(allLines, graphLines...)
+allLines = append(allLines, "")
+allLines = append(allLines, actionLines...)
+if len(fileLines) > 0 {
+	allLines = append(allLines, "")
+	allLines = append(allLines, fileLines...)
+}
+
+// Always add focus indicator to graph header for consistent layout
+graphContent := strings.Join(graphLines, "\n")
+focusIndicator := "  "
+if data.GraphFocused {
+	focusIndicator = "► "
+}
+graphContent = lipgloss.NewStyle().Bold(true).Render(focusIndicator+"Graph (Tab to switch):") + "\n" + graphContent
+
+return GraphResult{
+	GraphContent: graphContent,
+	ActionsBar:   strings.Join(actionLines, "\n"),
+	FilesContent: strings.Join(fileLines, "\n"),
+	FullContent:  strings.Join(allLines, "\n"),
+}
 }
 
 // fileTreeNode represents a node in the file tree

@@ -11,14 +11,38 @@ var clearButtonStyle = lipgloss.NewStyle().
 	Foreground(lipgloss.Color("#F85149")).
 	Bold(true)
 
-// Settings renders the settings view
+// settingsTabStyle for inactive tabs
+var settingsTabStyle = lipgloss.NewStyle().
+	Padding(0, 2).
+	Foreground(ColorMuted)
+
+// settingsTabActiveStyle for the active tab
+var settingsTabActiveStyle = lipgloss.NewStyle().
+	Padding(0, 2).
+	Bold(true).
+	Foreground(ColorPrimary).
+	Underline(true)
+
+// toggleOnStyle for enabled toggles
+var toggleOnStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("#50FA7B")).
+	Bold(true)
+
+// toggleOffStyle for disabled toggles
+var toggleOffStyle = lipgloss.NewStyle().
+	Foreground(ColorMuted)
+
+// Settings renders the settings view with sub-tabs
 func (r *Renderer) Settings(data SettingsData) string {
 	var lines []string
 	lines = append(lines, TitleStyle.Render("Settings"))
 	lines = append(lines, "")
-	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("Configure your API credentials. Press Tab/↓ to move between fields."))
-	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("Press Ctrl+S to save globally, Ctrl+L to save locally to this repo."))
-	
+
+	// Render sub-tabs
+	tabs := r.renderSettingsTabs(data.ActiveTab)
+	lines = append(lines, tabs)
+	lines = append(lines, "")
+
 	// Show config source
 	if data.ConfigSource != "" {
 		configInfo := "Config: " + data.ConfigSource
@@ -31,123 +55,15 @@ func (r *Renderer) Settings(data SettingsData) string {
 	}
 	lines = append(lines, "")
 
-	// GitHub section
-	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("GitHub"))
-	lines = append(lines, "")
-
-	// GitHub login button or connected status
-	if data.GithubService {
-		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B")).Render("  ✓ Connected to GitHub"))
-		lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    "+r.Zone.Mark(ZoneSettingsGitHubLogin, "[Reconnect]")))
-	} else {
-		loginButton := r.Zone.Mark(ZoneSettingsGitHubLogin, ButtonStyle.Background(lipgloss.Color("#238636")).Render("Login with GitHub"))
-		lines = append(lines, "  "+loginButton)
-		lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Opens browser to authenticate via GitHub"))
+	// Render content based on active tab
+	switch data.ActiveTab {
+	case SettingsTabGitHub:
+		lines = append(lines, r.renderGitHubSettings(data)...)
+	case SettingsTabJira:
+		lines = append(lines, r.renderJiraSettings(data)...)
+	case SettingsTabCodecks:
+		lines = append(lines, r.renderCodecksSettings(data)...)
 	}
-	lines = append(lines, "")
-
-	// Also show manual token input as alternative
-	githubTokenLabel := "  Or enter token manually:"
-	githubTokenStyle := lipgloss.NewStyle().Foreground(ColorMuted)
-	if data.FocusedField == 0 {
-		githubTokenStyle = githubTokenStyle.Bold(true).Foreground(ColorPrimary)
-	}
-	lines = append(lines, githubTokenStyle.Render(githubTokenLabel))
-	if len(data.Inputs) > 0 {
-		clearBtn := r.Zone.Mark(ZoneSettingsGitHubTokenClear, clearButtonStyle.Render("[Clear]"))
-		lines = append(lines, "  "+r.Zone.Mark(ZoneSettingsGitHubToken, data.Inputs[0].View)+" "+clearBtn)
-	}
-	lines = append(lines, "")
-
-	// Jira section
-	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("Jira"))
-	lines = append(lines, "")
-
-	// Jira URL field
-	jiraURLLabel := "  URL:"
-	jiraURLStyle := lipgloss.NewStyle()
-	if data.FocusedField == 1 {
-		jiraURLStyle = jiraURLStyle.Bold(true).Foreground(ColorPrimary)
-	}
-	lines = append(lines, jiraURLStyle.Render(jiraURLLabel))
-	if len(data.Inputs) > 1 {
-		clearBtn := r.Zone.Mark(ZoneSettingsJiraURLClear, clearButtonStyle.Render("[Clear]"))
-		lines = append(lines, "  "+r.Zone.Mark(ZoneSettingsJiraURL, data.Inputs[1].View)+" "+clearBtn)
-	}
-	lines = append(lines, "")
-
-	// Jira User field
-	jiraUserLabel := "  Email:"
-	jiraUserStyle := lipgloss.NewStyle()
-	if data.FocusedField == 2 {
-		jiraUserStyle = jiraUserStyle.Bold(true).Foreground(ColorPrimary)
-	}
-	lines = append(lines, jiraUserStyle.Render(jiraUserLabel))
-	if len(data.Inputs) > 2 {
-		clearBtn := r.Zone.Mark(ZoneSettingsJiraUserClear, clearButtonStyle.Render("[Clear]"))
-		lines = append(lines, "  "+r.Zone.Mark(ZoneSettingsJiraUser, data.Inputs[2].View)+" "+clearBtn)
-	}
-	lines = append(lines, "")
-
-	// Jira Token field
-	jiraTokenLabel := "  API Token:"
-	jiraTokenStyle := lipgloss.NewStyle()
-	if data.FocusedField == 3 {
-		jiraTokenStyle = jiraTokenStyle.Bold(true).Foreground(ColorPrimary)
-	}
-	lines = append(lines, jiraTokenStyle.Render(jiraTokenLabel))
-	if len(data.Inputs) > 3 {
-		clearBtn := r.Zone.Mark(ZoneSettingsJiraTokenClear, clearButtonStyle.Render("[Clear]"))
-		lines = append(lines, "  "+r.Zone.Mark(ZoneSettingsJiraToken, data.Inputs[3].View)+" "+clearBtn)
-	}
-	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Get from: https://id.atlassian.com/manage-profile/security/api-tokens"))
-	lines = append(lines, "")
-
-	// Codecks section
-	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("Codecks"))
-	lines = append(lines, "")
-
-	// Codecks Subdomain field
-	codecksSubdomainLabel := "  Subdomain:"
-	codecksSubdomainStyle := lipgloss.NewStyle()
-	if data.FocusedField == 4 {
-		codecksSubdomainStyle = codecksSubdomainStyle.Bold(true).Foreground(ColorPrimary)
-	}
-	lines = append(lines, codecksSubdomainStyle.Render(codecksSubdomainLabel))
-	if len(data.Inputs) > 4 {
-		clearBtn := r.Zone.Mark(ZoneSettingsCodecksSubdomainClear, clearButtonStyle.Render("[Clear]"))
-		lines = append(lines, "  "+r.Zone.Mark(ZoneSettingsCodecksSubdomain, data.Inputs[4].View)+" "+clearBtn)
-	}
-	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Your team name (e.g., 'myteam' from myteam.codecks.io)"))
-	lines = append(lines, "")
-
-	// Codecks Token field
-	codecksTokenLabel := "  Token:"
-	codecksTokenStyle := lipgloss.NewStyle()
-	if data.FocusedField == 5 {
-		codecksTokenStyle = codecksTokenStyle.Bold(true).Foreground(ColorPrimary)
-	}
-	lines = append(lines, codecksTokenStyle.Render(codecksTokenLabel))
-	if len(data.Inputs) > 5 {
-		clearBtn := r.Zone.Mark(ZoneSettingsCodecksTokenClear, clearButtonStyle.Render("[Clear]"))
-		lines = append(lines, "  "+r.Zone.Mark(ZoneSettingsCodecksToken, data.Inputs[5].View)+" "+clearBtn)
-	}
-	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Extract 'at' cookie from browser (see https://manual.codecks.io/api/)"))
-	lines = append(lines, "")
-
-	// Codecks Project field (optional filter)
-	codecksProjectLabel := "  Project:"
-	codecksProjectStyle := lipgloss.NewStyle()
-	if data.FocusedField == 6 {
-		codecksProjectStyle = codecksProjectStyle.Bold(true).Foreground(ColorPrimary)
-	}
-	lines = append(lines, codecksProjectStyle.Render(codecksProjectLabel))
-	if len(data.Inputs) > 6 {
-		clearBtn := r.Zone.Mark(ZoneSettingsCodecksProjectClear, clearButtonStyle.Render("[Clear]"))
-		lines = append(lines, "  "+r.Zone.Mark(ZoneSettingsCodecksProject, data.Inputs[6].View)+" "+clearBtn)
-	}
-	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Optional: Filter cards by project name"))
-	lines = append(lines, "")
 
 	// Connection status
 	lines = append(lines, "")
@@ -162,8 +78,6 @@ func (r *Renderer) Settings(data SettingsData) string {
 	} else {
 		lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("  ○ Tickets not connected"))
 	}
-	lines = append(lines, "")
-	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Italic(true).Render("  Note: Configure either Jira OR Codecks for ticket integration"))
 
 	lines = append(lines, "")
 	lines = append(lines, "")
@@ -174,8 +88,226 @@ func (r *Renderer) Settings(data SettingsData) string {
 	cancelButton := r.Zone.Mark(ZoneSettingsCancel, ButtonStyle.Render("Cancel (Esc)"))
 	lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Left, saveButton, " ", saveLocalButton, " ", cancelButton))
 	lines = append(lines, "")
-	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Italic(true).Render("  Local config: .jj-tui.json in repo root (per-repo settings)"))
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Italic(true).Render("  Use 1/2/3 or ←/→ to switch tabs. Tab/↓ to move between fields."))
 
 	return strings.Join(lines, "\n")
 }
 
+// renderSettingsTabs renders the tab bar
+func (r *Renderer) renderSettingsTabs(activeTab SettingsTab) string {
+	githubStyle := settingsTabStyle
+	jiraStyle := settingsTabStyle
+	codecksStyle := settingsTabStyle
+
+	switch activeTab {
+	case SettingsTabGitHub:
+		githubStyle = settingsTabActiveStyle
+	case SettingsTabJira:
+		jiraStyle = settingsTabActiveStyle
+	case SettingsTabCodecks:
+		codecksStyle = settingsTabActiveStyle
+	}
+
+	githubTab := r.Zone.Mark(ZoneSettingsTabGitHub, githubStyle.Render("GitHub (1)"))
+	jiraTab := r.Zone.Mark(ZoneSettingsTabJira, jiraStyle.Render("Jira (2)"))
+	codecksTab := r.Zone.Mark(ZoneSettingsTabCodecks, codecksStyle.Render("Codecks (3)"))
+
+	return lipgloss.JoinHorizontal(lipgloss.Left, githubTab, " │ ", jiraTab, " │ ", codecksTab)
+}
+
+// renderGitHubSettings renders the GitHub settings content
+func (r *Renderer) renderGitHubSettings(data SettingsData) []string {
+	var lines []string
+
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("GitHub Integration"))
+	lines = append(lines, "")
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("Connect to GitHub for PR management."))
+	lines = append(lines, "")
+
+	// GitHub login button or connected status
+	if data.GithubService {
+		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B")).Render("  ✓ Connected to GitHub"))
+		lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    "+r.Zone.Mark(ZoneSettingsGitHubLogin, "[Reconnect]")))
+	} else {
+		loginButton := r.Zone.Mark(ZoneSettingsGitHubLogin, ButtonStyle.Background(lipgloss.Color("#238636")).Render("Login with GitHub"))
+		lines = append(lines, "  "+loginButton)
+		lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Opens browser to authenticate via GitHub App"))
+	}
+	lines = append(lines, "")
+
+	// Manual token input as alternative
+	githubTokenLabel := "  Or enter token manually:"
+	githubTokenStyle := lipgloss.NewStyle().Foreground(ColorMuted)
+	if data.FocusedField == 0 {
+		githubTokenStyle = githubTokenStyle.Bold(true).Foreground(ColorPrimary)
+	}
+	lines = append(lines, githubTokenStyle.Render(githubTokenLabel))
+	if len(data.Inputs) > 0 {
+		clearBtn := r.Zone.Mark(ZoneSettingsGitHubTokenClear, clearButtonStyle.Render("[Clear]"))
+		lines = append(lines, "  "+r.Zone.Mark(ZoneSettingsGitHubToken, data.Inputs[0].View)+" "+clearBtn)
+	}
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Get a token from: https://github.com/settings/tokens"))
+	lines = append(lines, "")
+
+	// PR Filter toggles
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("  PR Filters:"))
+	lines = append(lines, "")
+
+	// Show Merged PRs toggle
+	mergedToggle := r.renderToggle("Show Merged PRs", data.ShowMergedPRs, ZoneSettingsGitHubShowMerged)
+	lines = append(lines, "    "+mergedToggle)
+
+	// Show Closed PRs toggle
+	closedToggle := r.renderToggle("Show Closed PRs", data.ShowClosedPRs, ZoneSettingsGitHubShowClosed)
+	lines = append(lines, "    "+closedToggle)
+
+	return lines
+}
+
+// renderToggle renders a clickable toggle switch
+func (r *Renderer) renderToggle(label string, enabled bool, zoneID string) string {
+	var toggleText string
+	if enabled {
+		toggleText = toggleOnStyle.Render("[✓]") + " " + label
+	} else {
+		toggleText = toggleOffStyle.Render("[ ]") + " " + lipgloss.NewStyle().Foreground(ColorMuted).Render(label)
+	}
+	return r.Zone.Mark(zoneID, toggleText)
+}
+
+// renderJiraSettings renders the Jira settings content
+// Input indices: 1=URL, 2=User, 3=Token, 4=Excluded Statuses
+func (r *Renderer) renderJiraSettings(data SettingsData) []string {
+	var lines []string
+
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("Jira Integration"))
+	lines = append(lines, "")
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("Connect to Jira for ticket management."))
+	lines = append(lines, "")
+
+	// Jira URL field (index 1)
+	jiraURLLabel := "  Instance URL:"
+	jiraURLStyle := lipgloss.NewStyle()
+	if data.FocusedField == 1 {
+		jiraURLStyle = jiraURLStyle.Bold(true).Foreground(ColorPrimary)
+	}
+	lines = append(lines, jiraURLStyle.Render(jiraURLLabel))
+	if len(data.Inputs) > 1 {
+		clearBtn := r.Zone.Mark(ZoneSettingsJiraURLClear, clearButtonStyle.Render("[Clear]"))
+		lines = append(lines, "  "+r.Zone.Mark(ZoneSettingsJiraURL, data.Inputs[1].View)+" "+clearBtn)
+	}
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    e.g., https://yourcompany.atlassian.net"))
+	lines = append(lines, "")
+
+	// Jira User field (index 2)
+	jiraUserLabel := "  Email:"
+	jiraUserStyle := lipgloss.NewStyle()
+	if data.FocusedField == 2 {
+		jiraUserStyle = jiraUserStyle.Bold(true).Foreground(ColorPrimary)
+	}
+	lines = append(lines, jiraUserStyle.Render(jiraUserLabel))
+	if len(data.Inputs) > 2 {
+		clearBtn := r.Zone.Mark(ZoneSettingsJiraUserClear, clearButtonStyle.Render("[Clear]"))
+		lines = append(lines, "  "+r.Zone.Mark(ZoneSettingsJiraUser, data.Inputs[2].View)+" "+clearBtn)
+	}
+	lines = append(lines, "")
+
+	// Jira Token field (index 3)
+	jiraTokenLabel := "  API Token:"
+	jiraTokenStyle := lipgloss.NewStyle()
+	if data.FocusedField == 3 {
+		jiraTokenStyle = jiraTokenStyle.Bold(true).Foreground(ColorPrimary)
+	}
+	lines = append(lines, jiraTokenStyle.Render(jiraTokenLabel))
+	if len(data.Inputs) > 3 {
+		clearBtn := r.Zone.Mark(ZoneSettingsJiraTokenClear, clearButtonStyle.Render("[Clear]"))
+		lines = append(lines, "  "+r.Zone.Mark(ZoneSettingsJiraToken, data.Inputs[3].View)+" "+clearBtn)
+	}
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Get from: https://id.atlassian.com/manage-profile/security/api-tokens"))
+	lines = append(lines, "")
+
+	// Jira Excluded Statuses field (index 4)
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("  Ticket Filters:"))
+	excludedLabel := "  Exclude Statuses:"
+	excludedStyle := lipgloss.NewStyle()
+	if data.FocusedField == 4 {
+		excludedStyle = excludedStyle.Bold(true).Foreground(ColorPrimary)
+	}
+	lines = append(lines, excludedStyle.Render(excludedLabel))
+	if len(data.Inputs) > 4 {
+		clearBtn := r.Zone.Mark(ZoneSettingsJiraExcludedClear, clearButtonStyle.Render("[Clear]"))
+		lines = append(lines, "  "+r.Zone.Mark(ZoneSettingsJiraExcluded, data.Inputs[4].View)+" "+clearBtn)
+	}
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Comma-separated list (e.g., Done, Won't Do, Cancelled)"))
+
+	return lines
+}
+
+// renderCodecksSettings renders the Codecks settings content
+// Input indices: 5=Subdomain, 6=Token, 7=Project, 8=Excluded Statuses
+func (r *Renderer) renderCodecksSettings(data SettingsData) []string {
+	var lines []string
+
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("Codecks Integration"))
+	lines = append(lines, "")
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("Connect to Codecks for card management."))
+	lines = append(lines, "")
+
+	// Codecks Subdomain field (index 5)
+	codecksSubdomainLabel := "  Subdomain:"
+	codecksSubdomainStyle := lipgloss.NewStyle()
+	if data.FocusedField == 5 {
+		codecksSubdomainStyle = codecksSubdomainStyle.Bold(true).Foreground(ColorPrimary)
+	}
+	lines = append(lines, codecksSubdomainStyle.Render(codecksSubdomainLabel))
+	if len(data.Inputs) > 5 {
+		clearBtn := r.Zone.Mark(ZoneSettingsCodecksSubdomainClear, clearButtonStyle.Render("[Clear]"))
+		lines = append(lines, "  "+r.Zone.Mark(ZoneSettingsCodecksSubdomain, data.Inputs[5].View)+" "+clearBtn)
+	}
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Your team name (e.g., 'myteam' from myteam.codecks.io)"))
+	lines = append(lines, "")
+
+	// Codecks Token field (index 6)
+	codecksTokenLabel := "  Auth Token:"
+	codecksTokenStyle := lipgloss.NewStyle()
+	if data.FocusedField == 6 {
+		codecksTokenStyle = codecksTokenStyle.Bold(true).Foreground(ColorPrimary)
+	}
+	lines = append(lines, codecksTokenStyle.Render(codecksTokenLabel))
+	if len(data.Inputs) > 6 {
+		clearBtn := r.Zone.Mark(ZoneSettingsCodecksTokenClear, clearButtonStyle.Render("[Clear]"))
+		lines = append(lines, "  "+r.Zone.Mark(ZoneSettingsCodecksToken, data.Inputs[6].View)+" "+clearBtn)
+	}
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Extract 'at' cookie from browser DevTools"))
+	lines = append(lines, "")
+
+	// Codecks Project field (index 7)
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("  Card Filters:"))
+	codecksProjectLabel := "  Project Filter:"
+	codecksProjectStyle := lipgloss.NewStyle()
+	if data.FocusedField == 7 {
+		codecksProjectStyle = codecksProjectStyle.Bold(true).Foreground(ColorPrimary)
+	}
+	lines = append(lines, codecksProjectStyle.Render(codecksProjectLabel))
+	if len(data.Inputs) > 7 {
+		clearBtn := r.Zone.Mark(ZoneSettingsCodecksProjectClear, clearButtonStyle.Render("[Clear]"))
+		lines = append(lines, "  "+r.Zone.Mark(ZoneSettingsCodecksProject, data.Inputs[7].View)+" "+clearBtn)
+	}
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Optional: Only show cards from this project"))
+	lines = append(lines, "")
+
+	// Codecks Excluded Statuses field (index 8)
+	excludedLabel := "  Exclude Statuses:"
+	excludedStyle := lipgloss.NewStyle()
+	if data.FocusedField == 8 {
+		excludedStyle = excludedStyle.Bold(true).Foreground(ColorPrimary)
+	}
+	lines = append(lines, excludedStyle.Render(excludedLabel))
+	if len(data.Inputs) > 8 {
+		clearBtn := r.Zone.Mark(ZoneSettingsCodecksExcludedClear, clearButtonStyle.Render("[Clear]"))
+		lines = append(lines, "  "+r.Zone.Mark(ZoneSettingsCodecksExcluded, data.Inputs[8].View)+" "+clearBtn)
+	}
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Comma-separated list (e.g., done, archived)"))
+
+	return lines
+}

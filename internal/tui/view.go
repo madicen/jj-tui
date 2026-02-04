@@ -6,7 +6,6 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/madicen/jj-tui/internal/config"
-	"github.com/madicen/jj-tui/internal/models"
 	"github.com/madicen/jj-tui/internal/tui/view"
 )
 
@@ -84,8 +83,102 @@ func (m *Model) View() string {
 				statusBar,
 			)
 		}
+	} else if m.viewMode == ViewCommitGraph {
+		// Graph view with split panes: graph (scrollable) | actions (fixed) | files (scrollable)
+		graphResult := m.getGraphResult()
+
+		headerHeight := strings.Count(header, "\n") + 1
+		statusHeight := strings.Count(statusBar, "\n") + 1
+		separatorLines := 2 // Two separator lines between sections
+		paddingLines := 1   // Padding after header
+
+		// Use a minimum actions height during loading to keep layout stable
+		actionsContent := graphResult.ActionsBar
+		if actionsContent == "" {
+			actionsContent = "Actions:"
+		}
+		actionsHeight := strings.Count(actionsContent, "\n") + 1
+
+		// Calculate available height for the two scrollable panes
+		availableHeight := m.height - headerHeight - statusHeight - actionsHeight - separatorLines - paddingLines
+		if availableHeight < 6 {
+			availableHeight = 6
+		}
+
+		// Split height: 60% for graph, 40% for files
+		graphHeight := (availableHeight * 60) / 100
+		filesHeight := availableHeight - graphHeight
+		if graphHeight < 3 {
+			graphHeight = 3
+		}
+		if filesHeight < 3 {
+			filesHeight = 3
+		}
+
+		// Set up graph viewport
+		m.viewport.Height = graphHeight
+		
+		// Always set content if we have valid graph content (even during loading, to avoid stale content from other views)
+		if graphResult.GraphContent != "" {
+			// Save scroll position during loading refresh
+			savedYOffset := m.viewport.YOffset
+			m.viewport.SetContent(graphResult.GraphContent)
+			if m.loading {
+				// Restore scroll position during loading to prevent jitter
+				m.viewport.YOffset = savedYOffset
+			}
+		}
+
+		// Set up files viewport - show placeholder if no files yet
+		m.filesViewport.Height = filesHeight
+		filesContent := graphResult.FilesContent
+		if filesContent == "" {
+			filesContent = lipgloss.NewStyle().Foreground(lipgloss.Color("#666666")).Render("  Loading changed files...")
+		}
+		savedFilesOffset := m.filesViewport.YOffset
+		m.filesViewport.SetContent(filesContent)
+		if m.loading {
+			m.filesViewport.YOffset = savedFilesOffset
+		}
+
+		// Ensure selected commit is visible in graph viewport (only when not loading)
+		if m.selectedCommit >= 0 && !m.loading {
+			// Account for the focus indicator header line
+			adjustedCommit := m.selectedCommit + 1
+			if adjustedCommit < m.viewport.YOffset {
+				m.viewport.YOffset = adjustedCommit
+			} else if adjustedCommit >= m.viewport.YOffset+graphHeight {
+				m.viewport.YOffset = adjustedCommit - graphHeight + 1
+			}
+		}
+
+		// Simple separator line
+		separator := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#444444")).
+			Render(strings.Repeat("─", m.width-2))
+
+		v = lipgloss.JoinVertical(
+			lipgloss.Left,
+			header,
+			"", // Padding line after header
+			m.viewport.View(),
+			separator,
+			actionsContent,
+			separator,
+			m.filesViewport.View(),
+			statusBar,
+		)
 	} else {
 		// Normal views: put all content in viewport
+		// Reset viewport height to full available space (may have been reduced by graph view)
+		headerHeight := strings.Count(header, "\n") + 1
+		statusHeight := strings.Count(statusBar, "\n") + 1
+		fullContentHeight := m.height - headerHeight - statusHeight
+		if fullContentHeight < 1 {
+			fullContentHeight = 1
+		}
+		m.viewport.Height = fullContentHeight
+
 		content := m.renderContent()
 		m.viewport.SetContent(content)
 		viewportContent := m.viewport.View()
@@ -200,12 +293,41 @@ func (m *Model) renderSplitContent() (string, string) {
 
 // renderError renders an error message
 func (m *Model) renderError() string {
-	style := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555"))
-	return style.Render(fmt.Sprintf("Error: %v\n\nPress Ctrl+r to retry, Esc to dismiss, or Ctrl+q to quit.", m.err))
+	errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555"))
+	
+	// Special handling for "not a jj repo" error - show init button
+	if m.notJJRepo {
+		var lines []string
+		lines = append(lines, view.TitleStyle.Render("Not a Jujutsu Repository"))
+		lines = append(lines, "")
+		lines = append(lines, errorStyle.Render(fmt.Sprintf("Directory: %s", m.currentPath)))
+		lines = append(lines, "")
+		lines = append(lines, "This directory is not initialized as a Jujutsu repository.")
+		lines = append(lines, "")
+		lines = append(lines, lipgloss.NewStyle().Bold(true).Render("Would you like to initialize it?"))
+		lines = append(lines, "")
+		
+		// Init button
+		initButton := m.zone.Mark(ZoneActionJJInit, view.ButtonStyle.Background(lipgloss.Color("#238636")).Render("Initialize Repository (i)"))
+		lines = append(lines, initButton)
+		lines = append(lines, "")
+		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#8B949E")).Render("This will run: jj git init"))
+		lines = append(lines, "")
+		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#8B949E")).Render("Press Ctrl+q to quit"))
+		
+		return strings.Join(lines, "\n")
+	}
+	
+	return errorStyle.Render(fmt.Sprintf("Error: %v\n\nPress Ctrl+r to retry, Esc to dismiss, or Ctrl+q to quit.", m.err))
 }
 
-// renderCommitGraph renders the commit graph view using the view package
-func (m *Model) renderCommitGraph() string {
+// getGraphResult returns the GraphResult for the commit graph view
+func (m *Model) getGraphResult() view.GraphResult {
+	return m.renderer().Graph(m.buildGraphData())
+}
+
+// buildGraphData builds the GraphData for the commit graph
+func (m *Model) buildGraphData() view.GraphData {
 	// Build a map of branches that have open PRs
 	openPRBranches := make(map[string]bool)
 	if m.repository != nil {
@@ -305,7 +427,7 @@ func (m *Model) renderCommitGraph() string {
 		})
 	}
 
-	return m.renderer().Graph(view.GraphData{
+	return view.GraphData{
 		Repository:         m.repository,
 		SelectedCommit:     m.selectedCommit,
 		InRebaseMode:       m.selectionMode == SelectionRebaseDestination,
@@ -314,7 +436,13 @@ func (m *Model) renderCommitGraph() string {
 		CommitPRBranch:     commitPRBranch,
 		CommitBookmark:     commitBookmark,
 		ChangedFiles:       changedFiles,
-	})
+		GraphFocused:       m.graphFocused,
+	}
+}
+
+// renderCommitGraph renders the commit graph view using the view package
+func (m *Model) renderCommitGraph() string {
+	return m.renderer().Graph(m.buildGraphData()).FullContent
 }
 
 // renderPullRequests renders the PR list view using the view package
@@ -410,6 +538,9 @@ func (m *Model) renderSettings() string {
 		JiraService:    m.ticketService != nil,
 		HasLocalConfig: hasLocalConfig,
 		ConfigSource:   configSource,
+		ActiveTab:      view.SettingsTab(m.settingsTab),
+		ShowMergedPRs:  m.settingsShowMerged,
+		ShowClosedPRs:  m.settingsShowClosed,
 	})
 }
 
@@ -461,6 +592,10 @@ func (m *Model) renderStatusBar() string {
 		status = "⏳ " + status
 	}
 
+	// Sanitize status message: remove newlines and truncate if needed
+	status = strings.ReplaceAll(status, "\n", " ")
+	status = strings.ReplaceAll(status, "\r", "")
+
 	// Show scroll position if content is scrollable
 	scrollIndicator := ""
 	if m.viewportReady && m.viewport.TotalLineCount() > m.viewport.Height {
@@ -475,7 +610,42 @@ func (m *Model) renderStatusBar() string {
 		m.zone.Mark(ZoneActionRefresh, "ctrl+r:refresh"),
 	}
 
+	// Add error action buttons if there's an error (check both m.err and status message)
+	hasError := m.err != nil || strings.Contains(strings.ToLower(m.statusMessage), "error")
+	if hasError {
+		copyBtn := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FF6B6B")).
+			Bold(true).
+			Render("[Copy]")
+		dismissBtn := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#888888")).
+			Bold(true).
+			Render("[X]")
+		shortcuts = append(shortcuts, " ", m.zone.Mark(ZoneActionCopyError, copyBtn), " ", m.zone.Mark(ZoneActionDismissError, dismissBtn))
+	}
+
 	shortcutsStr := lipgloss.JoinHorizontal(lipgloss.Left, shortcuts...)
+
+	// Calculate available space for status message
+	// Reserve space for: scroll indicator + shortcuts + padding
+	reservedWidth := lipgloss.Width(scrollIndicator) + lipgloss.Width(shortcutsStr) + 4
+	maxStatusWidth := m.width - reservedWidth
+	if maxStatusWidth < 20 {
+		maxStatusWidth = 20
+	}
+
+	// Truncate status if too long
+	if lipgloss.Width(status) > maxStatusWidth {
+		// Truncate and add ellipsis
+		truncated := ""
+		for _, r := range status {
+			if lipgloss.Width(truncated+"…") >= maxStatusWidth {
+				break
+			}
+			truncated += string(r)
+		}
+		status = truncated + "…"
+	}
 
 	// Layout: status on left, shortcuts on right
 	padding := m.width - lipgloss.Width(status) - lipgloss.Width(scrollIndicator) - lipgloss.Width(shortcutsStr) - 2
@@ -486,23 +656,6 @@ func (m *Model) renderStatusBar() string {
 	return StatusBarStyle.Width(m.width).Render(
 		status + scrollIndicator + strings.Repeat(" ", padding) + shortcutsStr,
 	)
-}
-
-// Getters for testing
-
-// GetViewMode returns the current view mode
-func (m *Model) GetViewMode() ViewMode {
-	return m.viewMode
-}
-
-// GetSelectedCommit returns the selected commit index
-func (m *Model) GetSelectedCommit() int {
-	return m.selectedCommit
-}
-
-// GetStatusMessage returns the status message
-func (m *Model) GetStatusMessage() string {
-	return m.statusMessage
 }
 
 // renderGitHubLogin renders the GitHub Device Flow login screen
@@ -545,16 +698,4 @@ func (m *Model) renderGitHubLogin() string {
 	lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#8B949E")).Render("Press Esc to cancel"))
 
 	return strings.Join(lines, "\n")
-}
-
-// GetRepository returns the repository
-func (m *Model) GetRepository() *models.Repository {
-	return m.repository
-}
-
-// Close releases resources
-func (m *Model) Close() {
-	if m.zone != nil {
-		m.zone.Close()
-	}
 }

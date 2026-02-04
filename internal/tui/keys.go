@@ -20,11 +20,17 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.loading = true
 			return m, m.loadRepository()
 		case "esc":
-			// Clear error and go back to graph
+			// Clear error and go back to graph, restart auto-refresh
 			m.err = nil
 			m.viewMode = ViewCommitGraph
 			m.statusMessage = "Error dismissed"
-			return m, nil
+			return m, m.tickCmd()
+		case "i":
+			// Initialize jj repo if not already one
+			if m.notJJRepo {
+				m.statusMessage = "Initializing repository..."
+				return m, m.runJJInit()
+			}
 		}
 		// Ignore other keys when in error state
 		return m, nil
@@ -147,6 +153,16 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.viewMode != ViewCommitGraph {
 			m.viewMode = ViewCommitGraph
 		}
+	case "tab":
+		// Switch focus between graph and files panes in graph view
+		if m.viewMode == ViewCommitGraph {
+			m.graphFocused = !m.graphFocused
+			if m.graphFocused {
+				m.statusMessage = "Graph pane focused"
+			} else {
+				m.statusMessage = "Files pane focused"
+			}
+		}
 	case "j", "down":
 		if m.viewMode == ViewPullRequests {
 			if m.repository != nil && m.selectedPR < len(m.repository.PRs)-1 {
@@ -156,14 +172,22 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.selectedTicket < len(m.ticketList)-1 {
 				m.selectedTicket++
 			}
-		} else {
-			if m.repository != nil && m.selectedCommit < len(m.repository.Graph.Commits)-1 {
-				m.selectedCommit++
-				// Load changed files for the newly selected commit
-				commit := m.repository.Graph.Commits[m.selectedCommit]
-				m.changedFilesCommitID = commit.ChangeID
-				m.changedFiles = nil
-				return m, m.loadChangedFiles(commit.ChangeID)
+		} else if m.viewMode == ViewCommitGraph {
+			if !m.graphFocused {
+				// Scroll files pane down (if there are files)
+				if len(m.changedFiles) > 0 {
+					m.filesViewport.ScrollDown(1)
+				}
+			} else {
+				// Navigate commits in graph pane
+				if m.repository != nil && m.selectedCommit < len(m.repository.Graph.Commits)-1 {
+					m.selectedCommit++
+					// Load changed files for the newly selected commit
+					commit := m.repository.Graph.Commits[m.selectedCommit]
+					m.changedFilesCommitID = commit.ChangeID
+					m.changedFiles = nil
+					return m, m.loadChangedFiles(commit.ChangeID)
+				}
 			}
 		}
 	case "k", "up":
@@ -175,14 +199,22 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.selectedTicket > 0 {
 				m.selectedTicket--
 			}
-		} else {
-			if m.selectedCommit > 0 && m.repository != nil {
-				m.selectedCommit--
-				// Load changed files for the newly selected commit
-				commit := m.repository.Graph.Commits[m.selectedCommit]
-				m.changedFilesCommitID = commit.ChangeID
-				m.changedFiles = nil
-				return m, m.loadChangedFiles(commit.ChangeID)
+		} else if m.viewMode == ViewCommitGraph {
+			if !m.graphFocused {
+				// Scroll files pane up (if there are files)
+				if len(m.changedFiles) > 0 {
+					m.filesViewport.ScrollUp(1)
+				}
+			} else {
+				// Navigate commits in graph pane
+				if m.selectedCommit > 0 && m.repository != nil {
+					m.selectedCommit--
+					// Load changed files for the newly selected commit
+					commit := m.repository.Graph.Commits[m.selectedCommit]
+					m.changedFilesCommitID = commit.ChangeID
+					m.changedFiles = nil
+					return m, m.loadChangedFiles(commit.ChangeID)
+				}
 			}
 		}
 	case "o":
@@ -312,6 +344,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // handleCreateBookmarkKeyMsg handles keyboard input in bookmark creation mode
 func (m *Model) handleCreateBookmarkKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Handle universal keys first
 	switch msg.String() {
 	case "esc":
 		// Cancel bookmark creation
@@ -322,24 +355,6 @@ func (m *Model) handleCreateBookmarkKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 		// Submit bookmark
 		if m.jjService != nil {
 			return m, m.submitBookmark()
-		}
-		return m, nil
-	case "j", "down":
-		// Navigate down in existing bookmarks list
-		if len(m.existingBookmarks) > 0 {
-			if m.selectedBookmarkIdx < len(m.existingBookmarks)-1 {
-				m.selectedBookmarkIdx++
-				m.bookmarkNameInput.Blur()
-			}
-		}
-		return m, nil
-	case "k", "up":
-		// Navigate up in existing bookmarks list (or to new bookmark input)
-		if m.selectedBookmarkIdx > -1 {
-			m.selectedBookmarkIdx--
-			if m.selectedBookmarkIdx == -1 {
-				m.bookmarkNameInput.Focus()
-			}
 		}
 		return m, nil
 	case "tab":
@@ -354,11 +369,32 @@ func (m *Model) handleCreateBookmarkKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 		return m, nil
 	}
 
-	// Only pass keys to input if we're in "new bookmark" mode
+	// If we're in "new bookmark" mode (input focused), pass all other keys to input
 	if m.selectedBookmarkIdx == -1 {
 		var cmd tea.Cmd
 		m.bookmarkNameInput, cmd = m.bookmarkNameInput.Update(msg)
 		return m, cmd
+	}
+
+	// Navigation only applies when in existing bookmarks list mode
+	switch msg.String() {
+	case "j", "down":
+		// Navigate down in existing bookmarks list
+		if len(m.existingBookmarks) > 0 {
+			if m.selectedBookmarkIdx < len(m.existingBookmarks)-1 {
+				m.selectedBookmarkIdx++
+			}
+		}
+		return m, nil
+	case "k", "up":
+		// Navigate up in existing bookmarks list (or to new bookmark input)
+		if m.selectedBookmarkIdx > -1 {
+			m.selectedBookmarkIdx--
+			if m.selectedBookmarkIdx == -1 {
+				m.bookmarkNameInput.Focus()
+			}
+		}
+		return m, nil
 	}
 
 	return m, nil
@@ -462,6 +498,29 @@ func (m *Model) handleSettingsKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Cancel and go back
 		m.viewMode = ViewCommitGraph
 		m.statusMessage = "Settings cancelled"
+		return m, nil
+	case "1":
+		// Switch to GitHub tab
+		m.settingsTab = 0
+		return m, nil
+	case "2":
+		// Switch to Jira tab
+		m.settingsTab = 1
+		return m, nil
+	case "3":
+		// Switch to Codecks tab
+		m.settingsTab = 2
+		return m, nil
+	case "left":
+		// Previous tab
+		m.settingsTab--
+		if m.settingsTab < 0 {
+			m.settingsTab = 2
+		}
+		return m, nil
+	case "right":
+		// Next tab
+		m.settingsTab = (m.settingsTab + 1) % 3
 		return m, nil
 	case "ctrl+s", "enter":
 		// If on a field and press enter, move to next field

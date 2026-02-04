@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"regexp"
 	"sort"
 	"strings"
@@ -11,6 +12,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen/jj-tui/internal/codecks"
+	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/github"
 	"github.com/madicen/jj-tui/internal/jira"
 	"github.com/madicen/jj-tui/internal/jj"
@@ -30,10 +32,15 @@ func (m *Model) initializeServices() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
 
+		// Get current directory for error reporting
+		cwd, _ := os.Getwd()
+
 		// Try to create jj service
 		jjSvc, err := jj.NewService("")
 		if err != nil {
-			return errorMsg{err: err}
+			// Check if this is a "not a jj repository" error
+			notJJRepo := strings.Contains(err.Error(), "not a jujutsu repository")
+			return errorMsg{err: err, notJJRepo: notJJRepo, currentPath: cwd}
 		}
 
 		// Load repository data
@@ -153,6 +160,28 @@ func (m *Model) loadPRs() tea.Cmd {
 		if err != nil {
 			return errorMsg{err: fmt.Errorf("failed to load PRs: %w", err)}
 		}
+
+		// Apply PR filters from config
+		cfg, _ := config.Load()
+		if cfg != nil {
+			var filtered []models.GitHubPR
+			showMerged := cfg.ShowMergedPRs()
+			showClosed := cfg.ShowClosedPRs()
+
+			for _, pr := range prs {
+				// Skip merged PRs if not showing them
+				if !showMerged && pr.State == "merged" {
+					continue
+				}
+				// Skip closed PRs if not showing them
+				if !showClosed && pr.State == "closed" {
+					continue
+				}
+				filtered = append(filtered, pr)
+			}
+			prs = filtered
+		}
+
 		return prsLoadedMsg{prs: prs}
 	}
 }
@@ -172,6 +201,40 @@ func (m *Model) loadTickets() tea.Cmd {
 		ticketList, err := svc.GetAssignedTickets(context.Background())
 		if err != nil {
 			return errorMsg{err: fmt.Errorf("failed to load tickets: %w", err)}
+		}
+
+		// Apply status filters from config
+		cfg, _ := config.Load()
+		if cfg != nil {
+			// Build excluded statuses set based on provider
+			excludedStatuses := make(map[string]bool)
+			var excludedStr string
+			if svc.GetProviderName() == "Jira" {
+				excludedStr = cfg.JiraExcludedStatuses
+			} else if svc.GetProviderName() == "Codecks" {
+				excludedStr = cfg.CodecksExcludedStatuses
+			}
+
+			if excludedStr != "" {
+				for _, status := range strings.Split(excludedStr, ",") {
+					status = strings.TrimSpace(strings.ToLower(status))
+					if status != "" {
+						excludedStatuses[status] = true
+					}
+				}
+			}
+
+			// Filter tickets
+			if len(excludedStatuses) > 0 {
+				var filtered []tickets.Ticket
+				for _, ticket := range ticketList {
+					statusLower := strings.ToLower(ticket.Status)
+					if !excludedStatuses[statusLower] {
+						filtered = append(filtered, ticket)
+					}
+				}
+				ticketList = filtered
+			}
 		}
 
 		// Sort tickets by DisplayKey descending (most recent first)
@@ -301,5 +364,21 @@ func (m *Model) pollGitHubToken(interval int) tea.Cmd {
 		// Still waiting for user authorization
 		return githubLoginPollMsg{interval: interval}
 	})
+}
+
+// runJJInit runs jj git init to initialize a new repository
+func (m *Model) runJJInit() tea.Cmd {
+	return func() tea.Msg {
+		// Run jj git init in the current directory
+		cmd := exec.Command("jj", "git", "init")
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return errorMsg{
+				err:       fmt.Errorf("failed to initialize repository: %s", strings.TrimSpace(string(output))),
+				notJJRepo: true,
+			}
+		}
+		return jjInitSuccessMsg{}
+	}
 }
 

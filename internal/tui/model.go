@@ -19,6 +19,7 @@ import (
 	"github.com/madicen/jj-tui/internal/jj"
 	"github.com/madicen/jj-tui/internal/models"
 	"github.com/madicen/jj-tui/internal/tickets"
+	"github.com/madicen/jj-tui/internal/tui/actions"
 )
 
 // openURL opens a URL in the default browser
@@ -50,6 +51,28 @@ func (m *Model) isSelectedCommitValid() bool {
 		m.selectedCommit < len(m.repository.Graph.Commits)
 }
 
+// calculateSplitViewHeight calculates the available height for the scrollable list
+// in PR and Jira views (which have a fixed header section)
+func (m *Model) calculateSplitViewHeight() int {
+	if m.width == 0 || m.height == 0 {
+		return 0
+	}
+
+	// Estimate header heights (same as in View())
+	headerHeight := 1 // Tab bar
+	statusHeight := 1 // Status bar
+
+	// Estimate fixed header height for split views
+	// This is an approximation - the actual height is calculated during rendering
+	fixedHeaderLines := 10 // Details box + instructions for PR/Tickets view
+
+	availableHeight := m.height - headerHeight - statusHeight - fixedHeaderLines
+	if availableHeight < 3 {
+		availableHeight = 3
+	}
+	return availableHeight
+}
+
 // tickMsg is sent on each timer tick for auto-refresh
 type tickMsg time.Time
 
@@ -74,14 +97,18 @@ type Model struct {
 	statusMessage  string
 	err            error
 	loading        bool
+	notJJRepo      bool   // true if error is "not a jj repository"
+	currentPath    string // path where we're running (for jj init)
 
 	// Changed files for selected commit
 	changedFiles         []jj.ChangedFile
 	changedFilesCommitID string // Which commit the files are for
 
-	// Viewport for scrollable content
-	viewport      viewport.Model
-	viewportReady bool
+	// Viewports for scrollable content
+	viewport       viewport.Model // Main viewport (graph or other content)
+	filesViewport  viewport.Model // Secondary viewport for changed files in graph view
+	viewportReady  bool
+	graphFocused   bool // True if graph viewport has focus, false if files viewport
 
 	// Rebase mode state
 	selectionMode      SelectionMode
@@ -97,6 +124,11 @@ type Model struct {
 	// Settings inputs
 	settingsInputs       []textinput.Model
 	settingsFocusedField int
+	settingsTab          int // 0=GitHub, 1=Jira, 2=Codecks
+
+	// Settings toggle states (for GitHub filters)
+	settingsShowMerged bool
+	settingsShowClosed bool
 
 	// PR creation state
 	prTitleInput        textinput.Model
@@ -108,22 +140,22 @@ type Model struct {
 	prNeedsMoveBookmark bool // True if we need to move the bookmark to include all commits
 
 	// Bookmark creation state
-	bookmarkNameInput       textinput.Model
-	bookmarkCommitIdx       int               // Index of commit to create bookmark on (-1 for new branch from main)
-	existingBookmarks       []string          // List of existing bookmarks
-	selectedBookmarkIdx     int               // Index of selected existing bookmark (-1 for new)
-	bookmarkFromJira           bool              // True if creating bookmark from Jira ticket
-	bookmarkJiraTicketKey      string            // Jira ticket key if creating from Jira
-	bookmarkJiraTicketTitle    string            // Jira ticket summary if creating from Jira
-	bookmarkTicketDisplayKey   string            // Short display key (e.g., "$12u" for Codecks) for commit messages
-	jiraBookmarkTitles         map[string]string // Maps bookmark names to formatted PR titles ("KEY - Title")
-	ticketBookmarkDisplayKeys  map[string]string // Maps bookmark names to ticket short IDs for commit messages
+	bookmarkNameInput         textinput.Model
+	bookmarkCommitIdx         int               // Index of commit to create bookmark on (-1 for new branch from main)
+	existingBookmarks         []string          // List of existing bookmarks
+	selectedBookmarkIdx       int               // Index of selected existing bookmark (-1 for new)
+	bookmarkFromJira          bool              // True if creating bookmark from Jira ticket
+	bookmarkJiraTicketKey     string            // Jira ticket key if creating from Jira
+	bookmarkJiraTicketTitle   string            // Jira ticket summary if creating from Jira
+	bookmarkTicketDisplayKey  string            // Short display key (e.g., "$12u" for Codecks) for commit messages
+	jiraBookmarkTitles        map[string]string // Maps bookmark names to formatted PR titles ("KEY - Title")
+	ticketBookmarkDisplayKeys map[string]string // Maps bookmark names to ticket short IDs for commit messages
 
 	// GitHub Device Flow state
-	githubDeviceCode     string // Device code for polling
-	githubUserCode       string // Code user needs to enter
+	githubDeviceCode      string // Device code for polling
+	githubUserCode        string // Code user needs to enter
 	githubVerificationURL string // URL user needs to visit
-	githubLoginPolling   bool   // True if currently polling for token
+	githubLoginPolling    bool   // True if currently polling for token
 }
 
 // Messages for async operations
@@ -165,8 +197,17 @@ type settingsSavedMsg struct {
 }
 
 type errorMsg struct {
-	err error
+	err         error
+	notJJRepo   bool   // true if the error is "not a jj repository"
+	currentPath string // the path where we tried to find a jj repo
 }
+
+// ErrorMsg creates an error message for testing purposes
+func ErrorMsg(err error) errorMsg {
+	return errorMsg{err: err}
+}
+
+type jjInitSuccessMsg struct{}
 
 // GitHub Device Flow messages
 type githubDeviceFlowStartedMsg struct {
@@ -237,10 +278,13 @@ func New(ctx context.Context) *Model {
 	ta.SetWidth(60)
 	ta.SetHeight(5)
 
-	// Create settings inputs
-	settingsInputs := make([]textinput.Model, 7)
+	// Load config for initial values
+	cfg, _ := config.Load()
 
-	// GitHub Token
+	// Create settings inputs
+	settingsInputs := make([]textinput.Model, 9)
+
+	// GitHub Token (index 0)
 	settingsInputs[0] = textinput.New()
 	settingsInputs[0].Placeholder = "GitHub Personal Access Token"
 	settingsInputs[0].CharLimit = 256 // GitHub PATs can be long
@@ -249,21 +293,21 @@ func New(ctx context.Context) *Model {
 	settingsInputs[0].EchoCharacter = '•'
 	settingsInputs[0].SetValue(os.Getenv("GITHUB_TOKEN"))
 
-	// Jira URL
+	// Jira URL (index 1)
 	settingsInputs[1] = textinput.New()
 	settingsInputs[1].Placeholder = "https://your-domain.atlassian.net"
 	settingsInputs[1].CharLimit = 100
 	settingsInputs[1].Width = 50
 	settingsInputs[1].SetValue(os.Getenv("JIRA_URL"))
 
-	// Jira User
+	// Jira User (index 2)
 	settingsInputs[2] = textinput.New()
 	settingsInputs[2].Placeholder = "your-email@example.com"
 	settingsInputs[2].CharLimit = 100
 	settingsInputs[2].Width = 50
 	settingsInputs[2].SetValue(os.Getenv("JIRA_USER"))
 
-	// Jira Token
+	// Jira Token (index 3)
 	settingsInputs[3] = textinput.New()
 	settingsInputs[3].Placeholder = "Jira API Token"
 	settingsInputs[3].CharLimit = 256 // Atlassian tokens can be 150+ chars
@@ -272,28 +316,54 @@ func New(ctx context.Context) *Model {
 	settingsInputs[3].EchoCharacter = '•'
 	settingsInputs[3].SetValue(os.Getenv("JIRA_TOKEN"))
 
-	// Codecks Subdomain
+	// Jira Excluded Statuses (index 4)
 	settingsInputs[4] = textinput.New()
-	settingsInputs[4].Placeholder = "your-team (from your-team.codecks.io)"
-	settingsInputs[4].CharLimit = 100
+	settingsInputs[4].Placeholder = "Done, Won't Do, Cancelled (comma-separated)"
+	settingsInputs[4].CharLimit = 200
 	settingsInputs[4].Width = 50
-	settingsInputs[4].SetValue(os.Getenv("CODECKS_SUBDOMAIN"))
+	if cfg != nil {
+		settingsInputs[4].SetValue(cfg.JiraExcludedStatuses)
+	}
 
-	// Codecks Token
+	// Codecks Subdomain (index 5)
 	settingsInputs[5] = textinput.New()
-	settingsInputs[5].Placeholder = "Codecks API Token (from browser cookie 'at')"
-	settingsInputs[5].CharLimit = 256
+	settingsInputs[5].Placeholder = "your-team (from your-team.codecks.io)"
+	settingsInputs[5].CharLimit = 100
 	settingsInputs[5].Width = 50
-	settingsInputs[5].EchoMode = textinput.EchoPassword
-	settingsInputs[5].EchoCharacter = '•'
-	settingsInputs[5].SetValue(os.Getenv("CODECKS_TOKEN"))
+	settingsInputs[5].SetValue(os.Getenv("CODECKS_SUBDOMAIN"))
 
-	// Codecks Project (optional filter)
+	// Codecks Token (index 6)
 	settingsInputs[6] = textinput.New()
-	settingsInputs[6].Placeholder = "Project name (optional, filters cards)"
-	settingsInputs[6].CharLimit = 100
+	settingsInputs[6].Placeholder = "Codecks API Token (from browser cookie 'at')"
+	settingsInputs[6].CharLimit = 256
 	settingsInputs[6].Width = 50
-	settingsInputs[6].SetValue(os.Getenv("CODECKS_PROJECT"))
+	settingsInputs[6].EchoMode = textinput.EchoPassword
+	settingsInputs[6].EchoCharacter = '•'
+	settingsInputs[6].SetValue(os.Getenv("CODECKS_TOKEN"))
+
+	// Codecks Project (index 7)
+	settingsInputs[7] = textinput.New()
+	settingsInputs[7].Placeholder = "Project name (optional, filters cards)"
+	settingsInputs[7].CharLimit = 100
+	settingsInputs[7].Width = 50
+	settingsInputs[7].SetValue(os.Getenv("CODECKS_PROJECT"))
+
+	// Codecks Excluded Statuses (index 8)
+	settingsInputs[8] = textinput.New()
+	settingsInputs[8].Placeholder = "done, archived (comma-separated)"
+	settingsInputs[8].CharLimit = 200
+	settingsInputs[8].Width = 50
+	if cfg != nil {
+		settingsInputs[8].SetValue(cfg.CodecksExcludedStatuses)
+	}
+
+	// Initialize toggle states from config
+	showMerged := true
+	showClosed := true
+	if cfg != nil {
+		showMerged = cfg.ShowMergedPRs()
+		showClosed = cfg.ShowClosedPRs()
+	}
 
 	// PR title input
 	prTitle := textinput.New()
@@ -315,21 +385,23 @@ func New(ctx context.Context) *Model {
 	bookmarkName.Width = 50
 
 	return &Model{
-		ctx:                 ctx,
-		zone:                zone.New(),
-		viewMode:            ViewCommitGraph,
-		selectedCommit:      -1,
-		statusMessage:       "Initializing...",
-		loading:             true,
-		descriptionInput:    ta,
-		settingsInputs:      settingsInputs,
-		prTitleInput:        prTitle,
-		prBodyInput:         prBody,
-		prBaseBranch:        "main",
-		prCommitIndex:       -1,
-		bookmarkNameInput:   bookmarkName,
-		bookmarkCommitIdx:   -1,
-		selectedBookmarkIdx: -1,
+		ctx:                       ctx,
+		zone:                      zone.New(),
+		viewMode:                  ViewCommitGraph,
+		selectedCommit:            -1,
+		statusMessage:             "Initializing...",
+		loading:                   true,
+		descriptionInput:          ta,
+		settingsInputs:            settingsInputs,
+		settingsShowMerged:        showMerged,
+		settingsShowClosed:        showClosed,
+		prTitleInput:              prTitle,
+		prBodyInput:               prBody,
+		prBaseBranch:              "main",
+		prCommitIndex:             -1,
+		bookmarkNameInput:         bookmarkName,
+		bookmarkCommitIdx:         -1,
+		selectedBookmarkIdx:       -1,
 		jiraBookmarkTitles:        make(map[string]string),
 		ticketBookmarkDisplayKeys: make(map[string]string),
 	}
@@ -369,15 +441,53 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		headerHeight := 1
 		statusHeight := 1
 		contentHeight := m.height - headerHeight - statusHeight
+		if contentHeight < 1 {
+			contentHeight = 1
+		}
 
 		if !m.viewportReady {
 			m.viewport = viewport.New(m.width, contentHeight)
 			m.viewport.MouseWheelEnabled = true
+			m.filesViewport = viewport.New(m.width, contentHeight)
+			m.filesViewport.MouseWheelEnabled = true
+			m.graphFocused = true // Start with graph focused
 			m.viewportReady = true
 		} else {
 			m.viewport.Width = m.width
 			m.viewport.Height = contentHeight
+			m.filesViewport.Width = m.width
+			m.filesViewport.Height = contentHeight
+
+			// Reset scroll position if it's now beyond valid bounds
+			totalLines := m.viewport.TotalLineCount()
+			maxOffset := totalLines - contentHeight
+			if maxOffset < 0 {
+				maxOffset = 0
+			}
+			if m.viewport.YOffset > maxOffset {
+				m.viewport.YOffset = maxOffset
+			}
 		}
+
+		// Resize text areas to fit new window width
+		inputWidth := m.width - 20 // Leave margin for borders/padding
+		if inputWidth < 30 {
+			inputWidth = 30
+		}
+		if inputWidth > 80 {
+			inputWidth = 80 // Cap at reasonable max
+		}
+
+		m.descriptionInput.SetWidth(inputWidth)
+		m.prBodyInput.SetWidth(inputWidth)
+		m.prTitleInput.Width = inputWidth
+		m.bookmarkNameInput.Width = inputWidth
+
+		// Resize settings inputs
+		for i := range m.settingsInputs {
+			m.settingsInputs[i].Width = inputWidth - 10
+		}
+
 		return m, nil
 
 	case tea.KeyMsg:
@@ -386,6 +496,34 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseMsg:
 		// Handle mouse wheel scrolling
 		if msg.Action == tea.MouseActionPress && (msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown) {
+			// For PR and Jira views, we need to handle scrolling with the reduced viewport height
+			if m.viewMode == ViewPullRequests || m.viewMode == ViewJira {
+				// Calculate the available height for the scrollable list
+				availableHeight := m.calculateSplitViewHeight()
+				if availableHeight > 0 {
+					// Get the total content lines
+					totalLines := m.viewport.TotalLineCount()
+					maxOffset := totalLines - availableHeight
+					if maxOffset < 0 {
+						maxOffset = 0
+					}
+
+					// Scroll up or down
+					if msg.Button == tea.MouseButtonWheelUp {
+						m.viewport.YOffset -= 3
+						if m.viewport.YOffset < 0 {
+							m.viewport.YOffset = 0
+						}
+					} else {
+						m.viewport.YOffset += 3
+						if m.viewport.YOffset > maxOffset {
+							m.viewport.YOffset = maxOffset
+						}
+					}
+					return m, nil
+				}
+			}
+			// Default viewport scrolling for other views
 			var cmd tea.Cmd
 			m.viewport, cmd = m.viewport.Update(msg)
 			return m, cmd
@@ -408,7 +546,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.repository = msg.repository
 		m.repository.PRs = oldPRs // Restore PRs
 		m.loading = false
-		m.err = nil
+		// Don't clear m.err here - let errors persist until dismissed
 		if m.jjService == nil {
 			// First load - set the service
 			jjSvc, _ := jj.NewService("")
@@ -434,7 +572,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.repository = msg.repository
 		m.repository.PRs = oldPRs // Restore PRs
 		m.loading = false
-		m.err = nil
+		// Don't clear m.err here - let errors persist until dismissed
 		// Find and select the working copy commit
 		for i, commit := range msg.repository.Graph.Commits {
 			if commit.IsWorking {
@@ -456,7 +594,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.repository = msg.repository
 			m.repository.PRs = oldPRs // Restore PRs
-			m.err = nil
+			// Don't clear m.err here - let errors persist until dismissed
 			// Only update status if commit count changed
 			newCount := len(msg.repository.Graph.Commits)
 			if newCount != oldCount {
@@ -474,9 +612,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case errorMsg:
 		m.err = msg.err
+		m.notJJRepo = msg.notJJRepo
+		m.currentPath = msg.currentPath
 		m.loading = false
 		m.statusMessage = fmt.Sprintf("Error: %v", msg.err)
-		return m, m.tickCmd() // Continue auto-refresh even on error
+		// Don't continue auto-refresh on error - let user dismiss or manually refresh
+		return m, nil
+
+	case jjInitSuccessMsg:
+		m.notJJRepo = false
+		// Don't clear m.err here - let errors persist until user dismisses them
+		m.statusMessage = "Repository initialized! Loading..."
+		return m, m.initializeServices()
 
 	case servicesInitializedMsg:
 		m.jjService = msg.jjService
@@ -484,7 +631,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ticketService = msg.ticketService
 		m.repository = msg.repository
 		m.loading = false
-		m.err = nil
+		// Don't clear m.err here - let errors persist until user dismisses them
 		m.statusMessage = fmt.Sprintf("Loaded %d commits", len(msg.repository.Graph.Commits))
 		if m.githubService != nil {
 			m.statusMessage += " (GitHub connected)"
@@ -639,6 +786,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tickMsg:
+		// Stop auto-refresh if there's an error - let user handle it
+		if m.err != nil {
+			return m, nil
+		}
 		// Auto-refresh: reload repository data silently (but not while editing, creating PR, or creating bookmark)
 		if !m.loading && m.jjService != nil && m.viewMode != ViewEditDescription && m.viewMode != ViewCreatePR && m.viewMode != ViewCreateBookmark {
 			return m, tea.Batch(m.loadRepositorySilent(), m.tickCmd())
@@ -724,6 +875,51 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ActionMsg:
 		return m.handleAction(msg.Action)
+
+	// Handle messages from actions package
+	case actions.RepositoryLoadedMsg:
+		return m.Update(repositoryLoadedMsg{repository: msg.Repository})
+
+	case actions.EditCompletedMsg:
+		return m.Update(editCompletedMsg{repository: msg.Repository})
+
+	case actions.ErrorMsg:
+		return m.Update(errorMsg{err: msg.Err})
+
+	case actions.DescriptionLoadedMsg:
+		return m.Update(descriptionLoadedMsg{commitID: msg.CommitID, description: msg.Description})
+
+	case actions.DescriptionSavedMsg:
+		return m.Update(descriptionSavedMsg{commitID: msg.CommitID})
+
+	case actions.PRCreatedMsg:
+		return m.Update(prCreatedMsg{pr: msg.PR})
+
+	case actions.BranchPushedMsg:
+		return m.Update(branchPushedMsg{branch: msg.Branch, pushOutput: msg.PushOutput})
+
+	case actions.BookmarkCreatedMsg:
+		return m.Update(bookmarkCreatedOnCommitMsg{bookmarkName: msg.BookmarkName, commitID: msg.CommitID, wasMoved: msg.WasMoved})
+
+	case actions.BookmarkDeletedMsg:
+		return m.Update(bookmarkDeletedMsg{bookmarkName: msg.BookmarkName})
+
+	case actions.ClipboardCopiedMsg:
+		if msg.Success {
+			m.statusMessage = "Error copied to clipboard!"
+		} else {
+			m.statusMessage = fmt.Sprintf("Failed to copy: %v", msg.Err)
+		}
+		return m, nil
+
+	case actions.SettingsSavedMsg:
+		return m.Update(settingsSavedMsg{
+			githubConnected: msg.GitHubConnected,
+			ticketService:   msg.TicketService,
+			ticketProvider:  msg.TicketProvider,
+			savedLocal:      msg.SavedLocal,
+			err:             msg.Err,
+		})
 	}
 
 	return m, nil

@@ -14,9 +14,20 @@ const (
 	ZoneJiraCreateBranch = "zone:jira:createbranch"
 	ZoneJiraOpenBrowser  = "zone:jira:openbrowser"
 
-	ZoneSettingsGitHubToken      = "zone:settings:github_token"
-	ZoneSettingsGitHubTokenClear = "zone:settings:github_token_clear"
-	ZoneSettingsGitHubLogin      = "zone:settings:github_login"
+	// Settings sub-tabs
+	ZoneSettingsTabGitHub  = "zone:settings:tab:github"
+	ZoneSettingsTabJira    = "zone:settings:tab:jira"
+	ZoneSettingsTabCodecks = "zone:settings:tab:codecks"
+
+	ZoneSettingsGitHubToken        = "zone:settings:github_token"
+	ZoneSettingsGitHubTokenClear   = "zone:settings:github_token_clear"
+	ZoneSettingsGitHubLogin        = "zone:settings:github_login"
+	ZoneSettingsGitHubShowMerged   = "zone:settings:github_show_merged"
+	ZoneSettingsGitHubShowClosed   = "zone:settings:github_show_closed"
+	ZoneSettingsJiraExcluded       = "zone:settings:jira_excluded"
+	ZoneSettingsJiraExcludedClear  = "zone:settings:jira_excluded_clear"
+	ZoneSettingsCodecksExcluded      = "zone:settings:codecks_excluded"
+	ZoneSettingsCodecksExcludedClear = "zone:settings:codecks_excluded_clear"
 	ZoneSettingsJiraURL          = "zone:settings:jira_url"
 	ZoneSettingsJiraURLClear     = "zone:settings:jira_url_clear"
 	ZoneSettingsJiraUser         = "zone:settings:jira_user"

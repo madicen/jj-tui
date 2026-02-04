@@ -17,7 +17,9 @@ const (
 	// Status bar action zones
 	ZoneActionQuit      = "zone:action:quit"
 	ZoneActionRefresh   = "zone:action:refresh"
-	ZoneActionNewCommit = "zone:action:newcommit"
+	ZoneActionNewCommit    = "zone:action:newcommit"
+	ZoneActionCopyError    = "zone:action:copyerror"
+	ZoneActionDismissError = "zone:action:dismisserror"
 
 	// Commit action zones
 	ZoneActionCheckout = "zone:action:checkout"
@@ -48,12 +50,22 @@ const (
 	// Push action zone
 	ZoneActionPush = "zone:action:push"
 
+	// Init button zone (shown when not in a jj repo)
+	ZoneActionJJInit = "zone:action:jj_init"
+
 	// Jira action zones
 	ZoneJiraCreateBranch = "zone:jira:createbranch"
 	ZoneJiraOpenBrowser  = "zone:jira:openbrowser"
 
+	// Settings sub-tab zones
+	ZoneSettingsTabGitHub  = "zone:settings:tab:github"
+	ZoneSettingsTabJira    = "zone:settings:tab:jira"
+	ZoneSettingsTabCodecks = "zone:settings:tab:codecks"
+
 	// Settings zones
-	ZoneSettingsGitHubToken           = "zone:settings:github_token"
+	ZoneSettingsGitHubToken      = "zone:settings:github_token"
+	ZoneSettingsGitHubShowMerged = "zone:settings:github_show_merged"
+	ZoneSettingsGitHubShowClosed = "zone:settings:github_show_closed"
 	ZoneSettingsGitHubTokenClear      = "zone:settings:github_token_clear"
 	ZoneSettingsGitHubLogin           = "zone:settings:github_login"
 	ZoneSettingsJiraURL               = "zone:settings:jira_url"
@@ -62,12 +74,16 @@ const (
 	ZoneSettingsJiraUserClear         = "zone:settings:jira_user_clear"
 	ZoneSettingsJiraToken             = "zone:settings:jira_token"
 	ZoneSettingsJiraTokenClear        = "zone:settings:jira_token_clear"
+	ZoneSettingsJiraExcluded          = "zone:settings:jira_excluded"
+	ZoneSettingsJiraExcludedClear     = "zone:settings:jira_excluded_clear"
 	ZoneSettingsCodecksSubdomain      = "zone:settings:codecks_subdomain"
 	ZoneSettingsCodecksSubdomainClear = "zone:settings:codecks_subdomain_clear"
 	ZoneSettingsCodecksToken          = "zone:settings:codecks_token"
 	ZoneSettingsCodecksTokenClear     = "zone:settings:codecks_token_clear"
 	ZoneSettingsCodecksProject        = "zone:settings:codecks_project"
 	ZoneSettingsCodecksProjectClear   = "zone:settings:codecks_project_clear"
+	ZoneSettingsCodecksExcluded       = "zone:settings:codecks_excluded"
+	ZoneSettingsCodecksExcludedClear  = "zone:settings:codecks_excluded_clear"
 	ZoneSettingsSave                  = "zone:settings:save"
 	ZoneSettingsSaveLocal             = "zone:settings:save_local"
 	ZoneSettingsCancel                = "zone:settings:cancel"
