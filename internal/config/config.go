@@ -24,9 +24,15 @@ type Config struct {
 	CodecksSubdomain string `json:"codecks_subdomain,omitempty"`
 	CodecksToken     string `json:"codecks_token,omitempty"`
 	CodecksProject   string `json:"codecks_project,omitempty"` // Optional: filter by project name
+
+	// Internal: tracks where the config was loaded from
+	loadedFrom string `json:"-"`
 }
 
-// configDir returns the config directory path
+// LocalConfigFileName is the name of the per-repo config file
+const LocalConfigFileName = ".jj-tui.json"
+
+// configDir returns the global config directory path
 func configDir() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -35,8 +41,8 @@ func configDir() (string, error) {
 	return filepath.Join(homeDir, ".config", "jj-tui"), nil
 }
 
-// configPath returns the full path to the config file
-func configPath() (string, error) {
+// globalConfigPath returns the full path to the global config file
+func globalConfigPath() (string, error) {
 	dir, err := configDir()
 	if err != nil {
 		return "", err
@@ -44,46 +50,139 @@ func configPath() (string, error) {
 	return filepath.Join(dir, "config.json"), nil
 }
 
-// Load reads the config from disk
-// Returns an empty config if the file doesn't exist
-func Load() (*Config, error) {
-	path, err := configPath()
-	if err != nil {
-		return &Config{}, err
-	}
+// localConfigPath returns the path to the local config file in the current directory
+func localConfigPath() string {
+	return LocalConfigFileName
+}
 
+// loadFromFile loads config from a specific file path
+func loadFromFile(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// No config file yet - return empty config
-			return &Config{}, nil
+			return nil, nil // File doesn't exist
 		}
-		return nil, fmt.Errorf("failed to read config: %w", err)
+		return nil, fmt.Errorf("failed to read config from %s: %w", path, err)
 	}
 
 	var cfg Config
 	if err := json.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse config: %w", err)
+		return nil, fmt.Errorf("failed to parse config from %s: %w", path, err)
 	}
-
+	cfg.loadedFrom = path
 	return &cfg, nil
 }
 
+// mergeConfig merges source config into dest, only overwriting non-empty values
+func mergeConfig(dest, source *Config) {
+	if source == nil {
+		return
+	}
+	if source.GitHubToken != "" {
+		dest.GitHubToken = source.GitHubToken
+	}
+	if source.TicketProvider != "" {
+		dest.TicketProvider = source.TicketProvider
+	}
+	if source.JiraURL != "" {
+		dest.JiraURL = source.JiraURL
+	}
+	if source.JiraUser != "" {
+		dest.JiraUser = source.JiraUser
+	}
+	if source.JiraToken != "" {
+		dest.JiraToken = source.JiraToken
+	}
+	if source.CodecksSubdomain != "" {
+		dest.CodecksSubdomain = source.CodecksSubdomain
+	}
+	if source.CodecksToken != "" {
+		dest.CodecksToken = source.CodecksToken
+	}
+	if source.CodecksProject != "" {
+		dest.CodecksProject = source.CodecksProject
+	}
+}
+
+// Load reads config with the following priority (highest to lowest):
+// 1. JJ_TUI_CONFIG env var (specific config file path)
+// 2. .jj-tui.json in current directory (local/repo config)
+// 3. ~/.config/jj-tui/config.json (global config)
+// Local config values override global config values.
+func Load() (*Config, error) {
+	cfg := &Config{}
+
+	// Check for JJ_TUI_CONFIG env var first
+	if envPath := os.Getenv("JJ_TUI_CONFIG"); envPath != "" {
+		envCfg, err := loadFromFile(envPath)
+		if err != nil {
+			return nil, err
+		}
+		if envCfg != nil {
+			return envCfg, nil
+		}
+		// If env var is set but file doesn't exist, return empty config
+		cfg.loadedFrom = envPath
+		return cfg, nil
+	}
+
+	// Load global config first
+	globalPath, err := globalConfigPath()
+	if err == nil {
+		globalCfg, err := loadFromFile(globalPath)
+		if err != nil {
+			return nil, err
+		}
+		if globalCfg != nil {
+			cfg = globalCfg
+		}
+	}
+
+	// Load local config and merge (local overrides global)
+	localPath := localConfigPath()
+	localCfg, err := loadFromFile(localPath)
+	if err != nil {
+		return nil, err
+	}
+	if localCfg != nil {
+		mergeConfig(cfg, localCfg)
+		cfg.loadedFrom = localPath // Mark as loaded from local
+	} else if cfg.loadedFrom == "" {
+		cfg.loadedFrom = globalPath
+	}
+
+	return cfg, nil
+}
+
 // Save writes the config to disk
+// By default, saves to the global config. Use SaveLocal() for local config.
 func (c *Config) Save() error {
-	dir, err := configDir()
-	if err != nil {
-		return err
-	}
+	return c.SaveTo("")
+}
 
-	// Create config directory if it doesn't exist
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return fmt.Errorf("failed to create config directory: %w", err)
-	}
+// SaveLocal saves the config to the local .jj-tui.json file in the current directory
+func (c *Config) SaveLocal() error {
+	return c.SaveTo(localConfigPath())
+}
 
-	path, err := configPath()
-	if err != nil {
-		return err
+// SaveTo saves the config to a specific path, or global config if path is empty
+func (c *Config) SaveTo(path string) error {
+	if path == "" {
+		// Save to global config
+		dir, err := configDir()
+		if err != nil {
+			return err
+		}
+
+		// Create config directory if it doesn't exist
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			return fmt.Errorf("failed to create config directory: %w", err)
+		}
+
+		path, err = globalConfigPath()
+		if err != nil {
+			return err
+		}
 	}
 
 	data, err := json.MarshalIndent(c, "", "  ")
@@ -96,7 +195,24 @@ func (c *Config) Save() error {
 		return fmt.Errorf("failed to write config: %w", err)
 	}
 
+	c.loadedFrom = path
 	return nil
+}
+
+// HasLocalConfig returns true if a local .jj-tui.json exists in the current directory
+func HasLocalConfig() bool {
+	_, err := os.Stat(localConfigPath())
+	return err == nil
+}
+
+// LoadedFrom returns the path the config was loaded from
+func (c *Config) LoadedFrom() string {
+	return c.loadedFrom
+}
+
+// IsLocal returns true if the config was loaded from a local .jj-tui.json file
+func (c *Config) IsLocal() bool {
+	return c.loadedFrom == localConfigPath()
 }
 
 // ApplyToEnvironment sets environment variables from config values

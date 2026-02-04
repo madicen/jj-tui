@@ -157,9 +157,11 @@ type bookmarkCreatedMsg struct {
 }
 
 type settingsSavedMsg struct {
-	githubConnected  bool
-	ticketService    tickets.Service
-	ticketProvider   string // "jira", "codecks", or ""
+	githubConnected bool
+	ticketService   tickets.Service
+	ticketProvider  string // "jira", "codecks", or ""
+	savedLocal      bool   // true if saved to local .jj-tui.json
+	err             error  // error if save failed
 }
 
 type errorMsg struct {
@@ -543,6 +545,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case settingsSavedMsg:
 		m.viewMode = ViewCommitGraph
 		m.ticketService = msg.ticketService
+
+		// Handle save error
+		if msg.err != nil {
+			m.statusMessage = fmt.Sprintf("Error saving settings: %v", msg.err)
+			return m, nil
+		}
+
 		var status []string
 		if msg.githubConnected {
 			status = append(status, "GitHub")
@@ -550,10 +559,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.ticketProvider != "" {
 			status = append(status, msg.ticketProvider)
 		}
+
+		saveLocation := "globally"
+		if msg.savedLocal {
+			saveLocation = "to .jj-tui.json (local)"
+		}
+
 		if len(status) > 0 {
-			m.statusMessage = fmt.Sprintf("Settings saved. Connected: %s", strings.Join(status, ", "))
+			m.statusMessage = fmt.Sprintf("Settings saved %s. Connected: %s", saveLocation, strings.Join(status, ", "))
 		} else {
-			m.statusMessage = "Settings saved"
+			m.statusMessage = fmt.Sprintf("Settings saved %s", saveLocation)
 		}
 		// Reinitialize services with new credentials
 		return m, m.initializeServices()

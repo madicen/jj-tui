@@ -17,8 +17,18 @@ func (r *Renderer) Settings(data SettingsData) string {
 	lines = append(lines, TitleStyle.Render("Settings"))
 	lines = append(lines, "")
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("Configure your API credentials. Press Tab/↓ to move between fields."))
-	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("Press Ctrl+S or Enter on last field to save, Esc to cancel."))
-	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Italic(true).Render("Settings are saved to ~/.config/jj-tui/config.json"))
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("Press Ctrl+S to save globally, Ctrl+L to save locally to this repo."))
+	
+	// Show config source
+	if data.ConfigSource != "" {
+		configInfo := "Config: " + data.ConfigSource
+		if data.HasLocalConfig {
+			configInfo += " (local override active)"
+		}
+		lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Italic(true).Render(configInfo))
+	} else {
+		lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Italic(true).Render("Config: ~/.config/jj-tui/config.json"))
+	}
 	lines = append(lines, "")
 
 	// GitHub section
@@ -159,9 +169,12 @@ func (r *Renderer) Settings(data SettingsData) string {
 	lines = append(lines, "")
 
 	// Action buttons
-	saveButton := r.Zone.Mark(ZoneSettingsSave, ButtonStyle.Render("Save (Ctrl+S)"))
+	saveButton := r.Zone.Mark(ZoneSettingsSave, ButtonStyle.Render("Save Global (Ctrl+S)"))
+	saveLocalButton := r.Zone.Mark(ZoneSettingsSaveLocal, ButtonStyle.Render("Save Local (Ctrl+L)"))
 	cancelButton := r.Zone.Mark(ZoneSettingsCancel, ButtonStyle.Render("Cancel (Esc)"))
-	lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Left, saveButton, " ", cancelButton))
+	lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Left, saveButton, " ", saveLocalButton, " ", cancelButton))
+	lines = append(lines, "")
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Italic(true).Render("  Local config: .jj-tui.json in repo root (per-repo settings)"))
 
 	return strings.Join(lines, "\n")
 }

@@ -764,3 +764,109 @@ func (m *Model) saveSettings() tea.Cmd {
 	}
 }
 
+// saveSettingsLocal saves settings to the local .jj-tui.json file in the current directory
+func (m *Model) saveSettingsLocal() tea.Cmd {
+	// Get values from inputs (same as saveSettings)
+	githubToken := strings.TrimSpace(m.settingsInputs[0].Value())
+	jiraURL := strings.TrimSpace(m.settingsInputs[1].Value())
+	jiraUser := strings.TrimSpace(m.settingsInputs[2].Value())
+	jiraToken := strings.TrimSpace(m.settingsInputs[3].Value())
+
+	var codecksSubdomain, codecksToken, codecksProject string
+	if len(m.settingsInputs) > 6 {
+		codecksSubdomain = strings.TrimSpace(m.settingsInputs[4].Value())
+		codecksToken = strings.TrimSpace(m.settingsInputs[5].Value())
+		codecksProject = strings.TrimSpace(m.settingsInputs[6].Value())
+	}
+
+	return func() tea.Msg {
+		// Set environment variables for the current process
+		if githubToken != "" {
+			os.Setenv("GITHUB_TOKEN", githubToken)
+		}
+		if jiraURL != "" {
+			os.Setenv("JIRA_URL", jiraURL)
+		}
+		if jiraUser != "" {
+			os.Setenv("JIRA_USER", jiraUser)
+		}
+		if jiraToken != "" {
+			os.Setenv("JIRA_TOKEN", jiraToken)
+		}
+		if codecksSubdomain != "" {
+			os.Setenv("CODECKS_SUBDOMAIN", codecksSubdomain)
+		}
+		if codecksToken != "" {
+			os.Setenv("CODECKS_TOKEN", codecksToken)
+		}
+		if codecksProject != "" {
+			os.Setenv("CODECKS_PROJECT", codecksProject)
+		} else {
+			os.Unsetenv("CODECKS_PROJECT")
+		}
+
+		// Determine ticket provider based on what's configured
+		var ticketProvider string
+		if codecksSubdomain != "" && codecksToken != "" {
+			ticketProvider = "codecks"
+		} else if jiraURL != "" && jiraUser != "" && jiraToken != "" {
+			ticketProvider = "jira"
+		}
+
+		// Create config with only the fields that should be saved locally
+		cfg := &config.Config{
+			TicketProvider:   ticketProvider,
+			CodecksProject:   codecksProject,
+		}
+
+		// Only include credentials if the user explicitly entered them
+		// (typically you'd keep tokens in global config, but allow override)
+		if githubToken != "" {
+			cfg.GitHubToken = githubToken
+		}
+		if jiraURL != "" {
+			cfg.JiraURL = jiraURL
+		}
+		if jiraUser != "" {
+			cfg.JiraUser = jiraUser
+		}
+		if jiraToken != "" {
+			cfg.JiraToken = jiraToken
+		}
+		if codecksSubdomain != "" {
+			cfg.CodecksSubdomain = codecksSubdomain
+		}
+		if codecksToken != "" {
+			cfg.CodecksToken = codecksToken
+		}
+
+		// Save to local config file
+		if err := cfg.SaveLocal(); err != nil {
+			return settingsSavedMsg{
+				err: err,
+			}
+		}
+
+		var githubConnected bool
+		var ticketSvc tickets.Service
+
+		// Try to initialize services
+		if githubToken != "" {
+			githubConnected = true
+		}
+
+		if ticketProvider == "codecks" && codecks.IsConfigured() {
+			ticketSvc, _ = codecks.NewService()
+		} else if ticketProvider == "jira" && jira.IsConfigured() {
+			ticketSvc, _ = jira.NewService()
+		}
+
+		return settingsSavedMsg{
+			githubConnected: githubConnected,
+			ticketService:   ticketSvc,
+			ticketProvider:  ticketProvider,
+			savedLocal:      true,
+		}
+	}
+}
+

@@ -256,6 +256,51 @@ The application automatically detects:
 - User preferences from jj config
 - Credentials from environment variables or in-app settings
 
+### Config File Locations
+
+jj-tui supports multiple configuration files with the following priority (highest to lowest):
+
+1. **`JJ_TUI_CONFIG` environment variable** - Custom config file path
+2. **`.jj-tui.json`** - Per-repo config in current directory
+3. **`~/.config/jj-tui/config.json`** - Global config
+
+Local config values **merge with and override** global config values. This allows you to:
+- Keep sensitive tokens (GitHub, Jira, Codecks) in the global config
+- Override project-specific settings (like `codecks_project`) per-repo
+
+### Per-Repo Configuration
+
+Create a `.jj-tui.json` in your repository root to customize settings for that repo:
+
+```json
+{
+  "ticket_provider": "codecks",
+  "codecks_project": "My Project Name"
+}
+```
+
+You can also share configs across similar repos using the environment variable:
+
+```bash
+export JJ_TUI_CONFIG=/path/to/shared-config.json
+jj-tui
+```
+
+### Config File Format
+
+```json
+{
+  "github_token": "ghp_...",
+  "ticket_provider": "codecks",
+  "jira_url": "https://company.atlassian.net",
+  "jira_user": "user@example.com",
+  "jira_token": "...",
+  "codecks_subdomain": "myteam",
+  "codecks_token": "...",
+  "codecks_project": "Project Name"
+}
+```
+
 ## Development
 
 ### Project Structure
