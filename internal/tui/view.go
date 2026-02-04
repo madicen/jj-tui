@@ -47,21 +47,23 @@ func (m *Model) View() string {
 			}
 			m.viewport.Height = availableHeight
 
+			// Save scroll position before SetContent (which resets YOffset)
+			savedYOffset := m.viewport.YOffset
+
 			// Put only the scrollable list in the viewport
 			m.viewport.SetContent(scrollableList)
 
-			// Ensure the selected item is visible by adjusting YOffset
-			var selectedLine int
-			if m.viewMode == ViewPullRequests {
-				selectedLine = m.selectedPR
-			} else if m.viewMode == ViewJira {
-				selectedLine = m.selectedTicket
+			// Restore scroll position and clamp to valid range
+			m.viewport.YOffset = savedYOffset
+			maxOffset := m.viewport.TotalLineCount() - availableHeight
+			if maxOffset < 0 {
+				maxOffset = 0
 			}
-			// Scroll to keep selected item in view
-			if selectedLine < m.viewport.YOffset {
-				m.viewport.YOffset = selectedLine
-			} else if selectedLine >= m.viewport.YOffset+availableHeight {
-				m.viewport.YOffset = selectedLine - availableHeight + 1
+			if m.viewport.YOffset > maxOffset {
+				m.viewport.YOffset = maxOffset
+			}
+			if m.viewport.YOffset < 0 {
+				m.viewport.YOffset = 0
 			}
 
 			viewportContent := m.viewport.View()
@@ -183,8 +185,25 @@ func (m *Model) View() string {
 		}
 		m.viewport.Height = fullContentHeight
 
+		// Save scroll position before SetContent (which resets YOffset)
+		savedYOffset := m.viewport.YOffset
+
 		content := m.renderContent()
 		m.viewport.SetContent(content)
+
+		// Restore scroll position and clamp to valid range
+		m.viewport.YOffset = savedYOffset
+		maxOffset := m.viewport.TotalLineCount() - fullContentHeight
+		if maxOffset < 0 {
+			maxOffset = 0
+		}
+		if m.viewport.YOffset > maxOffset {
+			m.viewport.YOffset = maxOffset
+		}
+		if m.viewport.YOffset < 0 {
+			m.viewport.YOffset = 0
+		}
+
 		viewportContent := m.viewport.View()
 
 		v = lipgloss.JoinVertical(
