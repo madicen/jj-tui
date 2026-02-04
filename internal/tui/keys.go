@@ -20,11 +20,11 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.loading = true
 			return m, m.loadRepository()
 		case "esc":
-			// Clear error and go back to graph
+			// Clear error and go back to graph, restart auto-refresh
 			m.err = nil
 			m.viewMode = ViewCommitGraph
 			m.statusMessage = "Error dismissed"
-			return m, nil
+			return m, m.tickCmd()
 		case "i":
 			// Initialize jj repo if not already one
 			if m.notJJRepo {

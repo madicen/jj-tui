@@ -74,6 +74,17 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 			return m, m.createNewCommit()
 		}
 	}
+	if m.zone.Get(ZoneActionCopyError) == zoneInfo {
+		// Copy error to clipboard (works with m.err or status message errors)
+		m.statusMessage = "Copying error to clipboard..."
+		return m, m.copyErrorToClipboard()
+	}
+	if m.zone.Get(ZoneActionDismissError) == zoneInfo {
+		// Dismiss/clear the error and restart auto-refresh
+		m.err = nil
+		m.statusMessage = "Ready"
+		return m, m.tickCmd()
+	}
 
 	// Check commit zones
 	if m.repository != nil {

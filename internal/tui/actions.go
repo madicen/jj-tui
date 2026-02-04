@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
+	"runtime"
 	"strings"
 	"time"
 
@@ -14,6 +16,57 @@ import (
 	"github.com/madicen/jj-tui/internal/models"
 	"github.com/madicen/jj-tui/internal/tickets"
 )
+
+// clipboardCopiedMsg is sent when content has been copied to clipboard
+type clipboardCopiedMsg struct {
+	success bool
+	err     error
+}
+
+// copyToClipboard copies text to the system clipboard
+func copyToClipboard(text string) tea.Cmd {
+	return func() tea.Msg {
+		var cmd *exec.Cmd
+
+		switch runtime.GOOS {
+		case "darwin":
+			cmd = exec.Command("pbcopy")
+		case "linux":
+			// Try xclip first, then xsel
+			if _, err := exec.LookPath("xclip"); err == nil {
+				cmd = exec.Command("xclip", "-selection", "clipboard")
+			} else if _, err := exec.LookPath("xsel"); err == nil {
+				cmd = exec.Command("xsel", "--clipboard", "--input")
+			} else {
+				return clipboardCopiedMsg{success: false, err: fmt.Errorf("no clipboard utility found (install xclip or xsel)")}
+			}
+		case "windows":
+			cmd = exec.Command("clip")
+		default:
+			return clipboardCopiedMsg{success: false, err: fmt.Errorf("clipboard not supported on %s", runtime.GOOS)}
+		}
+
+		cmd.Stdin = strings.NewReader(text)
+		if err := cmd.Run(); err != nil {
+			return clipboardCopiedMsg{success: false, err: err}
+		}
+
+		return clipboardCopiedMsg{success: true}
+	}
+}
+
+// copyErrorToClipboard copies the current error message to clipboard
+func (m *Model) copyErrorToClipboard() tea.Cmd {
+	// Copy actual error if available, otherwise copy the status message
+	if m.err != nil {
+		return copyToClipboard(m.err.Error())
+	}
+	// Fall back to status message if it contains an error
+	if strings.Contains(strings.ToLower(m.statusMessage), "error") {
+		return copyToClipboard(m.statusMessage)
+	}
+	return nil
+}
 
 // createNewCommit creates a new commit
 func (m *Model) createNewCommit() tea.Cmd {

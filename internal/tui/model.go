@@ -538,7 +538,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.repository = msg.repository
 		m.repository.PRs = oldPRs // Restore PRs
 		m.loading = false
-		m.err = nil
+		// Don't clear m.err here - let errors persist until dismissed
 		if m.jjService == nil {
 			// First load - set the service
 			jjSvc, _ := jj.NewService("")
@@ -564,7 +564,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.repository = msg.repository
 		m.repository.PRs = oldPRs // Restore PRs
 		m.loading = false
-		m.err = nil
+		// Don't clear m.err here - let errors persist until dismissed
 		// Find and select the working copy commit
 		for i, commit := range msg.repository.Graph.Commits {
 			if commit.IsWorking {
@@ -586,7 +586,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.repository = msg.repository
 			m.repository.PRs = oldPRs // Restore PRs
-			m.err = nil
+			// Don't clear m.err here - let errors persist until dismissed
 			// Only update status if commit count changed
 			newCount := len(msg.repository.Graph.Commits)
 			if newCount != oldCount {
@@ -608,11 +608,20 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.currentPath = msg.currentPath
 		m.loading = false
 		m.statusMessage = fmt.Sprintf("Error: %v", msg.err)
-		return m, m.tickCmd() // Continue auto-refresh even on error
-	
+		// Don't continue auto-refresh on error - let user dismiss or manually refresh
+		return m, nil
+
+	case clipboardCopiedMsg:
+		if msg.success {
+			m.statusMessage = "Error copied to clipboard!"
+		} else {
+			m.statusMessage = fmt.Sprintf("Failed to copy: %v", msg.err)
+		}
+		return m, nil
+
 	case jjInitSuccessMsg:
 		m.notJJRepo = false
-		m.err = nil
+		// Don't clear m.err here - let errors persist until user dismisses them
 		m.statusMessage = "Repository initialized! Loading..."
 		return m, m.initializeServices()
 
@@ -622,7 +631,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ticketService = msg.ticketService
 		m.repository = msg.repository
 		m.loading = false
-		m.err = nil
+		// Don't clear m.err here - let errors persist until user dismisses them
 		m.statusMessage = fmt.Sprintf("Loaded %d commits", len(msg.repository.Graph.Commits))
 		if m.githubService != nil {
 			m.statusMessage += " (GitHub connected)"
@@ -777,6 +786,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tickMsg:
+		// Stop auto-refresh if there's an error - let user handle it
+		if m.err != nil {
+			return m, nil
+		}
 		// Auto-refresh: reload repository data silently (but not while editing, creating PR, or creating bookmark)
 		if !m.loading && m.jjService != nil && m.viewMode != ViewEditDescription && m.viewMode != ViewCreatePR && m.viewMode != ViewCreateBookmark {
 			return m, tea.Batch(m.loadRepositorySilent(), m.tickCmd())

@@ -490,6 +490,10 @@ func (m *Model) renderStatusBar() string {
 		status = "⏳ " + status
 	}
 
+	// Sanitize status message: remove newlines and truncate if needed
+	status = strings.ReplaceAll(status, "\n", " ")
+	status = strings.ReplaceAll(status, "\r", "")
+
 	// Show scroll position if content is scrollable
 	scrollIndicator := ""
 	if m.viewportReady && m.viewport.TotalLineCount() > m.viewport.Height {
@@ -504,7 +508,42 @@ func (m *Model) renderStatusBar() string {
 		m.zone.Mark(ZoneActionRefresh, "ctrl+r:refresh"),
 	}
 
+	// Add error action buttons if there's an error (check both m.err and status message)
+	hasError := m.err != nil || strings.Contains(strings.ToLower(m.statusMessage), "error")
+	if hasError {
+		copyBtn := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FF6B6B")).
+			Bold(true).
+			Render("[Copy]")
+		dismissBtn := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#888888")).
+			Bold(true).
+			Render("[X]")
+		shortcuts = append(shortcuts, " ", m.zone.Mark(ZoneActionCopyError, copyBtn), " ", m.zone.Mark(ZoneActionDismissError, dismissBtn))
+	}
+
 	shortcutsStr := lipgloss.JoinHorizontal(lipgloss.Left, shortcuts...)
+
+	// Calculate available space for status message
+	// Reserve space for: scroll indicator + shortcuts + padding
+	reservedWidth := lipgloss.Width(scrollIndicator) + lipgloss.Width(shortcutsStr) + 4
+	maxStatusWidth := m.width - reservedWidth
+	if maxStatusWidth < 20 {
+		maxStatusWidth = 20
+	}
+
+	// Truncate status if too long
+	if lipgloss.Width(status) > maxStatusWidth {
+		// Truncate and add ellipsis
+		truncated := ""
+		for _, r := range status {
+			if lipgloss.Width(truncated+"…") >= maxStatusWidth {
+				break
+			}
+			truncated += string(r)
+		}
+		status = truncated + "…"
+	}
 
 	// Layout: status on left, shortcuts on right
 	padding := m.width - lipgloss.Width(status) - lipgloss.Width(scrollIndicator) - lipgloss.Width(shortcutsStr) - 2

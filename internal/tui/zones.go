@@ -17,7 +17,9 @@ const (
 	// Status bar action zones
 	ZoneActionQuit      = "zone:action:quit"
 	ZoneActionRefresh   = "zone:action:refresh"
-	ZoneActionNewCommit = "zone:action:newcommit"
+	ZoneActionNewCommit    = "zone:action:newcommit"
+	ZoneActionCopyError    = "zone:action:copyerror"
+	ZoneActionDismissError = "zone:action:dismisserror"
 
 	// Commit action zones
 	ZoneActionCheckout = "zone:action:checkout"
