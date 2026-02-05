@@ -11,13 +11,18 @@ A modern Terminal User Interface (TUI) for managing [Jujutsu](https://github.com
 ## Features
 
 - **Visual Commit Graph**: Navigate and visualize your commit history with tree structure
+- **Split-Pane View**: Graph and changed files in separate scrollable panes with click-to-focus
 - **Changed Files View**: See files modified in the selected commit with a nested folder structure
 - **Keyboard & Mouse Support**: Full keyboard navigation with zone-based mouse support for clickable UI elements
 - **GitHub Integration**: Create and manage GitHub Pull Requests directly from the TUI
+- **GitHub Device Flow**: Login to GitHub via browser - no token copying required
 - **Ticket Integration**: View assigned tickets from Jira or Codecks and create branches with auto-populated names
 - **Commit Management**: Edit, squash, describe, abandon, rebase, and manage commits with simple key presses
+- **New Commits from Immutable Parents**: Create new commits based on `main` or other immutable commits
 - **Bookmark Management**: Create, move, and delete bookmarks on commits
 - **Immutable Commit Detection**: Automatically detects and protects immutable commits (pushed to remote)
+- **Repository Cleanup Tools**: Abandon old commits, delete all bookmarks, track remote branches
+- **Auto-Initialize**: Prompt to run `jj git init` when opening a non-jj repository
 - **Real-time Updates**: Auto-refresh repository state and see changes immediately
 - **Modern UI**: Beautiful styling with colors, borders, and responsive layouts
 
@@ -108,10 +113,18 @@ jj-tui /path/to/your/jj/repo
 
 ### Commit Graph View
 
-- `↑/↓`, `j/k`: Navigate commits
+The graph view has two panes: the commit graph (left) and changed files (right). Click on either pane to focus it, or use keyboard navigation.
+
+**Navigation:**
+- `↑/↓`, `j/k`: Navigate commits (graph pane) or scroll (files pane)
+- `Tab`: Switch focus between graph and files panes
+- **Click** on a pane to focus it
+- **Mouse scroll** works on the focused pane
+
+**Commit Actions:**
 - `e`, `Enter`: Edit selected commit (checkout with `jj edit`)
 - `s`: Squash selected commit into parent
-- `n`: Create new commit
+- `n`: Create new commit (works even on immutable commits like `main`)
 - `d`: Edit commit description
 - `a`: Abandon commit
 - `r`: Rebase selected commit
@@ -135,12 +148,23 @@ jj-tui /path/to/your/jj/repo
 
 ### Settings View
 
+- `Ctrl+J`: Previous sub-tab (GitHub, Jira, Codecks, Advanced)
+- `Ctrl+K`: Next sub-tab
 - `Tab`, `↓`: Move to next field
 - `Shift+Tab`, `↑`: Move to previous field
 - `Enter`: Move to next field (or save if on last field)
-- `Ctrl+S`: Save settings
+- `Ctrl+S`: Save settings globally
+- `Ctrl+L`: Save settings to local `.jj-tui.json`
 - `Esc`: Cancel and return to graph
-- **Click** on any field to focus it
+- **Click** on any field or tab to focus/select it
+
+### Advanced Settings
+
+The Advanced tab in Settings provides repository cleanup tools:
+
+- **Delete All Bookmarks**: Remove all bookmarks in the repository
+- **Abandon Old Commits**: Abandon all mutable commits (useful for cleaning up after merging PRs)
+- **Track origin/main**: Fetch and track the remote main branch
 
 ## Settings
 
@@ -319,22 +343,31 @@ jj-tui/
 │   │   └── service.go
 │   ├── tickets/            # Generic ticket service interface
 │   │   └── interface.go
+│   ├── config/             # Configuration management
+│   │   └── config.go
 │   ├── models/             # Data models
 │   │   └── commit.go
 │   └── tui/                # Terminal UI components
-│       ├── model.go        # Main application model
-│       ├── view.go         # View rendering
-│       ├── keys.go         # Keyboard handlers
-│       ├── mouse.go        # Mouse handlers
-│       ├── actions.go      # Business logic actions
-│       ├── messages.go     # Event message types
-│       ├── zones.go        # Clickable zone ID constants
-│       ├── styles.go       # UI styling with lipgloss
+│       ├── tui.go          # Public facade (re-exports from model/)
+│       ├── model/          # Core TUI model
+│       │   ├── model.go    # Main application model
+│       │   ├── view.go     # View rendering
+│       │   ├── keys.go     # Keyboard handlers
+│       │   ├── mouse.go    # Mouse handlers
+│       │   ├── actions.go  # Business logic actions
+│       │   ├── commands.go # Async commands
+│       │   ├── cleanup.go  # Repository cleanup actions
+│       │   ├── messages.go # Event message types
+│       │   ├── zones.go    # Clickable zone ID constants
+│       │   └── styles.go   # UI styling
+│       ├── actions/        # Action handlers
+│       │   └── *.go
 │       └── view/           # View renderers
 │           ├── renderer.go
 │           ├── graph.go
 │           ├── prs.go
 │           ├── jira.go
+│           ├── settings.go
 │           ├── bookmark.go
 │           └── help.go
 ├── integration_tests/      # Integration tests
@@ -382,16 +415,17 @@ go test ./integration_tests/ -v
 The application supports these key user workflows:
 
 ### 1. Commit Navigation
-- View commit history in a visual graph
-- Navigate with keyboard shortcuts
+- View commit history in a visual graph with split-pane layout
+- Navigate with keyboard shortcuts or mouse
 - See commit details, authors, and timestamps
-- View changed files for each commit
+- View changed files for each commit in a separate scrollable pane
+- Click to switch focus between graph and files panes
 
 ### 2. Commit Management
 - Edit commits (checkout with `jj edit`)
 - Squash commits into their parents
 - Rebase commits onto different parents
-- Create new commits
+- Create new commits (including from immutable parents like `main`)
 - Immutable commit protection (cannot modify pushed commits)
 
 ### 3. Bookmark Management
@@ -401,9 +435,10 @@ The application supports these key user workflows:
 
 ### 4. Pull Request Workflow
 - Create GitHub PRs from commits with bookmarks
-- View existing PRs with status
+- View existing PRs with status and descriptions
 - Update PRs by pushing new commits
 - Push from descendant commits (bookmark auto-moves)
+- Login to GitHub via browser (Device Flow) - no token copying needed
 
 ### 5. Ticket Integration (Jira & Codecks)
 - View assigned tickets from Jira or Codecks cards
@@ -411,12 +446,20 @@ The application supports these key user workflows:
 - PR titles auto-populated from ticket info
 - Commit descriptions pre-populated with ticket IDs (Codecks)
 - Open tickets directly in browser
+- Consistent layout with description placeholders
 
 ### 6. Repository Monitoring
 - Real-time repository state updates
 - Conflict detection and display
 - Bookmark visualization
 - Working copy indicator
+
+### 7. Repository Setup & Cleanup
+- Auto-detect non-jj repositories and offer to initialize
+- Initialize with `jj git init` and automatically track `main@origin`
+- Abandon old commits after merging PRs
+- Delete all bookmarks for fresh start
+- Track/fetch remote branches
 
 ## Contributing
 
