@@ -145,3 +145,8 @@ type cleanupCompletedMsg struct {
 	message string
 	err     error
 }
+
+// undoCompletedMsg is sent when an undo/redo operation completes
+type undoCompletedMsg struct {
+	message string
+}

@@ -20,6 +20,8 @@ const (
 	ZoneActionNewCommit    = "zone:action:newcommit"
 	ZoneActionCopyError    = "zone:action:copyerror"
 	ZoneActionDismissError = "zone:action:dismisserror"
+	ZoneActionUndo         = "zone:action:undo"
+	ZoneActionRedo         = "zone:action:redo"
 
 	// Commit action zones
 	ZoneActionCheckout = "zone:action:checkout"

@@ -627,6 +627,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.statusMessage = fmt.Sprintf("Cleanup failed: %v", msg.err)
 		return m, nil
+
+	case undoCompletedMsg:
+		m.statusMessage = msg.message
+		// Reload repository after undo/redo
+		return m, m.refreshRepository()
 	}
 
 	return m, nil

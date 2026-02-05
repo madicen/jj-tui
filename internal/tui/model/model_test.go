@@ -528,11 +528,11 @@ func TestStatusBarContent(t *testing.T) {
 
 	view := m.View()
 
-	if !containsString(view, "ctrl+q:quit") {
-		t.Error("Status bar should contain 'ctrl+q:quit'")
+	if !containsString(view, "^q quit") {
+		t.Error("Status bar should contain '^q quit'")
 	}
-	if !containsString(view, "ctrl+r:refresh") {
-		t.Error("Status bar should contain 'ctrl+r:refresh'")
+	if !containsString(view, "^r refresh") {
+		t.Error("Status bar should contain '^r refresh'")
 	}
 }
 

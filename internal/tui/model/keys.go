@@ -138,6 +138,18 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "ctrl+r":
 		return m, m.refreshRepository()
+	case "ctrl+z":
+		// Undo last jj operation
+		if m.jjService != nil {
+			m.statusMessage = "Undoing last operation..."
+			return m, m.undoOperation()
+		}
+	case "ctrl+y":
+		// Redo (undo the undo)
+		if m.jjService != nil {
+			m.statusMessage = "Redoing operation..."
+			return m, m.redoOperation()
+		}
 	case "esc":
 		if m.viewMode != ViewCommitGraph {
 			m.viewMode = ViewCommitGraph

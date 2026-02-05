@@ -79,6 +79,18 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 		m.statusMessage = "Ready"
 		return m, m.tickCmd()
 	}
+	if m.zone.Get(ZoneActionUndo) == zoneInfo {
+		if m.jjService != nil {
+			m.statusMessage = "Undoing..."
+			return m, m.undoOperation()
+		}
+	}
+	if m.zone.Get(ZoneActionRedo) == zoneInfo {
+		if m.jjService != nil {
+			m.statusMessage = "Redoing..."
+			return m, m.redoOperation()
+		}
+	}
 
 	// Check graph view pane zones for click-to-focus
 	if m.viewMode == ViewCommitGraph {

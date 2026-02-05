@@ -105,6 +105,20 @@ func (s *Service) GetRevisionChangeID(ctx context.Context, revision string) (str
 	return strings.TrimSpace(out), nil
 }
 
+// Undo undoes the last jj operation
+func (s *Service) Undo(ctx context.Context) error {
+	return s.runJJ(ctx, "undo")
+}
+
+// Redo redoes the last undone jj operation (restores the operation before undo)
+func (s *Service) Redo(ctx context.Context) error {
+	// jj doesn't have a direct "redo" command, but "op restore" can be used
+	// to restore to a previous operation. For simplicity, we use "undo" again
+	// which effectively undoes the undo (if the last operation was an undo).
+	// A more robust solution would track operation IDs, but this works for the common case.
+	return s.runJJ(ctx, "undo")
+}
+
 // ChangedFile represents a file changed in a commit
 type ChangedFile struct {
 	Path   string // File path
