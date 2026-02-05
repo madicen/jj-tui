@@ -2,11 +2,12 @@
 
 A modern Terminal User Interface (TUI) for managing [Jujutsu](https://github.com/martinvonz/jj) repositories. Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lip Gloss](https://github.com/charmbracelet/lipgloss) for an intuitive and beautiful command-line experience.
 
-<img width="1501" height="442" alt="image" src="https://github.com/user-attachments/assets/b28b8e77-3cf6-4be4-82da-abb38b16441d" />
-<img width="1495" height="438" alt="image" src="https://github.com/user-attachments/assets/04e5c6b5-d910-4930-9e68-c6f7780d1258" />
-<img width="1495" height="441" alt="image" src="https://github.com/user-attachments/assets/d833b853-08a9-40df-aebc-62b0c4ec7b74" />
-<img width="1497" height="440" alt="image" src="https://github.com/user-attachments/assets/a2d7d142-a449-4a4f-8b01-46d9e377d81f" />
-
+<img width="1292" height="587" alt="image" src="https://github.com/user-attachments/assets/9035644c-aba6-4e63-9a9d-0af153c8c290" />
+<img width="1288" height="585" alt="image" src="https://github.com/user-attachments/assets/4bf3a935-e0b8-4516-b7b2-3ea99fd704d8" />
+<img width="1294" height="591" alt="image" src="https://github.com/user-attachments/assets/4096f42d-02ea-4549-8b96-a806ed8f2bd3" />
+<img width="1287" height="584" alt="image" src="https://github.com/user-attachments/assets/33875430-08f3-4243-85c8-91c5b4a5e4c0" />
+<img width="1292" height="587" alt="image" src="https://github.com/user-attachments/assets/b839729b-6277-40dd-a3c1-a2a690366575" />
+<img width="1292" height="587" alt="image" src="https://github.com/user-attachments/assets/b7bba41a-e6e8-4351-bbab-36fef0551dcf" />
 
 ## Features
 
