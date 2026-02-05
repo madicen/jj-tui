@@ -88,7 +88,12 @@ func createSettingsInputs(cfg *config.Config) []textinput.Model {
 	settingsInputs[0].Width = 50
 	settingsInputs[0].EchoMode = textinput.EchoPassword
 	settingsInputs[0].EchoCharacter = '•'
-	settingsInputs[0].SetValue(os.Getenv("GITHUB_TOKEN"))
+	// Load from env var first, then fall back to config
+	githubToken := os.Getenv("GITHUB_TOKEN")
+	if githubToken == "" && cfg != nil && cfg.GitHubToken != "" {
+		githubToken = cfg.GitHubToken
+	}
+	settingsInputs[0].SetValue(githubToken)
 
 	// Jira URL (index 1)
 	settingsInputs[1] = textinput.New()
@@ -164,4 +169,3 @@ func NewWithServices(ctx context.Context, jjSvc *jj.Service, ghSvc *github.Servi
 	m.githubService = ghSvc
 	return m
 }
-

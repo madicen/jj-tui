@@ -56,9 +56,26 @@ func (m *Model) initializeServices() tea.Cmd {
 		if err == nil {
 			owner, repoName, err := github.ParseGitHubURL(remoteURL)
 			if err == nil {
-				ghSvc, ghErr = github.NewService(owner, repoName)
-				// ghErr will be non-nil if GITHUB_TOKEN is not set
-				_ = ghErr // Suppress unused error - GitHub is optional
+				// Try to get GitHub token from environment variable first
+				token := os.Getenv("GITHUB_TOKEN")
+
+				// If not in env var, try to load from config
+				if token == "" {
+					cfg, _ := config.Load()
+					if cfg != nil && cfg.GitHubToken != "" {
+						token = cfg.GitHubToken
+					}
+				}
+
+				// If we have a token, try to create the service
+				if token != "" {
+					ghSvc, ghErr = github.NewServiceWithToken(owner, repoName, token)
+					if ghErr != nil {
+						// Service creation failed - this is still optional, so continue
+						ghSvc = nil
+					}
+				}
+				// If no token at all, ghSvc remains nil which is fine
 			}
 		}
 
@@ -280,7 +297,7 @@ func (m *Model) startBookmarkFromTicket(ticket tickets.Ticket) {
 	// Mark that this is coming from ticket service (will create new branch from main)
 	m.bookmarkFromJira = true // Reusing this flag for any ticket provider
 	m.bookmarkJiraTicketKey = ticket.Key
-	m.bookmarkJiraTicketTitle = ticket.Summary // Store the ticket summary for PR title
+	m.bookmarkJiraTicketTitle = ticket.Summary     // Store the ticket summary for PR title
 	m.bookmarkTicketDisplayKey = ticket.DisplayKey // Store short ID for commit messages
 	m.bookmarkCommitIdx = -1                       // -1 means create new branch from main
 	m.existingBookmarks = nil                      // Don't show existing bookmarks for ticket flow
@@ -389,4 +406,3 @@ func (m *Model) runJJInit() tea.Cmd {
 		return jjInitSuccessMsg{}
 	}
 }
-
