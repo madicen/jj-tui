@@ -474,7 +474,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseMsg:
 		// Handle mouse wheel scrolling
 		if msg.Action == tea.MouseActionPress && (msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown) {
-			// Let the viewport handle scrolling directly - it knows its own height
+			// For graph view, scroll the focused pane
+			if m.viewMode == ViewCommitGraph {
+				if m.graphFocused {
+					// Scroll graph pane
+					var cmd tea.Cmd
+					m.viewport, cmd = m.viewport.Update(msg)
+					return m, cmd
+				} else {
+					// Scroll files pane
+					var cmd tea.Cmd
+					m.filesViewport, cmd = m.filesViewport.Update(msg)
+					return m, cmd
+				}
+			}
+			// For other views, let the viewport handle scrolling directly
 			var cmd tea.Cmd
 			m.viewport, cmd = m.viewport.Update(msg)
 			return m, cmd

@@ -132,3 +132,37 @@ func (m *Model) ensureSelectionVisible(selectedLine int) {
 	}
 }
 
+// ensureGraphCommitVisible scrolls the graph viewport to keep the selected commit visible
+// This is called after keyboard navigation changes the commit selection
+// The +1 accounts for the focus indicator header line in the graph content
+func (m *Model) ensureGraphCommitVisible(commitIndex int) {
+	viewportHeight := m.viewport.Height
+	if viewportHeight <= 0 {
+		return
+	}
+
+	// Account for the focus indicator header line
+	adjustedLine := commitIndex + 1
+
+	// If selection is above visible area, scroll up
+	if adjustedLine < m.viewport.YOffset {
+		m.viewport.YOffset = adjustedLine
+	}
+	// If selection is below visible area, scroll down
+	if adjustedLine >= m.viewport.YOffset+viewportHeight {
+		m.viewport.YOffset = adjustedLine - viewportHeight + 1
+	}
+
+	// Clamp to valid range
+	maxOffset := m.viewport.TotalLineCount() - viewportHeight
+	if maxOffset < 0 {
+		maxOffset = 0
+	}
+	if m.viewport.YOffset > maxOffset {
+		m.viewport.YOffset = maxOffset
+	}
+	if m.viewport.YOffset < 0 {
+		m.viewport.YOffset = 0
+	}
+}
+

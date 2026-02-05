@@ -63,6 +63,10 @@ const (
 
 	// Push action zone
 	ZoneActionPush = "zone:action:push"
+
+	// Graph view pane zones (for click-to-focus)
+	ZoneGraphPane = "zone:graph:pane"
+	ZoneFilesPane = "zone:files:pane"
 )
 
 // ZoneExistingBookmark returns the zone ID for an existing bookmark at the given index

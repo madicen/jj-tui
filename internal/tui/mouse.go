@@ -86,6 +86,24 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 		return m, m.tickCmd()
 	}
 
+	// Check graph view pane zones for click-to-focus
+	if m.viewMode == ViewCommitGraph {
+		if m.zone.Get(ZoneGraphPane) == zoneInfo {
+			if !m.graphFocused {
+				m.graphFocused = true
+				m.statusMessage = "Graph pane focused"
+			}
+			return m, nil
+		}
+		if m.zone.Get(ZoneFilesPane) == zoneInfo {
+			if m.graphFocused {
+				m.graphFocused = false
+				m.statusMessage = "Files pane focused"
+			}
+			return m, nil
+		}
+	}
+
 	// Check commit zones
 	if m.repository != nil {
 		for i := range m.repository.Graph.Commits {

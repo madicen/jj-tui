@@ -186,6 +186,8 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				// Navigate commits in graph pane
 				if m.repository != nil && m.selectedCommit < len(m.repository.Graph.Commits)-1 {
 					m.selectedCommit++
+					// Scroll viewport to keep selection visible
+					m.ensureGraphCommitVisible(m.selectedCommit)
 					// Load changed files for the newly selected commit
 					commit := m.repository.Graph.Commits[m.selectedCommit]
 					m.changedFilesCommitID = commit.ChangeID
@@ -217,6 +219,8 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				// Navigate commits in graph pane
 				if m.selectedCommit > 0 && m.repository != nil {
 					m.selectedCommit--
+					// Scroll viewport to keep selection visible
+					m.ensureGraphCommitVisible(m.selectedCommit)
 					// Load changed files for the newly selected commit
 					commit := m.repository.Graph.Commits[m.selectedCommit]
 					m.changedFilesCommitID = commit.ChangeID

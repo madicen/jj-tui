@@ -53,6 +53,10 @@ const (
 	// Init button zone (shown when not in a jj repo)
 	ZoneActionJJInit = "zone:action:jj_init"
 
+	// Graph view pane zones (for click-to-focus)
+	ZoneGraphPane = "zone:graph:pane"
+	ZoneFilesPane = "zone:files:pane"
+
 	// Jira action zones
 	ZoneJiraCreateBranch = "zone:jira:createbranch"
 	ZoneJiraOpenBrowser  = "zone:jira:openbrowser"

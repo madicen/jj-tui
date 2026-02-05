@@ -123,16 +123,26 @@ func (m *Model) View() string {
 
 		// Set up graph viewport
 		m.viewport.Height = graphHeight
-		
+
+		// Save scroll position before SetContent (which resets YOffset)
+		savedGraphOffset := m.viewport.YOffset
+
 		// Always set content if we have valid graph content (even during loading, to avoid stale content from other views)
 		if graphResult.GraphContent != "" {
-			// Save scroll position during loading refresh
-			savedYOffset := m.viewport.YOffset
 			m.viewport.SetContent(graphResult.GraphContent)
-			if m.loading {
-				// Restore scroll position during loading to prevent jitter
-				m.viewport.YOffset = savedYOffset
-			}
+		}
+
+		// Restore scroll position and clamp to valid range
+		m.viewport.YOffset = savedGraphOffset
+		maxGraphOffset := m.viewport.TotalLineCount() - graphHeight
+		if maxGraphOffset < 0 {
+			maxGraphOffset = 0
+		}
+		if m.viewport.YOffset > maxGraphOffset {
+			m.viewport.YOffset = maxGraphOffset
+		}
+		if m.viewport.YOffset < 0 {
+			m.viewport.YOffset = 0
 		}
 
 		// Set up files viewport - show placeholder if no files yet
@@ -141,21 +151,22 @@ func (m *Model) View() string {
 		if filesContent == "" {
 			filesContent = lipgloss.NewStyle().Foreground(lipgloss.Color("#666666")).Render("  Loading changed files...")
 		}
+
+		// Save scroll position before SetContent
 		savedFilesOffset := m.filesViewport.YOffset
 		m.filesViewport.SetContent(filesContent)
-		if m.loading {
-			m.filesViewport.YOffset = savedFilesOffset
-		}
 
-		// Ensure selected commit is visible in graph viewport (only when not loading)
-		if m.selectedCommit >= 0 && !m.loading {
-			// Account for the focus indicator header line
-			adjustedCommit := m.selectedCommit + 1
-			if adjustedCommit < m.viewport.YOffset {
-				m.viewport.YOffset = adjustedCommit
-			} else if adjustedCommit >= m.viewport.YOffset+graphHeight {
-				m.viewport.YOffset = adjustedCommit - graphHeight + 1
-			}
+		// Restore scroll position and clamp to valid range
+		m.filesViewport.YOffset = savedFilesOffset
+		maxFilesOffset := m.filesViewport.TotalLineCount() - filesHeight
+		if maxFilesOffset < 0 {
+			maxFilesOffset = 0
+		}
+		if m.filesViewport.YOffset > maxFilesOffset {
+			m.filesViewport.YOffset = maxFilesOffset
+		}
+		if m.filesViewport.YOffset < 0 {
+			m.filesViewport.YOffset = 0
 		}
 
 		// Simple separator line
@@ -163,15 +174,19 @@ func (m *Model) View() string {
 			Foreground(lipgloss.Color("#444444")).
 			Render(strings.Repeat("─", m.width-2))
 
+		// Wrap viewports in zones for click-to-focus
+		graphPane := m.zone.Mark(ZoneGraphPane, m.viewport.View())
+		filesPane := m.zone.Mark(ZoneFilesPane, m.filesViewport.View())
+
 		v = lipgloss.JoinVertical(
 			lipgloss.Left,
 			header,
 			"", // Padding line after header
-			m.viewport.View(),
+			graphPane,
 			separator,
 			actionsContent,
 			separator,
-			m.filesViewport.View(),
+			filesPane,
 			statusBar,
 		)
 	} else {
