@@ -21,6 +21,30 @@ func (m *Model) View() string {
 
 	var v string
 
+	// Handle errors first - especially "not a jj repo" which needs special UI
+	if m.err != nil {
+		headerHeight := strings.Count(header, "\n") + 1
+		statusHeight := strings.Count(statusBar, "\n") + 1
+		fullContentHeight := m.height - headerHeight - statusHeight
+		if fullContentHeight < 1 {
+			fullContentHeight = 1
+		}
+		m.viewport.Height = fullContentHeight
+
+		// Render error content (includes init button for non-jj repos)
+		errorContent := m.renderError()
+		m.viewport.SetContent(errorContent)
+		viewportContent := m.viewport.View()
+
+		v = lipgloss.JoinVertical(
+			lipgloss.Left,
+			header,
+			viewportContent,
+			statusBar,
+		)
+		return m.zone.Scan(v)
+	}
+
 	// For PR and Jira views, use split rendering with fixed header
 	if m.viewMode == ViewPullRequests || m.viewMode == ViewJira {
 		fixedHeader, scrollableList := m.renderSplitContent()
@@ -350,6 +374,7 @@ func (m *Model) renderError() string {
 		lines = append(lines, initButton)
 		lines = append(lines, "")
 		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#8B949E")).Render("This will run: jj git init"))
+		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#8B949E")).Render("and try to track main@origin if available"))
 		lines = append(lines, "")
 		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#8B949E")).Render("Press Ctrl+q to quit"))
 		

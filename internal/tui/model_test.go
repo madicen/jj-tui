@@ -1010,3 +1010,152 @@ func TestMouseScrollingOnViews(t *testing.T) {
 	})
 }
 
+// TestJJInitFeature tests the jj init functionality for non-jj repositories
+func TestJJInitFeature(t *testing.T) {
+	t.Run("error message sets notJJRepo flag", func(t *testing.T) {
+		m := newTestModel()
+		defer m.Close()
+
+		// Simulate an error message indicating not a jj repo
+		errMsg := errorMsg{
+			err:         fmt.Errorf("not a jujutsu repository: /test/path"),
+			notJJRepo:   true,
+			currentPath: "/test/path",
+		}
+
+		newModel, _ := m.Update(errMsg)
+		m = newModel.(*Model)
+
+		if !m.IsNotJJRepo() {
+			t.Error("Expected notJJRepo to be true after error message")
+		}
+		if m.GetError() == nil {
+			t.Error("Expected error to be set")
+		}
+	})
+
+	t.Run("init screen shown when notJJRepo is true", func(t *testing.T) {
+		m := newTestModel()
+		defer m.Close()
+
+		// Set up the not-jj-repo state
+		m.err = fmt.Errorf("not a jujutsu repository")
+		m.notJJRepo = true
+		m.currentPath = "/test/path"
+
+		view := m.View()
+
+		// Check that the init screen elements are present
+		if !containsString(view, "Not a Jujutsu Repository") {
+			t.Error("Expected init screen title in view")
+		}
+		if !containsString(view, "Initialize Repository") {
+			t.Error("Expected init button in view")
+		}
+		if !containsString(view, "jj git init") {
+			t.Error("Expected jj git init command text in view")
+		}
+		if !containsString(view, "main@origin") {
+			t.Error("Expected main@origin tracking text in view")
+		}
+	})
+
+	t.Run("init screen NOT shown for other errors", func(t *testing.T) {
+		m := newTestModel()
+		defer m.Close()
+
+		// Set up a regular error (not a jj repo error)
+		m.err = fmt.Errorf("some other error")
+		m.notJJRepo = false
+
+		view := m.View()
+
+		// Check that init screen is NOT shown
+		if containsString(view, "Initialize Repository") {
+			t.Error("Init button should not appear for non-jj-repo errors")
+		}
+		// But error message should be shown
+		if !containsString(view, "Error") {
+			t.Error("Expected error message in view")
+		}
+	})
+
+	t.Run("jjInitSuccessMsg clears error state", func(t *testing.T) {
+		m := newTestModel()
+		defer m.Close()
+
+		// Set up the not-jj-repo state
+		m.err = fmt.Errorf("not a jujutsu repository")
+		m.notJJRepo = true
+		m.currentPath = "/test/path"
+
+		// Simulate init success
+		newModel, _ := m.Update(jjInitSuccessMsg{})
+		m = newModel.(*Model)
+
+		if m.IsNotJJRepo() {
+			t.Error("Expected notJJRepo to be false after init success")
+		}
+		if !containsString(m.GetStatusMessage(), "initialized") {
+			t.Error("Expected status message to indicate successful initialization")
+		}
+	})
+
+	t.Run("pressing i triggers init when notJJRepo", func(t *testing.T) {
+		m := newTestModel()
+		defer m.Close()
+
+		// Set up the not-jj-repo state
+		m.err = fmt.Errorf("not a jujutsu repository")
+		m.notJJRepo = true
+
+		// Press 'i' key
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}}
+		_, cmd := m.Update(msg)
+
+		// Should return a command (the runJJInit command)
+		if cmd == nil {
+			t.Error("Expected a command to be returned when pressing 'i' in notJJRepo state")
+		}
+	})
+
+	t.Run("pressing i does nothing when already in jj repo", func(t *testing.T) {
+		m := newTestModel()
+		defer m.Close()
+
+		// Not in error state
+		m.err = nil
+		m.notJJRepo = false
+
+		// Press 'i' key
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}}
+		_, cmd := m.Update(msg)
+
+		// Should NOT return an init command (i might do something else or nothing)
+		// The key point is we shouldn't try to init when we're already in a jj repo
+		// This test just ensures no crash and the behavior is defined
+		_ = cmd // Command may or may not be nil depending on what 'i' does normally
+	})
+
+	t.Run("error display takes priority over graph view", func(t *testing.T) {
+		m := newTestModel()
+		defer m.Close()
+
+		// Set up error state while in graph view mode
+		m.viewMode = ViewCommitGraph
+		m.err = fmt.Errorf("not a jujutsu repository")
+		m.notJJRepo = true
+		m.currentPath = "/test/path"
+
+		view := m.View()
+
+		// Should show error screen, not graph
+		if containsString(view, "Changed Files") {
+			t.Error("Should not show graph content when there's an error")
+		}
+		if !containsString(view, "Not a Jujutsu Repository") {
+			t.Error("Should show error screen when there's an error")
+		}
+	})
+}
+

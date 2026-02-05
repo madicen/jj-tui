@@ -378,6 +378,14 @@ func (m *Model) runJJInit() tea.Cmd {
 				notJJRepo: true,
 			}
 		}
+
+		// Try to track main@origin (common default branch)
+		// This makes the repo more useful if it's a clone with remote tracking
+		trackCmd := exec.Command("jj", "bookmark", "track", "main@origin")
+		trackOutput, trackErr := trackCmd.CombinedOutput()
+		_ = trackOutput // Ignore output - tracking may fail if main@origin doesn't exist
+		_ = trackErr    // Ignore error - this is optional, repo init still succeeded
+
 		return jjInitSuccessMsg{}
 	}
 }
