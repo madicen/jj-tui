@@ -63,6 +63,8 @@ func (r *Renderer) Settings(data SettingsData) string {
 		lines = append(lines, r.renderJiraSettings(data)...)
 	case SettingsTabCodecks:
 		lines = append(lines, r.renderCodecksSettings(data)...)
+	case SettingsTabAdvanced:
+		lines = append(lines, r.renderAdvancedSettings(data)...)
 	}
 
 	// Connection status
@@ -98,6 +100,7 @@ func (r *Renderer) renderSettingsTabs(activeTab SettingsTab) string {
 	githubStyle := settingsTabStyle
 	jiraStyle := settingsTabStyle
 	codecksStyle := settingsTabStyle
+	advancedStyle := settingsTabStyle
 
 	switch activeTab {
 	case SettingsTabGitHub:
@@ -106,13 +109,16 @@ func (r *Renderer) renderSettingsTabs(activeTab SettingsTab) string {
 		jiraStyle = settingsTabActiveStyle
 	case SettingsTabCodecks:
 		codecksStyle = settingsTabActiveStyle
+	case SettingsTabAdvanced:
+		advancedStyle = settingsTabActiveStyle
 	}
 
 	githubTab := r.Zone.Mark(ZoneSettingsTabGitHub, githubStyle.Render("GitHub (1)"))
 	jiraTab := r.Zone.Mark(ZoneSettingsTabJira, jiraStyle.Render("Jira (2)"))
 	codecksTab := r.Zone.Mark(ZoneSettingsTabCodecks, codecksStyle.Render("Codecks (3)"))
+	advancedTab := r.Zone.Mark(ZoneSettingsTabAdvanced, advancedStyle.Render("Advanced (4)"))
 
-	return lipgloss.JoinHorizontal(lipgloss.Left, githubTab, " │ ", jiraTab, " │ ", codecksTab)
+	return lipgloss.JoinHorizontal(lipgloss.Left, githubTab, " │ ", jiraTab, " │ ", codecksTab, " │ ", advancedTab)
 }
 
 // renderGitHubSettings renders the GitHub settings content
@@ -308,6 +314,50 @@ func (r *Renderer) renderCodecksSettings(data SettingsData) []string {
 		lines = append(lines, "  "+r.Zone.Mark(ZoneSettingsCodecksExcluded, data.Inputs[8].View)+" "+clearBtn)
 	}
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Comma-separated list (e.g., done, archived)"))
+
+	return lines
+}
+
+// renderAdvancedSettings renders the Advanced/Maintenance settings tab
+func (r *Renderer) renderAdvancedSettings(data SettingsData) []string {
+	var lines []string
+
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("Advanced Maintenance"))
+	lines = append(lines, "")
+	lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#F85149")).Bold(true).Render("WARNING: Destructive operations. Use caution!"))
+	lines = append(lines, "")
+
+	// Check if confirming
+	if data.ConfirmingCleanup != "" {
+		lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("Are you sure? This cannot be undone."))
+		lines = append(lines, "")
+
+		confirmYes := r.Zone.Mark(ZoneSettingsAdvancedConfirmYes, ButtonStyle.Background(lipgloss.Color("#F85149")).Render("Yes, Confirm"))
+		confirmNo := r.Zone.Mark(ZoneSettingsAdvancedConfirmNo, ButtonStyle.Render("Cancel"))
+		lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Left, confirmYes, " ", confirmNo))
+		lines = append(lines, "")
+		lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("Press Y to confirm, N/Esc to cancel"))
+
+		return lines
+	}
+
+	// Normal operation listing
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(ColorMuted).Render("Available Operations:"))
+	lines = append(lines, "")
+
+	deleteBtn := r.Zone.Mark(ZoneSettingsAdvancedDeleteBookmarks, ButtonStyle.Render("Delete All Bookmarks"))
+	lines = append(lines, "  "+deleteBtn)
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Delete all bookmarks in this repository"))
+	lines = append(lines, "")
+
+	abandonBtn := r.Zone.Mark(ZoneSettingsAdvancedAbandonOldCommits, ButtonStyle.Render("Abandon Old Commits"))
+	lines = append(lines, "  "+abandonBtn)
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Abandon commits before origin/main"))
+	lines = append(lines, "")
+
+	trackBtn := r.Zone.Mark(ZoneSettingsAdvancedTrackOriginMain, ButtonStyle.Render("Track origin/main"))
+	lines = append(lines, "  "+trackBtn)
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Fetch and track origin/main"))
 
 	return lines
 }

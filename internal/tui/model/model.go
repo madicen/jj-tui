@@ -47,10 +47,10 @@ type Model struct {
 	changedFilesCommitID string // Which commit the files are for
 
 	// Viewports for scrollable content
-	viewport       viewport.Model // Main viewport (graph or other content)
-	filesViewport  viewport.Model // Secondary viewport for changed files in graph view
-	viewportReady  bool
-	graphFocused   bool // True if graph viewport has focus, false if files viewport
+	viewport      viewport.Model // Main viewport (graph or other content)
+	filesViewport viewport.Model // Secondary viewport for changed files in graph view
+	viewportReady bool
+	graphFocused  bool // True if graph viewport has focus, false if files viewport
 
 	// Rebase mode state
 	selectionMode      SelectionMode
@@ -66,11 +66,14 @@ type Model struct {
 	// Settings inputs
 	settingsInputs       []textinput.Model
 	settingsFocusedField int
-	settingsTab          int // 0=GitHub, 1=Jira, 2=Codecks
+	settingsTab          int // 0=GitHub, 1=Jira, 2=Codecks, 3=Advanced
 
 	// Settings toggle states (for GitHub filters)
 	settingsShowMerged bool
 	settingsShowClosed bool
+
+	// Advanced settings state
+	confirmingCleanup string // "" = not confirming, "delete_bookmarks", "abandon_old_commits", "track_origin_main"
 
 	// PR creation state
 	prTitleInput        textinput.Model
@@ -612,6 +615,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			savedLocal:      msg.SavedLocal,
 			err:             msg.Err,
 		})
+
+	case cleanupCompletedMsg:
+		m.loading = false
+		if msg.success {
+			m.statusMessage = msg.message
+			// Reload repository after successful cleanup
+			return m, m.loadRepository()
+		}
+		m.statusMessage = fmt.Sprintf("Cleanup failed: %v", msg.err)
+		return m, nil
 	}
 
 	return m, nil

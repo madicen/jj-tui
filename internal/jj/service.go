@@ -164,8 +164,8 @@ func (s *Service) CreateBranchFromMain(ctx context.Context, bookmarkName string)
 	status, _ := s.runJJOutput(ctx, "log", "-r", "@", "--no-graph", "-T", "empty")
 	isEmpty := strings.TrimSpace(status) == "true"
 
-	// Create a new commit from main
-	if err := s.runJJ(ctx, "new", "main"); err != nil {
+	// Create a new commit from main@origin (the tracked remote main)
+	if err := s.runJJ(ctx, "new", "main@origin"); err != nil {
 		return fmt.Errorf("failed to create new commit from main: %w", err)
 	}
 
@@ -311,7 +311,7 @@ func (s *Service) GetCurrentBranch(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	
+
 	branch := strings.TrimSpace(out)
 	if branch == "" {
 		// No bookmark on @, check parent
@@ -321,11 +321,11 @@ func (s *Service) GetCurrentBranch(ctx context.Context) (string, error) {
 		}
 		branch = strings.TrimSpace(out)
 	}
-	
+
 	if branch == "" {
 		return "main", nil // Default to main
 	}
-	
+
 	// If multiple bookmarks, take the first one
 	parts := strings.Split(branch, " ")
 	return parts[0], nil
@@ -389,6 +389,30 @@ func (s *Service) PushToGit(ctx context.Context, branch string) (string, error) 
 	return pushOut, nil
 }
 
+// FetchFromGit fetches updates from the remote git repository
+func (s *Service) FetchFromGit(ctx context.Context) (string, error) {
+	// Use jj git fetch to update remote bookmarks
+	args := []string{"git", "fetch"}
+	out, err := s.runJJOutput(ctx, args...)
+	if err != nil {
+		return out, fmt.Errorf("fetch failed: %w", err)
+	}
+
+	// Also run git fetch directly to ensure we get latest remote refs
+	gitFetchCmd := exec.CommandContext(ctx, "git", "fetch", "origin")
+	gitFetchCmd.Dir = s.RepoPath
+	gitOut, gitErr := gitFetchCmd.CombinedOutput()
+	if gitErr != nil {
+		// Fetch failures are usually not fatal (e.g., no new changes)
+		// Only return error if it's a real network/permission issue
+		if !strings.Contains(string(gitOut), "Fetching from") && !strings.Contains(string(gitOut), "up-to-date") {
+			out += "\nGit fetch output: " + string(gitOut)
+		}
+	}
+
+	return out, nil
+}
+
 // getCommitGraph retrieves the commit graph with real jj data
 func (s *Service) getCommitGraph(ctx context.Context) (*models.CommitGraph, error) {
 	// Use a custom template with a unique marker to separate graph prefix from data
@@ -410,11 +434,16 @@ func (s *Service) getCommitGraph(ctx context.Context) (*models.CommitGraph, erro
 	)`
 
 	// Run WITH the graph to get ASCII art (no --reversed, keep natural newest-first order)
-	// Revset: all mutable (unpushed) commits plus bookmarks - this catches sibling branches
-	out, err := s.runJJOutput(ctx, "log", "-r", "mutable() | bookmarks()", "-T", template)
+	// Revset: mutable commits (new work) and bookmarks (local and remote)
+	// Try with main@origin first (real repos), fall back without it for test/fresh repos
+	out, err := s.runJJOutput(ctx, "log", "-r", "mutable() | bookmarks() | main@origin", "-T", template)
 	if err != nil {
-		// If template fails, try simpler approach
-		return s.getCommitGraphSimple(ctx)
+		// main@origin doesn't exist (test repo or no remote), try without it
+		out, err = s.runJJOutput(ctx, "log", "-r", "mutable() | bookmarks()", "-T", template)
+		if err != nil {
+			// If template fails, try simpler approach
+			return s.getCommitGraphSimple(ctx)
+		}
 	}
 
 	commits := []models.Commit{}

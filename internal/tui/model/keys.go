@@ -494,6 +494,18 @@ func (m *Model) handleDescriptionEditKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd)
 
 // handleSettingsKeyMsg handles keys while in settings view
 func (m *Model) handleSettingsKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Handle cleanup confirmation dialog
+	if m.confirmingCleanup != "" {
+		switch msg.String() {
+		case "y", "Y":
+			return m, m.confirmCleanup()
+		case "n", "N", "esc":
+			m.cancelCleanup()
+			return m, nil
+		}
+		return m, nil
+	}
+
 	switch msg.String() {
 	case "esc":
 		// Cancel and go back
@@ -512,18 +524,27 @@ func (m *Model) handleSettingsKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Switch to Codecks tab
 		m.settingsTab = 2
 		return m, nil
+	case "4":
+		// Switch to Advanced tab
+		m.settingsTab = 3
+		return m, nil
 	case "left":
 		// Previous tab
 		m.settingsTab--
 		if m.settingsTab < 0 {
-			m.settingsTab = 2
+			m.settingsTab = 3
 		}
 		return m, nil
 	case "right":
 		// Next tab
-		m.settingsTab = (m.settingsTab + 1) % 3
+		m.settingsTab = (m.settingsTab + 1) % 4
 		return m, nil
 	case "ctrl+s", "enter":
+		// Handle Advanced tab specially
+		if m.settingsTab == 3 {
+			// Advanced tab - these don't use settings saving, they use direct actions
+			return m, nil
+		}
 		// If on a field and press enter, move to next field
 		// If on last field, save
 		if msg.String() == "enter" && m.settingsFocusedField < len(m.settingsInputs)-1 {
@@ -543,6 +564,10 @@ func (m *Model) handleSettingsKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Save settings to local .jj-tui.json
 		return m, m.saveSettingsLocal()
 	case "tab", "down":
+		// Skip tab for Advanced (no input fields)
+		if m.settingsTab == 3 {
+			return m, nil
+		}
 		// Move to next field
 		m.settingsFocusedField = (m.settingsFocusedField + 1) % len(m.settingsInputs)
 		for i := range m.settingsInputs {
@@ -554,6 +579,10 @@ func (m *Model) handleSettingsKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "shift+tab", "up":
+		// Skip tab for Advanced (no input fields)
+		if m.settingsTab == 3 {
+			return m, nil
+		}
 		// Move to previous field
 		m.settingsFocusedField--
 		if m.settingsFocusedField < 0 {
@@ -569,9 +598,13 @@ func (m *Model) handleSettingsKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Skip input handling for Advanced tab
+	if m.settingsTab == 3 {
+		return m, nil
+	}
+
 	// Pass other keys to the focused input
 	var cmd tea.Cmd
 	m.settingsInputs[m.settingsFocusedField], cmd = m.settingsInputs[m.settingsFocusedField].Update(msg)
 	return m, cmd
 }
-

@@ -15,8 +15,8 @@ const (
 	ZoneTabHelp     = "zone:tab:help"
 
 	// Status bar action zones
-	ZoneActionQuit      = "zone:action:quit"
-	ZoneActionRefresh   = "zone:action:refresh"
+	ZoneActionQuit         = "zone:action:quit"
+	ZoneActionRefresh      = "zone:action:refresh"
 	ZoneActionNewCommit    = "zone:action:newcommit"
 	ZoneActionCopyError    = "zone:action:copyerror"
 	ZoneActionDismissError = "zone:action:dismisserror"
@@ -41,11 +41,11 @@ const (
 	ZoneActionCreatePR = "zone:action:createpr"
 
 	// Bookmark creation zones
-	ZoneBookmarkName       = "zone:bookmark:name"
-	ZoneBookmarkSubmit     = "zone:bookmark:submit"
-	ZoneBookmarkCancel     = "zone:bookmark:cancel"
-	ZoneActionBookmark     = "zone:action:bookmark"
-	ZoneActionDelBookmark  = "zone:action:delbookmark"
+	ZoneBookmarkName      = "zone:bookmark:name"
+	ZoneBookmarkSubmit    = "zone:bookmark:submit"
+	ZoneBookmarkCancel    = "zone:bookmark:cancel"
+	ZoneActionBookmark    = "zone:action:bookmark"
+	ZoneActionDelBookmark = "zone:action:delbookmark"
 
 	// Push action zone
 	ZoneActionPush = "zone:action:push"
@@ -62,14 +62,22 @@ const (
 	ZoneJiraOpenBrowser  = "zone:jira:openbrowser"
 
 	// Settings sub-tab zones
-	ZoneSettingsTabGitHub  = "zone:settings:tab:github"
-	ZoneSettingsTabJira    = "zone:settings:tab:jira"
-	ZoneSettingsTabCodecks = "zone:settings:tab:codecks"
+	ZoneSettingsTabGitHub   = "zone:settings:tab:github"
+	ZoneSettingsTabJira     = "zone:settings:tab:jira"
+	ZoneSettingsTabCodecks  = "zone:settings:tab:codecks"
+	ZoneSettingsTabAdvanced = "zone:settings:tab:advanced"
+
+	// Advanced/Maintenance operations
+	ZoneSettingsAdvancedDeleteBookmarks   = "zone:settings:advanced:delete_bookmarks"
+	ZoneSettingsAdvancedAbandonOldCommits = "zone:settings:advanced:abandon_old_commits"
+	ZoneSettingsAdvancedTrackOriginMain   = "zone:settings:advanced:track_origin_main"
+	ZoneSettingsAdvancedConfirmYes        = "zone:settings:advanced:confirm_yes"
+	ZoneSettingsAdvancedConfirmNo         = "zone:settings:advanced:confirm_no"
 
 	// Settings zones
-	ZoneSettingsGitHubToken      = "zone:settings:github_token"
-	ZoneSettingsGitHubShowMerged = "zone:settings:github_show_merged"
-	ZoneSettingsGitHubShowClosed = "zone:settings:github_show_closed"
+	ZoneSettingsGitHubToken           = "zone:settings:github_token"
+	ZoneSettingsGitHubShowMerged      = "zone:settings:github_show_merged"
+	ZoneSettingsGitHubShowClosed      = "zone:settings:github_show_closed"
 	ZoneSettingsGitHubTokenClear      = "zone:settings:github_token_clear"
 	ZoneSettingsGitHubLogin           = "zone:settings:github_login"
 	ZoneSettingsJiraURL               = "zone:settings:jira_url"
@@ -112,4 +120,3 @@ func ZoneJiraTicket(index int) string {
 func ZoneExistingBookmark(index int) string {
 	return fmt.Sprintf("zone:bookmark:existing:%d", index)
 }
-

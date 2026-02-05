@@ -90,6 +90,7 @@ const (
 	SettingsTabGitHub SettingsTab = iota
 	SettingsTabJira
 	SettingsTabCodecks
+	SettingsTabAdvanced
 )
 
 // SettingsData contains data needed for settings rendering
@@ -105,6 +106,9 @@ type SettingsData struct {
 	// GitHub filter toggles
 	ShowMergedPRs bool
 	ShowClosedPRs bool
+
+	// Advanced tab state
+	ConfirmingCleanup string // "" = not confirming, "delete_bookmarks", "abandon_old_commits", "track_origin_main"
 }
 
 // InputView represents a text input for rendering
