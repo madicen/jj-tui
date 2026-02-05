@@ -119,12 +119,9 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "n":
 		if m.viewMode == ViewCommitGraph && m.jjService != nil {
 			// Create a new commit as a child of the selected commit
+			// This is valid even for immutable commits - we're creating a child, not modifying the parent
 			if m.isSelectedCommitValid() {
 				commit := m.repository.Graph.Commits[m.selectedCommit]
-				if commit.Immutable {
-					m.statusMessage = "Cannot create commit: selected commit is immutable"
-					return m, nil
-				}
 				m.statusMessage = fmt.Sprintf("Creating new commit from %s...", commit.ShortID)
 			} else {
 				m.statusMessage = "Creating new commit..."

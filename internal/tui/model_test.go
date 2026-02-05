@@ -1159,3 +1159,77 @@ func TestJJInitFeature(t *testing.T) {
 	})
 }
 
+// TestNewCommitFromImmutableParent verifies that creating a new commit
+// based on an immutable commit (like main) is allowed. This is valid
+// because we're creating a CHILD of the immutable commit, not modifying it.
+func TestNewCommitFromImmutableParent(t *testing.T) {
+	t.Run("pressing n on immutable commit creates child commit", func(t *testing.T) {
+		m := newTestModel()
+		defer m.Close()
+
+		// Set up jjService (required for 'n' key to work)
+		m.jjService = &jj.Service{RepoPath: "/test/repo"}
+
+		// Mark the first commit as immutable (like main or root())
+		m.selectedCommit = 0
+		m.repository.Graph.Commits[0].Immutable = true
+		m.repository.Graph.Commits[0].ShortID = "main"
+
+		// Press 'n' to create a new commit
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}}
+		_, cmd := m.Update(msg)
+
+		// Should return a command (not nil) - this means the action was allowed
+		if cmd == nil {
+			t.Error("Expected a command to be returned when creating commit from immutable parent")
+		}
+
+		// Status message should indicate creating new commit, NOT an error
+		if containsString(m.statusMessage, "Cannot") {
+			t.Errorf("Should not show error message, got: %s", m.statusMessage)
+		}
+		if containsString(m.statusMessage, "immutable") {
+			t.Errorf("Should not mention immutable restriction, got: %s", m.statusMessage)
+		}
+		if !containsString(m.statusMessage, "Creating new commit") {
+			t.Errorf("Expected 'Creating new commit' status, got: %s", m.statusMessage)
+		}
+	})
+
+	t.Run("new commit button visible for immutable commits", func(t *testing.T) {
+		m := newTestModel()
+		defer m.Close()
+
+		m.selectedCommit = 0
+		m.repository.Graph.Commits[0].Immutable = true
+
+		view := m.View()
+
+		// The "New (n)" button should be visible even for immutable commits
+		// because creating a child of an immutable commit is valid
+		if !containsString(view, "New (n)") {
+			t.Error("Expected 'New (n)' button to be visible for immutable commit")
+		}
+	})
+
+	t.Run("other mutating actions blocked for immutable commits", func(t *testing.T) {
+		m := newTestModel()
+		defer m.Close()
+
+		m.jjService = &jj.Service{RepoPath: "/test/repo"}
+		m.selectedCommit = 0
+		m.repository.Graph.Commits[0].Immutable = true
+
+		// Press 'd' (describe) - should be blocked
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}}
+		_, cmd := m.Update(msg)
+
+		if cmd != nil {
+			t.Error("Describe should be blocked for immutable commit")
+		}
+		if !containsString(m.statusMessage, "immutable") {
+			t.Error("Expected immutable warning for describe action")
+		}
+	})
+}
+
