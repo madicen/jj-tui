@@ -693,7 +693,7 @@ func (m *Model) renderStatusBar() string {
 
 	// Add undo/redo shortcuts in Graph view
 	if m.viewMode == ViewCommitGraph && m.jjService != nil {
-		shortcuts = append(shortcuts, " │ ", "^z undo", " │ ", "^y redo")
+		shortcuts = append(shortcuts, " │ ", m.zone.Mark(ZoneActionUndo, "^z undo"), " │ ", m.zone.Mark(ZoneActionRedo, "^y redo"))
 	}
 
 	shortcutsStr := lipgloss.JoinHorizontal(lipgloss.Left, shortcuts...)
