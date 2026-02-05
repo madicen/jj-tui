@@ -1,4 +1,4 @@
-package tui
+package model
 
 // Messages represent user actions in the TUI.
 // Tests should verify these messages are produced, not coordinates.

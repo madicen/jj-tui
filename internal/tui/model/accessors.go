@@ -1,4 +1,4 @@
-package tui
+package model
 
 import (
 	"github.com/madicen/jj-tui/internal/github"

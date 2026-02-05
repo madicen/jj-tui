@@ -1,4 +1,4 @@
-package tui
+package model
 
 import (
 	"context"
@@ -592,7 +592,7 @@ func TestErrorMsg(t *testing.T) {
 
 	m.loading = true
 
-	msg := errorMsg{err: fmt.Errorf("test error")}
+	msg := errorMsg{Err: fmt.Errorf("test error")}
 	newModel, _ := m.Update(msg)
 	m = newModel.(*Model)
 
@@ -1018,9 +1018,9 @@ func TestJJInitFeature(t *testing.T) {
 
 		// Simulate an error message indicating not a jj repo
 		errMsg := errorMsg{
-			err:         fmt.Errorf("not a jujutsu repository: /test/path"),
-			notJJRepo:   true,
-			currentPath: "/test/path",
+			Err:         fmt.Errorf("not a jujutsu repository: /test/path"),
+			NotJJRepo:   true,
+			CurrentPath: "/test/path",
 		}
 
 		newModel, _ := m.Update(errMsg)

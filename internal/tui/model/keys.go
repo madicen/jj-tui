@@ -1,4 +1,4 @@
-package tui
+package model
 
 import (
 	"fmt"
@@ -16,9 +16,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "ctrl+r":
 			m.err = nil
 			m.viewMode = ViewCommitGraph
-			m.statusMessage = "Refreshing..."
-			m.loading = true
-			return m, m.loadRepository()
+			return m, m.refreshRepository()
 		case "esc":
 			// Clear error and go back to graph, restart auto-refresh
 			m.err = nil
@@ -139,13 +137,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.startEditingDescription(commit)
 		}
 	case "ctrl+r":
-		m.statusMessage = "Refreshing..."
-		m.loading = true
-		// Always refresh PRs too if GitHub is connected (needed for Update PR button on graph)
-		if m.githubService != nil {
-			return m, tea.Batch(m.loadRepository(), m.loadPRs())
-		}
-		return m, m.loadRepository()
+		return m, m.refreshRepository()
 	case "esc":
 		if m.viewMode != ViewCommitGraph {
 			m.viewMode = ViewCommitGraph

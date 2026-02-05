@@ -1,4 +1,4 @@
-package tui
+package model
 
 import (
 	"fmt"
@@ -59,13 +59,7 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 		)
 	}
 	if m.zone.Get(ZoneActionRefresh) == zoneInfo {
-		m.statusMessage = "Refreshing..."
-		m.loading = true
-		// Always refresh PRs too if GitHub is connected (needed for Update PR button on graph)
-		if m.githubService != nil {
-			return m, tea.Batch(m.loadRepository(), m.loadPRs())
-		}
-		return m, m.loadRepository()
+		return m, m.refreshRepository()
 	}
 	if m.zone.Get(ZoneActionNewCommit) == zoneInfo {
 		// Create a new commit (same as pressing 'n')
@@ -450,9 +444,7 @@ func (m *Model) handleAction(action ActionType) (tea.Model, tea.Cmd) {
 	case ActionQuit:
 		return m, tea.Quit
 	case ActionRefresh:
-		m.statusMessage = "Refreshing..."
-		m.loading = true
-		return m, m.loadRepository()
+		return m, m.refreshRepository()
 	case ActionNewPR:
 		m.viewMode = ViewCreatePR
 	case ActionCheckout, ActionEdit:
