@@ -38,13 +38,17 @@ func (m *Model) isSelectedCommitValid() bool {
 }
 
 // refreshRepository starts a refresh of the repository data.
-// Also refreshes PRs if GitHub is connected.
+// Also refreshes PRs if GitHub is connected and tickets if ticket service is available.
 func (m *Model) refreshRepository() tea.Cmd {
 	m.statusMessage = "Refreshing..."
 	m.loading = true
+	var cmds []tea.Cmd
+	cmds = append(cmds, m.loadRepository())
 	if m.githubService != nil {
-		return tea.Batch(m.loadRepository(), m.loadPRs())
+		cmds = append(cmds, m.loadPRs())
 	}
-	return m.loadRepository()
+	if m.ticketService != nil {
+		cmds = append(cmds, m.loadTickets())
+	}
+	return tea.Batch(cmds...)
 }
-
