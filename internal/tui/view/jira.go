@@ -63,6 +63,7 @@ func (r *Renderer) Jira(data JiraData) JiraResult {
 		detailLines = append(detailLines, fmt.Sprintf("Type: %s  |  Priority: %s  |  Status: %s",
 			ticket.Type, ticket.Priority, ticket.Status,
 		))
+		// Always show description line to prevent layout shift
 		if ticket.Description != "" {
 			// Truncate description if too long
 			desc := ticket.Description
@@ -70,6 +71,8 @@ func (r *Renderer) Jira(data JiraData) JiraResult {
 				desc = desc[:150] + "..."
 			}
 			detailLines = append(detailLines, lipgloss.NewStyle().Foreground(ColorMuted).Render(desc))
+		} else {
+			detailLines = append(detailLines, lipgloss.NewStyle().Foreground(ColorMuted).Italic(true).Render("(No description)"))
 		}
 
 		detailsBox := lipgloss.NewStyle().

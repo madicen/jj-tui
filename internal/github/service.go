@@ -163,6 +163,7 @@ func (s *Service) GetPullRequests(ctx context.Context) ([]models.GitHubPR, error
 			allPRs = append(allPRs, models.GitHubPR{
 				Number:     pr.GetNumber(),
 				Title:      pr.GetTitle(),
+				Body:       pr.GetBody(),
 				URL:        pr.GetHTMLURL(),
 				State:      state,
 				BaseBranch: pr.GetBase().GetRef(),

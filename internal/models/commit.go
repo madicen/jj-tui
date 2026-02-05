@@ -33,13 +33,14 @@ type CommitGraph struct {
 
 // GitHubPR represents a GitHub Pull Request
 type GitHubPR struct {
-	Number    int    `json:"number"`
-	Title     string `json:"title"`
-	URL       string `json:"url"`
-	State     string `json:"state"`
-	BaseBranch string `json:"base_branch"`
-	HeadBranch string `json:"head_branch"`
-	CommitIDs []string `json:"commit_ids"`
+	Number     int      `json:"number"`
+	Title      string   `json:"title"`
+	Body       string   `json:"body"`
+	URL        string   `json:"url"`
+	State      string   `json:"state"`
+	BaseBranch string   `json:"base_branch"`
+	HeadBranch string   `json:"head_branch"`
+	CommitIDs  []string `json:"commit_ids"`
 }
 
 // Repository represents the current jj repository state
