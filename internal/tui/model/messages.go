@@ -138,3 +138,10 @@ type descriptionLoadedMsg struct {
 	commitID    string
 	description string
 }
+
+// cleanupCompletedMsg is sent when a cleanup operation completes
+type cleanupCompletedMsg struct {
+	success bool
+	message string
+	err     error
+}

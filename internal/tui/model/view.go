@@ -356,7 +356,7 @@ func (m *Model) renderSplitContent() (string, string) {
 // renderError renders an error message
 func (m *Model) renderError() string {
 	errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555"))
-	
+
 	// Special handling for "not a jj repo" error - show init button
 	if m.notJJRepo {
 		var lines []string
@@ -368,7 +368,7 @@ func (m *Model) renderError() string {
 		lines = append(lines, "")
 		lines = append(lines, lipgloss.NewStyle().Bold(true).Render("Would you like to initialize it?"))
 		lines = append(lines, "")
-		
+
 		// Init button
 		initButton := m.zone.Mark(ZoneActionJJInit, view.ButtonStyle.Background(lipgloss.Color("#238636")).Render("Initialize Repository (i)"))
 		lines = append(lines, initButton)
@@ -377,10 +377,10 @@ func (m *Model) renderError() string {
 		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#8B949E")).Render("and try to track main@origin if available"))
 		lines = append(lines, "")
 		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#8B949E")).Render("Press Ctrl+q to quit"))
-		
+
 		return strings.Join(lines, "\n")
 	}
-	
+
 	return errorStyle.Render(fmt.Sprintf("Error: %v\n\nPress Ctrl+r to retry, Esc to dismiss, or Ctrl+q to quit.", m.err))
 }
 
@@ -595,15 +595,16 @@ func (m *Model) renderSettings() string {
 	}
 
 	return m.renderer().Settings(view.SettingsData{
-		Inputs:         inputs,
-		FocusedField:   m.settingsFocusedField,
-		GithubService:  m.githubService != nil,
-		JiraService:    m.ticketService != nil,
-		HasLocalConfig: hasLocalConfig,
-		ConfigSource:   configSource,
-		ActiveTab:      view.SettingsTab(m.settingsTab),
-		ShowMergedPRs:  m.settingsShowMerged,
-		ShowClosedPRs:  m.settingsShowClosed,
+		Inputs:            inputs,
+		FocusedField:      m.settingsFocusedField,
+		GithubService:     m.githubService != nil,
+		JiraService:       m.ticketService != nil,
+		HasLocalConfig:    hasLocalConfig,
+		ConfigSource:      configSource,
+		ActiveTab:         view.SettingsTab(m.settingsTab),
+		ShowMergedPRs:     m.settingsShowMerged,
+		ShowClosedPRs:     m.settingsShowClosed,
+		ConfirmingCleanup: m.confirmingCleanup,
 	})
 }
 

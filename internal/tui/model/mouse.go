@@ -327,7 +327,6 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 			return m, openURL(ticketURL)
 		}
 	}
-
 	// Settings input field clicks
 	if m.viewMode == ViewSettings {
 		// Settings sub-tabs
@@ -341,6 +340,40 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 		}
 		if m.zone.Get(ZoneSettingsTabCodecks) == zoneInfo {
 			m.settingsTab = 2
+			return m, nil
+		}
+		if m.zone.Get(ZoneSettingsTabAdvanced) == zoneInfo {
+			m.settingsTab = 3
+			return m, nil
+		}
+
+		// Handle Advanced tab operations
+		if m.settingsTab == 3 {
+			// Cleanup confirmation buttons
+			if m.confirmingCleanup != "" {
+				if m.zone.Get(ZoneSettingsAdvancedConfirmYes) == zoneInfo {
+					return m, m.confirmCleanup()
+				}
+				if m.zone.Get(ZoneSettingsAdvancedConfirmNo) == zoneInfo {
+					m.cancelCleanup()
+					return m, nil
+				}
+				return m, nil
+			}
+
+			// Advanced tab action buttons
+			if m.zone.Get(ZoneSettingsAdvancedDeleteBookmarks) == zoneInfo {
+				m.startDeleteBookmarks()
+				return m, nil
+			}
+			if m.zone.Get(ZoneSettingsAdvancedAbandonOldCommits) == zoneInfo {
+				m.startAbandonOldCommits()
+				return m, nil
+			}
+			if m.zone.Get(ZoneSettingsAdvancedTrackOriginMain) == zoneInfo {
+				m.startTrackOriginMain()
+				return m, m.trackOriginMain()
+			}
 			return m, nil
 		}
 
@@ -470,4 +503,3 @@ func (m *Model) handleAction(action ActionType) (tea.Model, tea.Cmd) {
 	}
 	return m, nil
 }
-
