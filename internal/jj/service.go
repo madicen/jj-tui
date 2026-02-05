@@ -290,10 +290,11 @@ func (s *Service) AbandonCommit(ctx context.Context, commitID string) error {
 	return s.runJJ(ctx, args...)
 }
 
-// RebaseCommit rebases a commit onto a destination commit
+// RebaseCommit rebases a commit and all its descendants onto a destination commit
 func (s *Service) RebaseCommit(ctx context.Context, sourceCommitID, destCommitID string) error {
-	// jj rebase -r <source> -d <destination>
-	args := []string{"rebase", "-r", sourceCommitID, "-d", destCommitID}
+	// jj rebase -s <source> -d <destination>
+	// Using -s (source) instead of -r (revision) so descendants follow along
+	args := []string{"rebase", "-s", sourceCommitID, "-d", destCommitID}
 	return s.runJJ(ctx, args...)
 }
 

@@ -1,6 +1,7 @@
 package view
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -160,6 +161,10 @@ func (r *Renderer) renderGitHubSettings(data SettingsData) []string {
 	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("  PR Filters:"))
 	lines = append(lines, "")
 
+	// Only My PRs toggle
+	onlyMineToggle := r.renderToggle("Only My PRs", data.OnlyMyPRs, ZoneSettingsGitHubOnlyMine)
+	lines = append(lines, "    "+onlyMineToggle)
+
 	// Show Merged PRs toggle
 	mergedToggle := r.renderToggle("Show Merged PRs", data.ShowMergedPRs, ZoneSettingsGitHubShowMerged)
 	lines = append(lines, "    "+mergedToggle)
@@ -167,6 +172,16 @@ func (r *Renderer) renderGitHubSettings(data SettingsData) []string {
 	// Show Closed PRs toggle
 	closedToggle := r.renderToggle("Show Closed PRs", data.ShowClosedPRs, ZoneSettingsGitHubShowClosed)
 	lines = append(lines, "    "+closedToggle)
+
+	lines = append(lines, "")
+
+	// PR Limit control
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("  PR Limit:"))
+	limitText := lipgloss.NewStyle().Bold(true).Render(fmt.Sprintf("%d", data.PRLimit))
+	decreaseBtn := r.Zone.Mark(ZoneSettingsGitHubPRLimitDecrease, lipgloss.NewStyle().Foreground(ColorPrimary).Render("[-]"))
+	increaseBtn := r.Zone.Mark(ZoneSettingsGitHubPRLimitIncrease, lipgloss.NewStyle().Foreground(ColorPrimary).Render("[+]"))
+	lines = append(lines, "    "+decreaseBtn+" "+limitText+" "+increaseBtn)
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Max PRs to load (reduces API calls)"))
 
 	return lines
 }

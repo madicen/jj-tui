@@ -106,6 +106,8 @@ type SettingsData struct {
 	// GitHub filter toggles
 	ShowMergedPRs bool
 	ShowClosedPRs bool
+	OnlyMyPRs     bool
+	PRLimit       int
 
 	// Advanced tab state
 	ConfirmingCleanup string // "" = not confirming, "delete_bookmarks", "abandon_old_commits", "track_origin_main"

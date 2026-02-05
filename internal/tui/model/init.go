@@ -30,9 +30,13 @@ func New(ctx context.Context) *Model {
 	// Initialize toggle states from config
 	showMerged := true
 	showClosed := true
+	onlyMine := false
+	prLimit := 100
 	if cfg != nil {
 		showMerged = cfg.ShowMergedPRs()
 		showClosed = cfg.ShowClosedPRs()
+		onlyMine = cfg.OnlyMyPRs()
+		prLimit = cfg.PRLimit()
 	}
 
 	// PR title input
@@ -65,6 +69,8 @@ func New(ctx context.Context) *Model {
 		settingsInputs:            settingsInputs,
 		settingsShowMerged:        showMerged,
 		settingsShowClosed:        showClosed,
+		settingsOnlyMine:          onlyMine,
+		settingsPRLimit:           prLimit,
 		prTitleInput:              prTitle,
 		prBodyInput:               prBody,
 		prBaseBranch:              "main",

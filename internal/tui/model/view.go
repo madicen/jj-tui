@@ -604,6 +604,8 @@ func (m *Model) renderSettings() string {
 		ActiveTab:         view.SettingsTab(m.settingsTab),
 		ShowMergedPRs:     m.settingsShowMerged,
 		ShowClosedPRs:     m.settingsShowClosed,
+		OnlyMyPRs:         m.settingsOnlyMine,
+		PRLimit:           m.settingsPRLimit,
 		ConfirmingCleanup: m.confirmingCleanup,
 	})
 }

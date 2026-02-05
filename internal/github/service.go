@@ -36,12 +36,21 @@ type TokenResponse struct {
 	ErrorDesc   string `json:"error_description"`
 }
 
+// PRFilterOptions contains options for filtering PRs
+type PRFilterOptions struct {
+	OnlyMine   bool // Only show PRs created by the authenticated user
+	Limit      int  // Maximum number of PRs to fetch (0 = no limit)
+	ShowMerged bool // Include merged PRs
+	ShowClosed bool // Include closed PRs
+}
+
 // Service handles GitHub API interactions
 type Service struct {
-	client *github.Client
-	owner  string
-	repo   string
-	token  string
+	client   *github.Client
+	owner    string
+	repo     string
+	token    string
+	username string // cached authenticated username
 }
 
 // NewService creates a new GitHub service
@@ -135,8 +144,43 @@ func (s *Service) UpdatePullRequest(ctx context.Context, prNumber int, req *mode
 	}, nil
 }
 
-// GetPullRequests retrieves all pull requests for the repository
+// GetAuthenticatedUsername returns the username of the authenticated user
+func (s *Service) GetAuthenticatedUsername(ctx context.Context) (string, error) {
+	// Return cached username if available
+	if s.username != "" {
+		return s.username, nil
+	}
+
+	user, _, err := s.client.Users.Get(ctx, "")
+	if err != nil {
+		return "", fmt.Errorf("failed to get authenticated user: %w", err)
+	}
+
+	s.username = user.GetLogin()
+	return s.username, nil
+}
+
+// GetPullRequests retrieves pull requests for the repository with optional filtering
 func (s *Service) GetPullRequests(ctx context.Context) ([]models.GitHubPR, error) {
+	return s.GetPullRequestsWithOptions(ctx, PRFilterOptions{
+		Limit:      100,
+		ShowMerged: true,
+		ShowClosed: true,
+	})
+}
+
+// GetPullRequestsWithOptions retrieves pull requests with the specified filter options
+func (s *Service) GetPullRequestsWithOptions(ctx context.Context, filterOpts PRFilterOptions) ([]models.GitHubPR, error) {
+	// Get authenticated username if filtering by user
+	var username string
+	if filterOpts.OnlyMine {
+		var err error
+		username, err = s.GetAuthenticatedUsername(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get username for filtering: %w", err)
+		}
+	}
+
 	opts := &github.PullRequestListOptions{
 		State: "all",
 		ListOptions: github.ListOptions{
@@ -152,12 +196,25 @@ func (s *Service) GetPullRequests(ctx context.Context) ([]models.GitHubPR, error
 		}
 
 		for _, pr := range prs {
+			// Filter by author if OnlyMine is set
+			if filterOpts.OnlyMine && pr.GetUser().GetLogin() != username {
+				continue
+			}
+
 			// Determine the actual state - GitHub API returns "closed" for both
 			// closed and merged PRs. Check MergedAt (populated in list responses)
 			// or Merged field to detect merged PRs.
 			state := pr.GetState()
 			if state == "closed" && (pr.MergedAt != nil || pr.GetMerged()) {
 				state = "merged"
+			}
+
+			// Apply state filters
+			if state == "merged" && !filterOpts.ShowMerged {
+				continue
+			}
+			if state == "closed" && !filterOpts.ShowClosed {
+				continue
 			}
 
 			allPRs = append(allPRs, models.GitHubPR{
@@ -169,12 +226,22 @@ func (s *Service) GetPullRequests(ctx context.Context) ([]models.GitHubPR, error
 				BaseBranch: pr.GetBase().GetRef(),
 				HeadBranch: pr.GetHead().GetRef(),
 			})
+
+			// Check limit
+			if filterOpts.Limit > 0 && len(allPRs) >= filterOpts.Limit {
+				return allPRs, nil
+			}
 		}
 
 		if resp.NextPage == 0 {
 			break
 		}
 		opts.Page = resp.NextPage
+
+		// Early exit if we've hit the limit
+		if filterOpts.Limit > 0 && len(allPRs) >= filterOpts.Limit {
+			break
+		}
 	}
 
 	return allPRs, nil

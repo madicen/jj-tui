@@ -72,6 +72,8 @@ type Model struct {
 	// Settings toggle states (for GitHub filters)
 	settingsShowMerged bool
 	settingsShowClosed bool
+	settingsOnlyMine   bool
+	settingsPRLimit    int
 
 	// Advanced settings state
 	confirmingCleanup string // "" = not confirming, "delete_bookmarks", "abandon_old_commits", "track_origin_main"

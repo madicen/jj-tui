@@ -15,6 +15,8 @@ type Config struct {
 	// GitHub filter settings
 	GitHubShowMerged *bool `json:"github_show_merged,omitempty"` // nil = true (show by default)
 	GitHubShowClosed *bool `json:"github_show_closed,omitempty"` // nil = true (show by default)
+	GitHubOnlyMine   *bool `json:"github_only_mine,omitempty"`   // nil = false (show all by default)
+	GitHubPRLimit    *int  `json:"github_pr_limit,omitempty"`    // nil = 100 (default limit)
 
 	// Ticket provider selection: "jira" or "codecks"
 	TicketProvider string `json:"ticket_provider,omitempty"`
@@ -92,6 +94,12 @@ func mergeConfig(dest, source *Config) {
 	}
 	if source.GitHubShowClosed != nil {
 		dest.GitHubShowClosed = source.GitHubShowClosed
+	}
+	if source.GitHubOnlyMine != nil {
+		dest.GitHubOnlyMine = source.GitHubOnlyMine
+	}
+	if source.GitHubPRLimit != nil {
+		dest.GitHubPRLimit = source.GitHubPRLimit
 	}
 	if source.TicketProvider != "" {
 		dest.TicketProvider = source.TicketProvider
@@ -303,6 +311,22 @@ func (c *Config) ShowClosedPRs() bool {
 		return true
 	}
 	return *c.GitHubShowClosed
+}
+
+// OnlyMyPRs returns whether to show only the user's own PRs (defaults to false)
+func (c *Config) OnlyMyPRs() bool {
+	if c.GitHubOnlyMine == nil {
+		return false
+	}
+	return *c.GitHubOnlyMine
+}
+
+// PRLimit returns the maximum number of PRs to load (defaults to 100)
+func (c *Config) PRLimit() int {
+	if c.GitHubPRLimit == nil {
+		return 100
+	}
+	return *c.GitHubPRLimit
 }
 
 // HasJira returns true if Jira is fully configured
