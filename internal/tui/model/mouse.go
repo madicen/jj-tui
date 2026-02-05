@@ -396,12 +396,28 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 		}
 
 		// GitHub filter toggles
+		if m.zone.Get(ZoneSettingsGitHubOnlyMine) == zoneInfo {
+			m.settingsOnlyMine = !m.settingsOnlyMine
+			return m, nil
+		}
 		if m.zone.Get(ZoneSettingsGitHubShowMerged) == zoneInfo {
 			m.settingsShowMerged = !m.settingsShowMerged
 			return m, nil
 		}
 		if m.zone.Get(ZoneSettingsGitHubShowClosed) == zoneInfo {
 			m.settingsShowClosed = !m.settingsShowClosed
+			return m, nil
+		}
+		if m.zone.Get(ZoneSettingsGitHubPRLimitDecrease) == zoneInfo {
+			if m.settingsPRLimit > 25 {
+				m.settingsPRLimit -= 25
+			}
+			return m, nil
+		}
+		if m.zone.Get(ZoneSettingsGitHubPRLimitIncrease) == zoneInfo {
+			if m.settingsPRLimit < 500 {
+				m.settingsPRLimit += 25
+			}
 			return m, nil
 		}
 

@@ -23,6 +23,8 @@ type SettingsParams struct {
 	CodecksExcludedStatuses string
 	ShowMerged              bool
 	ShowClosed              bool
+	OnlyMine                bool
+	PRLimit                 int
 }
 
 // SettingsSavedMsg indicates settings were saved
@@ -61,6 +63,8 @@ func SaveSettings(params SettingsParams) tea.Cmd {
 		}
 		cfg.GitHubShowMerged = &params.ShowMerged
 		cfg.GitHubShowClosed = &params.ShowClosed
+		cfg.GitHubOnlyMine = &params.OnlyMine
+		cfg.GitHubPRLimit = &params.PRLimit
 		cfg.TicketProvider = ticketProvider
 		cfg.JiraURL = params.JiraURL
 		cfg.JiraUser = params.JiraUser
@@ -98,6 +102,8 @@ func SaveSettingsLocal(params SettingsParams) tea.Cmd {
 			TicketProvider:          ticketProvider,
 			GitHubShowMerged:        &params.ShowMerged,
 			GitHubShowClosed:        &params.ShowClosed,
+			GitHubOnlyMine:          &params.OnlyMine,
+			GitHubPRLimit:           &params.PRLimit,
 			JiraExcludedStatuses:    params.JiraExcludedStatuses,
 			CodecksProject:          params.CodecksProject,
 			CodecksExcludedStatuses: params.CodecksExcludedStatuses,

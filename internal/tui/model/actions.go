@@ -318,6 +318,8 @@ func (m *Model) saveSettings() tea.Cmd {
 		JiraExcludedStatuses: strings.TrimSpace(m.settingsInputs[4].Value()),
 		ShowMerged:           m.settingsShowMerged,
 		ShowClosed:           m.settingsShowClosed,
+		OnlyMine:             m.settingsOnlyMine,
+		PRLimit:              m.settingsPRLimit,
 	}
 	if len(m.settingsInputs) > 8 {
 		params.CodecksSubdomain = strings.TrimSpace(m.settingsInputs[5].Value())
@@ -337,6 +339,8 @@ func (m *Model) saveSettingsLocal() tea.Cmd {
 		JiraExcludedStatuses: strings.TrimSpace(m.settingsInputs[4].Value()),
 		ShowMerged:           m.settingsShowMerged,
 		ShowClosed:           m.settingsShowClosed,
+		OnlyMine:             m.settingsOnlyMine,
+		PRLimit:              m.settingsPRLimit,
 	}
 	if len(m.settingsInputs) > 8 {
 		params.CodecksSubdomain = strings.TrimSpace(m.settingsInputs[5].Value())

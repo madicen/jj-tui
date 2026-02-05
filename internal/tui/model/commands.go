@@ -173,30 +173,24 @@ func (m *Model) loadPRs() tea.Cmd {
 	ghSvc := m.githubService
 
 	return func() tea.Msg {
-		prs, err := ghSvc.GetPullRequests(context.Background())
-		if err != nil {
-			return errorMsg{Err: fmt.Errorf("failed to load PRs: %w", err)}
+		// Build filter options from config
+		cfg, _ := config.Load()
+		filterOpts := github.PRFilterOptions{
+			Limit:      100,
+			ShowMerged: true,
+			ShowClosed: true,
+			OnlyMine:   false,
+		}
+		if cfg != nil {
+			filterOpts.ShowMerged = cfg.ShowMergedPRs()
+			filterOpts.ShowClosed = cfg.ShowClosedPRs()
+			filterOpts.OnlyMine = cfg.OnlyMyPRs()
+			filterOpts.Limit = cfg.PRLimit()
 		}
 
-		// Apply PR filters from config
-		cfg, _ := config.Load()
-		if cfg != nil {
-			var filtered []models.GitHubPR
-			showMerged := cfg.ShowMergedPRs()
-			showClosed := cfg.ShowClosedPRs()
-
-			for _, pr := range prs {
-				// Skip merged PRs if not showing them
-				if !showMerged && pr.State == "merged" {
-					continue
-				}
-				// Skip closed PRs if not showing them
-				if !showClosed && pr.State == "closed" {
-					continue
-				}
-				filtered = append(filtered, pr)
-			}
-			prs = filtered
+		prs, err := ghSvc.GetPullRequestsWithOptions(context.Background(), filterOpts)
+		if err != nil {
+			return errorMsg{Err: fmt.Errorf("failed to load PRs: %w", err)}
 		}
 
 		return prsLoadedMsg{prs: prs}
