@@ -39,19 +39,37 @@ func (r *Renderer) PullRequests(data PRData) PRResult {
 	// Show selected PR details in the fixed header
 	if data.SelectedPR >= 0 && data.SelectedPR < len(data.Repository.PRs) {
 		pr := data.Repository.PRs[data.SelectedPR]
+
+		// Build details content
+		var detailLines []string
+		detailLines = append(detailLines, fmt.Sprintf("%s #%d: %s",
+			lipgloss.NewStyle().Bold(true).Render("Selected:"),
+			pr.Number,
+			pr.Title,
+		))
+		detailLines = append(detailLines, lipgloss.NewStyle().Foreground(ColorMuted).Render(pr.URL))
+		detailLines = append(detailLines, fmt.Sprintf("Base: %s ← Head: %s", pr.BaseBranch, pr.HeadBranch))
+
+		// Always show description line to prevent layout shift
+		if pr.Body != "" {
+			// Truncate description if too long
+			desc := pr.Body
+			// Replace newlines with spaces for single-line display
+			desc = strings.ReplaceAll(desc, "\n", " ")
+			desc = strings.ReplaceAll(desc, "\r", "")
+			if len(desc) > 150 {
+				desc = desc[:150] + "..."
+			}
+			detailLines = append(detailLines, lipgloss.NewStyle().Foreground(ColorMuted).Render(desc))
+		} else {
+			detailLines = append(detailLines, lipgloss.NewStyle().Foreground(ColorMuted).Italic(true).Render("(No description)"))
+		}
+
 		detailsBox := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(ColorPrimary).
 			Padding(0, 1).
-			Render(fmt.Sprintf(
-				"%s #%d: %s\n%s\nBase: %s ← Head: %s",
-				lipgloss.NewStyle().Bold(true).Render("Selected:"),
-				pr.Number,
-				pr.Title,
-				lipgloss.NewStyle().Foreground(ColorMuted).Render(pr.URL),
-				pr.BaseBranch,
-				pr.HeadBranch,
-			))
+			Render(strings.Join(detailLines, "\n"))
 		headerLines = append(headerLines, detailsBox)
 		headerLines = append(headerLines, "")
 	}

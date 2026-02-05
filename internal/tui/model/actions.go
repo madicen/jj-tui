@@ -1,4 +1,4 @@
-package tui
+package model
 
 import (
 	"fmt"
@@ -26,10 +26,10 @@ func (m *Model) copyErrorToClipboard() tea.Cmd {
 func (m *Model) createNewCommit() tea.Cmd {
 	parentCommitID := ""
 	if m.isSelectedCommitValid() {
+		// Always use the selected commit as parent - creating a child of any commit
+		// (including immutable ones like main) is valid since we're not modifying the parent
 		commit := m.repository.Graph.Commits[m.selectedCommit]
-		if !commit.Immutable {
-			parentCommitID = commit.ChangeID
-		}
+		parentCommitID = commit.ChangeID
 	}
 	return actions.NewCommit(m.jjService, parentCommitID)
 }

@@ -1,13 +1,9 @@
-package tui
+package model
 
 import (
 	"context"
 	"fmt"
-	"os"
-	"os/exec"
-	"runtime"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -21,38 +17,6 @@ import (
 	"github.com/madicen/jj-tui/internal/tickets"
 	"github.com/madicen/jj-tui/internal/tui/actions"
 )
-
-// openURL opens a URL in the default browser
-func openURL(url string) tea.Cmd {
-	return func() tea.Msg {
-		var cmd *exec.Cmd
-		switch runtime.GOOS {
-		case "darwin":
-			cmd = exec.Command("open", url)
-		case "linux":
-			cmd = exec.Command("xdg-open", url)
-		case "windows":
-			cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
-		default:
-			return nil
-		}
-		_ = cmd.Start()
-		return nil
-	}
-}
-
-// Auto-refresh interval
-const autoRefreshInterval = 2 * time.Second
-
-// isSelectedCommitValid returns true if selectedCommit points to a valid commit
-func (m *Model) isSelectedCommitValid() bool {
-	return m.repository != nil &&
-		m.selectedCommit >= 0 &&
-		m.selectedCommit < len(m.repository.Graph.Commits)
-}
-
-// tickMsg is sent on each timer tick for auto-refresh
-type tickMsg time.Time
 
 // Model is the main TUI model using bubblezone for mouse handling.
 // All clickable elements are wrapped with zone.Mark() in the View.
@@ -136,263 +100,6 @@ type Model struct {
 	githubLoginPolling    bool   // True if currently polling for token
 }
 
-// Messages for async operations
-type repositoryLoadedMsg struct {
-	repository *models.Repository
-}
-
-type editCompletedMsg struct {
-	repository *models.Repository
-}
-
-type servicesInitializedMsg struct {
-	jjService     *jj.Service
-	githubService *github.Service
-	ticketService tickets.Service
-	ticketError   error // Error from ticket service initialization (for debugging)
-	repository    *models.Repository
-}
-
-type prsLoadedMsg struct {
-	prs []models.GitHubPR
-}
-
-type ticketsLoadedMsg struct {
-	tickets []tickets.Ticket
-}
-
-type bookmarkCreatedMsg struct {
-	ticketKey  string
-	branchName string
-}
-
-type settingsSavedMsg struct {
-	githubConnected bool
-	ticketService   tickets.Service
-	ticketProvider  string // "jira", "codecks", or ""
-	savedLocal      bool   // true if saved to local .jj-tui.json
-	err             error  // error if save failed
-}
-
-type errorMsg struct {
-	err         error
-	notJJRepo   bool   // true if the error is "not a jj repository"
-	currentPath string // the path where we tried to find a jj repo
-}
-
-// ErrorMsg creates an error message for testing purposes
-func ErrorMsg(err error) errorMsg {
-	return errorMsg{err: err}
-}
-
-type jjInitSuccessMsg struct{}
-
-// GitHub Device Flow messages
-type githubDeviceFlowStartedMsg struct {
-	deviceCode      string
-	userCode        string
-	verificationURL string
-	interval        int
-}
-
-type githubLoginSuccessMsg struct {
-	token string
-}
-
-type githubLoginPollMsg struct {
-	interval int // Polling interval in seconds
-}
-
-type descriptionSavedMsg struct {
-	commitID string
-}
-
-// prCreatedMsg is sent when a PR is successfully created
-type prCreatedMsg struct {
-	pr *models.GitHubPR
-}
-
-// branchPushedMsg is sent when a branch is pushed to remote
-type branchPushedMsg struct {
-	branch     string
-	pushOutput string
-}
-
-// bookmarkCreatedOnCommitMsg is sent when a bookmark is created or moved on a commit
-type bookmarkCreatedOnCommitMsg struct {
-	bookmarkName string
-	commitID     string
-	wasMoved     bool // true if bookmark was moved, false if newly created
-}
-
-// bookmarkDeletedMsg is sent when a bookmark is deleted
-type bookmarkDeletedMsg struct {
-	bookmarkName string
-}
-
-// changedFilesLoadedMsg is sent when changed files for a commit are loaded
-type changedFilesLoadedMsg struct {
-	commitID string
-	files    []jj.ChangedFile
-}
-
-// silentRepositoryLoadedMsg is for background refreshes that don't update the status
-type silentRepositoryLoadedMsg struct {
-	repository *models.Repository
-}
-
-// descriptionLoadedMsg contains the full description fetched from jj
-type descriptionLoadedMsg struct {
-	commitID    string
-	description string
-}
-
-// New creates a new Model
-func New(ctx context.Context) *Model {
-	// Create textarea for description editing
-	ta := textarea.New()
-	ta.Placeholder = "Enter commit description..."
-	ta.ShowLineNumbers = false
-	ta.SetWidth(60)
-	ta.SetHeight(5)
-
-	// Load config for initial values
-	cfg, _ := config.Load()
-
-	// Create settings inputs
-	settingsInputs := make([]textinput.Model, 9)
-
-	// GitHub Token (index 0)
-	settingsInputs[0] = textinput.New()
-	settingsInputs[0].Placeholder = "GitHub Personal Access Token"
-	settingsInputs[0].CharLimit = 256 // GitHub PATs can be long
-	settingsInputs[0].Width = 50
-	settingsInputs[0].EchoMode = textinput.EchoPassword
-	settingsInputs[0].EchoCharacter = '•'
-	settingsInputs[0].SetValue(os.Getenv("GITHUB_TOKEN"))
-
-	// Jira URL (index 1)
-	settingsInputs[1] = textinput.New()
-	settingsInputs[1].Placeholder = "https://your-domain.atlassian.net"
-	settingsInputs[1].CharLimit = 100
-	settingsInputs[1].Width = 50
-	settingsInputs[1].SetValue(os.Getenv("JIRA_URL"))
-
-	// Jira User (index 2)
-	settingsInputs[2] = textinput.New()
-	settingsInputs[2].Placeholder = "your-email@example.com"
-	settingsInputs[2].CharLimit = 100
-	settingsInputs[2].Width = 50
-	settingsInputs[2].SetValue(os.Getenv("JIRA_USER"))
-
-	// Jira Token (index 3)
-	settingsInputs[3] = textinput.New()
-	settingsInputs[3].Placeholder = "Jira API Token"
-	settingsInputs[3].CharLimit = 256 // Atlassian tokens can be 150+ chars
-	settingsInputs[3].Width = 50
-	settingsInputs[3].EchoMode = textinput.EchoPassword
-	settingsInputs[3].EchoCharacter = '•'
-	settingsInputs[3].SetValue(os.Getenv("JIRA_TOKEN"))
-
-	// Jira Excluded Statuses (index 4)
-	settingsInputs[4] = textinput.New()
-	settingsInputs[4].Placeholder = "Done, Won't Do, Cancelled (comma-separated)"
-	settingsInputs[4].CharLimit = 200
-	settingsInputs[4].Width = 50
-	if cfg != nil {
-		settingsInputs[4].SetValue(cfg.JiraExcludedStatuses)
-	}
-
-	// Codecks Subdomain (index 5)
-	settingsInputs[5] = textinput.New()
-	settingsInputs[5].Placeholder = "your-team (from your-team.codecks.io)"
-	settingsInputs[5].CharLimit = 100
-	settingsInputs[5].Width = 50
-	settingsInputs[5].SetValue(os.Getenv("CODECKS_SUBDOMAIN"))
-
-	// Codecks Token (index 6)
-	settingsInputs[6] = textinput.New()
-	settingsInputs[6].Placeholder = "Codecks API Token (from browser cookie 'at')"
-	settingsInputs[6].CharLimit = 256
-	settingsInputs[6].Width = 50
-	settingsInputs[6].EchoMode = textinput.EchoPassword
-	settingsInputs[6].EchoCharacter = '•'
-	settingsInputs[6].SetValue(os.Getenv("CODECKS_TOKEN"))
-
-	// Codecks Project (index 7)
-	settingsInputs[7] = textinput.New()
-	settingsInputs[7].Placeholder = "Project name (optional, filters cards)"
-	settingsInputs[7].CharLimit = 100
-	settingsInputs[7].Width = 50
-	settingsInputs[7].SetValue(os.Getenv("CODECKS_PROJECT"))
-
-	// Codecks Excluded Statuses (index 8)
-	settingsInputs[8] = textinput.New()
-	settingsInputs[8].Placeholder = "done, archived (comma-separated)"
-	settingsInputs[8].CharLimit = 200
-	settingsInputs[8].Width = 50
-	if cfg != nil {
-		settingsInputs[8].SetValue(cfg.CodecksExcludedStatuses)
-	}
-
-	// Initialize toggle states from config
-	showMerged := true
-	showClosed := true
-	if cfg != nil {
-		showMerged = cfg.ShowMergedPRs()
-		showClosed = cfg.ShowClosedPRs()
-	}
-
-	// PR title input
-	prTitle := textinput.New()
-	prTitle.Placeholder = "Pull request title"
-	prTitle.CharLimit = 200
-	prTitle.Width = 60
-
-	// PR body textarea
-	prBody := textarea.New()
-	prBody.Placeholder = "Describe your changes..."
-	prBody.ShowLineNumbers = false
-	prBody.SetWidth(60)
-	prBody.SetHeight(8)
-
-	// Bookmark name input
-	bookmarkName := textinput.New()
-	bookmarkName.Placeholder = "bookmark-name"
-	bookmarkName.CharLimit = 100
-	bookmarkName.Width = 50
-
-	return &Model{
-		ctx:                       ctx,
-		zone:                      zone.New(),
-		viewMode:                  ViewCommitGraph,
-		selectedCommit:            -1,
-		statusMessage:             "Initializing...",
-		loading:                   true,
-		descriptionInput:          ta,
-		settingsInputs:            settingsInputs,
-		settingsShowMerged:        showMerged,
-		settingsShowClosed:        showClosed,
-		prTitleInput:              prTitle,
-		prBodyInput:               prBody,
-		prBaseBranch:              "main",
-		prCommitIndex:             -1,
-		bookmarkNameInput:         bookmarkName,
-		bookmarkCommitIdx:         -1,
-		selectedBookmarkIdx:       -1,
-		jiraBookmarkTitles:        make(map[string]string),
-		ticketBookmarkDisplayKeys: make(map[string]string),
-	}
-}
-
-// NewWithServices creates a new Model with services
-func NewWithServices(ctx context.Context, jjSvc *jj.Service, ghSvc *github.Service) *Model {
-	m := New(ctx)
-	m.jjService = jjSvc
-	m.githubService = ghSvc
-	return m
-}
-
 // SetRepository sets the repository data
 func (m *Model) SetRepository(repo *models.Repository) {
 	m.repository = repo
@@ -474,7 +181,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseMsg:
 		// Handle mouse wheel scrolling
 		if msg.Action == tea.MouseActionPress && (msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown) {
-			// Let the viewport handle scrolling directly - it knows its own height
+			// For graph view, scroll the focused pane
+			if m.viewMode == ViewCommitGraph {
+				if m.graphFocused {
+					// Scroll graph pane
+					var cmd tea.Cmd
+					m.viewport, cmd = m.viewport.Update(msg)
+					return m, cmd
+				} else {
+					// Scroll files pane
+					var cmd tea.Cmd
+					m.filesViewport, cmd = m.filesViewport.Update(msg)
+					return m, cmd
+				}
+			}
+			// For other views, let the viewport handle scrolling directly
 			var cmd tea.Cmd
 			m.viewport, cmd = m.viewport.Update(msg)
 			return m, cmd
@@ -582,11 +303,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case errorMsg:
-		m.err = msg.err
-		m.notJJRepo = msg.notJJRepo
-		m.currentPath = msg.currentPath
+		m.err = msg.Err
+		m.notJJRepo = msg.NotJJRepo
+		m.currentPath = msg.CurrentPath
 		m.loading = false
-		m.statusMessage = fmt.Sprintf("Error: %v", msg.err)
+		m.statusMessage = fmt.Sprintf("Error: %v", msg.Err)
 		// Don't continue auto-refresh on error - let user dismiss or manually refresh
 		return m, nil
 
@@ -855,7 +576,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.Update(editCompletedMsg{repository: msg.Repository})
 
 	case actions.ErrorMsg:
-		return m.Update(errorMsg{err: msg.Err})
+		return m.Update(errorMsg{Err: msg.Err})
 
 	case actions.DescriptionLoadedMsg:
 		return m.Update(descriptionLoadedMsg{commitID: msg.CommitID, description: msg.Description})

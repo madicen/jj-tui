@@ -1,4 +1,4 @@
-package tui
+package model
 
 import (
 	"context"
@@ -40,13 +40,13 @@ func (m *Model) initializeServices() tea.Cmd {
 		if err != nil {
 			// Check if this is a "not a jj repository" error
 			notJJRepo := strings.Contains(err.Error(), "not a jujutsu repository")
-			return errorMsg{err: err, notJJRepo: notJJRepo, currentPath: cwd}
+			return errorMsg{Err: err, NotJJRepo: notJJRepo, CurrentPath: cwd}
 		}
 
 		// Load repository data
 		repo, err := jjSvc.GetRepository(ctx)
 		if err != nil {
-			return errorMsg{err: err}
+			return errorMsg{Err: err}
 		}
 
 		// Try to create GitHub service (optional - won't fail if no token)
@@ -121,7 +121,7 @@ func (m *Model) loadRepository() tea.Cmd {
 	return func() tea.Msg {
 		repo, err := m.jjService.GetRepository(context.Background())
 		if err != nil {
-			return errorMsg{err: err}
+			return errorMsg{Err: err}
 		}
 		return repositoryLoadedMsg{repository: repo}
 	}
@@ -158,7 +158,7 @@ func (m *Model) loadPRs() tea.Cmd {
 	return func() tea.Msg {
 		prs, err := ghSvc.GetPullRequests(context.Background())
 		if err != nil {
-			return errorMsg{err: fmt.Errorf("failed to load PRs: %w", err)}
+			return errorMsg{Err: fmt.Errorf("failed to load PRs: %w", err)}
 		}
 
 		// Apply PR filters from config
@@ -200,7 +200,7 @@ func (m *Model) loadTickets() tea.Cmd {
 	return func() tea.Msg {
 		ticketList, err := svc.GetAssignedTickets(context.Background())
 		if err != nil {
-			return errorMsg{err: fmt.Errorf("failed to load tickets: %w", err)}
+			return errorMsg{Err: fmt.Errorf("failed to load tickets: %w", err)}
 		}
 
 		// Apply status filters from config
@@ -330,7 +330,7 @@ func (m *Model) startGitHubLogin() tea.Cmd {
 	return func() tea.Msg {
 		deviceResp, err := github.StartDeviceFlow()
 		if err != nil {
-			return errorMsg{err: fmt.Errorf("failed to start GitHub login: %w", err)}
+			return errorMsg{Err: fmt.Errorf("failed to start GitHub login: %w", err)}
 		}
 		return githubDeviceFlowStartedMsg{
 			deviceCode:      deviceResp.DeviceCode,
@@ -354,7 +354,7 @@ func (m *Model) pollGitHubToken(interval int) tea.Cmd {
 				// Increase interval and continue polling
 				return githubLoginPollMsg{interval: interval + 5}
 			}
-			return errorMsg{err: fmt.Errorf("GitHub login failed: %w", err)}
+			return errorMsg{Err: fmt.Errorf("GitHub login failed: %w", err)}
 		}
 
 		if token != "" {
@@ -374,10 +374,18 @@ func (m *Model) runJJInit() tea.Cmd {
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			return errorMsg{
-				err:       fmt.Errorf("failed to initialize repository: %s", strings.TrimSpace(string(output))),
-				notJJRepo: true,
+				Err:       fmt.Errorf("failed to initialize repository: %s", strings.TrimSpace(string(output))),
+				NotJJRepo: true,
 			}
 		}
+
+		// Try to track main@origin (common default branch)
+		// This makes the repo more useful if it's a clone with remote tracking
+		trackCmd := exec.Command("jj", "bookmark", "track", "main@origin")
+		trackOutput, trackErr := trackCmd.CombinedOutput()
+		_ = trackOutput // Ignore output - tracking may fail if main@origin doesn't exist
+		_ = trackErr    // Ignore error - this is optional, repo init still succeeded
+
 		return jjInitSuccessMsg{}
 	}
 }

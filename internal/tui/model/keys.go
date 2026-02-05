@@ -1,4 +1,4 @@
-package tui
+package model
 
 import (
 	"fmt"
@@ -16,9 +16,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "ctrl+r":
 			m.err = nil
 			m.viewMode = ViewCommitGraph
-			m.statusMessage = "Refreshing..."
-			m.loading = true
-			return m, m.loadRepository()
+			return m, m.refreshRepository()
 		case "esc":
 			// Clear error and go back to graph, restart auto-refresh
 			m.err = nil
@@ -119,12 +117,9 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "n":
 		if m.viewMode == ViewCommitGraph && m.jjService != nil {
 			// Create a new commit as a child of the selected commit
+			// This is valid even for immutable commits - we're creating a child, not modifying the parent
 			if m.isSelectedCommitValid() {
 				commit := m.repository.Graph.Commits[m.selectedCommit]
-				if commit.Immutable {
-					m.statusMessage = "Cannot create commit: selected commit is immutable"
-					return m, nil
-				}
 				m.statusMessage = fmt.Sprintf("Creating new commit from %s...", commit.ShortID)
 			} else {
 				m.statusMessage = "Creating new commit..."
@@ -142,13 +137,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.startEditingDescription(commit)
 		}
 	case "ctrl+r":
-		m.statusMessage = "Refreshing..."
-		m.loading = true
-		// Always refresh PRs too if GitHub is connected (needed for Update PR button on graph)
-		if m.githubService != nil {
-			return m, tea.Batch(m.loadRepository(), m.loadPRs())
-		}
-		return m, m.loadRepository()
+		return m, m.refreshRepository()
 	case "esc":
 		if m.viewMode != ViewCommitGraph {
 			m.viewMode = ViewCommitGraph
@@ -186,6 +175,8 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				// Navigate commits in graph pane
 				if m.repository != nil && m.selectedCommit < len(m.repository.Graph.Commits)-1 {
 					m.selectedCommit++
+					// Scroll viewport to keep selection visible
+					m.ensureGraphCommitVisible(m.selectedCommit)
 					// Load changed files for the newly selected commit
 					commit := m.repository.Graph.Commits[m.selectedCommit]
 					m.changedFilesCommitID = commit.ChangeID
@@ -217,6 +208,8 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				// Navigate commits in graph pane
 				if m.selectedCommit > 0 && m.repository != nil {
 					m.selectedCommit--
+					// Scroll viewport to keep selection visible
+					m.ensureGraphCommitVisible(m.selectedCommit)
 					// Load changed files for the newly selected commit
 					commit := m.repository.Graph.Commits[m.selectedCommit]
 					m.changedFilesCommitID = commit.ChangeID
