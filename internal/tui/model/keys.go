@@ -512,31 +512,15 @@ func (m *Model) handleSettingsKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.viewMode = ViewCommitGraph
 		m.statusMessage = "Settings cancelled"
 		return m, nil
-	case "1":
-		// Switch to GitHub tab
-		m.settingsTab = 0
-		return m, nil
-	case "2":
-		// Switch to Jira tab
-		m.settingsTab = 1
-		return m, nil
-	case "3":
-		// Switch to Codecks tab
-		m.settingsTab = 2
-		return m, nil
-	case "4":
-		// Switch to Advanced tab
-		m.settingsTab = 3
-		return m, nil
-	case "left":
-		// Previous tab
+	case "ctrl+j":
+		// Previous sub-tab
 		m.settingsTab--
 		if m.settingsTab < 0 {
 			m.settingsTab = 3
 		}
 		return m, nil
-	case "right":
-		// Next tab
+	case "ctrl+k":
+		// Next sub-tab
 		m.settingsTab = (m.settingsTab + 1) % 4
 		return m, nil
 	case "ctrl+s", "enter":

@@ -91,50 +91,26 @@ func (m *Model) abandonCommitsBeforeOriginMain() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
 
-		// Find the commit ID for origin/main
-		var mainCommitID string
-		for _, commit := range repo.Graph.Commits {
-			for _, branch := range commit.Branches {
-				if branch == "origin/main" {
-					mainCommitID = commit.ChangeID
-					break
-				}
-			}
-			if mainCommitID != "" {
-				break
-			}
-		}
-
-		if mainCommitID == "" {
+		// Use jj directly to find main@origin's change_id
+		mainCommitID, err := jjSvc.GetRevisionChangeID(ctx, "main@origin")
+		if err != nil || mainCommitID == "" {
 			return cleanupCompletedMsg{
 				success: false,
-				err:     fmt.Errorf("could not find origin/main in repository"),
+				err:     fmt.Errorf("could not find main@origin - make sure to track it first"),
 			}
 		}
 
-		// Collect commits before origin/main and abandon them
+		// Abandon all mutable commits (they are not ancestors of main@origin)
 		var abandonedCount int
 		for _, commit := range repo.Graph.Commits {
-			// Don't abandon the working copy or main itself
-			if commit.IsWorking || commit.ChangeID == mainCommitID {
+			// Don't abandon the working copy, immutable commits, or main itself
+			if commit.IsWorking || commit.Immutable || commit.ChangeID == mainCommitID {
 				continue
 			}
 
-			// Check if this commit has origin/main
-			hasOriginMain := false
-			for _, branch := range commit.Branches {
-				if branch == "origin/main" {
-					hasOriginMain = true
-					break
-				}
-			}
-
-			// Abandon if it's not main and doesn't have origin/main
-			if !hasOriginMain {
-				err := jjSvc.AbandonCommit(ctx, commit.ChangeID)
-				if err == nil {
-					abandonedCount++
-				}
+			err := jjSvc.AbandonCommit(ctx, commit.ChangeID)
+			if err == nil {
+				abandonedCount++
 			}
 		}
 

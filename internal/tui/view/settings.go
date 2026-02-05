@@ -113,12 +113,13 @@ func (r *Renderer) renderSettingsTabs(activeTab SettingsTab) string {
 		advancedStyle = settingsTabActiveStyle
 	}
 
-	githubTab := r.Zone.Mark(ZoneSettingsTabGitHub, githubStyle.Render("GitHub (1)"))
-	jiraTab := r.Zone.Mark(ZoneSettingsTabJira, jiraStyle.Render("Jira (2)"))
-	codecksTab := r.Zone.Mark(ZoneSettingsTabCodecks, codecksStyle.Render("Codecks (3)"))
-	advancedTab := r.Zone.Mark(ZoneSettingsTabAdvanced, advancedStyle.Render("Advanced (4)"))
+	githubTab := r.Zone.Mark(ZoneSettingsTabGitHub, githubStyle.Render("GitHub"))
+	jiraTab := r.Zone.Mark(ZoneSettingsTabJira, jiraStyle.Render("Jira"))
+	codecksTab := r.Zone.Mark(ZoneSettingsTabCodecks, codecksStyle.Render("Codecks"))
+	advancedTab := r.Zone.Mark(ZoneSettingsTabAdvanced, advancedStyle.Render("Advanced"))
+	navHint := lipgloss.NewStyle().Foreground(ColorMuted).Render("  Ctrl+J/K switch tabs")
 
-	return lipgloss.JoinHorizontal(lipgloss.Left, githubTab, " │ ", jiraTab, " │ ", codecksTab, " │ ", advancedTab)
+	return lipgloss.JoinHorizontal(lipgloss.Left, githubTab, " │ ", jiraTab, " │ ", codecksTab, " │ ", advancedTab, navHint)
 }
 
 // renderGitHubSettings renders the GitHub settings content

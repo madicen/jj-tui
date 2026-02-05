@@ -96,6 +96,15 @@ func (s *Service) GetCommitDescription(ctx context.Context, commitID string) (st
 	return strings.TrimSpace(out), nil
 }
 
+// GetRevisionChangeID gets the change_id for any jj revision (e.g., "main@origin", "@", etc.)
+func (s *Service) GetRevisionChangeID(ctx context.Context, revision string) (string, error) {
+	out, err := s.runJJOutput(ctx, "log", "-r", revision, "--no-graph", "-T", "change_id")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
 // ChangedFile represents a file changed in a commit
 type ChangedFile struct {
 	Path   string // File path
