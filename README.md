@@ -116,6 +116,8 @@ jj-tui /path/to/your/jj/repo
 
 - `Ctrl+q`: Quit application
 - `Ctrl+r`: Refresh current view
+- `Ctrl+z`: Undo last jj operation
+- `Ctrl+y`: Redo (undo the undo)
 - `g`: Switch to commit graph view
 - `p`: Switch to pull requests view
 - `t`: Switch to tickets (Jira) view

@@ -279,6 +279,38 @@ func (m *Model) loadChangedFiles(commitID string) tea.Cmd {
 	}
 }
 
+// undoOperation undoes the last jj operation and refreshes
+func (m *Model) undoOperation() tea.Cmd {
+	if m.jjService == nil {
+		return nil
+	}
+
+	jjSvc := m.jjService
+	return func() tea.Msg {
+		err := jjSvc.Undo(context.Background())
+		if err != nil {
+			return errorMsg{Err: fmt.Errorf("undo failed: %w", err)}
+		}
+		return undoCompletedMsg{message: "Undo successful"}
+	}
+}
+
+// redoOperation redoes the last undone operation (by undoing the undo)
+func (m *Model) redoOperation() tea.Cmd {
+	if m.jjService == nil {
+		return nil
+	}
+
+	jjSvc := m.jjService
+	return func() tea.Msg {
+		err := jjSvc.Redo(context.Background())
+		if err != nil {
+			return errorMsg{Err: fmt.Errorf("redo failed: %w", err)}
+		}
+		return undoCompletedMsg{message: "Redo successful"}
+	}
+}
+
 // startBookmarkFromTicket opens the bookmark creation screen pre-populated with the ticket key
 func (m *Model) startBookmarkFromTicket(ticket tickets.Ticket) {
 	// Use DisplayKey (short ID) if available, otherwise fall back to Key

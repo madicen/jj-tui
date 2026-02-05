@@ -674,6 +674,11 @@ func (m *Model) renderStatusBar() string {
 		m.zone.Mark(ZoneActionRefresh, "ctrl+r:refresh"),
 	}
 
+	// Add undo/redo shortcuts in Graph view
+	if m.viewMode == ViewCommitGraph && m.jjService != nil {
+		shortcuts = append(shortcuts, " ", "ctrl+z:undo", " ", "ctrl+y:redo")
+	}
+
 	// Add error action buttons if there's an error (check both m.err and status message)
 	hasError := m.err != nil || strings.Contains(strings.ToLower(m.statusMessage), "error")
 	if hasError {
