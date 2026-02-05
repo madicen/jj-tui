@@ -434,11 +434,16 @@ func (s *Service) getCommitGraph(ctx context.Context) (*models.CommitGraph, erro
 	)`
 
 	// Run WITH the graph to get ASCII art (no --reversed, keep natural newest-first order)
-	// Revset: current commit, all local bookmarks, and all remote bookmarks (main@origin, etc)
-	out, err := s.runJJOutput(ctx, "log", "-r", "@ | bookmarks() | main@origin", "-T", template)
+	// Revset: mutable commits (new work) and bookmarks (local and remote)
+	// Try with main@origin first (real repos), fall back without it for test/fresh repos
+	out, err := s.runJJOutput(ctx, "log", "-r", "mutable() | bookmarks() | main@origin", "-T", template)
 	if err != nil {
-		// If template fails, try simpler approach
-		return s.getCommitGraphSimple(ctx)
+		// main@origin doesn't exist (test repo or no remote), try without it
+		out, err = s.runJJOutput(ctx, "log", "-r", "mutable() | bookmarks()", "-T", template)
+		if err != nil {
+			// If template fails, try simpler approach
+			return s.getCommitGraphSimple(ctx)
+		}
 	}
 
 	commits := []models.Commit{}
