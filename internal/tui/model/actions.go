@@ -248,7 +248,15 @@ func (m *Model) startCreatePR() {
 	m.prBodyInput.Blur()
 	m.prTitleInput.Width = m.width - 10
 	m.prBodyInput.SetWidth(m.width - 10)
-	m.prBodyInput.SetHeight(m.height - 15)
+	// Calculate body height: total height minus header(~3), status(1), and PR form chrome(~14 lines)
+	bodyHeight := m.height - 20
+	if bodyHeight < 3 {
+		bodyHeight = 3
+	}
+	if bodyHeight > 8 {
+		bodyHeight = 8 // Cap at reasonable max to ensure buttons are visible
+	}
+	m.prBodyInput.SetHeight(bodyHeight)
 
 	m.viewMode = ViewCreatePR
 	if needsMoveBookmark {

@@ -3,6 +3,7 @@ package model
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textarea"
@@ -444,7 +445,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cfg, _ := config.Load()
 		cfg.GitHubToken = msg.token
 		_ = cfg.Save()
-		cfg.ApplyToEnvironment()
+		// Explicitly set the token in env (override any existing value)
+		_ = os.Setenv("GITHUB_TOKEN", msg.token)
 		// Reinitialize services
 		return m, m.initializeServices()
 
