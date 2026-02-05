@@ -667,19 +667,10 @@ func (m *Model) renderStatusBar() string {
 		scrollIndicator = fmt.Sprintf(" [%.0f%%]", scrollPercent)
 	}
 
-	// Build shortcuts with zone markers (only global actions)
-	shortcuts := []string{
-		m.zone.Mark(ZoneActionQuit, "ctrl+q:quit"),
-		" ",
-		m.zone.Mark(ZoneActionRefresh, "ctrl+r:refresh"),
-	}
+	// Build shortcuts list
+	var shortcuts []string
 
-	// Add undo/redo shortcuts in Graph view
-	if m.viewMode == ViewCommitGraph && m.jjService != nil {
-		shortcuts = append(shortcuts, " ", "ctrl+z:undo", " ", "ctrl+y:redo")
-	}
-
-	// Add error action buttons if there's an error (check both m.err and status message)
+	// Add error action buttons first (if there's an error)
 	hasError := m.err != nil || strings.Contains(strings.ToLower(m.statusMessage), "error")
 	if hasError {
 		copyBtn := lipgloss.NewStyle().
@@ -690,7 +681,19 @@ func (m *Model) renderStatusBar() string {
 			Foreground(lipgloss.Color("#888888")).
 			Bold(true).
 			Render("[X]")
-		shortcuts = append(shortcuts, " ", m.zone.Mark(ZoneActionCopyError, copyBtn), " ", m.zone.Mark(ZoneActionDismissError, dismissBtn))
+		shortcuts = append(shortcuts, m.zone.Mark(ZoneActionCopyError, copyBtn), " ", m.zone.Mark(ZoneActionDismissError, dismissBtn), " │ ")
+	}
+
+	// Add keyboard shortcuts with ^ notation and | separators
+	shortcuts = append(shortcuts,
+		m.zone.Mark(ZoneActionQuit, "^q quit"),
+		" │ ",
+		m.zone.Mark(ZoneActionRefresh, "^r refresh"),
+	)
+
+	// Add undo/redo shortcuts in Graph view
+	if m.viewMode == ViewCommitGraph && m.jjService != nil {
+		shortcuts = append(shortcuts, " │ ", "^z undo", " │ ", "^y redo")
 	}
 
 	shortcutsStr := lipgloss.JoinHorizontal(lipgloss.Left, shortcuts...)
