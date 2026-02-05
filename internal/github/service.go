@@ -38,10 +38,10 @@ type TokenResponse struct {
 
 // Service handles GitHub API interactions
 type Service struct {
-	client    *github.Client
-	owner     string
-	repo      string
-	token     string
+	client *github.Client
+	owner  string
+	repo   string
+	token  string
 }
 
 // NewService creates a new GitHub service
@@ -73,7 +73,7 @@ func (s *Service) CreatePullRequest(ctx context.Context, req *models.CreatePRReq
 	// For same-repo PRs, head can be just the branch name
 	// But some GitHub configurations require owner:branch format
 	headRef := req.HeadBranch
-	
+
 	newPR := &github.NewPullRequest{
 		Title:               github.String(req.Title),
 		Head:                github.String(headRef),
@@ -111,7 +111,7 @@ func (s *Service) CreatePullRequest(ctx context.Context, req *models.CreatePRReq
 // UpdatePullRequest updates an existing pull request
 func (s *Service) UpdatePullRequest(ctx context.Context, prNumber int, req *models.UpdatePRRequest) (*models.GitHubPR, error) {
 	updatePR := &github.PullRequest{}
-	
+
 	if req.Title != "" {
 		updatePR.Title = github.String(req.Title)
 	}
@@ -159,7 +159,7 @@ func (s *Service) GetPullRequests(ctx context.Context) ([]models.GitHubPR, error
 			if state == "closed" && (pr.MergedAt != nil || pr.GetMerged()) {
 				state = "merged"
 			}
-			
+
 			allPRs = append(allPRs, models.GitHubPR{
 				Number:     pr.GetNumber(),
 				Title:      pr.GetTitle(),
@@ -207,7 +207,7 @@ func (s *Service) GetPullRequest(ctx context.Context, prNumber int) (*models.Git
 // getPullRequestCommits retrieves commit IDs for a pull request
 func (s *Service) getPullRequestCommits(ctx context.Context, prNumber int) ([]string, error) {
 	opts := &github.ListOptions{PerPage: 100}
-	
+
 	var commitIDs []string
 	for {
 		commits, resp, err := s.client.PullRequests.ListCommits(ctx, s.owner, s.repo, prNumber, opts)
@@ -245,19 +245,23 @@ func (s *Service) BranchExists(ctx context.Context, branch string) (bool, error)
 func ParseGitHubURL(remoteURL string) (owner, repo string, err error) {
 	// Handle various GitHub URL formats
 	remoteURL = strings.TrimSpace(remoteURL)
-	
+
 	// Remove .git suffix
 	remoteURL = strings.TrimSuffix(remoteURL, ".git")
-	
-	// Handle HTTPS URLs
-	if strings.HasPrefix(remoteURL, "https://github.com/") {
-		path := strings.TrimPrefix(remoteURL, "https://github.com/")
-		parts := strings.Split(path, "/")
-		if len(parts) >= 2 {
-			return parts[0], parts[1], nil
+
+	// Handle HTTPS URLs (including those with username like https://user@github.com/...)
+	if strings.Contains(remoteURL, "github.com/") {
+		// Find the github.com/ part and extract what comes after
+		parts := strings.Split(remoteURL, "github.com/")
+		if len(parts) == 2 {
+			path := parts[1]
+			pathParts := strings.Split(path, "/")
+			if len(pathParts) >= 2 {
+				return pathParts[0], pathParts[1], nil
+			}
 		}
 	}
-	
+
 	// Handle SSH URLs
 	if strings.HasPrefix(remoteURL, "git@github.com:") {
 		path := strings.TrimPrefix(remoteURL, "git@github.com:")
@@ -266,7 +270,7 @@ func ParseGitHubURL(remoteURL string) (owner, repo string, err error) {
 			return parts[0], parts[1], nil
 		}
 	}
-	
+
 	return "", "", fmt.Errorf("invalid GitHub URL: %s", remoteURL)
 }
 
