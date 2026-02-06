@@ -27,6 +27,22 @@ func (m *Model) tickCmd() tea.Cmd {
 	})
 }
 
+// prTickCmd returns a command that sends a PR tick after the configured interval
+// Returns nil if PR auto-refresh is disabled (interval = 0)
+func (m *Model) prTickCmd() tea.Cmd {
+	cfg, _ := config.Load()
+	interval := 120 // Default: 2 minutes
+	if cfg != nil {
+		interval = cfg.PRRefreshInterval()
+	}
+	if interval <= 0 {
+		return nil // Auto-refresh disabled
+	}
+	return tea.Tick(time.Duration(interval)*time.Second, func(t time.Time) tea.Msg {
+		return prTickMsg(t)
+	})
+}
+
 // initializeServices sets up the jj service, GitHub service, and loads initial data
 func (m *Model) initializeServices() tea.Cmd {
 	return func() tea.Msg {

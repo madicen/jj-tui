@@ -32,11 +32,13 @@ func New(ctx context.Context) *Model {
 	showClosed := true
 	onlyMine := false
 	prLimit := 100
+	prRefreshInterval := 120 // Default: 2 minutes
 	if cfg != nil {
 		showMerged = cfg.ShowMergedPRs()
 		showClosed = cfg.ShowClosedPRs()
 		onlyMine = cfg.OnlyMyPRs()
 		prLimit = cfg.PRLimit()
+		prRefreshInterval = cfg.PRRefreshInterval()
 	}
 
 	// PR title input
@@ -71,6 +73,7 @@ func New(ctx context.Context) *Model {
 		settingsShowClosed:        showClosed,
 		settingsOnlyMine:          onlyMine,
 		settingsPRLimit:           prLimit,
+		settingsPRRefreshInterval: prRefreshInterval,
 		prTitleInput:              prTitle,
 		prBodyInput:               prBody,
 		prBaseBranch:              "main",

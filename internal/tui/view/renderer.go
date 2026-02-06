@@ -104,10 +104,11 @@ type SettingsData struct {
 	ActiveTab      SettingsTab // Which settings tab is active
 
 	// GitHub filter toggles
-	ShowMergedPRs bool
-	ShowClosedPRs bool
-	OnlyMyPRs     bool
-	PRLimit       int
+	ShowMergedPRs     bool
+	ShowClosedPRs     bool
+	OnlyMyPRs         bool
+	PRLimit           int
+	PRRefreshInterval int // in seconds, 0 = disabled
 
 	// Advanced tab state
 	ConfirmingCleanup string // "" = not confirming, "delete_bookmarks", "abandon_old_commits", "track_origin_main"

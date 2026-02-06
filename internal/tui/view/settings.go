@@ -183,6 +183,24 @@ func (r *Renderer) renderGitHubSettings(data SettingsData) []string {
 	increaseBtn := r.Zone.Mark(ZoneSettingsGitHubPRLimitIncrease, lipgloss.NewStyle().Foreground(ColorPrimary).Render("[+]"))
 	lines = append(lines, "    "+decreaseBtn+" "+limitText+" "+increaseBtn)
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Max PRs to load (reduces API calls)"))
+	lines = append(lines, "")
+
+	// PR Auto-Refresh Interval control
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("  PR Auto-Refresh:"))
+	var refreshText string
+	if data.PRRefreshInterval == 0 {
+		refreshText = lipgloss.NewStyle().Foreground(ColorMuted).Render("Disabled")
+	} else if data.PRRefreshInterval < 60 {
+		refreshText = lipgloss.NewStyle().Bold(true).Render(fmt.Sprintf("%ds", data.PRRefreshInterval))
+	} else {
+		mins := data.PRRefreshInterval / 60
+		refreshText = lipgloss.NewStyle().Bold(true).Render(fmt.Sprintf("%dm", mins))
+	}
+	refreshDecBtn := r.Zone.Mark(ZoneSettingsGitHubRefreshDecrease, lipgloss.NewStyle().Foreground(ColorPrimary).Render("[-]"))
+	refreshIncBtn := r.Zone.Mark(ZoneSettingsGitHubRefreshIncrease, lipgloss.NewStyle().Foreground(ColorPrimary).Render("[+]"))
+	toggleBtn := r.Zone.Mark(ZoneSettingsGitHubRefreshToggle, lipgloss.NewStyle().Foreground(ColorPrimary).Render("[Toggle]"))
+	lines = append(lines, "    "+refreshDecBtn+" "+refreshText+" "+refreshIncBtn+" "+toggleBtn)
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Auto-refresh PRs when viewing PR tab (0 = disabled)"))
 
 	return lines
 }

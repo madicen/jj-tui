@@ -70,10 +70,11 @@ type Model struct {
 	settingsTab          int // 0=GitHub, 1=Jira, 2=Codecks, 3=Advanced
 
 	// Settings toggle states (for GitHub filters)
-	settingsShowMerged bool
-	settingsShowClosed bool
-	settingsOnlyMine   bool
-	settingsPRLimit    int
+	settingsShowMerged        bool
+	settingsShowClosed        bool
+	settingsOnlyMine          bool
+	settingsPRLimit           int
+	settingsPRRefreshInterval int // in seconds, 0 = disabled
 
 	// Advanced settings state
 	confirmingCleanup string // "" = not confirming, "delete_bookmarks", "abandon_old_commits", "track_origin_main"
@@ -343,8 +344,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.tickCmd())
 
 		// Load PRs on startup if GitHub is connected (needed for Update PR button)
+		// Also start PR auto-refresh timer
 		if m.githubService != nil {
 			cmds = append(cmds, m.loadPRs())
+			if prTickCmd := m.prTickCmd(); prTickCmd != nil {
+				cmds = append(cmds, prTickCmd)
+			}
 		}
 
 		// Auto-select first commit if none selected and load its changed files
@@ -453,8 +458,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case prCreatedMsg:
 		m.viewMode = ViewCommitGraph
 		m.statusMessage = fmt.Sprintf("PR #%d created: %s", msg.pr.Number, msg.pr.Title)
-		// Open the PR in browser
-		return m, openURL(msg.pr.URL)
+		// Open the PR in browser and refresh PR list
+		return m, tea.Batch(openURL(msg.pr.URL), m.loadPRs())
 
 	case branchPushedMsg:
 		m.statusMessage = fmt.Sprintf("Pushed %s to remote", msg.branch)
@@ -492,6 +497,25 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(m.loadRepositorySilent(), m.tickCmd())
 		}
 		return m, m.tickCmd()
+
+	case prTickMsg:
+		// PR auto-refresh: only refresh when GitHub is connected and viewing PR tab
+		if m.err != nil || m.githubService == nil {
+			return m, nil
+		}
+		var cmds []tea.Cmd
+		// Only actually refresh PRs if we're on the PR tab
+		if m.viewMode == ViewPullRequests && !m.loading {
+			cmds = append(cmds, m.loadPRs())
+		}
+		// Always restart the timer
+		if prTickCmd := m.prTickCmd(); prTickCmd != nil {
+			cmds = append(cmds, prTickCmd)
+		}
+		if len(cmds) > 0 {
+			return m, tea.Batch(cmds...)
+		}
+		return m, nil
 
 	case descriptionSavedMsg:
 		// Description saved successfully, go back to graph view
