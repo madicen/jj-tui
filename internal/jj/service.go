@@ -745,26 +745,6 @@ func (s *Service) runJJOutput(ctx context.Context, args ...string) (string, erro
 	return stdout.String(), nil
 }
 
-// filterWarnings removes jj warning messages from output
-func filterWarnings(output string) string {
-	lines := strings.Split(output, "\n")
-	var filtered []string
-	skip := false
-	for _, line := range lines {
-		// Skip Warning: and Hint: lines and their continuations
-		if strings.HasPrefix(line, "Warning:") || strings.HasPrefix(line, "Hint:") {
-			skip = true
-			continue
-		}
-		if skip && strings.HasPrefix(line, "  ") {
-			continue
-		}
-		skip = false
-		filtered = append(filtered, line)
-	}
-	return strings.Join(filtered, "\n")
-}
-
 // isJJRepo checks if a directory is a jj repository
 func isJJRepo(path string) bool {
 	jjDir := filepath.Join(path, ".jj")
