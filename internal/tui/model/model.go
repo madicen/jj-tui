@@ -44,6 +44,7 @@ type Model struct {
 	// Ticket transitions
 	availableTransitions   []tickets.Transition
 	transitionInProgress   bool
+	statusChangeMode       bool // whether status change buttons are expanded
 	loadingTransitions     bool
 	notJJRepo      bool   // true if error is "not a jj repository"
 	currentPath    string // path where we're running (for jj init)
@@ -399,6 +400,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case transitionCompletedMsg:
 		m.transitionInProgress = false
+		m.statusChangeMode = false // Collapse status buttons after transition
 		if msg.err != nil {
 			m.statusMessage = fmt.Sprintf("Failed to transition %s: %v", msg.ticketKey, msg.err)
 		} else if msg.newStatus != "" {
@@ -407,18 +409,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.loadTickets()
 		}
 		return m, nil
-
-	case bookmarkCreatedMsg:
-		m.statusMessage = fmt.Sprintf("Created branch '%s' from %s", msg.branchName, msg.ticketKey)
-		// Switch to commit graph view to see the new bookmark
-		m.viewMode = ViewCommitGraph
-		// Reload repository to show the new bookmark
-		// Also trigger auto-transition to "In Progress" if enabled
-		cfg, _ := config.Load()
-		if cfg != nil && cfg.AutoInProgressOnBranch() && m.ticketService != nil && msg.ticketKey != "" {
-			return m, tea.Batch(m.loadRepository(), m.transitionTicketToInProgress(msg.ticketKey))
-		}
-		return m, m.loadRepository()
 
 	case settingsSavedMsg:
 		m.viewMode = ViewCommitGraph
@@ -503,6 +493,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.statusMessage = fmt.Sprintf("Bookmark '%s' created", msg.bookmarkName)
 		}
+		// Trigger auto-transition to "In Progress" if enabled and created from a ticket
+		if msg.ticketKey != "" && m.ticketService != nil {
+			cfg, _ := config.Load()
+			if cfg != nil && cfg.AutoInProgressOnBranch() {
+				return m, tea.Batch(m.loadRepository(), m.transitionTicketToInProgress(msg.ticketKey))
+			}
+		}
+		return m, m.loadRepository()
 
 	case bookmarkDeletedMsg:
 		m.viewMode = ViewCommitGraph
@@ -650,7 +648,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.Update(branchPushedMsg{branch: msg.Branch, pushOutput: msg.PushOutput})
 
 	case actions.BookmarkCreatedMsg:
-		return m.Update(bookmarkCreatedOnCommitMsg{bookmarkName: msg.BookmarkName, commitID: msg.CommitID, wasMoved: msg.WasMoved})
+		return m.Update(bookmarkCreatedOnCommitMsg{bookmarkName: msg.BookmarkName, commitID: msg.CommitID, wasMoved: msg.WasMoved, ticketKey: msg.TicketKey})
 
 	case actions.BookmarkDeletedMsg:
 		return m.Update(bookmarkDeletedMsg{bookmarkName: msg.BookmarkName})

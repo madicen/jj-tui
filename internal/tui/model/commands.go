@@ -341,10 +341,13 @@ func (m *Model) transitionTicketToInProgress(ticketKey string) tea.Cmd {
 		}
 
 		// Find an "in progress" like transition
+		// Must contain "progress" OR ("start" but NOT "not start")
 		var inProgressID string
 		for _, t := range transitions {
 			lowerName := strings.ToLower(t.Name)
-			if strings.Contains(lowerName, "progress") || strings.Contains(lowerName, "start") {
+			isInProgress := strings.Contains(lowerName, "progress") ||
+				(strings.Contains(lowerName, "start") && !strings.Contains(lowerName, "not start") && !strings.Contains(lowerName, "not_start"))
+			if isInProgress {
 				inProgressID = t.ID
 				break
 			}

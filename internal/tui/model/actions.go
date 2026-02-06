@@ -12,13 +12,27 @@ import (
 // Clipboard actions
 
 func (m *Model) copyErrorToClipboard() tea.Cmd {
-	if m.err != nil {
-		return actions.CopyToClipboard(m.err.Error())
-	}
-	if strings.Contains(strings.ToLower(m.statusMessage), "error") {
-		return actions.CopyToClipboard(m.statusMessage)
+	errMsg := m.getErrorMessage()
+	if errMsg != "" {
+		return actions.CopyToClipboard(errMsg)
 	}
 	return nil
+}
+
+// getErrorMessage returns the current error message (from m.err or status message)
+func (m *Model) getErrorMessage() string {
+	if m.err != nil {
+		return m.err.Error()
+	}
+	if strings.Contains(strings.ToLower(m.statusMessage), "error") {
+		return m.statusMessage
+	}
+	return ""
+}
+
+// copyErrorMessageToClipboard copies a specific error message to clipboard
+func (m *Model) copyErrorMessageToClipboard(errMsg string) tea.Cmd {
+	return actions.CopyToClipboard(errMsg)
 }
 
 // Commit actions
@@ -179,12 +193,15 @@ func (m *Model) submitBookmarkFromJira() tea.Cmd {
 		m.ticketBookmarkDisplayKeys[bookmarkName] = m.bookmarkTicketDisplayKey
 	}
 
+	// Capture ticket key for auto-transition before clearing it
+	ticketKey := m.bookmarkJiraTicketKey
+
 	m.bookmarkFromJira = false
 	m.bookmarkJiraTicketKey = ""
 	m.bookmarkJiraTicketTitle = ""
 	m.bookmarkTicketDisplayKey = ""
 
-	return actions.CreateBranchFromMain(m.jjService, bookmarkName)
+	return actions.CreateBranchFromMain(m.jjService, bookmarkName, ticketKey)
 }
 
 func (m *Model) deleteBookmark() tea.Cmd {

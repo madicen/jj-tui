@@ -73,12 +73,13 @@ func MoveBookmark(svc *jj.Service, bookmarkName, commitID string) tea.Cmd {
 }
 
 // CreateBranchFromMain creates a new branch from main
-func CreateBranchFromMain(svc *jj.Service, bookmarkName string) tea.Cmd {
+// ticketKey is optional - if provided, it enables auto-transition to "In Progress"
+func CreateBranchFromMain(svc *jj.Service, bookmarkName, ticketKey string) tea.Cmd {
 	return func() tea.Msg {
 		if err := svc.CreateBranchFromMain(context.Background(), bookmarkName); err != nil {
 			return ErrorMsg{Err: fmt.Errorf("failed to create branch from main: %w", err)}
 		}
-		return BookmarkCreatedMsg{BookmarkName: bookmarkName, CommitID: "main", WasMoved: false}
+		return BookmarkCreatedMsg{BookmarkName: bookmarkName, CommitID: "main", WasMoved: false, TicketKey: ticketKey}
 	}
 }
 

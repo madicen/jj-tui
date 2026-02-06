@@ -15,7 +15,8 @@ const (
 	ZoneJiraOpenBrowser     = "zone:jira:openbrowser"
 	ZoneJiraSetInProgress   = "zone:jira:setinprogress"
 	ZoneJiraSetDone         = "zone:jira:setdone"
-	ZoneJiraTransition      = "zone:jira:transition:" // Prefix for dynamic transitions
+	ZoneJiraChangeStatus    = "zone:jira:changestatus"  // Toggle status change mode
+	ZoneJiraTransition      = "zone:jira:transition:"   // Prefix for dynamic transitions
 	ZonePROpenBrowser       = "zone:pr:openbrowser"
 
 	// Settings sub-tabs

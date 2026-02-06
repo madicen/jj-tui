@@ -616,20 +616,16 @@ func (s *Service) GetAvailableTransitions(ctx context.Context, ticketKey string)
 }
 
 // TransitionTicket changes a Codecks card's status
+// Codecks write operations use /dispatch/ endpoints, not the query API
+// See: https://manual.codecks.io/api/
 func (s *Service) TransitionTicket(ctx context.Context, ticketKey string, transitionID string) error {
-	// Codecks uses mutations to update card status
-	mutation := map[string]interface{}{
-		"mutation": map[string]interface{}{
-			"updateCard": map[string]interface{}{
-				"args": map[string]interface{}{
-					"cardId": ticketKey,
-					"status": transitionID,
-				},
-			},
-		},
+	// Build the update payload
+	payload := map[string]interface{}{
+		"id":     ticketKey,
+		"status": transitionID,
 	}
 
-	respBody, err := s.doRequest(ctx, mutation)
+	respBody, err := s.doDispatchRequest(ctx, "cards/update", payload)
 	if err != nil {
 		return fmt.Errorf("failed to update card status: %w", err)
 	}
@@ -646,6 +642,41 @@ func (s *Service) TransitionTicket(ctx context.Context, ticketKey string, transi
 	}
 
 	return nil
+}
+
+// doDispatchRequest performs a write operation to the Codecks dispatch API
+func (s *Service) doDispatchRequest(ctx context.Context, action string, body interface{}) ([]byte, error) {
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	url := fmt.Sprintf("https://api.codecks.io/dispatch/%s", action)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("X-Account", s.subdomain)
+	req.Header.Set("X-Auth-Token", s.token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("codecks API error (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	return respBody, nil
 }
 
 // IsConfigured returns true if Codecks environment variables are set

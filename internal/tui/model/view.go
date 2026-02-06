@@ -588,6 +588,8 @@ func (m *Model) getJiraResult() view.JiraResult {
 		ProviderName:         providerName,
 		AvailableTransitions: transitionViews,
 		TransitionInProgress: m.transitionInProgress,
+		StatusChangeMode:     m.statusChangeMode,
+		Width:                m.width,
 	})
 }
 

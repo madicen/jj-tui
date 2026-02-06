@@ -56,12 +56,6 @@ type transitionCompletedMsg struct {
 	err       error
 }
 
-// bookmarkCreatedMsg is sent when a bookmark is created from a ticket
-type bookmarkCreatedMsg struct {
-	ticketKey  string
-	branchName string
-}
-
 // settingsSavedMsg is sent when settings are saved
 type settingsSavedMsg struct {
 	githubConnected bool
@@ -129,7 +123,8 @@ type branchPushedMsg struct {
 type bookmarkCreatedOnCommitMsg struct {
 	bookmarkName string
 	commitID     string
-	wasMoved     bool // true if bookmark was moved, false if newly created
+	wasMoved     bool   // true if bookmark was moved, false if newly created
+	ticketKey    string // set when creating from a ticket (for auto-transition)
 }
 
 // bookmarkDeletedMsg is sent when a bookmark is deleted
