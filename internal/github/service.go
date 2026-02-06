@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/go-github/v66/github"
 	"github.com/madicen/jj-tui/internal/models"
+	"github.com/shurcooL/githubv4"
 	"golang.org/x/oauth2"
 )
 
@@ -45,11 +46,12 @@ type PRFilterOptions struct {
 
 // Service handles GitHub API interactions
 type Service struct {
-	client   *github.Client
-	owner    string
-	repo     string
-	token    string
-	username string // cached authenticated username
+	client        *github.Client
+	graphqlClient *githubv4.Client
+	owner         string
+	repo          string
+	token         string
+	username      string // cached authenticated username
 }
 
 // CreatePullRequest creates a new pull request
@@ -144,7 +146,20 @@ func (s *Service) GetPullRequests(ctx context.Context) ([]models.GitHubPR, error
 	})
 }
 
+// prQueryStates returns the GraphQL PR states to query based on filter options
+func prQueryStates(filterOpts PRFilterOptions) []githubv4.PullRequestState {
+	states := []githubv4.PullRequestState{githubv4.PullRequestStateOpen}
+	if filterOpts.ShowMerged {
+		states = append(states, githubv4.PullRequestStateMerged)
+	}
+	if filterOpts.ShowClosed {
+		states = append(states, githubv4.PullRequestStateClosed)
+	}
+	return states
+}
+
 // GetPullRequestsWithOptions retrieves pull requests with the specified filter options
+// Uses GraphQL to fetch PRs with check status and reviews in a single API call
 func (s *Service) GetPullRequestsWithOptions(ctx context.Context, filterOpts PRFilterOptions) ([]models.GitHubPR, error) {
 	// Get authenticated username if filtering by user
 	var username string
@@ -156,64 +171,112 @@ func (s *Service) GetPullRequestsWithOptions(ctx context.Context, filterOpts PRF
 		}
 	}
 
-	opts := &github.PullRequestListOptions{
-		State: "all",
-		ListOptions: github.ListOptions{
-			PerPage: 100,
-		},
+	// Build the list of states to query
+	states := prQueryStates(filterOpts)
+
+	// GraphQL query structure
+	var query struct {
+		Repository struct {
+			PullRequests struct {
+				PageInfo struct {
+					HasNextPage bool
+					EndCursor   githubv4.String
+				}
+				Nodes []struct {
+					Number      int
+					Title       string
+					Body        string
+					Url         string
+					State       string
+					BaseRefName string
+					HeadRefName string
+					Merged      bool
+					Author      struct {
+						Login string
+					}
+					Commits struct {
+						Nodes []struct {
+							Commit struct {
+								StatusCheckRollup struct {
+									State string
+								}
+							}
+						}
+					} `graphql:"commits(last: 1)"`
+					Reviews struct {
+						Nodes []struct {
+							State  string
+							Author struct {
+								Login string
+							}
+						}
+					} `graphql:"reviews(last: 20)"`
+				}
+			} `graphql:"pullRequests(first: $first, after: $after, states: $states, orderBy: {field: CREATED_AT, direction: DESC})"`
+		} `graphql:"repository(owner: $owner, name: $name)"`
+	}
+
+	// Set query limit
+	first := 100
+	if filterOpts.Limit > 0 && filterOpts.Limit < first {
+		first = filterOpts.Limit
+	}
+
+	variables := map[string]interface{}{
+		"owner":  githubv4.String(s.owner),
+		"name":   githubv4.String(s.repo),
+		"first":  githubv4.Int(first),
+		"after":  (*githubv4.String)(nil),
+		"states": states,
 	}
 
 	var allPRs []models.GitHubPR
 	for {
-		prs, resp, err := s.client.PullRequests.List(ctx, s.owner, s.repo, opts)
+		err := s.graphqlClient.Query(ctx, &query, variables)
 		if err != nil {
-			return nil, fmt.Errorf("failed to list pull requests: %w", err)
+			return nil, fmt.Errorf("failed to query pull requests: %w", err)
 		}
 
-		for _, pr := range prs {
+		for _, pr := range query.Repository.PullRequests.Nodes {
 			// Filter by author if OnlyMine is set
-			if filterOpts.OnlyMine && pr.GetUser().GetLogin() != username {
+			if filterOpts.OnlyMine && pr.Author.Login != username {
 				continue
 			}
 
-			// Determine the actual state - GitHub API returns "closed" for both
-			// closed and merged PRs. Check MergedAt (populated in list responses)
-			// or Merged field to detect merged PRs.
-			state := pr.GetState()
-			if state == "closed" && (pr.MergedAt != nil || pr.GetMerged()) {
+			// Determine state - GraphQL returns OPEN, CLOSED, MERGED
+			state := strings.ToLower(pr.State)
+			if state == "closed" && pr.Merged {
 				state = "merged"
 			}
 
-			// Apply state filters
-			if state == "merged" && !filterOpts.ShowMerged {
-				continue
-			}
-			if state == "closed" && !filterOpts.ShowClosed {
-				continue
-			}
-
-			ghPR := models.GitHubPR{
-				Number:       pr.GetNumber(),
-				Title:        pr.GetTitle(),
-				Body:         pr.GetBody(),
-				URL:          pr.GetHTMLURL(),
-				State:        state,
-				BaseBranch:   pr.GetBase().GetRef(),
-				HeadBranch:   pr.GetHead().GetRef(),
-				CheckStatus:  models.CheckStatusNone,
-				ReviewStatus: models.ReviewStatusNone,
-			}
-
-			// Only fetch status for open PRs (optimization)
-			if state == "open" {
-				headSHA := pr.GetHead().GetSHA()
-				if headSHA != "" {
-					ghPR.CheckStatus = s.getCheckStatus(ctx, headSHA)
-					ghPR.ReviewStatus = s.getReviewStatus(ctx, pr.GetNumber())
+			// Parse check status from statusCheckRollup
+			checkStatus := models.CheckStatusNone
+			if len(pr.Commits.Nodes) > 0 {
+				rollupState := pr.Commits.Nodes[0].Commit.StatusCheckRollup.State
+				switch rollupState {
+				case "SUCCESS":
+					checkStatus = models.CheckStatusSuccess
+				case "FAILURE", "ERROR":
+					checkStatus = models.CheckStatusFailure
+				case "PENDING", "EXPECTED":
+					checkStatus = models.CheckStatusPending
 				}
 			}
 
-			allPRs = append(allPRs, ghPR)
+			// Parse review status
+			reviewStatus := parseReviewStatus(pr.Reviews.Nodes)
+
+			allPRs = append(allPRs, models.GitHubPR{
+				Number:       pr.Number,
+				Title:        pr.Title,
+				Body:         pr.Body,
+				URL:          pr.Url,
+				State:        state,
+				BaseBranch:   pr.BaseRefName,
+				HeadBranch:   pr.HeadRefName,
+				CheckStatus:  checkStatus,
+				ReviewStatus: reviewStatus,
+			})
 
 			// Check limit
 			if filterOpts.Limit > 0 && len(allPRs) >= filterOpts.Limit {
@@ -221,10 +284,11 @@ func (s *Service) GetPullRequestsWithOptions(ctx context.Context, filterOpts PRF
 			}
 		}
 
-		if resp.NextPage == 0 {
+		// Check for more pages
+		if !query.Repository.PullRequests.PageInfo.HasNextPage {
 			break
 		}
-		opts.Page = resp.NextPage
+		variables["after"] = githubv4.NewString(query.Repository.PullRequests.PageInfo.EndCursor)
 
 		// Early exit if we've hit the limit
 		if filterOpts.Limit > 0 && len(allPRs) >= filterOpts.Limit {
@@ -235,62 +299,22 @@ func (s *Service) GetPullRequestsWithOptions(ctx context.Context, filterOpts PRF
 	return allPRs, nil
 }
 
-// getCheckStatus fetches the combined CI check status for a commit SHA
-func (s *Service) getCheckStatus(ctx context.Context, sha string) models.CheckStatus {
-	// Try combined status first (older status API)
-	combinedStatus, _, err := s.client.Repositories.GetCombinedStatus(ctx, s.owner, s.repo, sha, nil)
-	if err == nil && combinedStatus.GetTotalCount() > 0 {
-		switch combinedStatus.GetState() {
-		case "success":
-			return models.CheckStatusSuccess
-		case "failure", "error":
-			return models.CheckStatusFailure
-		case "pending":
-			return models.CheckStatusPending
-		}
+// parseReviewStatus aggregates review states and returns the overall status
+func parseReviewStatus(reviews []struct {
+	State  string
+	Author struct {
+		Login string
 	}
-
-	// Try check runs (newer checks API - GitHub Actions)
-	checkRuns, _, err := s.client.Checks.ListCheckRunsForRef(ctx, s.owner, s.repo, sha, nil)
-	if err != nil || checkRuns == nil || len(checkRuns.CheckRuns) == 0 {
-		return models.CheckStatusNone
-	}
-
-	// Aggregate check run statuses
-	hasFailure := false
-	hasPending := false
-	for _, run := range checkRuns.CheckRuns {
-		conclusion := run.GetConclusion()
-		status := run.GetStatus()
-
-		if status == "in_progress" || status == "queued" {
-			hasPending = true
-		} else if conclusion == "failure" || conclusion == "cancelled" || conclusion == "timed_out" {
-			hasFailure = true
-		}
-	}
-
-	if hasFailure {
-		return models.CheckStatusFailure
-	}
-	if hasPending {
-		return models.CheckStatusPending
-	}
-	return models.CheckStatusSuccess
-}
-
-// getReviewStatus fetches the review status for a PR
-func (s *Service) getReviewStatus(ctx context.Context, prNumber int) models.ReviewStatus {
-	reviews, _, err := s.client.PullRequests.ListReviews(ctx, s.owner, s.repo, prNumber, nil)
-	if err != nil || len(reviews) == 0 {
+}) models.ReviewStatus {
+	if len(reviews) == 0 {
 		return models.ReviewStatusNone
 	}
 
 	// Get the latest review state from each reviewer
 	latestReviews := make(map[string]string)
 	for _, review := range reviews {
-		reviewer := review.GetUser().GetLogin()
-		state := review.GetState()
+		reviewer := review.Author.Login
+		state := review.State
 		// Only track meaningful states
 		if state == "APPROVED" || state == "CHANGES_REQUESTED" || state == "DISMISSED" {
 			latestReviews[reviewer] = state
@@ -511,13 +535,17 @@ func NewServiceWithToken(owner, repo, token string) (*Service, error) {
 	)
 	tc := oauth2.NewClient(context.Background(), ts)
 
-	// Create GitHub client
+	// Create GitHub REST client
 	client := github.NewClient(tc)
 
+	// Create GitHub GraphQL client
+	graphqlClient := githubv4.NewClient(tc)
+
 	return &Service{
-		client: client,
-		owner:  owner,
-		repo:   repo,
-		token:  token,
+		client:        client,
+		graphqlClient: graphqlClient,
+		owner:         owner,
+		repo:          repo,
+		token:         token,
 	}, nil
 }
