@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
@@ -15,7 +14,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// OAuth App Client ID for jj-tui
+// GitHubClientID is the OAuth App Client ID for jj-tui
 const GitHubClientID = "Iv23liEpah7dINFx13j6"
 
 // DeviceCodeResponse represents the response from GitHub's device code endpoint
@@ -51,30 +50,6 @@ type Service struct {
 	repo     string
 	token    string
 	username string // cached authenticated username
-}
-
-// NewService creates a new GitHub service
-func NewService(owner, repo string) (*Service, error) {
-	token := os.Getenv("GITHUB_TOKEN")
-	if token == "" {
-		return nil, fmt.Errorf("GITHUB_TOKEN environment variable is required")
-	}
-
-	// Create OAuth2 token source
-	ts := oauth2.StaticTokenSource(
-		&oauth2.Token{AccessToken: token},
-	)
-	tc := oauth2.NewClient(context.Background(), ts)
-
-	// Create GitHub client
-	client := github.NewClient(tc)
-
-	return &Service{
-		client: client,
-		owner:  owner,
-		repo:   repo,
-		token:  token,
-	}, nil
 }
 
 // CreatePullRequest creates a new pull request
