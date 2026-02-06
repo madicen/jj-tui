@@ -110,7 +110,7 @@ func (s *Service) GetAssignedTickets(ctx context.Context) ([]tickets.Ticket, err
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("Jira API error (status %d): %s", resp.StatusCode, string(bodyBytes))
+		return nil, fmt.Errorf("jira API error (status %d): %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	var result searchResponse
@@ -191,7 +191,7 @@ func (s *Service) GetTicket(ctx context.Context, key string) (*tickets.Ticket, e
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("Jira API error (status %d): %s", resp.StatusCode, string(bodyBytes))
+		return nil, fmt.Errorf("jira API error (status %d): %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	var issue issueResponse
