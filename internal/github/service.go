@@ -192,15 +192,28 @@ func (s *Service) GetPullRequestsWithOptions(ctx context.Context, filterOpts PRF
 				continue
 			}
 
-			allPRs = append(allPRs, models.GitHubPR{
-				Number:     pr.GetNumber(),
-				Title:      pr.GetTitle(),
-				Body:       pr.GetBody(),
-				URL:        pr.GetHTMLURL(),
-				State:      state,
-				BaseBranch: pr.GetBase().GetRef(),
-				HeadBranch: pr.GetHead().GetRef(),
-			})
+			ghPR := models.GitHubPR{
+				Number:       pr.GetNumber(),
+				Title:        pr.GetTitle(),
+				Body:         pr.GetBody(),
+				URL:          pr.GetHTMLURL(),
+				State:        state,
+				BaseBranch:   pr.GetBase().GetRef(),
+				HeadBranch:   pr.GetHead().GetRef(),
+				CheckStatus:  models.CheckStatusNone,
+				ReviewStatus: models.ReviewStatusNone,
+			}
+
+			// Only fetch status for open PRs (optimization)
+			if state == "open" {
+				headSHA := pr.GetHead().GetSHA()
+				if headSHA != "" {
+					ghPR.CheckStatus = s.getCheckStatus(ctx, headSHA)
+					ghPR.ReviewStatus = s.getReviewStatus(ctx, pr.GetNumber())
+				}
+			}
+
+			allPRs = append(allPRs, ghPR)
 
 			// Check limit
 			if filterOpts.Limit > 0 && len(allPRs) >= filterOpts.Limit {
@@ -220,6 +233,94 @@ func (s *Service) GetPullRequestsWithOptions(ctx context.Context, filterOpts PRF
 	}
 
 	return allPRs, nil
+}
+
+// getCheckStatus fetches the combined CI check status for a commit SHA
+func (s *Service) getCheckStatus(ctx context.Context, sha string) models.CheckStatus {
+	// Try combined status first (older status API)
+	combinedStatus, _, err := s.client.Repositories.GetCombinedStatus(ctx, s.owner, s.repo, sha, nil)
+	if err == nil && combinedStatus.GetTotalCount() > 0 {
+		switch combinedStatus.GetState() {
+		case "success":
+			return models.CheckStatusSuccess
+		case "failure", "error":
+			return models.CheckStatusFailure
+		case "pending":
+			return models.CheckStatusPending
+		}
+	}
+
+	// Try check runs (newer checks API - GitHub Actions)
+	checkRuns, _, err := s.client.Checks.ListCheckRunsForRef(ctx, s.owner, s.repo, sha, nil)
+	if err != nil || checkRuns == nil || len(checkRuns.CheckRuns) == 0 {
+		return models.CheckStatusNone
+	}
+
+	// Aggregate check run statuses
+	hasFailure := false
+	hasPending := false
+	for _, run := range checkRuns.CheckRuns {
+		conclusion := run.GetConclusion()
+		status := run.GetStatus()
+
+		if status == "in_progress" || status == "queued" {
+			hasPending = true
+		} else if conclusion == "failure" || conclusion == "cancelled" || conclusion == "timed_out" {
+			hasFailure = true
+		}
+	}
+
+	if hasFailure {
+		return models.CheckStatusFailure
+	}
+	if hasPending {
+		return models.CheckStatusPending
+	}
+	return models.CheckStatusSuccess
+}
+
+// getReviewStatus fetches the review status for a PR
+func (s *Service) getReviewStatus(ctx context.Context, prNumber int) models.ReviewStatus {
+	reviews, _, err := s.client.PullRequests.ListReviews(ctx, s.owner, s.repo, prNumber, nil)
+	if err != nil || len(reviews) == 0 {
+		return models.ReviewStatusNone
+	}
+
+	// Get the latest review state from each reviewer
+	latestReviews := make(map[string]string)
+	for _, review := range reviews {
+		reviewer := review.GetUser().GetLogin()
+		state := review.GetState()
+		// Only track meaningful states
+		if state == "APPROVED" || state == "CHANGES_REQUESTED" || state == "DISMISSED" {
+			latestReviews[reviewer] = state
+		}
+	}
+
+	if len(latestReviews) == 0 {
+		return models.ReviewStatusPending
+	}
+
+	// Check for any changes requested or approvals
+	hasApproval := false
+	hasChangesRequested := false
+	for _, state := range latestReviews {
+		if state == "APPROVED" {
+			hasApproval = true
+		}
+		if state == "CHANGES_REQUESTED" {
+			hasChangesRequested = true
+		}
+	}
+
+	// Changes requested takes priority over approval
+	if hasChangesRequested {
+		return models.ReviewStatusChangesRequested
+	}
+	if hasApproval {
+		return models.ReviewStatusApproved
+	}
+	return models.ReviewStatusPending
 }
 
 // GetPullRequest retrieves a specific pull request
