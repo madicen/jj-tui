@@ -25,6 +25,7 @@ type SettingsParams struct {
 	ShowClosed              bool
 	OnlyMine                bool
 	PRLimit                 int
+	PRRefreshInterval       int
 }
 
 // SettingsSavedMsg indicates settings were saved
@@ -65,6 +66,7 @@ func SaveSettings(params SettingsParams) tea.Cmd {
 		cfg.GitHubShowClosed = &params.ShowClosed
 		cfg.GitHubOnlyMine = &params.OnlyMine
 		cfg.GitHubPRLimit = &params.PRLimit
+		cfg.GitHubRefreshInterval = &params.PRRefreshInterval
 		cfg.TicketProvider = ticketProvider
 		cfg.JiraURL = params.JiraURL
 		cfg.JiraUser = params.JiraUser
@@ -104,6 +106,7 @@ func SaveSettingsLocal(params SettingsParams) tea.Cmd {
 			GitHubShowClosed:        &params.ShowClosed,
 			GitHubOnlyMine:          &params.OnlyMine,
 			GitHubPRLimit:           &params.PRLimit,
+			GitHubRefreshInterval:   &params.PRRefreshInterval,
 			JiraExcludedStatuses:    params.JiraExcludedStatuses,
 			CodecksProject:          params.CodecksProject,
 			CodecksExcludedStatuses: params.CodecksExcludedStatuses,

@@ -607,6 +607,7 @@ func (m *Model) renderSettings() string {
 		ShowClosedPRs:     m.settingsShowClosed,
 		OnlyMyPRs:         m.settingsOnlyMine,
 		PRLimit:           m.settingsPRLimit,
+		PRRefreshInterval: m.settingsPRRefreshInterval,
 		ConfirmingCleanup: m.confirmingCleanup,
 	})
 }

@@ -432,6 +432,32 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// PR Refresh Interval controls
+		if m.zone.Get(ZoneSettingsGitHubRefreshDecrease) == zoneInfo {
+			if m.settingsPRRefreshInterval > 30 {
+				m.settingsPRRefreshInterval -= 30 // Decrease by 30 seconds
+			} else if m.settingsPRRefreshInterval > 0 {
+				m.settingsPRRefreshInterval = 0 // Go to disabled
+			}
+			return m, nil
+		}
+		if m.zone.Get(ZoneSettingsGitHubRefreshIncrease) == zoneInfo {
+			if m.settingsPRRefreshInterval == 0 {
+				m.settingsPRRefreshInterval = 30 // Enable at 30 seconds
+			} else if m.settingsPRRefreshInterval < 600 {
+				m.settingsPRRefreshInterval += 30 // Increase by 30 seconds (max 10 min)
+			}
+			return m, nil
+		}
+		if m.zone.Get(ZoneSettingsGitHubRefreshToggle) == zoneInfo {
+			if m.settingsPRRefreshInterval == 0 {
+				m.settingsPRRefreshInterval = 120 // Enable at 2 minutes (default)
+			} else {
+				m.settingsPRRefreshInterval = 0 // Disable
+			}
+			return m, nil
+		}
+
 		// Clear buttons for each field (in order of input indices)
 		// 0=GitHub Token, 1=Jira URL, 2=Jira User, 3=Jira Token, 4=Jira Excluded,
 		// 5=Codecks Subdomain, 6=Codecks Token, 7=Codecks Project, 8=Codecks Excluded

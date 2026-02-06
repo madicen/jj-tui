@@ -9,8 +9,11 @@ import (
 	"github.com/madicen/jj-tui/internal/tickets"
 )
 
-// tickMsg is sent on each timer tick for auto-refresh
+// tickMsg is sent on each timer tick for auto-refresh (jj repository)
 type tickMsg time.Time
+
+// prTickMsg is sent on each timer tick for PR auto-refresh
+type prTickMsg time.Time
 
 // repositoryLoadedMsg is sent when repository data is loaded
 type repositoryLoadedMsg struct {

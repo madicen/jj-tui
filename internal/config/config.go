@@ -13,10 +13,11 @@ type Config struct {
 	GitHubToken string `json:"github_token,omitempty"`
 
 	// GitHub filter settings
-	GitHubShowMerged *bool `json:"github_show_merged,omitempty"` // nil = true (show by default)
-	GitHubShowClosed *bool `json:"github_show_closed,omitempty"` // nil = true (show by default)
-	GitHubOnlyMine   *bool `json:"github_only_mine,omitempty"`   // nil = false (show all by default)
-	GitHubPRLimit    *int  `json:"github_pr_limit,omitempty"`    // nil = 100 (default limit)
+	GitHubShowMerged      *bool `json:"github_show_merged,omitempty"`       // nil = true (show by default)
+	GitHubShowClosed      *bool `json:"github_show_closed,omitempty"`       // nil = true (show by default)
+	GitHubOnlyMine        *bool `json:"github_only_mine,omitempty"`         // nil = false (show all by default)
+	GitHubPRLimit         *int  `json:"github_pr_limit,omitempty"`          // nil = 100 (default limit)
+	GitHubRefreshInterval *int  `json:"github_refresh_interval,omitempty"` // nil = 120 seconds (2 min default), 0 = disabled
 
 	// Ticket provider selection: "jira" or "codecks"
 	TicketProvider string `json:"ticket_provider,omitempty"`
@@ -100,6 +101,9 @@ func mergeConfig(dest, source *Config) {
 	}
 	if source.GitHubPRLimit != nil {
 		dest.GitHubPRLimit = source.GitHubPRLimit
+	}
+	if source.GitHubRefreshInterval != nil {
+		dest.GitHubRefreshInterval = source.GitHubRefreshInterval
 	}
 	if source.TicketProvider != "" {
 		dest.TicketProvider = source.TicketProvider
@@ -327,6 +331,15 @@ func (c *Config) PRLimit() int {
 		return 100
 	}
 	return *c.GitHubPRLimit
+}
+
+// PRRefreshInterval returns the PR auto-refresh interval in seconds
+// Returns 0 if auto-refresh is disabled, defaults to 120 (2 minutes)
+func (c *Config) PRRefreshInterval() int {
+	if c.GitHubRefreshInterval == nil {
+		return 120 // Default: 2 minutes
+	}
+	return *c.GitHubRefreshInterval
 }
 
 // HasJira returns true if Jira is fully configured
