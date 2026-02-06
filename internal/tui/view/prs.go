@@ -51,34 +51,34 @@ func (r *Renderer) PullRequests(data PRData) PRResult {
 		detailLines = append(detailLines, lipgloss.NewStyle().Foreground(ColorMuted).Render(pr.URL))
 		detailLines = append(detailLines, fmt.Sprintf("Base: %s ← Head: %s", pr.BaseBranch, pr.HeadBranch))
 
-		// Show status indicators for open PRs
-		if pr.State == "open" {
-			var statusParts []string
+		// Always show status line to prevent layout shift
+		var checkPart, reviewPart string
 
-			// CI status
-			switch pr.CheckStatus {
-			case models.CheckStatusSuccess:
-				statusParts = append(statusParts, lipgloss.NewStyle().Foreground(lipgloss.Color("#2ea44f")).Render("✓ Checks passed"))
-			case models.CheckStatusFailure:
-				statusParts = append(statusParts, lipgloss.NewStyle().Foreground(lipgloss.Color("#cb2431")).Render("✗ Checks failed"))
-			case models.CheckStatusPending:
-				statusParts = append(statusParts, lipgloss.NewStyle().Foreground(lipgloss.Color("#dbab09")).Render("○ Checks pending"))
-			}
-
-			// Review status
-			switch pr.ReviewStatus {
-			case models.ReviewStatusApproved:
-				statusParts = append(statusParts, lipgloss.NewStyle().Foreground(lipgloss.Color("#2ea44f")).Render("👍 Approved"))
-			case models.ReviewStatusChangesRequested:
-				statusParts = append(statusParts, lipgloss.NewStyle().Foreground(lipgloss.Color("#cb2431")).Render("📝 Changes requested"))
-			case models.ReviewStatusPending:
-				statusParts = append(statusParts, lipgloss.NewStyle().Foreground(lipgloss.Color("#dbab09")).Render("⏳ Review pending"))
-			}
-
-			if len(statusParts) > 0 {
-				detailLines = append(detailLines, strings.Join(statusParts, "  │  "))
-			}
+		// CI status
+		switch pr.CheckStatus {
+		case models.CheckStatusSuccess:
+			checkPart = lipgloss.NewStyle().Foreground(lipgloss.Color("#2ea44f")).Render("✓ Checks passed")
+		case models.CheckStatusFailure:
+			checkPart = lipgloss.NewStyle().Foreground(lipgloss.Color("#cb2431")).Render("✗ Checks failed")
+		case models.CheckStatusPending:
+			checkPart = lipgloss.NewStyle().Foreground(lipgloss.Color("#dbab09")).Render("○ Checks pending")
+		default:
+			checkPart = lipgloss.NewStyle().Foreground(lipgloss.Color("#6a737d")).Render("· No checks")
 		}
+
+		// Review status
+		switch pr.ReviewStatus {
+		case models.ReviewStatusApproved:
+			reviewPart = lipgloss.NewStyle().Foreground(lipgloss.Color("#2ea44f")).Render("👍 Approved")
+		case models.ReviewStatusChangesRequested:
+			reviewPart = lipgloss.NewStyle().Foreground(lipgloss.Color("#cb2431")).Render("📝 Changes requested")
+		case models.ReviewStatusPending:
+			reviewPart = lipgloss.NewStyle().Foreground(lipgloss.Color("#dbab09")).Render("⏳ Review pending")
+		default:
+			reviewPart = lipgloss.NewStyle().Foreground(lipgloss.Color("#6a737d")).Render("· No reviews")
+		}
+
+		detailLines = append(detailLines, checkPart+"  │  "+reviewPart)
 
 		// Always show description line to prevent layout shift
 		if pr.Body != "" {
