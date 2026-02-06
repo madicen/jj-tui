@@ -39,11 +39,6 @@ func (r *Renderer) Settings(data SettingsData) string {
 	lines = append(lines, TitleStyle.Render("Settings"))
 	lines = append(lines, "")
 
-	// Render sub-tabs
-	tabs := r.renderSettingsTabs(data.ActiveTab)
-	lines = append(lines, tabs)
-	lines = append(lines, "")
-
 	// Show config source
 	if data.ConfigSource != "" {
 		configInfo := "Config: " + data.ConfigSource
@@ -54,6 +49,15 @@ func (r *Renderer) Settings(data SettingsData) string {
 	} else {
 		lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Italic(true).Render("Config: ~/.config/jj-tui/config.json"))
 	}
+
+	// Navigation hint
+	navHint := lipgloss.NewStyle().Foreground(ColorMuted).Italic(true).Render("^j/^k: switch tabs  Tab: next field")
+	lines = append(lines, navHint)
+	lines = append(lines, "")
+
+	// Render sub-tabs
+	tabs := r.renderSettingsTabs(data.ActiveTab)
+	lines = append(lines, tabs)
 	lines = append(lines, "")
 
 	// Render content based on active tab
@@ -86,12 +90,10 @@ func (r *Renderer) Settings(data SettingsData) string {
 	lines = append(lines, "")
 
 	// Action buttons
-	saveButton := r.Zone.Mark(ZoneSettingsSave, ButtonStyle.Render("Save Global (Ctrl+S)"))
-	saveLocalButton := r.Zone.Mark(ZoneSettingsSaveLocal, ButtonStyle.Render("Save Local (Ctrl+L)"))
+	saveButton := r.Zone.Mark(ZoneSettingsSave, ButtonStyle.Render("Save Global (^s)"))
+	saveLocalButton := r.Zone.Mark(ZoneSettingsSaveLocal, ButtonStyle.Render("Save Local (^l)"))
 	cancelButton := r.Zone.Mark(ZoneSettingsCancel, ButtonStyle.Render("Cancel (Esc)"))
 	lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Left, saveButton, " ", saveLocalButton, " ", cancelButton))
-	lines = append(lines, "")
-	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Italic(true).Render("  Use 1/2/3 or ←/→ to switch tabs. Tab/↓ to move between fields."))
 
 	return strings.Join(lines, "\n")
 }
@@ -118,9 +120,8 @@ func (r *Renderer) renderSettingsTabs(activeTab SettingsTab) string {
 	jiraTab := r.Zone.Mark(ZoneSettingsTabJira, jiraStyle.Render("Jira"))
 	codecksTab := r.Zone.Mark(ZoneSettingsTabCodecks, codecksStyle.Render("Codecks"))
 	advancedTab := r.Zone.Mark(ZoneSettingsTabAdvanced, advancedStyle.Render("Advanced"))
-	navHint := lipgloss.NewStyle().Foreground(ColorMuted).Render("  Ctrl+J/K switch tabs")
 
-	return lipgloss.JoinHorizontal(lipgloss.Left, githubTab, " │ ", jiraTab, " │ ", codecksTab, " │ ", advancedTab, navHint)
+	return lipgloss.JoinHorizontal(lipgloss.Left, githubTab, " │ ", jiraTab, " │ ", codecksTab, " │ ", advancedTab)
 }
 
 // renderGitHubSettings renders the GitHub settings content
