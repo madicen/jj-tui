@@ -63,6 +63,9 @@ const (
 	ZoneJiraCreateBranch = "zone:jira:createbranch"
 	ZoneJiraOpenBrowser  = "zone:jira:openbrowser"
 
+	// PR action zones
+	ZonePROpenBrowser = "zone:pr:openbrowser"
+
 	// Settings sub-tab zones
 	ZoneSettingsTabGitHub   = "zone:settings:tab:github"
 	ZoneSettingsTabJira     = "zone:settings:tab:jira"
