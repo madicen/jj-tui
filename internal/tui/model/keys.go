@@ -165,19 +165,20 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case "j", "down":
-		if m.viewMode == ViewPullRequests {
+		switch m.viewMode {
+		case ViewPullRequests:
 			if m.repository != nil && m.selectedPR < len(m.repository.PRs)-1 {
 				m.selectedPR++
 				// Scroll viewport to keep selection visible
 				m.ensureSelectionVisible(m.selectedPR)
 			}
-		} else if m.viewMode == ViewJira {
+		case ViewJira:
 			if m.selectedTicket < len(m.ticketList)-1 {
 				m.selectedTicket++
 				// Scroll viewport to keep selection visible
 				m.ensureSelectionVisible(m.selectedTicket)
 			}
-		} else if m.viewMode == ViewCommitGraph {
+		case ViewCommitGraph:
 			if !m.graphFocused {
 				// Scroll files pane down (if there are files)
 				if len(m.changedFiles) > 0 {
@@ -198,19 +199,20 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case "k", "up":
-		if m.viewMode == ViewPullRequests {
+		switch m.viewMode {
+		case ViewPullRequests:
 			if m.selectedPR > 0 {
 				m.selectedPR--
 				// Scroll viewport to keep selection visible
 				m.ensureSelectionVisible(m.selectedPR)
 			}
-		} else if m.viewMode == ViewJira {
+		case ViewJira:
 			if m.selectedTicket > 0 {
 				m.selectedTicket--
 				// Scroll viewport to keep selection visible
 				m.ensureSelectionVisible(m.selectedTicket)
 			}
-		} else if m.viewMode == ViewCommitGraph {
+		case ViewCommitGraph:
 			if !m.graphFocused {
 				// Scroll files pane up (if there are files)
 				if len(m.changedFiles) > 0 {

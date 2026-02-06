@@ -151,23 +151,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Reset scroll position if it's now beyond valid bounds
 			totalLines := m.viewport.TotalLineCount()
-			maxOffset := totalLines - contentHeight
-			if maxOffset < 0 {
-				maxOffset = 0
-			}
+			maxOffset := max(totalLines-contentHeight, 0)
 			if m.viewport.YOffset > maxOffset {
 				m.viewport.YOffset = maxOffset
 			}
 		}
 
 		// Resize text areas to fit new window width
-		inputWidth := m.width - 20 // Leave margin for borders/padding
-		if inputWidth < 30 {
-			inputWidth = 30
-		}
-		if inputWidth > 80 {
-			inputWidth = 80 // Cap at reasonable max
-		}
+		inputWidth := min(
+			// Leave margin for borders/padding
+			max(
+				m.width-20, 30,
+			),
+			// Cap at reasonable max
+			80,
+		)
 
 		m.descriptionInput.SetWidth(inputWidth)
 		m.prBodyInput.SetWidth(inputWidth)

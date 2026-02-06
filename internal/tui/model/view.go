@@ -46,7 +46,8 @@ func (m *Model) View() string {
 	}
 
 	// For PR and Jira views, use split rendering with fixed header
-	if m.viewMode == ViewPullRequests || m.viewMode == ViewJira {
+	switch m.viewMode {
+	case ViewPullRequests, ViewJira:
 		fixedHeader, scrollableList := m.renderSplitContent()
 
 		// Calculate full content height first (may have been reduced by graph view)
@@ -113,7 +114,7 @@ func (m *Model) View() string {
 				statusBar,
 			)
 		}
-	} else if m.viewMode == ViewCommitGraph {
+	case ViewCommitGraph:
 		// Graph view with split panes: graph (scrollable) | actions (fixed) | files (scrollable)
 		graphResult := m.getGraphResult()
 
@@ -213,7 +214,7 @@ func (m *Model) View() string {
 			filesPane,
 			statusBar,
 		)
-	} else {
+	default:
 		// Normal views: put all content in viewport
 		// Reset viewport height to full available space (may have been reduced by graph view)
 		headerHeight := strings.Count(header, "\n") + 1

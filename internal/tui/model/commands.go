@@ -114,14 +114,14 @@ func createTicketService() (tickets.Service, error) {
 			svc, err := codecks.NewService()
 			if err != nil {
 				// Codecks configured but failed to connect - return the error
-				return nil, fmt.Errorf("Codecks: %w", err)
+				return nil, fmt.Errorf("codecks: %w", err)
 			}
 			return svc, nil
 		}
 		if jira.IsConfigured() {
 			svc, err := jira.NewService()
 			if err != nil {
-				return nil, fmt.Errorf("Jira: %w", err)
+				return nil, fmt.Errorf("jira: %w", err)
 			}
 			return svc, nil
 		}

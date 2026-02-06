@@ -233,7 +233,7 @@ func (s *Service) doRequest(ctx context.Context, body interface{}) ([]byte, erro
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Codecks API error (status %d): %s", resp.StatusCode, string(respBody))
+		return nil, fmt.Errorf("codecks API error (status %d): %s", resp.StatusCode, string(respBody))
 	}
 
 	return respBody, nil
