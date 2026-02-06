@@ -1,6 +1,7 @@
 package jj
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -697,17 +698,30 @@ func extractErrorMessage(output string) string {
 	return ""
 }
 
-// runJJOutput executes a jj command and returns its output
+// runJJOutput executes a jj command and returns its stdout only
+// stderr is captured separately to avoid jj hints/warnings mixing into parsed output
 func (s *Service) runJJOutput(ctx context.Context, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "jj", args...)
 	cmd.Dir = s.RepoPath
-	out, err := cmd.CombinedOutput()
+
+	// Capture stdout and stderr separately
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
 	if err != nil {
+		// Include stderr in error message for debugging
+		errOutput := stderr.String()
+		if errOutput == "" {
+			errOutput = stdout.String()
+		}
 		return "", fmt.Errorf("jj command '%s' failed: %w\nOutput: %s",
-			fmt.Sprintf("jj %s", strings.Join(args, " ")), err, string(out))
+			fmt.Sprintf("jj %s", strings.Join(args, " ")), err, errOutput)
 	}
-	// Filter out warning lines
-	return filterWarnings(string(out)), nil
+
+	// Return only stdout - hints/warnings go to stderr
+	return stdout.String(), nil
 }
 
 // filterWarnings removes jj warning messages from output
