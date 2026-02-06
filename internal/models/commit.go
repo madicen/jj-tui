@@ -31,16 +31,38 @@ type CommitGraph struct {
 	Connections map[string][]string `json:"connections"` // commit_id -> connected_commit_ids
 }
 
+// CheckStatus represents the CI check status of a PR
+type CheckStatus string
+
+const (
+	CheckStatusPending CheckStatus = "pending"
+	CheckStatusSuccess CheckStatus = "success"
+	CheckStatusFailure CheckStatus = "failure"
+	CheckStatusNone    CheckStatus = "none"
+)
+
+// ReviewStatus represents the review status of a PR
+type ReviewStatus string
+
+const (
+	ReviewStatusApproved         ReviewStatus = "approved"
+	ReviewStatusChangesRequested ReviewStatus = "changes_requested"
+	ReviewStatusPending          ReviewStatus = "pending"
+	ReviewStatusNone             ReviewStatus = "none"
+)
+
 // GitHubPR represents a GitHub Pull Request
 type GitHubPR struct {
-	Number     int      `json:"number"`
-	Title      string   `json:"title"`
-	Body       string   `json:"body"`
-	URL        string   `json:"url"`
-	State      string   `json:"state"`
-	BaseBranch string   `json:"base_branch"`
-	HeadBranch string   `json:"head_branch"`
-	CommitIDs  []string `json:"commit_ids"`
+	Number       int          `json:"number"`
+	Title        string       `json:"title"`
+	Body         string       `json:"body"`
+	URL          string       `json:"url"`
+	State        string       `json:"state"`
+	BaseBranch   string       `json:"base_branch"`
+	HeadBranch   string       `json:"head_branch"`
+	CommitIDs    []string     `json:"commit_ids"`
+	CheckStatus  CheckStatus  `json:"check_status"`  // CI check status
+	ReviewStatus ReviewStatus `json:"review_status"` // Review status
 }
 
 // Repository represents the current jj repository state
