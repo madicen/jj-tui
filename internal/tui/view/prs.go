@@ -72,10 +72,12 @@ func (r *Renderer) PullRequests(data PRData) PRResult {
 			Render(strings.Join(detailLines, "\n"))
 		headerLines = append(headerLines, detailsBox)
 		headerLines = append(headerLines, "")
-	}
 
-	headerLines = append(headerLines, lipgloss.NewStyle().Foreground(ColorMuted).Render("Press Enter/o to open in browser"))
-	headerLines = append(headerLines, "")
+		// Add Open in Browser button
+		openBrowserBtn := r.Zone.Mark(ZonePROpenBrowser, ButtonStyle.Render("Open in Browser (o)"))
+		headerLines = append(headerLines, openBrowserBtn)
+		headerLines = append(headerLines, "")
+	}
 
 	// Build scrollable list section
 	var listLines []string

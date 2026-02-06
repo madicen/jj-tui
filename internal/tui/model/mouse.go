@@ -242,6 +242,17 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// Check PR open in browser button
+	if m.zone.Get(ZonePROpenBrowser) == zoneInfo {
+		if m.viewMode == ViewPullRequests && m.repository != nil && m.selectedPR >= 0 && m.selectedPR < len(m.repository.PRs) {
+			pr := m.repository.PRs[m.selectedPR]
+			if pr.URL != "" {
+				m.statusMessage = fmt.Sprintf("Opening PR #%d...", pr.Number)
+				return m, openURL(pr.URL)
+			}
+		}
+	}
+
 	// Description editor zones
 	if m.zone.Get(ZoneDescSave) == zoneInfo {
 		if m.viewMode == ViewEditDescription {

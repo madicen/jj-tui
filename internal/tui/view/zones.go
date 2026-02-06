@@ -13,6 +13,7 @@ const (
 
 	ZoneJiraCreateBranch = "zone:jira:createbranch"
 	ZoneJiraOpenBrowser  = "zone:jira:openbrowser"
+	ZonePROpenBrowser    = "zone:pr:openbrowser"
 
 	// Settings sub-tabs
 	ZoneSettingsTabGitHub   = "zone:settings:tab:github"
