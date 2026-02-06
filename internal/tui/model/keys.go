@@ -2,6 +2,7 @@ package model
 
 import (
 	"fmt"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -177,6 +178,10 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.selectedTicket++
 				// Scroll viewport to keep selection visible
 				m.ensureSelectionVisible(m.selectedTicket)
+				// Load transitions for newly selected ticket
+				m.availableTransitions = nil
+				m.loadingTransitions = true
+				return m, m.loadTransitions()
 			}
 		case ViewCommitGraph:
 			if !m.graphFocused {
@@ -211,6 +216,10 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.selectedTicket--
 				// Scroll viewport to keep selection visible
 				m.ensureSelectionVisible(m.selectedTicket)
+				// Load transitions for newly selected ticket
+				m.availableTransitions = nil
+				m.loadingTransitions = true
+				return m, m.loadTransitions()
 			}
 		case ViewCommitGraph:
 			if !m.graphFocused {
@@ -231,6 +240,62 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					return m, m.loadChangedFiles(commit.ChangeID)
 				}
 			}
+		}
+	case "i":
+		// Set ticket to "In Progress" (Tickets view only)
+		if m.viewMode == ViewJira && m.ticketService != nil && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
+			if m.transitionInProgress {
+				return m, nil // Already transitioning
+			}
+			// Find "in progress" transition (must contain "progress" or "start" but NOT "not start")
+			for _, t := range m.availableTransitions {
+				lowerName := strings.ToLower(t.Name)
+				isInProgress := strings.Contains(lowerName, "progress") ||
+					(strings.Contains(lowerName, "start") && !strings.Contains(lowerName, "not start") && !strings.Contains(lowerName, "not_start"))
+				if isInProgress {
+					m.transitionInProgress = true
+					ticket := m.ticketList[m.selectedTicket]
+					m.statusMessage = fmt.Sprintf("Setting %s to %s...", ticket.DisplayKey, t.Name)
+					return m, m.transitionTicket(t.ID)
+				}
+			}
+			m.statusMessage = "No 'In Progress' transition available"
+		}
+	case "D":
+		// Set ticket to "Done" (Tickets view only) - capital D to avoid conflicts
+		if m.viewMode == ViewJira && m.ticketService != nil && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
+			if m.transitionInProgress {
+				return m, nil // Already transitioning
+			}
+			// Find "done" transition
+			for _, t := range m.availableTransitions {
+				lowerName := strings.ToLower(t.Name)
+				if strings.Contains(lowerName, "done") || strings.Contains(lowerName, "complete") || strings.Contains(lowerName, "resolve") {
+					m.transitionInProgress = true
+					ticket := m.ticketList[m.selectedTicket]
+					m.statusMessage = fmt.Sprintf("Setting %s to %s...", ticket.DisplayKey, t.Name)
+					return m, m.transitionTicket(t.ID)
+				}
+			}
+			m.statusMessage = "No 'Done' transition available"
+		}
+	case "B":
+		// Set ticket to "Blocked" (Tickets view only) - capital B to avoid conflicts
+		if m.viewMode == ViewJira && m.ticketService != nil && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
+			if m.transitionInProgress {
+				return m, nil // Already transitioning
+			}
+			// Find "blocked" transition
+			for _, t := range m.availableTransitions {
+				lowerName := strings.ToLower(t.Name)
+				if strings.Contains(lowerName, "block") {
+					m.transitionInProgress = true
+					ticket := m.ticketList[m.selectedTicket]
+					m.statusMessage = fmt.Sprintf("Setting %s to %s...", ticket.DisplayKey, t.Name)
+					return m, m.transitionTicket(t.ID)
+				}
+			}
+			m.statusMessage = "No 'Blocked' transition available"
 		}
 	case "o":
 		// Open PR URL in browser (PR view only)

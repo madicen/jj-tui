@@ -321,6 +321,7 @@ func (m *Model) saveSettings() tea.Cmd {
 		OnlyMine:             m.settingsOnlyMine,
 		PRLimit:              m.settingsPRLimit,
 		PRRefreshInterval:    m.settingsPRRefreshInterval,
+		AutoInProgress:       m.settingsAutoInProgress,
 	}
 	if len(m.settingsInputs) > 8 {
 		params.CodecksSubdomain = strings.TrimSpace(m.settingsInputs[5].Value())
@@ -343,6 +344,7 @@ func (m *Model) saveSettingsLocal() tea.Cmd {
 		OnlyMine:             m.settingsOnlyMine,
 		PRLimit:              m.settingsPRLimit,
 		PRRefreshInterval:    m.settingsPRRefreshInterval,
+		AutoInProgress:       m.settingsAutoInProgress,
 	}
 	if len(m.settingsInputs) > 8 {
 		params.CodecksSubdomain = strings.TrimSpace(m.settingsInputs[5].Value())

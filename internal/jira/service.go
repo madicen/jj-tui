@@ -246,6 +246,70 @@ func (s *Service) GetProviderName() string {
 	return "Jira"
 }
 
+// transitionsResponse represents the response from Jira transitions API
+type transitionsResponse struct {
+	Transitions []struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+		To   struct {
+			Name string `json:"name"`
+		} `json:"to"`
+	} `json:"transitions"`
+}
+
+// GetAvailableTransitions returns the available status transitions for a Jira issue
+func (s *Service) GetAvailableTransitions(ctx context.Context, ticketKey string) ([]tickets.Transition, error) {
+	endpoint := "/rest/api/3/issue/" + ticketKey + "/transitions"
+
+	resp, err := s.doRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get transitions for %s: %w", ticketKey, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("jira API error (status %d): %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var result transitionsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode transitions response: %w", err)
+	}
+
+	transitions := make([]tickets.Transition, 0, len(result.Transitions))
+	for _, t := range result.Transitions {
+		transitions = append(transitions, tickets.Transition{
+			ID:   t.ID,
+			Name: t.Name,
+		})
+	}
+
+	return transitions, nil
+}
+
+// TransitionTicket executes a transition on a Jira issue
+func (s *Service) TransitionTicket(ctx context.Context, ticketKey string, transitionID string) error {
+	endpoint := "/rest/api/3/issue/" + ticketKey + "/transitions"
+
+	// Build the transition request body
+	body := fmt.Sprintf(`{"transition":{"id":"%s"}}`, transitionID)
+
+	resp, err := s.doRequest(ctx, "POST", endpoint, strings.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("failed to transition %s: %w", ticketKey, err)
+	}
+	defer resp.Body.Close()
+
+	// Jira returns 204 No Content on successful transition
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("jira transition failed (status %d): %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	return nil
+}
+
 // IsConfigured returns true if Jira environment variables are set
 func IsConfigured() bool {
 	return os.Getenv("JIRA_URL") != "" &&

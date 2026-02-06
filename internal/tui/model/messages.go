@@ -44,6 +44,18 @@ type ticketsLoadedMsg struct {
 	tickets []tickets.Ticket
 }
 
+// transitionsLoadedMsg is sent when available transitions are loaded for a ticket
+type transitionsLoadedMsg struct {
+	transitions []tickets.Transition
+}
+
+// transitionCompletedMsg is sent when a ticket status transition completes
+type transitionCompletedMsg struct {
+	ticketKey string
+	newStatus string
+	err       error
+}
+
 // bookmarkCreatedMsg is sent when a bookmark is created from a ticket
 type bookmarkCreatedMsg struct {
 	ticketKey  string

@@ -603,6 +603,51 @@ func (s *Service) GetSubdomain() string {
 	return s.subdomain
 }
 
+// GetAvailableTransitions returns the available status transitions for a Codecks card
+// Codecks has fixed statuses: not_started, started, blocked, done
+func (s *Service) GetAvailableTransitions(ctx context.Context, ticketKey string) ([]tickets.Transition, error) {
+	// Codecks has fixed statuses - return all possible transitions
+	return []tickets.Transition{
+		{ID: "not_started", Name: "Not Started"},
+		{ID: "started", Name: "In Progress"},
+		{ID: "blocked", Name: "Blocked"},
+		{ID: "done", Name: "Done"},
+	}, nil
+}
+
+// TransitionTicket changes a Codecks card's status
+func (s *Service) TransitionTicket(ctx context.Context, ticketKey string, transitionID string) error {
+	// Codecks uses mutations to update card status
+	mutation := map[string]interface{}{
+		"mutation": map[string]interface{}{
+			"updateCard": map[string]interface{}{
+				"args": map[string]interface{}{
+					"cardId": ticketKey,
+					"status": transitionID,
+				},
+			},
+		},
+	}
+
+	respBody, err := s.doRequest(ctx, mutation)
+	if err != nil {
+		return fmt.Errorf("failed to update card status: %w", err)
+	}
+
+	// Check for errors in the response
+	var result map[string]interface{}
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	// Check if there's an error in the response
+	if errData, ok := result["error"]; ok {
+		return fmt.Errorf("codecks error: %v", errData)
+	}
+
+	return nil
+}
+
 // IsConfigured returns true if Codecks environment variables are set
 func IsConfigured() bool {
 	return os.Getenv("CODECKS_SUBDOMAIN") != "" &&

@@ -357,6 +357,23 @@ func (r *Renderer) renderCodecksSettings(data SettingsData) []string {
 func (r *Renderer) renderAdvancedSettings(data SettingsData) []string {
 	var lines []string
 
+	// Ticket Workflow section
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("Ticket Workflow"))
+	lines = append(lines, "")
+
+	// Auto-transition toggle
+	autoInProgressToggle := "[ ]"
+	if data.AutoInProgressOnBranch {
+		autoInProgressToggle = "[✓]"
+	}
+	toggleStyle := lipgloss.NewStyle().Foreground(ColorPrimary).Bold(true)
+	autoBtn := r.Zone.Mark(ZoneSettingsAutoInProgress, toggleStyle.Render(autoInProgressToggle+" Auto-set 'In Progress' on branch creation"))
+	lines = append(lines, "  "+autoBtn)
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Automatically transition ticket to 'In Progress' when creating a branch from it"))
+	lines = append(lines, "")
+	lines = append(lines, "")
+
+	// Advanced Maintenance section
 	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("Advanced Maintenance"))
 	lines = append(lines, "")
 	lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#F85149")).Bold(true).Render("WARNING: Destructive operations. Use caution!"))

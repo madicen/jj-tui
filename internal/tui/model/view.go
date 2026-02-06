@@ -572,11 +572,22 @@ func (m *Model) getJiraResult() view.JiraResult {
 		providerName = m.ticketService.GetProviderName()
 	}
 
+	// Convert transitions to view format
+	var transitionViews []view.TicketTransition
+	for _, t := range m.availableTransitions {
+		transitionViews = append(transitionViews, view.TicketTransition{
+			ID:   t.ID,
+			Name: t.Name,
+		})
+	}
+
 	return m.renderer().Jira(view.JiraData{
-		Tickets:        ticketViews,
-		SelectedTicket: m.selectedTicket,
-		JiraService:    m.ticketService != nil,
-		ProviderName:   providerName,
+		Tickets:              ticketViews,
+		SelectedTicket:       m.selectedTicket,
+		JiraService:          m.ticketService != nil,
+		ProviderName:         providerName,
+		AvailableTransitions: transitionViews,
+		TransitionInProgress: m.transitionInProgress,
 	})
 }
 
@@ -604,11 +615,12 @@ func (m *Model) renderSettings() string {
 		ConfigSource:      configSource,
 		ActiveTab:         view.SettingsTab(m.settingsTab),
 		ShowMergedPRs:     m.settingsShowMerged,
-		ShowClosedPRs:     m.settingsShowClosed,
-		OnlyMyPRs:         m.settingsOnlyMine,
-		PRLimit:           m.settingsPRLimit,
-		PRRefreshInterval: m.settingsPRRefreshInterval,
-		ConfirmingCleanup: m.confirmingCleanup,
+		ShowClosedPRs:          m.settingsShowClosed,
+		OnlyMyPRs:              m.settingsOnlyMine,
+		PRLimit:                m.settingsPRLimit,
+		PRRefreshInterval:      m.settingsPRRefreshInterval,
+		AutoInProgressOnBranch: m.settingsAutoInProgress,
+		ConfirmingCleanup:      m.confirmingCleanup,
 	})
 }
 

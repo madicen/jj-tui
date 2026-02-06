@@ -91,6 +91,21 @@ func (m *MockTicketService) GetProviderName() string {
 	return m.ProviderName
 }
 
+// GetAvailableTransitions returns mock transitions
+func (m *MockTicketService) GetAvailableTransitions(ctx context.Context, ticketKey string) ([]tickets.Transition, error) {
+	// Return common transitions for testing
+	return []tickets.Transition{
+		{ID: "21", Name: "In Progress"},
+		{ID: "31", Name: "Done"},
+	}, nil
+}
+
+// TransitionTicket mocks transitioning a ticket
+func (m *MockTicketService) TransitionTicket(ctx context.Context, ticketKey string, transitionID string) error {
+	// Mock successful transition
+	return nil
+}
+
 // NewMockJiraService creates a mock Jira service with sample data
 func NewMockJiraService() *MockTicketService {
 	return &MockTicketService{

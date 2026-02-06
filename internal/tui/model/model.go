@@ -40,6 +40,11 @@ type Model struct {
 	statusMessage  string
 	err            error
 	loading        bool
+
+	// Ticket transitions
+	availableTransitions   []tickets.Transition
+	transitionInProgress   bool
+	loadingTransitions     bool
 	notJJRepo      bool   // true if error is "not a jj repository"
 	currentPath    string // path where we're running (for jj init)
 
@@ -74,7 +79,8 @@ type Model struct {
 	settingsShowClosed        bool
 	settingsOnlyMine          bool
 	settingsPRLimit           int
-	settingsPRRefreshInterval int // in seconds, 0 = disabled
+	settingsPRRefreshInterval int  // in seconds, 0 = disabled
+	settingsAutoInProgress    bool // auto-set ticket to "In Progress" when creating branch
 
 	// Advanced settings state
 	confirmingCleanup string // "" = not confirming, "delete_bookmarks", "abandon_old_commits", "track_origin_main"
@@ -381,6 +387,25 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(msg.tickets) > 0 && m.selectedTicket < 0 {
 			m.selectedTicket = 0
 		}
+		// Load transitions for the selected ticket
+		m.availableTransitions = nil
+		m.loadingTransitions = true
+		return m, m.loadTransitions()
+
+	case transitionsLoadedMsg:
+		m.loadingTransitions = false
+		m.availableTransitions = msg.transitions
+		return m, nil
+
+	case transitionCompletedMsg:
+		m.transitionInProgress = false
+		if msg.err != nil {
+			m.statusMessage = fmt.Sprintf("Failed to transition %s: %v", msg.ticketKey, msg.err)
+		} else if msg.newStatus != "" {
+			m.statusMessage = fmt.Sprintf("Ticket %s transitioned to %s", msg.ticketKey, msg.newStatus)
+			// Reload tickets to get updated status
+			return m, m.loadTickets()
+		}
 		return m, nil
 
 	case bookmarkCreatedMsg:
@@ -388,6 +413,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Switch to commit graph view to see the new bookmark
 		m.viewMode = ViewCommitGraph
 		// Reload repository to show the new bookmark
+		// Also trigger auto-transition to "In Progress" if enabled
+		cfg, _ := config.Load()
+		if cfg != nil && cfg.AutoInProgressOnBranch() && m.ticketService != nil && msg.ticketKey != "" {
+			return m, tea.Batch(m.loadRepository(), m.transitionTicketToInProgress(msg.ticketKey))
+		}
 		return m, m.loadRepository()
 
 	case settingsSavedMsg:

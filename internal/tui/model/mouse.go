@@ -341,6 +341,21 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// Check ticket transition buttons (dynamic zones)
+	if m.viewMode == ViewJira && m.ticketService != nil && !m.transitionInProgress {
+		for i, t := range m.availableTransitions {
+			zoneID := ZoneJiraTransition + fmt.Sprintf("%d", i)
+			if m.zone.Get(zoneID) == zoneInfo {
+				if m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
+					m.transitionInProgress = true
+					ticket := m.ticketList[m.selectedTicket]
+					m.statusMessage = fmt.Sprintf("Setting %s to %s...", ticket.DisplayKey, t.Name)
+					return m, m.transitionTicket(t.ID)
+				}
+			}
+		}
+	}
+
 	// Check ticket open in browser button
 	if m.zone.Get(ZoneJiraOpenBrowser) == zoneInfo {
 		if m.viewMode == ViewJira && m.ticketService != nil && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
@@ -396,6 +411,11 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 			if m.zone.Get(ZoneSettingsAdvancedTrackOriginMain) == zoneInfo {
 				m.startTrackOriginMain()
 				return m, m.trackOriginMain()
+			}
+			// Auto-status toggle
+			if m.zone.Get(ZoneSettingsAutoInProgress) == zoneInfo {
+				m.settingsAutoInProgress = !m.settingsAutoInProgress
+				return m, nil
 			}
 			return m, nil
 		}

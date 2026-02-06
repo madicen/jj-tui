@@ -15,6 +15,12 @@ type Ticket struct {
 	DeckID      string // Codecks: deck ID for URL construction
 }
 
+// Transition represents a possible status transition for a ticket
+type Transition struct {
+	ID   string // Transition ID (for Jira) or status value (for Codecks)
+	Name string // Human-readable name (e.g., "In Progress", "Done")
+}
+
 // Service is the interface that all ticket providers must implement
 type Service interface {
 	// GetAssignedTickets returns tickets assigned to the current user
@@ -28,6 +34,15 @@ type Service interface {
 
 	// GetProviderName returns the name of the ticket provider (e.g., "Jira", "Codecks")
 	GetProviderName() string
+
+	// GetAvailableTransitions returns the available status transitions for a ticket
+	// Returns nil/empty if transitions are not supported or unavailable
+	GetAvailableTransitions(ctx context.Context, ticketKey string) ([]Transition, error)
+
+	// TransitionTicket changes the ticket's status using the given transition
+	// For Jira: transitionID is the transition ID
+	// For Codecks: transitionID is the target status value (e.g., "started", "done")
+	TransitionTicket(ctx context.Context, ticketKey string, transitionID string) error
 }
 
 // Provider represents a ticket provider type
@@ -37,5 +52,11 @@ const (
 	ProviderNone    Provider = ""
 	ProviderJira    Provider = "jira"
 	ProviderCodecks Provider = "codecks"
+)
+
+// Common transition names for convenience
+const (
+	TransitionInProgress = "in_progress"
+	TransitionDone       = "done"
 )
 

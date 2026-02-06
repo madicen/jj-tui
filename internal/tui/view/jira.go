@@ -7,6 +7,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// Note: ZoneJiraTransition is a prefix - full zone ID is ZoneJiraTransition + index
+
 // Jira renders the tickets view with split header/list for scrolling
 func (r *Renderer) Jira(data JiraData) JiraResult {
 	if !data.JiraService {
@@ -83,10 +85,65 @@ func (r *Renderer) Jira(data JiraData) JiraResult {
 		headerLines = append(headerLines, detailsBox)
 		headerLines = append(headerLines, "")
 
-		// Action buttons in header
-		createBranchBtn := r.Zone.Mark(ZoneJiraCreateBranch, ButtonStyle.Render("Create Branch (Enter)"))
-		openBrowserBtn := r.Zone.Mark(ZoneJiraOpenBrowser, ButtonStyle.Render("Open in Browser (o)"))
-		headerLines = append(headerLines, createBranchBtn+"  "+openBrowserBtn)
+		// Actions section (like Graph tab)
+		headerLines = append(headerLines, "Actions:")
+
+		// Build all action buttons on one line
+		var actionButtons []string
+
+		// Primary actions
+		actionButtons = append(actionButtons,
+			r.Zone.Mark(ZoneJiraCreateBranch, ButtonStyle.Render("Create Branch (Enter)")),
+			r.Zone.Mark(ZoneJiraOpenBrowser, ButtonStyle.Render("Open in Browser (o)")),
+		)
+
+		// Status transition buttons
+		if len(data.AvailableTransitions) > 0 && !data.TransitionInProgress {
+			for i, t := range data.AvailableTransitions {
+				var shortcut string
+				btnStyle := ButtonStyle
+
+				// Check for common transition patterns
+				lowerName := strings.ToLower(t.Name)
+
+				// In Progress: contains "progress" OR ("start" but not "not start")
+				isInProgress := strings.Contains(lowerName, "progress") ||
+					(strings.Contains(lowerName, "start") && !strings.Contains(lowerName, "not start") && !strings.Contains(lowerName, "not_start"))
+
+				if isInProgress {
+					shortcut = " (i)"
+					btnStyle = lipgloss.NewStyle().
+						Background(lipgloss.Color("#FFB86C")).
+						Foreground(lipgloss.Color("#000000")).
+						Padding(0, 1).
+						Bold(true)
+				} else if strings.Contains(lowerName, "done") || strings.Contains(lowerName, "complete") || strings.Contains(lowerName, "resolve") {
+					shortcut = " (D)"
+					btnStyle = lipgloss.NewStyle().
+						Background(lipgloss.Color("#50FA7B")).
+						Foreground(lipgloss.Color("#000000")).
+						Padding(0, 1).
+						Bold(true)
+				} else if strings.Contains(lowerName, "block") {
+					shortcut = " (B)"
+					btnStyle = lipgloss.NewStyle().
+						Background(lipgloss.Color("#FF5555")).
+						Foreground(lipgloss.Color("#FFFFFF")).
+						Padding(0, 1).
+						Bold(true)
+				}
+
+				zoneID := ZoneJiraTransition + fmt.Sprintf("%d", i)
+				btn := r.Zone.Mark(zoneID, btnStyle.Render(t.Name+shortcut))
+				actionButtons = append(actionButtons, btn)
+			}
+		}
+
+		if data.TransitionInProgress {
+			headerLines = append(headerLines, lipgloss.NewStyle().Foreground(ColorMuted).Italic(true).Render("Updating status..."))
+		} else {
+			headerLines = append(headerLines, strings.Join(actionButtons, " "))
+		}
 		headerLines = append(headerLines, "")
 	}
 
