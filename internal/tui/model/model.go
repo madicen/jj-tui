@@ -458,8 +458,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case prCreatedMsg:
 		m.viewMode = ViewCommitGraph
 		m.statusMessage = fmt.Sprintf("PR #%d created: %s", msg.pr.Number, msg.pr.Title)
-		// Open the PR in browser
-		return m, openURL(msg.pr.URL)
+		// Open the PR in browser and refresh PR list
+		return m, tea.Batch(openURL(msg.pr.URL), m.loadPRs())
 
 	case branchPushedMsg:
 		m.statusMessage = fmt.Sprintf("Pushed %s to remote", msg.branch)
