@@ -173,22 +173,43 @@ func (s *Service) CreateNewBranch(ctx context.Context, branchName string) error 
 	return s.runJJ(ctx, args...)
 }
 
-// CreateBranchFromMain creates a new branch from main, bookmarks it, and rebases
-// the current working copy onto it. This is used when creating a new branch for a Jira ticket.
+// CreateBranchFromMain creates a bookmark for a ticket, handling existing work intelligently.
+// If the user has existing work based on main (main -> A -> B...), the bookmark is added
+// to the first commit after main (A). Otherwise, a new commit is created from main.
 func (s *Service) CreateBranchFromMain(ctx context.Context, bookmarkName string) error {
-	// Get the current working copy's change ID before we move away from it
+	// Find the first mutable commit after main in our ancestry
+	// This handles: main -> A -> B -> @ by finding A
+	// Revset: ancestors of @ that are mutable AND whose parent is main@origin
+	rootCommitID, err := s.runJJOutput(ctx, "log", "-r", "ancestors(@) & mutable() & children(main@origin)", "--no-graph", "-T", "change_id", "--limit", "1")
+	if err == nil && strings.TrimSpace(rootCommitID) != "" {
+		rootCommitID = strings.TrimSpace(rootCommitID)
+
+		// Check if this root commit is non-empty (has actual changes)
+		emptyCheck, _ := s.runJJOutput(ctx, "log", "-r", rootCommitID, "--no-graph", "-T", "empty")
+		isRootEmpty := strings.TrimSpace(emptyCheck) == "true"
+
+		if !isRootEmpty {
+			// We have existing non-empty work based on main - add bookmark to the root commit
+			if err := s.runJJ(ctx, "bookmark", "create", bookmarkName, "-r", rootCommitID); err != nil {
+				return fmt.Errorf("failed to create bookmark: %w", err)
+			}
+			return nil
+		}
+	}
+
+	// No existing work based on main, or root is empty - use original flow
+	// Get the current working copy's change ID before we move
 	currentChangeID, err := s.runJJOutput(ctx, "log", "-r", "@", "--no-graph", "-T", "change_id")
 	if err != nil {
 		return fmt.Errorf("failed to get current working copy: %w", err)
 	}
 	currentChangeID = strings.TrimSpace(currentChangeID)
 
-	// Check if the current working copy is empty (no changes)
-	// If it's empty, we'll just create the new branch without rebasing
+	// Check if the current working copy is empty
 	status, _ := s.runJJOutput(ctx, "log", "-r", "@", "--no-graph", "-T", "empty")
 	isEmpty := strings.TrimSpace(status) == "true"
 
-	// Create a new commit from main@origin (the tracked remote main)
+	// Create a new commit from main@origin
 	if err := s.runJJ(ctx, "new", "main@origin"); err != nil {
 		return fmt.Errorf("failed to create new commit from main: %w", err)
 	}
