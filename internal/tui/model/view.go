@@ -611,14 +611,14 @@ func (m *Model) renderSettings() string {
 	}
 
 	return m.renderer().Settings(view.SettingsData{
-		Inputs:            inputs,
-		FocusedField:      m.settingsFocusedField,
-		GithubService:     m.githubService != nil,
-		JiraService:       m.ticketService != nil,
-		HasLocalConfig:    hasLocalConfig,
-		ConfigSource:      configSource,
-		ActiveTab:         view.SettingsTab(m.settingsTab),
-		ShowMergedPRs:     m.settingsShowMerged,
+		Inputs:                 inputs,
+		FocusedField:           m.settingsFocusedField,
+		GithubService:          m.githubService != nil,
+		JiraService:            m.ticketService != nil,
+		HasLocalConfig:         hasLocalConfig,
+		ConfigSource:           configSource,
+		ActiveTab:              view.SettingsTab(m.settingsTab),
+		ShowMergedPRs:          m.settingsShowMerged,
 		ShowClosedPRs:          m.settingsShowClosed,
 		OnlyMyPRs:              m.settingsOnlyMine,
 		PRLimit:                m.settingsPRLimit,
@@ -706,16 +706,22 @@ func (m *Model) renderStatusBar() string {
 	}
 
 	// Add keyboard shortcuts with ^ notation and | separators
+	// Start with undo/redo if in Graph view, then quit and refresh
+	if m.viewMode == ViewCommitGraph && m.jjService != nil {
+		shortcuts = append(shortcuts,
+			m.zone.Mark(ZoneActionUndo, "^z undo"),
+			" │ ",
+			m.zone.Mark(ZoneActionRedo, "^y redo"),
+			" │ ",
+		)
+	}
+
+	// Always add quit and refresh (in same position for all tabs)
 	shortcuts = append(shortcuts,
 		m.zone.Mark(ZoneActionQuit, "^q quit"),
 		" │ ",
 		m.zone.Mark(ZoneActionRefresh, "^r refresh"),
 	)
-
-	// Add undo/redo shortcuts in Graph view
-	if m.viewMode == ViewCommitGraph && m.jjService != nil {
-		shortcuts = append(shortcuts, " │ ", m.zone.Mark(ZoneActionUndo, "^z undo"), " │ ", m.zone.Mark(ZoneActionRedo, "^y redo"))
-	}
 
 	shortcutsStr := lipgloss.JoinHorizontal(lipgloss.Left, shortcuts...)
 
