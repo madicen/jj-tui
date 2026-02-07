@@ -20,23 +20,9 @@ func (r *Renderer) Graph(data GraphData) GraphResult {
 	var actionLines []string
 	var fileLines []string
 
-	// Style for graph lines (muted color)
-	graphStyle := lipgloss.NewStyle().Foreground(ColorMuted)
-
-	// Special styles for rebase mode
-	rebaseSourceStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color("#5555AA")).
-		Foreground(lipgloss.Color("#FFFFFF")).
-		Bold(true)
-	rebaseDestStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color("#55AA55")).
-		Foreground(lipgloss.Color("#FFFFFF"))
-
 	// Show rebase mode header if active
 	if data.InRebaseMode {
-		rebaseHeader := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FFAA00")).
-			Bold(true).
+		rebaseHeader := RebaseHeaderStyle.
 			Render("🔀 REBASE MODE - Select destination commit (Esc to cancel)")
 		graphLines = append(graphLines, rebaseHeader)
 		graphLines = append(graphLines, "")
@@ -48,39 +34,35 @@ func (r *Renderer) Graph(data GraphData) GraphResult {
 
 		// In rebase mode, use special styling
 		if data.InRebaseMode {
-			if i == data.RebaseSourceCommit {
+			switch {
+			case data.RebaseSourceCommit > -1:
 				// Source commit being rebased - highlighted differently
-				style = rebaseSourceStyle
-			} else if i == data.SelectedCommit {
+				style = RebaseSourceStyle
+			case data.SelectedCommit > -1:
 				// Potential destination - green highlight
-				style = rebaseDestStyle
+				style = RebaseDestStyle
 			}
 		} else if i == data.SelectedCommit {
 			style = CommitSelectedStyle
 		}
 
-		// Use jj's graph prefix if available, otherwise fall back to simple display
 		var graphPrefix string
-		if commit.GraphPrefix != "" {
-			// Use jj's native graph prefix
-			graphPrefix = graphStyle.Render(commit.GraphPrefix)
-		} else {
-			// Fall back to simple prefix
-			if commit.IsWorking {
-				graphPrefix = graphStyle.Render("@  ")
-			} else if commit.Immutable {
-				graphPrefix = graphStyle.Render("◆  ")
-			} else {
-				graphPrefix = graphStyle.Render("○  ")
-			}
+		switch {
+		case commit.IsWorking:
+			graphPrefix = lipgloss.NewStyle().Foreground(ColorSecondary).Render("@  ")
+		case commit.Immutable:
+			graphPrefix = GraphStyle.Render("◆  ")
+		default:
+			graphPrefix = GraphStyle.Render("○  ")
 		}
 
 		// Selection indicator (prepended before graph)
 		selectionPrefix := "  "
 		if data.InRebaseMode {
-			if i == data.RebaseSourceCommit {
+			switch {
+			case data.RebaseSourceCommit > -1:
 				selectionPrefix = "⚡ " // Source being rebased
-			} else if i == data.SelectedCommit {
+			case data.SelectedCommit > -1:
 				selectionPrefix = "→ " // Target destination
 			}
 		} else if i == data.SelectedCommit {
@@ -116,7 +98,7 @@ func (r *Renderer) Graph(data GraphData) GraphResult {
 		for _, graphLine := range commit.GraphLines {
 			// These are the lines between commits (like │, ├─╯, etc.)
 			// Add spacing to align with commit lines
-			paddedLine := "  " + graphStyle.Render(graphLine)
+			paddedLine := "  " + GraphStyle.Render(graphLine)
 			graphLines = append(graphLines, paddedLine)
 		}
 	}
@@ -200,54 +182,54 @@ func (r *Renderer) Graph(data GraphData) GraphResult {
 						// This is a descendant - indicate we'll move the bookmark to include all commits
 						buttonLabel = fmt.Sprintf("Create PR [%s] (c)", createPRBranch)
 					}
-			actionButtons = append(actionButtons,
-					r.Zone.Mark(ZoneActionCreatePR, ButtonStyle.Render(buttonLabel)),
-				)
+					actionButtons = append(actionButtons,
+						r.Zone.Mark(ZoneActionCreatePR, ButtonStyle.Render(buttonLabel)),
+					)
+				}
 			}
+			actionLines = append(actionLines, lipgloss.JoinHorizontal(lipgloss.Left, actionButtons...))
 		}
+	} else {
 		actionLines = append(actionLines, lipgloss.JoinHorizontal(lipgloss.Left, actionButtons...))
 	}
-} else {
-	actionLines = append(actionLines, lipgloss.JoinHorizontal(lipgloss.Left, actionButtons...))
-}
 
-// Build changed files section with focus indicator
-if len(data.ChangedFiles) > 0 {
+	// Build changed files section with focus indicator
+	if len(data.ChangedFiles) > 0 {
+		focusIndicator := "  "
+		if !data.GraphFocused {
+			focusIndicator = "► "
+		}
+		fileLines = append(fileLines, lipgloss.NewStyle().Bold(true).Render(focusIndicator+"Changed Files (Tab to switch):"))
+
+		// Build and render the file tree
+		treeLines := renderFileTree(data.ChangedFiles)
+		fileLines = append(fileLines, treeLines...)
+	}
+
+	// Build full content for backward compatibility
+	var allLines []string
+	allLines = append(allLines, graphLines...)
+	allLines = append(allLines, "")
+	allLines = append(allLines, actionLines...)
+	if len(fileLines) > 0 {
+		allLines = append(allLines, "")
+		allLines = append(allLines, fileLines...)
+	}
+
+	// Always add focus indicator to graph header for consistent layout
+	graphContent := strings.Join(graphLines, "\n")
 	focusIndicator := "  "
-	if !data.GraphFocused {
+	if data.GraphFocused {
 		focusIndicator = "► "
 	}
-	fileLines = append(fileLines, lipgloss.NewStyle().Bold(true).Render(focusIndicator+"Changed Files (Tab to switch):"))
+	graphContent = lipgloss.NewStyle().Bold(true).Render(focusIndicator+"Graph (Tab to switch):") + "\n" + graphContent
 
-	// Build and render the file tree
-	treeLines := renderFileTree(data.ChangedFiles)
-	fileLines = append(fileLines, treeLines...)
-}
-
-// Build full content for backward compatibility
-var allLines []string
-allLines = append(allLines, graphLines...)
-allLines = append(allLines, "")
-allLines = append(allLines, actionLines...)
-if len(fileLines) > 0 {
-	allLines = append(allLines, "")
-	allLines = append(allLines, fileLines...)
-}
-
-// Always add focus indicator to graph header for consistent layout
-graphContent := strings.Join(graphLines, "\n")
-focusIndicator := "  "
-if data.GraphFocused {
-	focusIndicator = "► "
-}
-graphContent = lipgloss.NewStyle().Bold(true).Render(focusIndicator+"Graph (Tab to switch):") + "\n" + graphContent
-
-return GraphResult{
-	GraphContent: graphContent,
-	ActionsBar:   strings.Join(actionLines, "\n"),
-	FilesContent: strings.Join(fileLines, "\n"),
-	FullContent:  strings.Join(allLines, "\n"),
-}
+	return GraphResult{
+		GraphContent: graphContent,
+		ActionsBar:   strings.Join(actionLines, "\n"),
+		FilesContent: strings.Join(fileLines, "\n"),
+		FullContent:  strings.Join(allLines, "\n"),
+	}
 }
 
 // fileTreeNode represents a node in the file tree
@@ -299,7 +281,7 @@ func renderTreeNode(node *fileTreeNode, indent string, lines *[]string, isRoot b
 	if !isRoot {
 		if node.isFile {
 			// Render file with status
-			statusStyle, statusChar := getStatusStyle(node.status)
+			statusStyle, statusChar := GetStatusStyle(node.status)
 			*lines = append(*lines, fmt.Sprintf("%s%s %s", indent, statusStyle.Render(statusChar), node.name))
 		} else {
 			// Render directory
@@ -334,20 +316,3 @@ func renderTreeNode(node *fileTreeNode, indent string, lines *[]string, isRoot b
 		renderTreeNode(node.children[name], newIndent, lines, false)
 	}
 }
-
-// getStatusStyle returns the style and character for a file status
-func getStatusStyle(status string) (lipgloss.Style, string) {
-	switch status {
-	case "M":
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("#FFB86C")), "M" // Orange for modified
-	case "A":
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B")), "A" // Green for added
-	case "D":
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555")), "D" // Red for deleted
-	case "R":
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("#8BE9FD")), "R" // Cyan for renamed
-	default:
-		return lipgloss.NewStyle().Foreground(ColorMuted), status
-	}
-}
-
