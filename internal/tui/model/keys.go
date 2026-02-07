@@ -356,6 +356,28 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.statusMessage = fmt.Sprintf("Opening %s...", ticket.Key)
 			return m, openURL(ticketURL)
 		}
+	case "M":
+		// Merge PR (PR view only, open PRs only)
+		if m.viewMode == ViewPullRequests && m.githubService != nil && m.repository != nil && m.selectedPR >= 0 && m.selectedPR < len(m.repository.PRs) {
+			pr := m.repository.PRs[m.selectedPR]
+			if pr.State != "open" {
+				m.statusMessage = "Can only merge open PRs"
+				return m, nil
+			}
+			m.statusMessage = fmt.Sprintf("Merging PR #%d...", pr.Number)
+			return m, m.mergePR(pr.Number)
+		}
+	case "X":
+		// Close PR (PR view only, open PRs only)
+		if m.viewMode == ViewPullRequests && m.githubService != nil && m.repository != nil && m.selectedPR >= 0 && m.selectedPR < len(m.repository.PRs) {
+			pr := m.repository.PRs[m.selectedPR]
+			if pr.State != "open" {
+				m.statusMessage = "Can only close open PRs"
+				return m, nil
+			}
+			m.statusMessage = fmt.Sprintf("Closing PR #%d...", pr.Number)
+			return m, m.closePR(pr.Number)
+		}
 	case "enter", "e":
 		// In PR view, open the PR in browser
 		if m.viewMode == ViewPullRequests && m.repository != nil && m.selectedPR >= 0 && m.selectedPR < len(m.repository.PRs) {

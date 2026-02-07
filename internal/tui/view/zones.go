@@ -17,7 +17,9 @@ const (
 	ZoneJiraSetDone         = "zone:jira:setdone"
 	ZoneJiraChangeStatus    = "zone:jira:changestatus"  // Toggle status change mode
 	ZoneJiraTransition      = "zone:jira:transition:"   // Prefix for dynamic transitions
-	ZonePROpenBrowser       = "zone:pr:openbrowser"
+	ZonePROpenBrowser = "zone:pr:openbrowser"
+	ZonePRMerge       = "zone:pr:merge"
+	ZonePRClose       = "zone:pr:close"
 
 	// Settings sub-tabs
 	ZoneSettingsTabGitHub   = "zone:settings:tab:github"

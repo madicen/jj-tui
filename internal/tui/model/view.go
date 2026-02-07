@@ -515,6 +515,7 @@ func (m *Model) renderPullRequests() string {
 		Repository:    m.repository,
 		SelectedPR:    m.selectedPR,
 		GithubService: m.githubService != nil,
+		Width:         m.width,
 	})
 	return result.FullContent
 }
@@ -526,6 +527,7 @@ func (m *Model) renderPullRequestsSplit() (string, string) {
 		Repository:    m.repository,
 		SelectedPR:    m.selectedPR,
 		GithubService: m.githubService != nil,
+		Width:         m.width,
 	})
 	// If there's no scrollable list (error states), return full content as the "header"
 	if result.ScrollableList == "" {

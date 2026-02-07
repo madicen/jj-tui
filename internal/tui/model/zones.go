@@ -69,6 +69,8 @@ const (
 
 	// PR action zones
 	ZonePROpenBrowser = "zone:pr:openbrowser"
+	ZonePRMerge       = "zone:pr:merge"
+	ZonePRClose       = "zone:pr:close"
 
 	// Settings sub-tab zones
 	ZoneSettingsTabGitHub   = "zone:settings:tab:github"

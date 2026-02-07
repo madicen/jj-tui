@@ -258,6 +258,32 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// Check PR merge button
+	if m.zone.Get(ZonePRMerge) == zoneInfo {
+		if m.viewMode == ViewPullRequests && m.githubService != nil && m.repository != nil && m.selectedPR >= 0 && m.selectedPR < len(m.repository.PRs) {
+			pr := m.repository.PRs[m.selectedPR]
+			if pr.State != "open" {
+				m.statusMessage = "Can only merge open PRs"
+				return m, nil
+			}
+			m.statusMessage = fmt.Sprintf("Merging PR #%d...", pr.Number)
+			return m, m.mergePR(pr.Number)
+		}
+	}
+
+	// Check PR close button
+	if m.zone.Get(ZonePRClose) == zoneInfo {
+		if m.viewMode == ViewPullRequests && m.githubService != nil && m.repository != nil && m.selectedPR >= 0 && m.selectedPR < len(m.repository.PRs) {
+			pr := m.repository.PRs[m.selectedPR]
+			if pr.State != "open" {
+				m.statusMessage = "Can only close open PRs"
+				return m, nil
+			}
+			m.statusMessage = fmt.Sprintf("Closing PR #%d...", pr.Number)
+			return m, m.closePR(pr.Number)
+		}
+	}
+
 	// Description editor zones
 	if m.zone.Get(ZoneDescSave) == zoneInfo {
 		if m.viewMode == ViewEditDescription {

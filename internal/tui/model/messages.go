@@ -113,6 +113,18 @@ type prCreatedMsg struct {
 	pr *models.GitHubPR
 }
 
+// prMergedMsg is sent when a PR is successfully merged
+type prMergedMsg struct {
+	prNumber int
+	err      error
+}
+
+// prClosedMsg is sent when a PR is successfully closed
+type prClosedMsg struct {
+	prNumber int
+	err      error
+}
+
 // branchPushedMsg is sent when a branch is pushed to remote
 type branchPushedMsg struct {
 	branch     string

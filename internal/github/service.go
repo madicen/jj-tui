@@ -121,6 +121,35 @@ func (s *Service) UpdatePullRequest(ctx context.Context, prNumber int, req *mode
 	}, nil
 }
 
+// MergePullRequest merges a pull request using the default merge method
+func (s *Service) MergePullRequest(ctx context.Context, prNumber int) error {
+	// Use default merge commit method
+	options := &github.PullRequestOptions{
+		MergeMethod: "merge",
+	}
+
+	_, _, err := s.client.PullRequests.Merge(ctx, s.owner, s.repo, prNumber, "", options)
+	if err != nil {
+		return fmt.Errorf("failed to merge pull request: %w", err)
+	}
+
+	return nil
+}
+
+// ClosePullRequest closes a pull request without merging
+func (s *Service) ClosePullRequest(ctx context.Context, prNumber int) error {
+	updatePR := &github.PullRequest{
+		State: github.String("closed"),
+	}
+
+	_, _, err := s.client.PullRequests.Edit(ctx, s.owner, s.repo, prNumber, updatePR)
+	if err != nil {
+		return fmt.Errorf("failed to close pull request: %w", err)
+	}
+
+	return nil
+}
+
 // GetAuthenticatedUsername returns the username of the authenticated user
 func (s *Service) GetAuthenticatedUsername(ctx context.Context) (string, error) {
 	// Return cached username if available

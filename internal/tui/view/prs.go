@@ -101,12 +101,32 @@ func (r *Renderer) PullRequests(data PRData) PRResult {
 			Padding(0, 1).
 			Render(strings.Join(detailLines, "\n"))
 		headerLines = append(headerLines, detailsBox)
-		headerLines = append(headerLines, "")
 
-		// Add Open in Browser button
+		// Actions section with separators (like Graph and Tickets tabs)
+		separatorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#444444"))
+		separatorWidth := data.Width - 4
+		if separatorWidth < 20 {
+			separatorWidth = 80
+		}
+		separator := separatorStyle.Render(strings.Repeat("─", separatorWidth))
+
+		headerLines = append(headerLines, separator)
+		headerLines = append(headerLines, "Actions:")
+
+		// Build action buttons
+		var actionButtons []string
 		openBrowserBtn := r.Zone.Mark(ZonePROpenBrowser, ButtonStyle.Render("Open in Browser (o)"))
-		headerLines = append(headerLines, openBrowserBtn)
-		headerLines = append(headerLines, "")
+		actionButtons = append(actionButtons, openBrowserBtn)
+
+		// Only show merge/close for open PRs
+		if pr.State == "open" {
+			mergeBtn := r.Zone.Mark(ZonePRMerge, ButtonStyle.Render("Merge (M)"))
+			closeBtn := r.Zone.Mark(ZonePRClose, ButtonStyle.Render("Close (X)"))
+			actionButtons = append(actionButtons, mergeBtn, closeBtn)
+		}
+
+		headerLines = append(headerLines, strings.Join(actionButtons, " "))
+		headerLines = append(headerLines, separator)
 	}
 
 	// Build scrollable list section
