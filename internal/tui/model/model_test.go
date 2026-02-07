@@ -17,7 +17,7 @@ func newTestModel() *Model {
 	ctx := context.Background()
 	m := New(ctx)
 	m.width = 100
-	m.height = 80 // Tall enough to show all content including help view
+	m.height = 80     // Tall enough to show all content including help view
 	m.loading = false // Skip loading state for tests
 	m.SetRepository(&models.Repository{
 		Path: "/test/repo",
@@ -1261,7 +1261,6 @@ func TestInProgressTransitionDetection(t *testing.T) {
 			transitions: []struct{ id, name string }{
 				{"not_started", "Not Started"},
 				{"started", "In Progress"},
-				{"blocked", "Blocked"},
 				{"done", "Done"},
 			},
 			expectedID:  "started",
@@ -1326,4 +1325,3 @@ func TestInProgressTransitionDetection(t *testing.T) {
 		})
 	}
 }
-

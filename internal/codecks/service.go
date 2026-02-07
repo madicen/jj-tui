@@ -598,13 +598,13 @@ func (s *Service) GetSubdomain() string {
 }
 
 // GetAvailableTransitions returns the available status transitions for a Codecks card
-// Codecks has fixed statuses: not_started, started, blocked, done
+// Codecks has fixed statuses: not_started, started, done
 func (s *Service) GetAvailableTransitions(ctx context.Context, ticketKey string) ([]tickets.Transition, error) {
 	// Codecks has fixed statuses - return all possible transitions
+	// Note: "blocked" status was removed as it's not supported by the Codecks API
 	return []tickets.Transition{
 		{ID: "not_started", Name: "Not Started"},
 		{ID: "started", Name: "In Progress"},
-		{ID: "blocked", Name: "Blocked"},
 		{ID: "done", Name: "Done"},
 	}, nil
 }
