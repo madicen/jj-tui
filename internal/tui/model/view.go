@@ -515,6 +515,7 @@ func (m *Model) renderPullRequests() string {
 		Repository:    m.repository,
 		SelectedPR:    m.selectedPR,
 		GithubService: m.githubService != nil,
+		Width:         m.width,
 	})
 	return result.FullContent
 }
@@ -526,6 +527,7 @@ func (m *Model) renderPullRequestsSplit() (string, string) {
 		Repository:    m.repository,
 		SelectedPR:    m.selectedPR,
 		GithubService: m.githubService != nil,
+		Width:         m.width,
 	})
 	// If there's no scrollable list (error states), return full content as the "header"
 	if result.ScrollableList == "" {
@@ -689,7 +691,8 @@ func (m *Model) renderStatusBar() string {
 	var shortcuts []string
 
 	// Add error action buttons first (if there's an error)
-	hasError := m.err != nil || strings.Contains(strings.ToLower(m.statusMessage), "error")
+	statusLower := strings.ToLower(m.statusMessage)
+	hasError := m.err != nil || strings.Contains(statusLower, "error") || strings.Contains(statusLower, "failed")
 	if hasError {
 		copyBtn := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#FF6B6B")).

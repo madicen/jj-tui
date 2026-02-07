@@ -213,6 +213,34 @@ func (m *Model) loadPRs() tea.Cmd {
 	}
 }
 
+// mergePR merges the selected pull request
+func (m *Model) mergePR(prNumber int) tea.Cmd {
+	if m.githubService == nil {
+		return nil
+	}
+
+	ghSvc := m.githubService
+
+	return func() tea.Msg {
+		err := ghSvc.MergePullRequest(context.Background(), prNumber)
+		return prMergedMsg{prNumber: prNumber, err: err}
+	}
+}
+
+// closePR closes the selected pull request without merging
+func (m *Model) closePR(prNumber int) tea.Cmd {
+	if m.githubService == nil {
+		return nil
+	}
+
+	ghSvc := m.githubService
+
+	return func() tea.Msg {
+		err := ghSvc.ClosePullRequest(context.Background(), prNumber)
+		return prClosedMsg{prNumber: prNumber, err: err}
+	}
+}
+
 // loadTickets loads tickets from the configured ticket service
 func (m *Model) loadTickets() tea.Cmd {
 	if m.ticketService == nil {

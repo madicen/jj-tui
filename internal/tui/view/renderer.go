@@ -48,6 +48,7 @@ type PRData struct {
 	Repository    *models.Repository
 	SelectedPR    int
 	GithubService bool // whether GitHub is connected
+	Width         int  // viewport width for separator lines
 }
 
 // PRResult contains the split rendering for PRs

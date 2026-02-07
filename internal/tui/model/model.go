@@ -378,6 +378,26 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case prMergedMsg:
+		if msg.err != nil {
+			m.statusMessage = fmt.Sprintf("Failed to merge PR #%d: %v", msg.prNumber, msg.err)
+		} else {
+			m.statusMessage = fmt.Sprintf("Merged PR #%d", msg.prNumber)
+			// Reload PRs to update status
+			return m, m.loadPRs()
+		}
+		return m, nil
+
+	case prClosedMsg:
+		if msg.err != nil {
+			m.statusMessage = fmt.Sprintf("Failed to close PR #%d: %v", msg.prNumber, msg.err)
+		} else {
+			m.statusMessage = fmt.Sprintf("Closed PR #%d", msg.prNumber)
+			// Reload PRs to update status
+			return m, m.loadPRs()
+		}
+		return m, nil
+
 	case ticketsLoadedMsg:
 		m.ticketList = msg.tickets
 		providerName := "tickets"
