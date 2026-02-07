@@ -1,0 +1,67 @@
+name: Manual Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.2.3)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate version format
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          if ! [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Error: Version must be in format vX.Y.Z (e.g., v1.2.3)"
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Check if tag already exists
+        run: |
+          if git rev-parse "${{ env.VERSION }}" >/dev/null 2>&1; then
+            echo "Error: Tag ${{ env.VERSION }} already exists"
+            exit 1
+          fi
+
+      - name: Configure Git
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+
+      - name: Create and push tag
+        run: |
+          git tag -a "${{ env.VERSION }}" -m "Release ${{ env.VERSION }}"
+          git push origin "${{ env.VERSION }}"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+
+      - name: Release Summary
+        run: |
+          echo "✅ Release ${{ env.VERSION }} created successfully!"
+          echo "📍 Release page: https://github.com/${{ github.repository }}/releases/tag/${{ env.VERSION }}"
