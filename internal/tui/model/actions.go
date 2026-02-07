@@ -11,14 +11,6 @@ import (
 
 // Clipboard actions
 
-func (m *Model) copyErrorToClipboard() tea.Cmd {
-	errMsg := m.getErrorMessage()
-	if errMsg != "" {
-		return actions.CopyToClipboard(errMsg)
-	}
-	return nil
-}
-
 // getErrorMessage returns the current error message (from m.err or status message)
 func (m *Model) getErrorMessage() string {
 	if m.err != nil {
