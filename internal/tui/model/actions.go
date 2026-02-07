@@ -16,7 +16,8 @@ func (m *Model) getErrorMessage() string {
 	if m.err != nil {
 		return m.err.Error()
 	}
-	if strings.Contains(strings.ToLower(m.statusMessage), "error") {
+	statusLower := strings.ToLower(m.statusMessage)
+	if strings.Contains(statusLower, "error") || strings.Contains(statusLower, "failed") {
 		return m.statusMessage
 	}
 	return ""

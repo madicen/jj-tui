@@ -691,7 +691,8 @@ func (m *Model) renderStatusBar() string {
 	var shortcuts []string
 
 	// Add error action buttons first (if there's an error)
-	hasError := m.err != nil || strings.Contains(strings.ToLower(m.statusMessage), "error")
+	statusLower := strings.ToLower(m.statusMessage)
+	hasError := m.err != nil || strings.Contains(statusLower, "error") || strings.Contains(statusLower, "failed")
 	if hasError {
 		copyBtn := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#FF6B6B")).
