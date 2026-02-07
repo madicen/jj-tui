@@ -94,8 +94,8 @@ func (s *Service) doRequest(ctx context.Context, method, endpoint string, body i
 
 // GetAssignedTickets fetches tickets assigned to the current user using API v3
 func (s *Service) GetAssignedTickets(ctx context.Context) ([]tickets.Ticket, error) {
-	// JQL to find issues assigned to the current user that are not done
-	jql := fmt.Sprintf("assignee = \"%s\" AND status != Done ORDER BY updated DESC", s.username)
+	// JQL to find issues assigned to the current user
+	jql := fmt.Sprintf("assignee = \"%s\" ORDER BY updated DESC", s.username)
 
 	// Use the new /rest/api/3/search/jql endpoint
 	// Must explicitly request fields - the v3 API returns minimal data by default

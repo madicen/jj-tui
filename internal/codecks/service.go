@@ -304,9 +304,6 @@ func (s *Service) getAllCards(ctx context.Context) ([]tickets.Ticket, error) {
 		}
 
 		status := getString(cardMap, "status")
-		if status == "done" {
-			continue
-		}
 
 		// Get the accountSeq and encode it as Codecks' short ID format
 		accountSeq := getInt(cardMap, "accountSeq")
@@ -390,9 +387,6 @@ func (s *Service) getCardsFromDeck(ctx context.Context, deckID string) ([]ticket
 		}
 
 		status := getString(cardMap, "status")
-		if status == "done" {
-			continue
-		}
 
 		// Get the accountSeq and encode it as Codecks' short ID format
 		accountSeq := getInt(cardMap, "accountSeq")
