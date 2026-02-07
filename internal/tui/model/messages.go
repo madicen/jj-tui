@@ -44,10 +44,16 @@ type ticketsLoadedMsg struct {
 	tickets []tickets.Ticket
 }
 
-// bookmarkCreatedMsg is sent when a bookmark is created from a ticket
-type bookmarkCreatedMsg struct {
-	ticketKey  string
-	branchName string
+// transitionsLoadedMsg is sent when available transitions are loaded for a ticket
+type transitionsLoadedMsg struct {
+	transitions []tickets.Transition
+}
+
+// transitionCompletedMsg is sent when a ticket status transition completes
+type transitionCompletedMsg struct {
+	ticketKey string
+	newStatus string
+	err       error
 }
 
 // settingsSavedMsg is sent when settings are saved
@@ -117,7 +123,8 @@ type branchPushedMsg struct {
 type bookmarkCreatedOnCommitMsg struct {
 	bookmarkName string
 	commitID     string
-	wasMoved     bool // true if bookmark was moved, false if newly created
+	wasMoved     bool   // true if bookmark was moved, false if newly created
+	ticketKey    string // set when creating from a ticket (for auto-transition)
 }
 
 // bookmarkDeletedMsg is sent when a bookmark is deleted

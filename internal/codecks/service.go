@@ -304,9 +304,6 @@ func (s *Service) getAllCards(ctx context.Context) ([]tickets.Ticket, error) {
 		}
 
 		status := getString(cardMap, "status")
-		if status == "done" {
-			continue
-		}
 
 		// Get the accountSeq and encode it as Codecks' short ID format
 		accountSeq := getInt(cardMap, "accountSeq")
@@ -390,9 +387,6 @@ func (s *Service) getCardsFromDeck(ctx context.Context, deckID string) ([]ticket
 		}
 
 		status := getString(cardMap, "status")
-		if status == "done" {
-			continue
-		}
 
 		// Get the accountSeq and encode it as Codecks' short ID format
 		accountSeq := getInt(cardMap, "accountSeq")
@@ -601,6 +595,82 @@ func (s *Service) GetProviderName() string {
 // GetSubdomain returns the Codecks subdomain
 func (s *Service) GetSubdomain() string {
 	return s.subdomain
+}
+
+// GetAvailableTransitions returns the available status transitions for a Codecks card
+// Codecks has fixed statuses: not_started, started, blocked, done
+func (s *Service) GetAvailableTransitions(ctx context.Context, ticketKey string) ([]tickets.Transition, error) {
+	// Codecks has fixed statuses - return all possible transitions
+	return []tickets.Transition{
+		{ID: "not_started", Name: "Not Started"},
+		{ID: "started", Name: "In Progress"},
+		{ID: "blocked", Name: "Blocked"},
+		{ID: "done", Name: "Done"},
+	}, nil
+}
+
+// TransitionTicket changes a Codecks card's status
+// Codecks write operations use /dispatch/ endpoints, not the query API
+// See: https://manual.codecks.io/api/
+func (s *Service) TransitionTicket(ctx context.Context, ticketKey string, transitionID string) error {
+	// Build the update payload
+	payload := map[string]interface{}{
+		"id":     ticketKey,
+		"status": transitionID,
+	}
+
+	respBody, err := s.doDispatchRequest(ctx, "cards/update", payload)
+	if err != nil {
+		return fmt.Errorf("failed to update card status: %w", err)
+	}
+
+	// Check for errors in the response
+	var result map[string]interface{}
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	// Check if there's an error in the response
+	if errData, ok := result["error"]; ok {
+		return fmt.Errorf("codecks error: %v", errData)
+	}
+
+	return nil
+}
+
+// doDispatchRequest performs a write operation to the Codecks dispatch API
+func (s *Service) doDispatchRequest(ctx context.Context, action string, body interface{}) ([]byte, error) {
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	url := fmt.Sprintf("https://api.codecks.io/dispatch/%s", action)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("X-Account", s.subdomain)
+	req.Header.Set("X-Auth-Token", s.token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("codecks API error (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	return respBody, nil
 }
 
 // IsConfigured returns true if Codecks environment variables are set

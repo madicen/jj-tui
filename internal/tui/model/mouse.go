@@ -70,8 +70,13 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 	}
 	if m.zone.Get(ZoneActionCopyError) == zoneInfo {
 		// Copy error to clipboard (works with m.err or status message errors)
-		m.statusMessage = "Copying error to clipboard..."
-		return m, m.copyErrorToClipboard()
+		// Important: capture the error BEFORE changing statusMessage
+		errMsg := m.getErrorMessage()
+		if errMsg != "" {
+			m.statusMessage = "Copying error to clipboard..."
+			return m, m.copyErrorMessageToClipboard(errMsg)
+		}
+		return m, nil
 	}
 	if m.zone.Get(ZoneActionDismissError) == zoneInfo {
 		// Dismiss/clear the error and restart auto-refresh
@@ -341,6 +346,34 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// Check "Change Status" button to toggle status change mode
+	if m.zone.Get(ZoneJiraChangeStatus) == zoneInfo {
+		if m.viewMode == ViewJira && m.ticketService != nil && !m.transitionInProgress {
+			m.statusChangeMode = !m.statusChangeMode
+			if m.statusChangeMode {
+				m.statusMessage = "Select a status to apply"
+			} else {
+				m.statusMessage = "Ready"
+			}
+			return m, nil
+		}
+	}
+
+	// Check ticket transition buttons (only when status change mode is active)
+	if m.viewMode == ViewJira && m.ticketService != nil && !m.transitionInProgress && m.statusChangeMode {
+		for i, t := range m.availableTransitions {
+			zoneID := ZoneJiraTransition + fmt.Sprintf("%d", i)
+			if m.zone.Get(zoneID) == zoneInfo {
+				if m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
+					m.transitionInProgress = true
+					ticket := m.ticketList[m.selectedTicket]
+					m.statusMessage = fmt.Sprintf("Setting %s to %s...", ticket.DisplayKey, t.Name)
+					return m, m.transitionTicket(t.ID)
+				}
+			}
+		}
+	}
+
 	// Check ticket open in browser button
 	if m.zone.Get(ZoneJiraOpenBrowser) == zoneInfo {
 		if m.viewMode == ViewJira && m.ticketService != nil && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
@@ -396,6 +429,11 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 			if m.zone.Get(ZoneSettingsAdvancedTrackOriginMain) == zoneInfo {
 				m.startTrackOriginMain()
 				return m, m.trackOriginMain()
+			}
+			// Auto-status toggle
+			if m.zone.Get(ZoneSettingsAutoInProgress) == zoneInfo {
+				m.settingsAutoInProgress = !m.settingsAutoInProgress
+				return m, nil
 			}
 			return m, nil
 		}

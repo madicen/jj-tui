@@ -59,9 +59,13 @@ const (
 	ZoneGraphPane = "zone:graph:pane"
 	ZoneFilesPane = "zone:files:pane"
 
-	// Jira action zones
-	ZoneJiraCreateBranch = "zone:jira:createbranch"
-	ZoneJiraOpenBrowser  = "zone:jira:openbrowser"
+	// Jira/Ticket action zones
+	ZoneJiraCreateBranch  = "zone:jira:createbranch"
+	ZoneJiraOpenBrowser   = "zone:jira:openbrowser"
+	ZoneJiraSetInProgress = "zone:jira:setinprogress"
+	ZoneJiraSetDone       = "zone:jira:setdone"
+	ZoneJiraChangeStatus  = "zone:jira:changestatus"  // Toggle status change mode
+	ZoneJiraTransition    = "zone:jira:transition:"   // Prefix for dynamic transitions
 
 	// PR action zones
 	ZonePROpenBrowser = "zone:pr:openbrowser"
@@ -78,6 +82,7 @@ const (
 	ZoneSettingsAdvancedTrackOriginMain   = "zone:settings:advanced:track_origin_main"
 	ZoneSettingsAdvancedConfirmYes        = "zone:settings:advanced:confirm_yes"
 	ZoneSettingsAdvancedConfirmNo         = "zone:settings:advanced:confirm_no"
+	ZoneSettingsAutoInProgress            = "zone:settings:auto_in_progress"
 
 	// Settings zones
 	ZoneSettingsGitHubToken           = "zone:settings:github_token"

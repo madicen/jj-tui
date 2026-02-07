@@ -2,6 +2,7 @@ package model
 
 import (
 	"fmt"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -151,6 +152,12 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, m.redoOperation()
 		}
 	case "esc":
+		// Cancel status change mode in Tickets view
+		if m.viewMode == ViewJira && m.statusChangeMode {
+			m.statusChangeMode = false
+			m.statusMessage = "Ready"
+			return m, nil
+		}
 		if m.viewMode != ViewCommitGraph {
 			m.viewMode = ViewCommitGraph
 		}
@@ -177,6 +184,10 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.selectedTicket++
 				// Scroll viewport to keep selection visible
 				m.ensureSelectionVisible(m.selectedTicket)
+				// Load transitions for newly selected ticket
+				m.availableTransitions = nil
+				m.loadingTransitions = true
+				return m, m.loadTransitions()
 			}
 		case ViewCommitGraph:
 			if !m.graphFocused {
@@ -211,6 +222,10 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.selectedTicket--
 				// Scroll viewport to keep selection visible
 				m.ensureSelectionVisible(m.selectedTicket)
+				// Load transitions for newly selected ticket
+				m.availableTransitions = nil
+				m.loadingTransitions = true
+				return m, m.loadTransitions()
 			}
 		case ViewCommitGraph:
 			if !m.graphFocused {
@@ -231,6 +246,99 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					return m, m.loadChangedFiles(commit.ChangeID)
 				}
 			}
+		}
+	case "c":
+		// Toggle status change mode (Tickets view only)
+		if m.viewMode == ViewJira && m.ticketService != nil && !m.transitionInProgress {
+			m.statusChangeMode = !m.statusChangeMode
+			if m.statusChangeMode {
+				m.statusMessage = "Select a status to apply (i/D/B or Esc to cancel)"
+			} else {
+				m.statusMessage = "Ready"
+			}
+			return m, nil
+		}
+		// Create PR from selected commit (Graph view)
+		if m.viewMode == ViewCommitGraph && m.isSelectedCommitValid() && m.jjService != nil && m.githubService != nil {
+			m.startCreatePR()
+			return m, nil
+		} else if m.viewMode == ViewCommitGraph && m.githubService == nil {
+			m.statusMessage = "GitHub not connected. Configure in Settings (,)"
+			return m, nil
+		}
+	case "i":
+		// Set ticket to "In Progress" (Tickets view only, requires status change mode)
+		if m.viewMode == ViewJira && m.ticketService != nil && m.statusChangeMode && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
+			if m.transitionInProgress {
+				return m, nil // Already transitioning
+			}
+			// Find "in progress" transition (must contain "progress" or "start" but NOT "not start")
+			for _, t := range m.availableTransitions {
+				lowerName := strings.ToLower(t.Name)
+				isInProgress := strings.Contains(lowerName, "progress") ||
+					(strings.Contains(lowerName, "start") && !strings.Contains(lowerName, "not start") && !strings.Contains(lowerName, "not_start"))
+				if isInProgress {
+					m.transitionInProgress = true
+					ticket := m.ticketList[m.selectedTicket]
+					m.statusMessage = fmt.Sprintf("Setting %s to %s...", ticket.DisplayKey, t.Name)
+					return m, m.transitionTicket(t.ID)
+				}
+			}
+			m.statusMessage = "No 'In Progress' transition available"
+		}
+	case "D":
+		// Set ticket to "Done" (Tickets view only, requires status change mode)
+		if m.viewMode == ViewJira && m.ticketService != nil && m.statusChangeMode && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
+			if m.transitionInProgress {
+				return m, nil // Already transitioning
+			}
+			// Find "done" transition
+			for _, t := range m.availableTransitions {
+				lowerName := strings.ToLower(t.Name)
+				if strings.Contains(lowerName, "done") || strings.Contains(lowerName, "complete") || strings.Contains(lowerName, "resolve") {
+					m.transitionInProgress = true
+					ticket := m.ticketList[m.selectedTicket]
+					m.statusMessage = fmt.Sprintf("Setting %s to %s...", ticket.DisplayKey, t.Name)
+					return m, m.transitionTicket(t.ID)
+				}
+			}
+			m.statusMessage = "No 'Done' transition available"
+		}
+	case "B":
+		// Set ticket to "Blocked" (Tickets view only, requires status change mode)
+		if m.viewMode == ViewJira && m.ticketService != nil && m.statusChangeMode && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
+			if m.transitionInProgress {
+				return m, nil // Already transitioning
+			}
+			// Find "blocked" transition
+			for _, t := range m.availableTransitions {
+				lowerName := strings.ToLower(t.Name)
+				if strings.Contains(lowerName, "block") {
+					m.transitionInProgress = true
+					ticket := m.ticketList[m.selectedTicket]
+					m.statusMessage = fmt.Sprintf("Setting %s to %s...", ticket.DisplayKey, t.Name)
+					return m, m.transitionTicket(t.ID)
+				}
+			}
+			m.statusMessage = "No 'Blocked' transition available"
+		}
+	case "N":
+		// Set ticket to "Not Started" (Tickets view only, requires status change mode)
+		if m.viewMode == ViewJira && m.ticketService != nil && m.statusChangeMode && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
+			if m.transitionInProgress {
+				return m, nil // Already transitioning
+			}
+			// Find "not started" transition
+			for _, t := range m.availableTransitions {
+				lowerName := strings.ToLower(t.Name)
+				if strings.Contains(lowerName, "not") && strings.Contains(lowerName, "start") {
+					m.transitionInProgress = true
+					ticket := m.ticketList[m.selectedTicket]
+					m.statusMessage = fmt.Sprintf("Setting %s to %s...", ticket.DisplayKey, t.Name)
+					return m, m.transitionTicket(t.ID)
+				}
+			}
+			m.statusMessage = "No 'Not Started' transition available"
 		}
 	case "o":
 		// Open PR URL in browser (PR view only)
@@ -301,15 +409,6 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.startRebaseMode()
-			return m, nil
-		}
-	case "c":
-		// Create PR from selected commit
-		if m.viewMode == ViewCommitGraph && m.isSelectedCommitValid() && m.jjService != nil && m.githubService != nil {
-			m.startCreatePR()
-			return m, nil
-		} else if m.githubService == nil {
-			m.statusMessage = "GitHub not connected. Configure in Settings (,)"
 			return m, nil
 		}
 	case "b":

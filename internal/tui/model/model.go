@@ -40,6 +40,12 @@ type Model struct {
 	statusMessage  string
 	err            error
 	loading        bool
+
+	// Ticket transitions
+	availableTransitions   []tickets.Transition
+	transitionInProgress   bool
+	statusChangeMode       bool // whether status change buttons are expanded
+	loadingTransitions     bool
 	notJJRepo      bool   // true if error is "not a jj repository"
 	currentPath    string // path where we're running (for jj init)
 
@@ -74,7 +80,8 @@ type Model struct {
 	settingsShowClosed        bool
 	settingsOnlyMine          bool
 	settingsPRLimit           int
-	settingsPRRefreshInterval int // in seconds, 0 = disabled
+	settingsPRRefreshInterval int  // in seconds, 0 = disabled
+	settingsAutoInProgress    bool // auto-set ticket to "In Progress" when creating branch
 
 	// Advanced settings state
 	confirmingCleanup string // "" = not confirming, "delete_bookmarks", "abandon_old_commits", "track_origin_main"
@@ -381,14 +388,27 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(msg.tickets) > 0 && m.selectedTicket < 0 {
 			m.selectedTicket = 0
 		}
+		// Load transitions for the selected ticket
+		m.availableTransitions = nil
+		m.loadingTransitions = true
+		return m, m.loadTransitions()
+
+	case transitionsLoadedMsg:
+		m.loadingTransitions = false
+		m.availableTransitions = msg.transitions
 		return m, nil
 
-	case bookmarkCreatedMsg:
-		m.statusMessage = fmt.Sprintf("Created branch '%s' from %s", msg.branchName, msg.ticketKey)
-		// Switch to commit graph view to see the new bookmark
-		m.viewMode = ViewCommitGraph
-		// Reload repository to show the new bookmark
-		return m, m.loadRepository()
+	case transitionCompletedMsg:
+		m.transitionInProgress = false
+		m.statusChangeMode = false // Collapse status buttons after transition
+		if msg.err != nil {
+			m.statusMessage = fmt.Sprintf("Failed to transition %s: %v", msg.ticketKey, msg.err)
+		} else if msg.newStatus != "" {
+			m.statusMessage = fmt.Sprintf("Ticket %s transitioned to %s", msg.ticketKey, msg.newStatus)
+			// Reload tickets to get updated status
+			return m, m.loadTickets()
+		}
+		return m, nil
 
 	case settingsSavedMsg:
 		m.viewMode = ViewCommitGraph
@@ -473,6 +493,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.statusMessage = fmt.Sprintf("Bookmark '%s' created", msg.bookmarkName)
 		}
+		// Trigger auto-transition to "In Progress" if enabled and created from a ticket
+		if msg.ticketKey != "" && m.ticketService != nil {
+			cfg, _ := config.Load()
+			if cfg != nil && cfg.AutoInProgressOnBranch() {
+				return m, tea.Batch(m.loadRepository(), m.transitionTicketToInProgress(msg.ticketKey))
+			}
+		}
+		return m, m.loadRepository()
 
 	case bookmarkDeletedMsg:
 		m.viewMode = ViewCommitGraph
@@ -620,7 +648,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.Update(branchPushedMsg{branch: msg.Branch, pushOutput: msg.PushOutput})
 
 	case actions.BookmarkCreatedMsg:
-		return m.Update(bookmarkCreatedOnCommitMsg{bookmarkName: msg.BookmarkName, commitID: msg.CommitID, wasMoved: msg.WasMoved})
+		return m.Update(bookmarkCreatedOnCommitMsg{bookmarkName: msg.BookmarkName, commitID: msg.CommitID, wasMoved: msg.WasMoved, ticketKey: msg.TicketKey})
 
 	case actions.BookmarkDeletedMsg:
 		return m.Update(bookmarkDeletedMsg{bookmarkName: msg.BookmarkName})

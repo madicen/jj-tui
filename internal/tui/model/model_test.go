@@ -3,6 +3,7 @@ package model
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -1231,5 +1232,98 @@ func TestNewCommitFromImmutableParent(t *testing.T) {
 			t.Error("Expected immutable warning for describe action")
 		}
 	})
+}
+
+// TestInProgressTransitionDetection verifies the logic for finding "In Progress" transitions
+// This tests both Jira-style and Codecks-style transition names
+func TestInProgressTransitionDetection(t *testing.T) {
+	// Helper function that mirrors the logic in transitionTicketToInProgress
+	findInProgressTransition := func(transitions []struct{ id, name string }) string {
+		for _, tr := range transitions {
+			lowerName := strings.ToLower(tr.name)
+			isInProgress := strings.Contains(lowerName, "progress") ||
+				(strings.Contains(lowerName, "start") && !strings.Contains(lowerName, "not start") && !strings.Contains(lowerName, "not_start"))
+			if isInProgress {
+				return tr.id
+			}
+		}
+		return ""
+	}
+
+	tests := []struct {
+		name        string
+		transitions []struct{ id, name string }
+		expectedID  string
+		description string
+	}{
+		{
+			name: "Codecks transitions - should find 'started' not 'not_started'",
+			transitions: []struct{ id, name string }{
+				{"not_started", "Not Started"},
+				{"started", "In Progress"},
+				{"blocked", "Blocked"},
+				{"done", "Done"},
+			},
+			expectedID:  "started",
+			description: "Codecks has 'Not Started' which contains 'start' - should be excluded",
+		},
+		{
+			name: "Jira typical workflow - Start Progress",
+			transitions: []struct{ id, name string }{
+				{"11", "Start Progress"},
+				{"21", "Done"},
+			},
+			expectedID:  "11",
+			description: "Common Jira transition 'Start Progress' should match",
+		},
+		{
+			name: "Jira workflow - In Progress",
+			transitions: []struct{ id, name string }{
+				{"31", "To Do"},
+				{"41", "In Progress"},
+				{"51", "Done"},
+			},
+			expectedID:  "41",
+			description: "Jira 'In Progress' transition should match on 'progress'",
+		},
+		{
+			name: "Jira workflow - Start Work",
+			transitions: []struct{ id, name string }{
+				{"61", "Backlog"},
+				{"71", "Start Work"},
+				{"81", "Complete"},
+			},
+			expectedID:  "71",
+			description: "Jira 'Start Work' should match on 'start'",
+		},
+		{
+			name: "No in-progress transition available",
+			transitions: []struct{ id, name string }{
+				{"91", "To Do"},
+				{"101", "Done"},
+				{"111", "Closed"},
+			},
+			expectedID:  "",
+			description: "Should return empty when no matching transition exists",
+		},
+		{
+			name: "Edge case - 'Begin' without 'start' or 'progress'",
+			transitions: []struct{ id, name string }{
+				{"121", "Begin Work"},
+				{"131", "Done"},
+			},
+			expectedID:  "",
+			description: "'Begin Work' doesn't contain 'start' or 'progress' - won't match (may need to add)",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := findInProgressTransition(tc.transitions)
+			if result != tc.expectedID {
+				t.Errorf("%s\nExpected: %q, Got: %q", tc.description, tc.expectedID, result)
+			}
+		})
+	}
 }
 

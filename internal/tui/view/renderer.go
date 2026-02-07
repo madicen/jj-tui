@@ -58,11 +58,21 @@ type PRResult struct {
 }
 
 // JiraData contains data needed for Jira/Tickets rendering
+// TicketTransition represents a possible status transition
+type TicketTransition struct {
+	ID   string
+	Name string
+}
+
 type JiraData struct {
-	Tickets        []JiraTicket
-	SelectedTicket int
-	JiraService    bool   // whether a ticket service is connected
-	ProviderName   string // name of the ticket provider (e.g., "Jira", "Codecks")
+	Tickets              []JiraTicket
+	SelectedTicket       int
+	JiraService          bool                 // whether a ticket service is connected
+	ProviderName         string               // name of the ticket provider (e.g., "Jira", "Codecks")
+	AvailableTransitions []TicketTransition   // available status transitions for selected ticket
+	TransitionInProgress bool                 // whether a transition is currently being executed
+	StatusChangeMode     bool                 // whether status change buttons are expanded
+	Width                int                  // viewport width for separator lines
 }
 
 // JiraResult contains the split rendering for Jira
@@ -109,6 +119,9 @@ type SettingsData struct {
 	OnlyMyPRs         bool
 	PRLimit           int
 	PRRefreshInterval int // in seconds, 0 = disabled
+
+	// Ticket workflow settings
+	AutoInProgressOnBranch bool // Auto-transition ticket to "In Progress" when creating branch
 
 	// Advanced tab state
 	ConfirmingCleanup string // "" = not confirming, "delete_bookmarks", "abandon_old_commits", "track_origin_main"

@@ -34,6 +34,9 @@ type Config struct {
 	CodecksProject          string `json:"codecks_project,omitempty"`          // Optional: filter by project name
 	CodecksExcludedStatuses string `json:"codecks_excluded_statuses,omitempty"` // Comma-separated statuses to hide
 
+	// Ticket workflow settings
+	TicketAutoInProgress *bool `json:"ticket_auto_in_progress,omitempty"` // nil = true (auto-set "In Progress" when creating branch)
+
 	// Internal: tracks where the config was loaded from
 	loadedFrom string `json:"-"`
 }
@@ -131,6 +134,9 @@ func mergeConfig(dest, source *Config) {
 	}
 	if source.CodecksExcludedStatuses != "" {
 		dest.CodecksExcludedStatuses = source.CodecksExcludedStatuses
+	}
+	if source.TicketAutoInProgress != nil {
+		dest.TicketAutoInProgress = source.TicketAutoInProgress
 	}
 }
 
@@ -340,6 +346,15 @@ func (c *Config) PRRefreshInterval() int {
 		return 120 // Default: 2 minutes
 	}
 	return *c.GitHubRefreshInterval
+}
+
+// AutoInProgressOnBranch returns true if tickets should auto-transition to "In Progress" when creating a branch
+// Defaults to true (enabled)
+func (c *Config) AutoInProgressOnBranch() bool {
+	if c.TicketAutoInProgress == nil {
+		return true // Default: enabled
+	}
+	return *c.TicketAutoInProgress
 }
 
 // HasJira returns true if Jira is fully configured

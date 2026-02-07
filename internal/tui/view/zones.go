@@ -11,9 +11,13 @@ const (
 	ZoneActionRebase    = "zone:action:rebase"
 	ZoneActionAbandon   = "zone:action:abandon"
 
-	ZoneJiraCreateBranch = "zone:jira:createbranch"
-	ZoneJiraOpenBrowser  = "zone:jira:openbrowser"
-	ZonePROpenBrowser    = "zone:pr:openbrowser"
+	ZoneJiraCreateBranch    = "zone:jira:createbranch"
+	ZoneJiraOpenBrowser     = "zone:jira:openbrowser"
+	ZoneJiraSetInProgress   = "zone:jira:setinprogress"
+	ZoneJiraSetDone         = "zone:jira:setdone"
+	ZoneJiraChangeStatus    = "zone:jira:changestatus"  // Toggle status change mode
+	ZoneJiraTransition      = "zone:jira:transition:"   // Prefix for dynamic transitions
+	ZonePROpenBrowser       = "zone:pr:openbrowser"
 
 	// Settings sub-tabs
 	ZoneSettingsTabGitHub   = "zone:settings:tab:github"
@@ -55,6 +59,7 @@ const (
 	ZoneSettingsAdvancedTrackOriginMain   = "zone:settings:advanced:track_origin_main"
 	ZoneSettingsAdvancedConfirmYes        = "zone:settings:advanced:confirm_yes"
 	ZoneSettingsAdvancedConfirmNo         = "zone:settings:advanced:confirm_no"
+	ZoneSettingsAutoInProgress            = "zone:settings:auto_in_progress"
 
 	ZoneSettingsSave      = "zone:settings:save"
 	ZoneSettingsSaveLocal = "zone:settings:save_local"

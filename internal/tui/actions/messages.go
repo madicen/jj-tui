@@ -47,6 +47,7 @@ type BookmarkCreatedMsg struct {
 	BookmarkName string
 	CommitID     string
 	WasMoved     bool
+	TicketKey    string // set when creating from a ticket (for auto-transition)
 }
 
 // BookmarkDeletedMsg indicates bookmark was deleted

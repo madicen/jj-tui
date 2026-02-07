@@ -273,6 +273,100 @@ func (m *Model) loadTickets() tea.Cmd {
 	}
 }
 
+// loadTransitions loads the available transitions for the selected ticket
+func (m *Model) loadTransitions() tea.Cmd {
+	if m.ticketService == nil || m.selectedTicket < 0 || m.selectedTicket >= len(m.ticketList) {
+		return func() tea.Msg {
+			return transitionsLoadedMsg{transitions: nil}
+		}
+	}
+
+	ticket := m.ticketList[m.selectedTicket]
+	svc := m.ticketService
+
+	return func() tea.Msg {
+		transitions, err := svc.GetAvailableTransitions(context.Background(), ticket.Key)
+		if err != nil {
+			// Silently return empty transitions on error
+			return transitionsLoadedMsg{transitions: nil}
+		}
+		return transitionsLoadedMsg{transitions: transitions}
+	}
+}
+
+// transitionTicket executes a status transition on the selected ticket
+func (m *Model) transitionTicket(transitionID string) tea.Cmd {
+	if m.ticketService == nil || m.selectedTicket < 0 || m.selectedTicket >= len(m.ticketList) {
+		return nil
+	}
+
+	ticket := m.ticketList[m.selectedTicket]
+	svc := m.ticketService
+
+	return func() tea.Msg {
+		err := svc.TransitionTicket(context.Background(), ticket.Key, transitionID)
+		if err != nil {
+			return transitionCompletedMsg{ticketKey: ticket.Key, err: err}
+		}
+		// Get the transition name for status message
+		transitions, _ := svc.GetAvailableTransitions(context.Background(), ticket.Key)
+		var newStatus string
+		for _, t := range transitions {
+			if t.ID == transitionID {
+				newStatus = t.Name
+				break
+			}
+		}
+		if newStatus == "" {
+			newStatus = transitionID
+		}
+		return transitionCompletedMsg{ticketKey: ticket.Key, newStatus: newStatus}
+	}
+}
+
+// transitionTicketToInProgress transitions a ticket to "In Progress" status
+// This is used for auto-transition when creating a branch
+func (m *Model) transitionTicketToInProgress(ticketKey string) tea.Cmd {
+	if m.ticketService == nil {
+		return nil
+	}
+
+	svc := m.ticketService
+
+	return func() tea.Msg {
+		// Get available transitions
+		transitions, err := svc.GetAvailableTransitions(context.Background(), ticketKey)
+		if err != nil {
+			return transitionCompletedMsg{ticketKey: ticketKey, err: err}
+		}
+
+		// Find an "in progress" like transition
+		// Must contain "progress" OR ("start" but NOT "not start")
+		var inProgressID string
+		for _, t := range transitions {
+			lowerName := strings.ToLower(t.Name)
+			isInProgress := strings.Contains(lowerName, "progress") ||
+				(strings.Contains(lowerName, "start") && !strings.Contains(lowerName, "not start") && !strings.Contains(lowerName, "not_start"))
+			if isInProgress {
+				inProgressID = t.ID
+				break
+			}
+		}
+
+		if inProgressID == "" {
+			// No "in progress" transition found - that's OK, just continue
+			return transitionCompletedMsg{ticketKey: ticketKey, newStatus: ""}
+		}
+
+		err = svc.TransitionTicket(context.Background(), ticketKey, inProgressID)
+		if err != nil {
+			return transitionCompletedMsg{ticketKey: ticketKey, err: err}
+		}
+
+		return transitionCompletedMsg{ticketKey: ticketKey, newStatus: "In Progress"}
+	}
+}
+
 // loadChangedFiles loads the changed files for a commit
 func (m *Model) loadChangedFiles(commitID string) tea.Cmd {
 	if m.jjService == nil || commitID == "" {
