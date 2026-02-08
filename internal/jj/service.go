@@ -175,7 +175,9 @@ func (s *Service) CreateNewBranch(ctx context.Context, branchName string) error 
 
 // CreateBranchFromMain creates a bookmark for a ticket, handling existing work intelligently.
 // If the user has existing work based on main (main -> A -> B...), the bookmark is added
-// to the first commit after main (A). Otherwise, a new commit is created from main.
+// to the first commit after main (A). Otherwise, a new empty commit is created on main
+// but the bookmark is placed on main@origin to avoid unnecessary placeholder commits.
+// When the user makes changes to the empty commit, it becomes non-empty naturally.
 func (s *Service) CreateBranchFromMain(ctx context.Context, bookmarkName string) error {
 	// Find the first mutable commit after main in our ancestry
 	// This handles: main -> A -> B -> @ by finding A
@@ -197,39 +199,12 @@ func (s *Service) CreateBranchFromMain(ctx context.Context, bookmarkName string)
 		}
 	}
 
-	// No existing work based on main, or root is empty - use original flow
-	// Get the current working copy's change ID before we move
-	currentChangeID, err := s.runJJOutput(ctx, "log", "-r", "@", "--no-graph", "-T", "change_id")
-	if err != nil {
-		return fmt.Errorf("failed to get current working copy: %w", err)
-	}
-	currentChangeID = strings.TrimSpace(currentChangeID)
-
-	// Check if the current working copy is empty
-	status, _ := s.runJJOutput(ctx, "log", "-r", "@", "--no-graph", "-T", "empty")
-	isEmpty := strings.TrimSpace(status) == "true"
-
-	// Create a new commit from main@origin
-	if err := s.runJJ(ctx, "new", "main@origin"); err != nil {
-		return fmt.Errorf("failed to create new commit from main: %w", err)
-	}
-
-	// Create bookmark on the new commit
-	if err := s.runJJ(ctx, "bookmark", "create", bookmarkName); err != nil {
-		return fmt.Errorf("failed to create bookmark: %w", err)
-	}
-
-	// If the old working copy had changes, rebase it onto the new branch
-	if !isEmpty && currentChangeID != "" {
-		// Rebase the old working copy onto the new branch
-		if err := s.runJJ(ctx, "rebase", "-s", currentChangeID, "-d", "@"); err != nil {
-			return fmt.Errorf("failed to rebase current work onto new branch: %w", err)
-		}
-
-		// Edit the rebased commit (move working copy to it)
-		if err := s.runJJ(ctx, "edit", currentChangeID); err != nil {
-			return fmt.Errorf("failed to edit rebased commit: %w", err)
-		}
+	// No existing work based on main, or root is empty
+	// Place bookmark directly on main@origin to avoid creating an unnecessary empty placeholder commit.
+	// This prevents the "rebased empty commit" problem during merges.
+	// The bookmark will naturally move when the user starts making changes.
+	if err := s.runJJ(ctx, "bookmark", "create", bookmarkName, "-r", "main@origin"); err != nil {
+		return fmt.Errorf("failed to create bookmark on main: %w", err)
 	}
 
 	return nil
@@ -295,9 +270,11 @@ func (s *Service) SquashCommit(ctx context.Context, commitID string) error {
 	return s.runJJ(ctx, "edit", "@-")
 }
 
-// NewCommit creates a new empty commit after the current working copy
 // NewCommit creates a new commit. If parentCommitID is provided, creates a child of that commit.
-// Otherwise creates a new commit on top of the current working copy.
+// Otherwise creates a new commit on top of the current working copy (@).
+// Note: This creates an empty commit initially. To avoid unnecessary placeholder commits during
+// branch creation, use CreateBranchFromMain instead. NewCommit is useful for creating commits
+// at specific parent points in the graph.
 func (s *Service) NewCommit(ctx context.Context, parentCommitID string) error {
 	args := []string{"new"}
 	if parentCommitID != "" {
