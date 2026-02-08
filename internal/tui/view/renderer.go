@@ -68,12 +68,12 @@ type TicketTransition struct {
 type JiraData struct {
 	Tickets              []JiraTicket
 	SelectedTicket       int
-	JiraService          bool                 // whether a ticket service is connected
-	ProviderName         string               // name of the ticket provider (e.g., "Jira", "Codecks")
-	AvailableTransitions []TicketTransition   // available status transitions for selected ticket
-	TransitionInProgress bool                 // whether a transition is currently being executed
-	StatusChangeMode     bool                 // whether status change buttons are expanded
-	Width                int                  // viewport width for separator lines
+	JiraService          bool               // whether a ticket service is connected
+	ProviderName         string             // name of the ticket provider (e.g., "Jira", "Codecks")
+	AvailableTransitions []TicketTransition // available status transitions for selected ticket
+	TransitionInProgress bool               // whether a transition is currently being executed
+	StatusChangeMode     bool               // whether status change buttons are expanded
+	Width                int                // viewport width for separator lines
 }
 
 // JiraResult contains the split rendering for Jira
