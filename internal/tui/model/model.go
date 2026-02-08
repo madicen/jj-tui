@@ -496,6 +496,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		_ = cfg.Save()
 		// Explicitly set the token in env (override any existing value)
 		_ = os.Setenv("GITHUB_TOKEN", msg.token)
+		// Update the settings input field with the new token so it's ready to save
+		if len(m.settingsInputs) > 0 {
+			m.settingsInputs[0].SetValue(msg.token)
+		}
 		// Reinitialize services
 		return m, m.initializeServices()
 
