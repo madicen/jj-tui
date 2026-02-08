@@ -130,6 +130,10 @@ func (s *Service) MergePullRequest(ctx context.Context, prNumber int) error {
 
 	_, _, err := s.client.PullRequests.Merge(ctx, s.owner, s.repo, prNumber, "", options)
 	if err != nil {
+		if errResp, ok := err.(*github.ErrorResponse); ok {
+			// If the error is a GitHub API error, include the response body for more context.
+			return fmt.Errorf("failed to merge pull request: %v (body: %s)", err, string(errResp.Body))
+		}
 		return fmt.Errorf("failed to merge pull request: %w", err)
 	}
 
@@ -459,8 +463,8 @@ func ParseGitHubURL(remoteURL string) (owner, repo string, err error) {
 	}
 
 	// Handle SSH URLs
-	if strings.HasPrefix(remoteURL, "git@github.com:") {
-		path := strings.TrimPrefix(remoteURL, "git@github.com:")
+	if after, ok := strings.CutPrefix(remoteURL, "git@github.com:"); ok {
+		path := after
 		parts := strings.Split(path, "/")
 		if len(parts) >= 2 {
 			return parts[0], parts[1], nil
