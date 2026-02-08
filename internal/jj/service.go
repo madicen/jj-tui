@@ -52,6 +52,10 @@ func NewService(repoPath string) (*Service, error) {
 
 // GetRepository retrieves the current repository state
 func (s *Service) GetRepository(ctx context.Context) (*models.Repository, error) {
+	// Before loading the graph, do a quick cleanup of any orphaned empty commits
+	// This handles the case where jj auto-created them after a merge
+	_ = s.abandonOrphanedEmptyCommits(ctx)
+
 	// Get commit graph (includes working copy)
 	graph, err := s.getCommitGraph(ctx)
 	if err != nil {
@@ -435,7 +439,47 @@ func (s *Service) FetchFromGit(ctx context.Context) (string, error) {
 		}
 	}
 
+	// After fetch, clean up the working copy state and any orphaned empty commits
+	_ = s.cleanupAfterFetch(ctx)
+
 	return out, nil
+}
+
+// cleanupAfterFetch handles post-fetch cleanup:
+// 1. Moves working copy if it's on an immutable commit
+// 2. Abandons orphaned empty commits that don't have bookmarks or content
+func (s *Service) cleanupAfterFetch(ctx context.Context) error {
+	// First, move working copy if it's immutable
+	isImmutable, _ := s.runJJOutput(ctx, "log", "-r", "@", "--no-graph", "-T", "if(immutable, \"true\", \"false\")")
+	if strings.TrimSpace(isImmutable) == "true" {
+		// Working copy is immutable (e.g., after a merge). Create a new mutable descendant.
+		_ = s.runJJ(ctx, "new", "@")
+	}
+
+	// Then abandon empty commits that are orphaned (have no bookmarks, no content, and are not working copy)
+	// These are commits created by jj when keeping the graph valid after merges
+	return s.abandonOrphanedEmptyCommits(ctx)
+}
+
+// abandonOrphanedEmptyCommits removes empty commits that have no bookmarks
+// These are commits auto-created by jj to keep the working copy valid
+func (s *Service) abandonOrphanedEmptyCommits(ctx context.Context) error {
+	// Find empty, mutable commits with no bookmarks
+	// Exclude: the working copy (@), commits on bookmarks
+	orphans, _ := s.runJJOutput(ctx, "log", "-r", "empty() & mutable() & ~bookmarks() & ~@", "--no-graph", "-T", "change_id")
+	if strings.TrimSpace(orphans) == "" {
+		return nil
+	}
+
+	// Abandon each orphaned empty commit
+	for _, changeID := range strings.Split(strings.TrimSpace(orphans), "\n") {
+		changeID = strings.TrimSpace(changeID)
+		if changeID != "" {
+			_ = s.runJJ(ctx, "abandon", changeID)
+		}
+	}
+
+	return nil
 }
 
 // getCommitGraph retrieves the commit graph with real jj data
