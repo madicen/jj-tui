@@ -353,7 +353,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.viewMode == ViewJira && m.ticketService != nil && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
 			ticket := m.ticketList[m.selectedTicket]
 			ticketURL := m.ticketService.GetTicketURL(ticket)
-			m.statusMessage = fmt.Sprintf("Opening %s...", ticket.Key)
+			m.statusMessage = fmt.Sprintf("Opening %s...", ticket.DisplayKey)
 			return m, openURL(ticketURL)
 		}
 	case "M":
