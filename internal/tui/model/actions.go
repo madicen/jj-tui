@@ -260,12 +260,7 @@ func (m *Model) startCreatePR() {
 	m.prBodyInput.SetWidth(m.width - 10)
 	// Calculate body height: total height minus header(~3), status(1), and PR form chrome(~14 lines)
 	bodyHeight := m.height - 20
-	if bodyHeight < 3 {
-		bodyHeight = 3
-	}
-	if bodyHeight > 8 {
-		bodyHeight = 8 // Cap at reasonable max to ensure buttons are visible
-	}
+	bodyHeight = min(max(bodyHeight, 3), 8)
 	m.prBodyInput.SetHeight(bodyHeight)
 
 	m.viewMode = ViewCreatePR
@@ -283,11 +278,7 @@ func (m *Model) submitPR() tea.Cmd {
 		return nil
 	}
 
-	if m.prNeedsMoveBookmark {
-		m.statusMessage = fmt.Sprintf("Moving bookmark %s and creating PR...", m.prHeadBranch)
-	} else {
-		m.statusMessage = fmt.Sprintf("Pushing %s and creating PR...", m.prHeadBranch)
-	}
+	m.statusMessage = fmt.Sprintf("%s %s and creating PR...", If(m.prNeedsMoveBookmark, "Moving bookmark", "Pushing"), m.prHeadBranch)
 
 	var commitChangeID string
 	if m.prNeedsMoveBookmark && m.repository != nil && m.prCommitIndex >= 0 && m.prCommitIndex < len(m.repository.Graph.Commits) {
@@ -364,4 +355,3 @@ func (m *Model) saveSettingsLocal() tea.Cmd {
 	}
 	return actions.SaveSettingsLocal(params)
 }
-

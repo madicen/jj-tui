@@ -6,6 +6,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	zone "github.com/lrstanley/bubblezone"
 )
 
 // Auto-refresh interval
@@ -51,4 +52,17 @@ func (m *Model) refreshRepository() tea.Cmd {
 		cmds = append(cmds, m.loadTickets())
 	}
 	return tea.Batch(cmds...)
+}
+
+func If[T any](condition bool, trueCmd, falseCmd T) T {
+	if condition {
+		return trueCmd
+	}
+	return falseCmd
+}
+
+func (m *Model) createIsZoneClickedFunc(clickedZone *zone.ZoneInfo) func(string) bool {
+	return func(clickedZoneID string) bool {
+		return m.zoneManager.Get(clickedZoneID) == clickedZone
+	}
 }

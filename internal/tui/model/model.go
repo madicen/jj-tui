@@ -24,7 +24,7 @@ import (
 // Mouse events are handled via zone.MsgZoneInBounds messages.
 type Model struct {
 	ctx           context.Context
-	zone          *zone.Manager
+	zoneManager   *zone.Manager
 	jjService     *jj.Service
 	githubService *github.Service
 	ticketService tickets.Service // Generic ticket service (Jira, Codecks, etc.)
@@ -214,7 +214,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Use AnyInBoundsAndUpdate to detect which zone was clicked
 		if msg.Action == tea.MouseActionRelease {
-			return m.zone.AnyInBoundsAndUpdate(m, msg)
+			return m.zoneManager.AnyInBoundsAndUpdate(m, msg)
 		}
 		return m, nil
 
@@ -637,17 +637,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Handle our custom messages
 	case TabSelectedMsg:
 		m.viewMode = msg.Tab
-		return m, nil
-
-	case CommitSelectedMsg:
-		m.selectedCommit = msg.Index
-		// Load changed files for the selected commit
-		if m.repository != nil && msg.Index >= 0 && msg.Index < len(m.repository.Graph.Commits) {
-			commit := m.repository.Graph.Commits[msg.Index]
-			m.changedFilesCommitID = commit.ChangeID
-			m.changedFiles = nil // Clear old files while loading
-			return m, m.loadChangedFiles(commit.ChangeID)
-		}
 		return m, nil
 
 	case ActionMsg:

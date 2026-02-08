@@ -8,108 +8,72 @@ import (
 )
 
 // handleZoneClick handles clicks detected by bubblezone
-func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
-	if zoneInfo == nil {
+func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd) {
+	if clickedZone == nil {
 		return m, nil
 	}
 
+	userClicked := m.createIsZoneClickedFunc(clickedZone)
+
 	// Check for JJ init button (shown when not in a jj repo)
-	if m.zone.Get(ZoneActionJJInit) == zoneInfo && m.notJJRepo {
+	if userClicked(ZoneActionJJInit) && m.notJJRepo {
 		m.statusMessage = "Initializing repository..."
 		return m, m.runJJInit()
 	}
 
 	// Check tab zones
-	if m.zone.Get(ZoneTabGraph) == zoneInfo {
-		return m, func() tea.Msg { return TabSelectedMsg{Tab: ViewCommitGraph} }
+	if userClicked(ZoneTabGraph) {
+		return m.handleNavigateToGraphTab()
 	}
-	if m.zone.Get(ZoneTabPRs) == zoneInfo {
-		return m, func() tea.Msg { return TabSelectedMsg{Tab: ViewPullRequests} }
+	if userClicked(ZoneTabPRs) {
+		return m.handleNavigateToPRTab()
 	}
-	if m.zone.Get(ZoneTabJira) == zoneInfo {
-		m.viewMode = ViewJira
-		if m.ticketService != nil {
-			m.statusMessage = "Loading tickets..."
-			return m, m.loadTickets()
-		}
-		return m, nil
+	if userClicked(ZoneTabJira) {
+		return m.handleNavigateToTicketsTab()
 	}
-	if m.zone.Get(ZoneTabSettings) == zoneInfo {
-		m.viewMode = ViewSettings
-		// Focus first input when entering settings
-		m.settingsFocusedField = 0
-		for i := range m.settingsInputs {
-			if i == 0 {
-				m.settingsInputs[i].Focus()
-			} else {
-				m.settingsInputs[i].Blur()
-			}
-		}
-		return m, nil
+	if userClicked(ZoneTabSettings) {
+		return m.handleNavigateToSettingsTab()
 	}
-	if m.zone.Get(ZoneTabHelp) == zoneInfo {
-		return m, func() tea.Msg { return TabSelectedMsg{Tab: ViewHelp} }
+	if userClicked(ZoneTabHelp) {
+		return m.handleNavigateToHelpTab()
 	}
 
 	// Check status bar action zones
-	if m.zone.Get(ZoneActionQuit) == zoneInfo {
-		return m, tea.Batch(
-			func() tea.Msg { return ActionMsg{Action: ActionQuit} },
-			tea.Quit,
-		)
+	if userClicked(ZoneActionQuit) {
+		return m, tea.Quit
 	}
-	if m.zone.Get(ZoneActionRefresh) == zoneInfo {
+	if userClicked(ZoneActionRefresh) {
 		return m, m.refreshRepository()
 	}
-	if m.zone.Get(ZoneActionNewCommit) == zoneInfo {
-		// Create a new commit (same as pressing 'n')
-		if m.jjService != nil {
-			m.statusMessage = "Creating new commit..."
-			return m, m.createNewCommit()
-		}
+	if userClicked(ZoneActionNewCommit) {
+		return m.handleNewCommit()
 	}
-	if m.zone.Get(ZoneActionCopyError) == zoneInfo {
-		// Copy error to clipboard (works with m.err or status message errors)
-		// Important: capture the error BEFORE changing statusMessage
-		errMsg := m.getErrorMessage()
-		if errMsg != "" {
-			m.statusMessage = "Copying error to clipboard..."
-			return m, m.copyErrorMessageToClipboard(errMsg)
-		}
-		return m, nil
+	if userClicked(ZoneActionCopyError) {
+		return m.handleCopyError()
 	}
-	if m.zone.Get(ZoneActionDismissError) == zoneInfo {
-		// Dismiss/clear the error and restart auto-refresh
-		m.err = nil
-		m.statusMessage = "Ready"
-		return m, m.tickCmd()
+	if userClicked(ZoneActionDismissError) {
+		return m.handleDismissError()
 	}
-	if m.zone.Get(ZoneActionUndo) == zoneInfo {
-		if m.jjService != nil {
-			m.statusMessage = "Undoing..."
-			return m, m.undoOperation()
-		}
+	if userClicked(ZoneActionUndo) {
+		return m.handleUndo()
 	}
-	if m.zone.Get(ZoneActionRedo) == zoneInfo {
-		if m.jjService != nil {
-			m.statusMessage = "Redoing..."
-			return m, m.redoOperation()
-		}
+	if userClicked(ZoneActionRedo) {
+		return m.handleRedo()
 	}
 
 	// Check graph view pane zones for click-to-focus
 	if m.viewMode == ViewCommitGraph {
-		if m.zone.Get(ZoneGraphPane) == zoneInfo {
+		if userClicked(ZoneGraphPane) {
 			if !m.graphFocused {
 				m.graphFocused = true
-				m.statusMessage = "Graph pane focused"
+				m.statusMessage = m.handleGraphFoucsMessage()
 			}
 			return m, nil
 		}
-		if m.zone.Get(ZoneFilesPane) == zoneInfo {
+		if userClicked(ZoneFilesPane) {
 			if m.graphFocused {
 				m.graphFocused = false
-				m.statusMessage = "Files pane focused"
+				m.statusMessage = m.handleGraphFoucsMessage()
 			}
 			return m, nil
 		}
@@ -117,149 +81,61 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 
 	// Check commit zones
 	if m.repository != nil {
-		for i := range m.repository.Graph.Commits {
-			if m.zone.Get(ZoneCommit(i)) == zoneInfo {
+		for commitIndex := range m.repository.Graph.Commits {
+			if userClicked(ZoneCommit(commitIndex)) {
 				// If in rebase mode, clicking a commit selects it as destination
 				if m.selectionMode == SelectionRebaseDestination {
-					return m, m.performRebase(i)
+					return m, m.performRebase(commitIndex)
 				}
 				// Normal selection
-				return m, func() tea.Msg {
-					return CommitSelectedMsg{
-						Index:    i,
-						CommitID: m.repository.Graph.Commits[i].ID,
-					}
-				}
+				return m.handleSelectCommit(commitIndex)
 			}
 		}
 	}
 
 	// Check commit action zones (only for mutable commits)
-	if m.zone.Get(ZoneActionCheckout) == zoneInfo {
-		if m.isSelectedCommitValid() && m.jjService != nil {
-			commit := m.repository.Graph.Commits[m.selectedCommit]
-			if commit.Immutable {
-				m.statusMessage = "Cannot edit: commit is immutable"
-				return m, nil
-			}
-			return m, m.checkoutCommit()
-		}
+	if userClicked(ZoneActionCheckout) {
+		return m.handleCheckoutCommit()
 	}
-	if m.zone.Get(ZoneActionSquash) == zoneInfo {
-		if m.isSelectedCommitValid() && m.jjService != nil {
-			commit := m.repository.Graph.Commits[m.selectedCommit]
-			if commit.Immutable {
-				m.statusMessage = "Cannot squash: commit is immutable"
-				return m, nil
-			}
-			return m, m.squashCommit()
-		}
+	if userClicked(ZoneActionSquash) {
+		return m.handleSquashCommit()
 	}
-	if m.zone.Get(ZoneActionDescribe) == zoneInfo {
-		if m.isSelectedCommitValid() && m.jjService != nil {
-			commit := m.repository.Graph.Commits[m.selectedCommit]
-			if commit.Immutable {
-				m.statusMessage = "Cannot edit description: commit is immutable"
-				return m, nil
-			}
-			return m.startEditingDescription(commit)
-		}
+	if userClicked(ZoneActionDescribe) {
+		return m.handleDescribeCommit()
 	}
-	if m.zone.Get(ZoneActionAbandon) == zoneInfo {
-		if m.isSelectedCommitValid() && m.jjService != nil {
-			commit := m.repository.Graph.Commits[m.selectedCommit]
-			if commit.Immutable {
-				m.statusMessage = "Cannot abandon: commit is immutable"
-				return m, nil
-			}
-			return m, m.abandonCommit()
-		}
+	if userClicked(ZoneActionAbandon) {
+		return m.handleAbandonCommit()
 	}
-	if m.zone.Get(ZoneActionRebase) == zoneInfo {
-		if m.isSelectedCommitValid() && m.jjService != nil {
-			commit := m.repository.Graph.Commits[m.selectedCommit]
-			if commit.Immutable {
-				m.statusMessage = "Cannot rebase: commit is immutable"
-				return m, nil
-			}
-			m.startRebaseMode()
-			return m, nil
-		}
+	if userClicked(ZoneActionRebase) {
+		return m.handleRebase()
 	}
-	if m.zone.Get(ZoneActionCreatePR) == zoneInfo {
-		if m.isSelectedCommitValid() && m.jjService != nil && m.githubService != nil {
-			m.startCreatePR()
-			return m, nil
-		} else if m.githubService == nil {
-			m.statusMessage = "GitHub not connected. Configure in Settings (,)"
-			return m, nil
-		}
+	if userClicked(ZoneActionCreatePR) {
+		return m.handleCreatePR()
 	}
-	if m.zone.Get(ZoneActionBookmark) == zoneInfo {
-		if m.isSelectedCommitValid() && m.jjService != nil {
-			commit := m.repository.Graph.Commits[m.selectedCommit]
-			if commit.Immutable {
-				m.statusMessage = "Cannot create bookmark: commit is immutable"
-				return m, nil
-			}
-			m.startCreateBookmark()
-			return m, nil
-		}
+	if userClicked(ZoneActionBookmark) {
+		return m.handleCreateBookmark()
 	}
-	if m.zone.Get(ZoneActionDelBookmark) == zoneInfo {
-		if m.isSelectedCommitValid() && m.jjService != nil {
-			commit := m.repository.Graph.Commits[m.selectedCommit]
-			if len(commit.Branches) == 0 {
-				m.statusMessage = "No bookmark on this commit to delete"
-				return m, nil
-			}
-			return m, m.deleteBookmark()
-		}
-	}
-	if m.zone.Get(ZoneActionPush) == zoneInfo {
-		if m.isSelectedCommitValid() && m.jjService != nil {
-			// Find the PR branch for this commit (could be on this commit or an ancestor)
-			prBranch := m.findPRBranchForCommit(m.selectedCommit)
-			if prBranch == "" {
-				m.statusMessage = "No open PR found for this commit or its ancestors"
-				return m, nil
-			}
-			commit := m.repository.Graph.Commits[m.selectedCommit]
-			// Check if we need to move the bookmark (commit doesn't have it directly)
-			needsMoveBookmark := true
-			for _, branch := range commit.Branches {
-				if branch == prBranch {
-					needsMoveBookmark = false
-					break
-				}
-			}
-			return m, m.pushToPR(prBranch, commit.ChangeID, needsMoveBookmark)
-		}
+	if userClicked(ZoneActionUpdatePR) {
+		return m.handleUpdatePR()
 	}
 
 	// Check PR zones
 	if m.repository != nil {
-		for i := range m.repository.PRs {
-			if m.zone.Get(ZonePR(i)) == zoneInfo {
-				m.selectedPR = i
+		for index := range m.repository.PRs {
+			if userClicked(ZonePR(index)) {
+				m.selectedPR = index
 				return m, nil
 			}
 		}
 	}
 
 	// Check PR open in browser button
-	if m.zone.Get(ZonePROpenBrowser) == zoneInfo {
-		if m.viewMode == ViewPullRequests && m.repository != nil && m.selectedPR >= 0 && m.selectedPR < len(m.repository.PRs) {
-			pr := m.repository.PRs[m.selectedPR]
-			if pr.URL != "" {
-				m.statusMessage = fmt.Sprintf("Opening PR #%d...", pr.Number)
-				return m, openURL(pr.URL)
-			}
-		}
+	if userClicked(ZonePROpenBrowser) {
+		return m.handleOpenPRInBrowser()
 	}
 
 	// Check PR merge button
-	if m.zone.Get(ZonePRMerge) == zoneInfo {
+	if userClicked(ZonePRMerge) {
 		if m.viewMode == ViewPullRequests && m.githubService != nil && m.repository != nil && m.selectedPR >= 0 && m.selectedPR < len(m.repository.PRs) {
 			pr := m.repository.PRs[m.selectedPR]
 			if pr.State != "open" {
@@ -272,7 +148,7 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 	}
 
 	// Check PR close button
-	if m.zone.Get(ZonePRClose) == zoneInfo {
+	if userClicked(ZonePRClose) {
 		if m.viewMode == ViewPullRequests && m.githubService != nil && m.repository != nil && m.selectedPR >= 0 && m.selectedPR < len(m.repository.PRs) {
 			pr := m.repository.PRs[m.selectedPR]
 			if pr.State != "open" {
@@ -285,12 +161,12 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 	}
 
 	// Description editor zones
-	if m.zone.Get(ZoneDescSave) == zoneInfo {
+	if userClicked(ZoneDescSave) {
 		if m.viewMode == ViewEditDescription {
 			return m, m.saveDescription()
 		}
 	}
-	if m.zone.Get(ZoneDescCancel) == zoneInfo {
+	if userClicked(ZoneDescCancel) {
 		if m.viewMode == ViewEditDescription {
 			m.viewMode = ViewCommitGraph
 			m.editingCommitID = ""
@@ -303,25 +179,25 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 	if m.viewMode == ViewCreateBookmark {
 		// Check for clicks on existing bookmarks
 		for i := range m.existingBookmarks {
-			if m.zone.Get(ZoneExistingBookmark(i)) == zoneInfo {
+			if userClicked(ZoneExistingBookmark(i)) {
 				m.selectedBookmarkIdx = i
 				m.bookmarkNameInput.Blur()
 				return m, nil
 			}
 		}
 
-		if m.zone.Get(ZoneBookmarkName) == zoneInfo {
+		if userClicked(ZoneBookmarkName) {
 			m.selectedBookmarkIdx = -1 // Switch to new bookmark mode
 			m.bookmarkNameInput.Focus()
 			return m, nil
 		}
-		if m.zone.Get(ZoneBookmarkSubmit) == zoneInfo {
+		if userClicked(ZoneBookmarkSubmit) {
 			if m.jjService != nil {
 				return m, m.submitBookmark()
 			}
 			return m, nil
 		}
-		if m.zone.Get(ZoneBookmarkCancel) == zoneInfo {
+		if userClicked(ZoneBookmarkCancel) {
 			m.viewMode = ViewCommitGraph
 			m.statusMessage = "Bookmark creation cancelled"
 			return m, nil
@@ -330,25 +206,25 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 
 	// PR creation zones
 	if m.viewMode == ViewCreatePR {
-		if m.zone.Get(ZonePRTitle) == zoneInfo {
+		if userClicked(ZonePRTitle) {
 			m.prFocusedField = 0
 			m.prTitleInput.Focus()
 			m.prBodyInput.Blur()
 			return m, nil
 		}
-		if m.zone.Get(ZonePRBody) == zoneInfo {
+		if userClicked(ZonePRBody) {
 			m.prFocusedField = 1
 			m.prTitleInput.Blur()
 			m.prBodyInput.Focus()
 			return m, nil
 		}
-		if m.zone.Get(ZonePRSubmit) == zoneInfo {
+		if userClicked(ZonePRSubmit) {
 			if m.githubService != nil && m.jjService != nil {
 				return m, m.submitPR()
 			}
 			return m, nil
 		}
-		if m.zone.Get(ZonePRCancel) == zoneInfo {
+		if userClicked(ZonePRCancel) {
 			m.viewMode = ViewCommitGraph
 			m.statusMessage = "PR creation cancelled"
 			return m, nil
@@ -357,15 +233,15 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 
 	// Check ticket zones
 	for i := range m.ticketList {
-		if m.zone.Get(ZoneJiraTicket(i)) == zoneInfo {
+		if userClicked(ZoneJiraTicket(i)) {
 			m.selectedTicket = i
 			return m, nil
 		}
 	}
 
 	// Check ticket create branch button
-	if m.zone.Get(ZoneJiraCreateBranch) == zoneInfo {
-		if m.viewMode == ViewJira && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) && m.jjService != nil {
+	if userClicked(ZoneJiraCreateBranch) {
+		if m.viewMode == ViewTickets && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) && m.jjService != nil {
 			ticket := m.ticketList[m.selectedTicket]
 			m.startBookmarkFromTicket(ticket)
 			return m, nil
@@ -373,8 +249,8 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 	}
 
 	// Check "Change Status" button to toggle status change mode
-	if m.zone.Get(ZoneJiraChangeStatus) == zoneInfo {
-		if m.viewMode == ViewJira && m.ticketService != nil && !m.transitionInProgress {
+	if userClicked(ZoneJiraChangeStatus) {
+		if m.viewMode == ViewTickets && m.ticketService != nil && !m.transitionInProgress {
 			m.statusChangeMode = !m.statusChangeMode
 			if m.statusChangeMode {
 				m.statusMessage = "Select a status to apply"
@@ -386,10 +262,10 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 	}
 
 	// Check ticket transition buttons (only when status change mode is active)
-	if m.viewMode == ViewJira && m.ticketService != nil && !m.transitionInProgress && m.statusChangeMode {
+	if m.viewMode == ViewTickets && m.ticketService != nil && !m.transitionInProgress && m.statusChangeMode {
 		for i, t := range m.availableTransitions {
 			zoneID := ZoneJiraTransition + fmt.Sprintf("%d", i)
-			if m.zone.Get(zoneID) == zoneInfo {
+			if userClicked(zoneID) {
 				if m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
 					m.transitionInProgress = true
 					ticket := m.ticketList[m.selectedTicket]
@@ -401,30 +277,27 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 	}
 
 	// Check ticket open in browser button
-	if m.zone.Get(ZoneJiraOpenBrowser) == zoneInfo {
-		if m.viewMode == ViewJira && m.ticketService != nil && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
-			ticket := m.ticketList[m.selectedTicket]
-			ticketURL := m.ticketService.GetTicketURL(ticket)
-			m.statusMessage = fmt.Sprintf("Opening %s...", ticket.DisplayKey)
-			return m, openURL(ticketURL)
+	if userClicked(ZoneTicketOpenBrowser) {
+		if m.viewMode == ViewTickets {
+			return m.handleOpenTicketInBrowser()
 		}
 	}
 	// Settings input field clicks
 	if m.viewMode == ViewSettings {
 		// Settings sub-tabs
-		if m.zone.Get(ZoneSettingsTabGitHub) == zoneInfo {
+		if userClicked(ZoneSettingsTabGitHub) {
 			m.settingsTab = 0
 			return m, nil
 		}
-		if m.zone.Get(ZoneSettingsTabJira) == zoneInfo {
+		if userClicked(ZoneSettingsTabJira) {
 			m.settingsTab = 1
 			return m, nil
 		}
-		if m.zone.Get(ZoneSettingsTabCodecks) == zoneInfo {
+		if userClicked(ZoneSettingsTabCodecks) {
 			m.settingsTab = 2
 			return m, nil
 		}
-		if m.zone.Get(ZoneSettingsTabAdvanced) == zoneInfo {
+		if userClicked(ZoneSettingsTabAdvanced) {
 			m.settingsTab = 3
 			return m, nil
 		}
@@ -433,10 +306,10 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 		if m.settingsTab == 3 {
 			// Cleanup confirmation buttons
 			if m.confirmingCleanup != "" {
-				if m.zone.Get(ZoneSettingsAdvancedConfirmYes) == zoneInfo {
+				if userClicked(ZoneSettingsAdvancedConfirmYes) {
 					return m, m.confirmCleanup()
 				}
-				if m.zone.Get(ZoneSettingsAdvancedConfirmNo) == zoneInfo {
+				if userClicked(ZoneSettingsAdvancedConfirmNo) {
 					m.cancelCleanup()
 					return m, nil
 				}
@@ -444,20 +317,20 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 			}
 
 			// Advanced tab action buttons
-			if m.zone.Get(ZoneSettingsAdvancedDeleteBookmarks) == zoneInfo {
+			if userClicked(ZoneSettingsAdvancedDeleteBookmarks) {
 				m.startDeleteBookmarks()
 				return m, nil
 			}
-			if m.zone.Get(ZoneSettingsAdvancedAbandonOldCommits) == zoneInfo {
+			if userClicked(ZoneSettingsAdvancedAbandonOldCommits) {
 				m.startAbandonOldCommits()
 				return m, nil
 			}
-			if m.zone.Get(ZoneSettingsAdvancedTrackOriginMain) == zoneInfo {
+			if userClicked(ZoneSettingsAdvancedTrackOriginMain) {
 				m.startTrackOriginMain()
 				return m, m.trackOriginMain()
 			}
 			// Auto-status toggle
-			if m.zone.Get(ZoneSettingsAutoInProgress) == zoneInfo {
+			if userClicked(ZoneSettingsAutoInProgress) {
 				m.settingsAutoInProgress = !m.settingsAutoInProgress
 				return m, nil
 			}
@@ -465,31 +338,31 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 		}
 
 		// GitHub login button
-		if m.zone.Get(ZoneSettingsGitHubLogin) == zoneInfo {
+		if userClicked(ZoneSettingsGitHubLogin) {
 			m.statusMessage = "Starting GitHub login..."
 			return m, m.startGitHubLogin()
 		}
 
 		// GitHub filter toggles
-		if m.zone.Get(ZoneSettingsGitHubOnlyMine) == zoneInfo {
+		if userClicked(ZoneSettingsGitHubOnlyMine) {
 			m.settingsOnlyMine = !m.settingsOnlyMine
 			return m, nil
 		}
-		if m.zone.Get(ZoneSettingsGitHubShowMerged) == zoneInfo {
+		if userClicked(ZoneSettingsGitHubShowMerged) {
 			m.settingsShowMerged = !m.settingsShowMerged
 			return m, nil
 		}
-		if m.zone.Get(ZoneSettingsGitHubShowClosed) == zoneInfo {
+		if userClicked(ZoneSettingsGitHubShowClosed) {
 			m.settingsShowClosed = !m.settingsShowClosed
 			return m, nil
 		}
-		if m.zone.Get(ZoneSettingsGitHubPRLimitDecrease) == zoneInfo {
+		if userClicked(ZoneSettingsGitHubPRLimitDecrease) {
 			if m.settingsPRLimit > 25 {
 				m.settingsPRLimit -= 25
 			}
 			return m, nil
 		}
-		if m.zone.Get(ZoneSettingsGitHubPRLimitIncrease) == zoneInfo {
+		if userClicked(ZoneSettingsGitHubPRLimitIncrease) {
 			if m.settingsPRLimit < 500 {
 				m.settingsPRLimit += 25
 			}
@@ -497,7 +370,7 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 		}
 
 		// PR Refresh Interval controls
-		if m.zone.Get(ZoneSettingsGitHubRefreshDecrease) == zoneInfo {
+		if userClicked(ZoneSettingsGitHubRefreshDecrease) {
 			if m.settingsPRRefreshInterval > 30 {
 				m.settingsPRRefreshInterval -= 30 // Decrease by 30 seconds
 			} else if m.settingsPRRefreshInterval > 0 {
@@ -505,7 +378,7 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		if m.zone.Get(ZoneSettingsGitHubRefreshIncrease) == zoneInfo {
+		if userClicked(ZoneSettingsGitHubRefreshIncrease) {
 			if m.settingsPRRefreshInterval == 0 {
 				m.settingsPRRefreshInterval = 30 // Enable at 30 seconds
 			} else if m.settingsPRRefreshInterval < 600 {
@@ -513,7 +386,7 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		if m.zone.Get(ZoneSettingsGitHubRefreshToggle) == zoneInfo {
+		if userClicked(ZoneSettingsGitHubRefreshToggle) {
 			if m.settingsPRRefreshInterval == 0 {
 				m.settingsPRRefreshInterval = 120 // Enable at 2 minutes (default)
 			} else {
@@ -537,7 +410,7 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 			ZoneSettingsCodecksExcludedClear,  // 8
 		}
 		for i, zoneID := range clearZones {
-			if m.zone.Get(zoneID) == zoneInfo {
+			if userClicked(zoneID) {
 				if i < len(m.settingsInputs) {
 					m.settingsInputs[i].SetValue("")
 					m.settingsInputs[i].Focus()
@@ -566,7 +439,7 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 			ZoneSettingsCodecksExcluded,  // 8
 		}
 		for i, zoneID := range settingsZones {
-			if m.zone.Get(zoneID) == zoneInfo {
+			if userClicked(zoneID) {
 				m.settingsFocusedField = i
 				for j := range m.settingsInputs {
 					if j == i {
@@ -580,17 +453,17 @@ func (m *Model) handleZoneClick(zoneInfo *zone.ZoneInfo) (tea.Model, tea.Cmd) {
 		}
 
 		// Save button (global)
-		if m.zone.Get(ZoneSettingsSave) == zoneInfo {
+		if userClicked(ZoneSettingsSave) {
 			return m, m.saveSettings()
 		}
 
 		// Save Local button
-		if m.zone.Get(ZoneSettingsSaveLocal) == zoneInfo {
+		if userClicked(ZoneSettingsSaveLocal) {
 			return m, m.saveSettingsLocal()
 		}
 
 		// Cancel button
-		if m.zone.Get(ZoneSettingsCancel) == zoneInfo {
+		if userClicked(ZoneSettingsCancel) {
 			m.viewMode = ViewCommitGraph
 			m.statusMessage = "Settings cancelled"
 			return m, nil
