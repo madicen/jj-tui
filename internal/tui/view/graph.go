@@ -47,13 +47,23 @@ func (r *Renderer) Graph(data GraphData) GraphResult {
 		}
 
 		var graphPrefix string
-		switch {
-		case commit.IsWorking:
-			graphPrefix = lipgloss.NewStyle().Foreground(ColorSecondary).Render("@  ")
-		case commit.Immutable:
-			graphPrefix = GraphStyle.Render("◆  ")
-		default:
-			graphPrefix = GraphStyle.Render("○  ")
+		var graphStyle lipgloss.Style = GraphStyle
+		if commit.IsWorking {
+			// Highlight working copy with a different color
+			graphStyle = graphStyle.Foreground(ColorSecondary)
+		}
+		if commit.GraphPrefix != "" {
+			// Use jj's native graph prefix
+			graphPrefix = graphStyle.Render(commit.GraphPrefix)
+		} else {
+			switch {
+			case commit.IsWorking:
+				graphPrefix = graphStyle.Render("@  ")
+			case commit.Immutable:
+				graphPrefix = graphStyle.Render("◆  ")
+			default:
+				graphPrefix = graphStyle.Render("○  ")
+			}
 		}
 
 		// Selection indicator (prepended before graph)
