@@ -25,10 +25,7 @@ func (m *Model) View() string {
 	if m.err != nil {
 		headerHeight := strings.Count(header, "\n") + 1
 		statusHeight := strings.Count(statusBar, "\n") + 1
-		fullContentHeight := m.height - headerHeight - statusHeight
-		if fullContentHeight < 1 {
-			fullContentHeight = 1
-		}
+		fullContentHeight := max(m.height-headerHeight-statusHeight, 1)
 		m.viewport.Height = fullContentHeight
 
 		// Render error content (includes init button for non-jj repos)
@@ -53,10 +50,7 @@ func (m *Model) View() string {
 		// Calculate full content height first (may have been reduced by graph view)
 		headerHeight := strings.Count(header, "\n") + 1
 		statusHeight := strings.Count(statusBar, "\n") + 1
-		fullContentHeight := m.height - headerHeight - statusHeight
-		if fullContentHeight < 1 {
-			fullContentHeight = 1
-		}
+		fullContentHeight := max(m.height-headerHeight-statusHeight, 1)
 
 		if scrollableList != "" {
 			// Render the fixed header with styling
@@ -66,10 +60,9 @@ func (m *Model) View() string {
 			fixedHeaderLines := strings.Count(styledFixedHeader, "\n") + 1
 
 			// Calculate viewport height for the split view
-			availableHeight := fullContentHeight - fixedHeaderLines
-			if availableHeight < 3 {
-				availableHeight = 3 // Minimum height
-			}
+			availableHeight := max(fullContentHeight-fixedHeaderLines,
+				// Minimum height
+				3)
 			m.viewport.Height = availableHeight
 
 			// Save scroll position before SetContent (which resets YOffset)
@@ -80,16 +73,8 @@ func (m *Model) View() string {
 
 			// Restore scroll position and clamp to valid range
 			m.viewport.YOffset = savedYOffset
-			maxOffset := m.viewport.TotalLineCount() - availableHeight
-			if maxOffset < 0 {
-				maxOffset = 0
-			}
-			if m.viewport.YOffset > maxOffset {
-				m.viewport.YOffset = maxOffset
-			}
-			if m.viewport.YOffset < 0 {
-				m.viewport.YOffset = 0
-			}
+			maxOffset := max(m.viewport.TotalLineCount()-availableHeight, 0)
+			m.viewport.YOffset = max(min(m.viewport.YOffset, maxOffset), 0)
 
 			viewportContent := m.viewport.View()
 
@@ -131,20 +116,13 @@ func (m *Model) View() string {
 		actionsHeight := strings.Count(actionsContent, "\n") + 1
 
 		// Calculate available height for the two scrollable panes
-		availableHeight := m.height - headerHeight - statusHeight - actionsHeight - separatorLines - paddingLines
-		if availableHeight < 6 {
-			availableHeight = 6
-		}
+		availableHeight := max(m.height-headerHeight-statusHeight-actionsHeight-separatorLines-paddingLines, 6)
 
 		// Split height: 60% for graph, 40% for files
 		graphHeight := (availableHeight * 60) / 100
 		filesHeight := availableHeight - graphHeight
-		if graphHeight < 3 {
-			graphHeight = 3
-		}
-		if filesHeight < 3 {
-			filesHeight = 3
-		}
+		graphHeight = max(graphHeight, 3)
+		filesHeight = max(filesHeight, 3)
 
 		// Set up graph viewport
 		m.viewport.Height = graphHeight
@@ -159,16 +137,8 @@ func (m *Model) View() string {
 
 		// Restore scroll position and clamp to valid range
 		m.viewport.YOffset = savedGraphOffset
-		maxGraphOffset := m.viewport.TotalLineCount() - graphHeight
-		if maxGraphOffset < 0 {
-			maxGraphOffset = 0
-		}
-		if m.viewport.YOffset > maxGraphOffset {
-			m.viewport.YOffset = maxGraphOffset
-		}
-		if m.viewport.YOffset < 0 {
-			m.viewport.YOffset = 0
-		}
+		maxGraphOffset := max(m.viewport.TotalLineCount()-graphHeight, 0)
+		m.viewport.YOffset = max(min(m.viewport.YOffset, maxGraphOffset), 0)
 
 		// Set up files viewport - show placeholder if no files yet
 		m.filesViewport.Height = filesHeight
@@ -183,16 +153,8 @@ func (m *Model) View() string {
 
 		// Restore scroll position and clamp to valid range
 		m.filesViewport.YOffset = savedFilesOffset
-		maxFilesOffset := m.filesViewport.TotalLineCount() - filesHeight
-		if maxFilesOffset < 0 {
-			maxFilesOffset = 0
-		}
-		if m.filesViewport.YOffset > maxFilesOffset {
-			m.filesViewport.YOffset = maxFilesOffset
-		}
-		if m.filesViewport.YOffset < 0 {
-			m.filesViewport.YOffset = 0
-		}
+		maxFilesOffset := max(m.filesViewport.TotalLineCount()-filesHeight, 0)
+		m.filesViewport.YOffset = max(min(m.filesViewport.YOffset, maxFilesOffset), 0)
 
 		// Simple separator line
 		separator := lipgloss.NewStyle().
@@ -219,10 +181,7 @@ func (m *Model) View() string {
 		// Reset viewport height to full available space (may have been reduced by graph view)
 		headerHeight := strings.Count(header, "\n") + 1
 		statusHeight := strings.Count(statusBar, "\n") + 1
-		fullContentHeight := m.height - headerHeight - statusHeight
-		if fullContentHeight < 1 {
-			fullContentHeight = 1
-		}
+		fullContentHeight := max(m.height-headerHeight-statusHeight, 1)
 		m.viewport.Height = fullContentHeight
 
 		// Save scroll position before SetContent (which resets YOffset)
@@ -233,16 +192,8 @@ func (m *Model) View() string {
 
 		// Restore scroll position and clamp to valid range
 		m.viewport.YOffset = savedYOffset
-		maxOffset := m.viewport.TotalLineCount() - fullContentHeight
-		if maxOffset < 0 {
-			maxOffset = 0
-		}
-		if m.viewport.YOffset > maxOffset {
-			m.viewport.YOffset = maxOffset
-		}
-		if m.viewport.YOffset < 0 {
-			m.viewport.YOffset = 0
-		}
+		maxOffset := max(m.viewport.TotalLineCount()-fullContentHeight, 0)
+		m.viewport.YOffset = max(min(m.viewport.YOffset, maxOffset), 0)
 
 		viewportContent := m.viewport.View()
 
@@ -282,10 +233,7 @@ func (m *Model) renderHeader() string {
 	tabsStr := lipgloss.JoinHorizontal(lipgloss.Left, tabs...)
 
 	// Layout: title on left, tabs on right
-	padding := m.width - lipgloss.Width(title) - lipgloss.Width(tabsStr) - 2
-	if padding < 0 {
-		padding = 0
-	}
+	padding := max(m.width-lipgloss.Width(title)-lipgloss.Width(tabsStr)-2, 0)
 
 	return HeaderStyle.Width(m.width).Render(
 		title + strings.Repeat(" ", padding) + tabsStr,
@@ -691,8 +639,7 @@ func (m *Model) renderStatusBar() string {
 	var shortcuts []string
 
 	// Add error action buttons first (if there's an error)
-	statusLower := strings.ToLower(m.statusMessage)
-	hasError := m.err != nil || strings.Contains(statusLower, "error") || strings.Contains(statusLower, "failed")
+	hasError := m.err != nil
 	if hasError {
 		copyBtn := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#FF6B6B")).

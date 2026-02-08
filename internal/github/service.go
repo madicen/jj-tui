@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -130,6 +131,16 @@ func (s *Service) MergePullRequest(ctx context.Context, prNumber int) error {
 
 	_, _, err := s.client.PullRequests.Merge(ctx, s.owner, s.repo, prNumber, "", options)
 	if err != nil {
+		if errResp, ok := err.(*github.ErrorResponse); ok {
+			// If the error is a GitHub API error, read the body for more context.
+			bodyBytes, readErr := io.ReadAll(errResp.Response.Body)
+			if readErr != nil {
+				// If we can't read the body, just return the original error.
+				return fmt.Errorf("failed to merge pull request: %w (and failed to read error body)", err)
+			}
+			defer errResp.Response.Body.Close()
+			return fmt.Errorf("failed to merge pull request: %v (body: %s)", err, string(bodyBytes))
+		}
 		return fmt.Errorf("failed to merge pull request: %w", err)
 	}
 
@@ -459,8 +470,8 @@ func ParseGitHubURL(remoteURL string) (owner, repo string, err error) {
 	}
 
 	// Handle SSH URLs
-	if strings.HasPrefix(remoteURL, "git@github.com:") {
-		path := strings.TrimPrefix(remoteURL, "git@github.com:")
+	if after, ok := strings.CutPrefix(remoteURL, "git@github.com:"); ok {
+		path := after
 		parts := strings.Split(path, "/")
 		if len(parts) >= 2 {
 			return parts[0], parts[1], nil

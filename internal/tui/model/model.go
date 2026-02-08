@@ -42,12 +42,12 @@ type Model struct {
 	loading        bool
 
 	// Ticket transitions
-	availableTransitions   []tickets.Transition
-	transitionInProgress   bool
-	statusChangeMode       bool // whether status change buttons are expanded
-	loadingTransitions     bool
-	notJJRepo      bool   // true if error is "not a jj repository"
-	currentPath    string // path where we're running (for jj init)
+	availableTransitions []tickets.Transition
+	transitionInProgress bool
+	statusChangeMode     bool // whether status change buttons are expanded
+	loadingTransitions   bool
+	notJJRepo            bool   // true if error is "not a jj repository"
+	currentPath          string // path where we're running (for jj init)
 
 	// Changed files for selected commit
 	changedFiles         []jj.ChangedFile
@@ -381,6 +381,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case prMergedMsg:
 		if msg.err != nil {
 			m.statusMessage = fmt.Sprintf("Failed to merge PR #%d: %v", msg.prNumber, msg.err)
+			m.err = msg.err
 		} else {
 			m.statusMessage = fmt.Sprintf("Merged PR #%d", msg.prNumber)
 			// Reload PRs to update status
@@ -391,6 +392,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case prClosedMsg:
 		if msg.err != nil {
 			m.statusMessage = fmt.Sprintf("Failed to close PR #%d: %v", msg.prNumber, msg.err)
+			m.err = msg.err
 		} else {
 			m.statusMessage = fmt.Sprintf("Closed PR #%d", msg.prNumber)
 			// Reload PRs to update status
@@ -423,6 +425,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusChangeMode = false // Collapse status buttons after transition
 		if msg.err != nil {
 			m.statusMessage = fmt.Sprintf("Failed to transition %s: %v", msg.ticketKey, msg.err)
+			m.err = msg.err
 		} else if msg.newStatus != "" {
 			m.statusMessage = fmt.Sprintf("Ticket %s transitioned to %s", msg.ticketKey, msg.newStatus)
 			// Reload tickets to get updated status
@@ -437,6 +440,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Handle save error
 		if msg.err != nil {
 			m.statusMessage = fmt.Sprintf("Error saving settings: %v", msg.err)
+			m.err = msg.err
 			return m, nil
 		}
 

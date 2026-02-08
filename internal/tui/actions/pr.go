@@ -42,7 +42,7 @@ func CreatePR(jjSvc *jj.Service, ghSvc *github.Service, params PRCreateParams) t
 
 		var pr *models.GitHubPR
 		var lastErr error
-		for attempt := 0; attempt < 5; attempt++ {
+		for range 5 {
 			pr, lastErr = ghSvc.CreatePullRequest(ctx, &models.CreatePRRequest{
 				Title:      params.Title,
 				Body:       params.Body,
@@ -130,4 +130,3 @@ func FindPRBranchForCommit(repo *models.Repository, commitIndex int) string {
 	}
 	return ""
 }
-

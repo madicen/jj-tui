@@ -41,17 +41,7 @@ type SettingsSavedMsg struct {
 // SaveSettings saves settings to global config
 func SaveSettings(params SettingsParams) tea.Cmd {
 	return func() tea.Msg {
-		setEnvIfNotEmpty("GITHUB_TOKEN", params.GitHubToken)
-		setEnvIfNotEmpty("JIRA_URL", params.JiraURL)
-		setEnvIfNotEmpty("JIRA_USER", params.JiraUser)
-		setEnvIfNotEmpty("JIRA_TOKEN", params.JiraToken)
-		setEnvIfNotEmpty("CODECKS_SUBDOMAIN", params.CodecksSubdomain)
-		setEnvIfNotEmpty("CODECKS_TOKEN", params.CodecksToken)
-		if params.CodecksProject != "" {
-			os.Setenv("CODECKS_PROJECT", params.CodecksProject)
-		} else {
-			os.Unsetenv("CODECKS_PROJECT")
-		}
+		setEnvParams(params)
 
 		ticketProvider := determineTicketProvider(params)
 
@@ -60,9 +50,7 @@ func SaveSettings(params SettingsParams) tea.Cmd {
 			cfg = &config.Config{}
 		}
 
-		if params.GitHubToken != "" {
-			cfg.GitHubToken = params.GitHubToken
-		}
+		cfg.GitHubToken = params.GitHubToken
 		cfg.GitHubShowMerged = &params.ShowMerged
 		cfg.GitHubShowClosed = &params.ShowClosed
 		cfg.GitHubOnlyMine = &params.OnlyMine
@@ -88,17 +76,7 @@ func SaveSettings(params SettingsParams) tea.Cmd {
 // SaveSettingsLocal saves settings to local config file
 func SaveSettingsLocal(params SettingsParams) tea.Cmd {
 	return func() tea.Msg {
-		setEnvIfNotEmpty("GITHUB_TOKEN", params.GitHubToken)
-		setEnvIfNotEmpty("JIRA_URL", params.JiraURL)
-		setEnvIfNotEmpty("JIRA_USER", params.JiraUser)
-		setEnvIfNotEmpty("JIRA_TOKEN", params.JiraToken)
-		setEnvIfNotEmpty("CODECKS_SUBDOMAIN", params.CodecksSubdomain)
-		setEnvIfNotEmpty("CODECKS_TOKEN", params.CodecksToken)
-		if params.CodecksProject != "" {
-			os.Setenv("CODECKS_PROJECT", params.CodecksProject)
-		} else {
-			os.Unsetenv("CODECKS_PROJECT")
-		}
+		setEnvParams(params)
 
 		ticketProvider := determineTicketProvider(params)
 
@@ -115,24 +93,12 @@ func SaveSettingsLocal(params SettingsParams) tea.Cmd {
 			CodecksExcludedStatuses: params.CodecksExcludedStatuses,
 		}
 
-		if params.GitHubToken != "" {
-			cfg.GitHubToken = params.GitHubToken
-		}
-		if params.JiraURL != "" {
-			cfg.JiraURL = params.JiraURL
-		}
-		if params.JiraUser != "" {
-			cfg.JiraUser = params.JiraUser
-		}
-		if params.JiraToken != "" {
-			cfg.JiraToken = params.JiraToken
-		}
-		if params.CodecksSubdomain != "" {
-			cfg.CodecksSubdomain = params.CodecksSubdomain
-		}
-		if params.CodecksToken != "" {
-			cfg.CodecksToken = params.CodecksToken
-		}
+		cfg.GitHubToken = params.GitHubToken
+		cfg.JiraURL = params.JiraURL
+		cfg.JiraUser = params.JiraUser
+		cfg.JiraToken = params.JiraToken
+		cfg.CodecksSubdomain = params.CodecksSubdomain
+		cfg.CodecksToken = params.CodecksToken
 
 		if err := cfg.SaveLocal(); err != nil {
 			return SettingsSavedMsg{Err: err}
@@ -142,9 +108,17 @@ func SaveSettingsLocal(params SettingsParams) tea.Cmd {
 	}
 }
 
-func setEnvIfNotEmpty(key, value string) {
-	if value != "" {
-		os.Setenv(key, value)
+func setEnvParams(params SettingsParams) {
+	os.Setenv("GITHUB_TOKEN", params.GitHubToken)
+	os.Setenv("JIRA_URL", params.JiraURL)
+	os.Setenv("JIRA_USER", params.JiraUser)
+	os.Setenv("JIRA_TOKEN", params.JiraToken)
+	os.Setenv("CODECKS_SUBDOMAIN", params.CodecksSubdomain)
+	os.Setenv("CODECKS_TOKEN", params.CodecksToken)
+	if params.CodecksProject != "" {
+		os.Setenv("CODECKS_PROJECT", params.CodecksProject)
+	} else {
+		os.Unsetenv("CODECKS_PROJECT")
 	}
 }
 
@@ -179,4 +153,3 @@ func buildSettingsSavedMsg(githubToken, ticketProvider string, savedLocal bool) 
 		SavedLocal:      savedLocal,
 	}
 }
-
