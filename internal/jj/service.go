@@ -175,9 +175,8 @@ func (s *Service) CreateNewBranch(ctx context.Context, branchName string) error 
 
 // CreateBranchFromMain creates a bookmark for a ticket, handling existing work intelligently.
 // If the user has existing work based on main (main -> A -> B...), the bookmark is added
-// to the first commit after main (A). Otherwise, a new empty commit is created on main
-// but the bookmark is placed on main@origin to avoid unnecessary placeholder commits.
-// When the user makes changes to the empty commit, it becomes non-empty naturally.
+// to the first commit after main (A). Otherwise, a new empty commit is created and the
+// bookmark is placed on it. This is the standard jj workflow.
 func (s *Service) CreateBranchFromMain(ctx context.Context, bookmarkName string) error {
 	// Find the first mutable commit after main in our ancestry
 	// This handles: main -> A -> B -> @ by finding A
@@ -199,12 +198,15 @@ func (s *Service) CreateBranchFromMain(ctx context.Context, bookmarkName string)
 		}
 	}
 
-	// No existing work based on main, or root is empty
-	// Place bookmark directly on main@origin to avoid creating an unnecessary empty placeholder commit.
-	// This prevents the "rebased empty commit" problem during merges.
-	// The bookmark will naturally move when the user starts making changes.
-	if err := s.runJJ(ctx, "bookmark", "create", bookmarkName, "-r", "main@origin"); err != nil {
-		return fmt.Errorf("failed to create bookmark on main: %w", err)
+	// No existing non-empty work based on main. Create a new empty commit and place the bookmark on it.
+	// This is the standard jj workflow since bookmarks must be on mutable commits.
+	if err := s.runJJ(ctx, "new", "main@origin"); err != nil {
+		return fmt.Errorf("failed to create new commit from main: %w", err)
+	}
+
+	// Create the bookmark on this new mutable commit
+	if err := s.runJJ(ctx, "bookmark", "create", bookmarkName); err != nil {
+		return fmt.Errorf("failed to create bookmark: %w", err)
 	}
 
 	return nil
