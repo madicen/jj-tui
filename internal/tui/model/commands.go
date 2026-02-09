@@ -68,31 +68,52 @@ func (m *Model) initializeServices() tea.Cmd {
 		// Try to create GitHub service (optional - won't fail if no token)
 		var ghSvc *github.Service
 		var ghErr error
+		var githubInfo string
 		remoteURL, err := jjSvc.GetGitRemoteURL(ctx)
 		if err == nil {
 			owner, repoName, err := github.ParseGitHubURL(remoteURL)
 			if err == nil {
+				// Track token source for diagnostics
+				tokenSource := ""
+
 				// Try to get GitHub token from environment variable first
 				token := os.Getenv("GITHUB_TOKEN")
+				if token != "" {
+					tokenSource = "env:GITHUB_TOKEN"
+				}
 
 				// If not in env var, try to load from config
 				if token == "" {
 					cfg, _ := config.Load()
 					if cfg != nil && cfg.GitHubToken != "" {
 						token = cfg.GitHubToken
+						if cfg.LoadedFrom() != "" {
+							tokenSource = fmt.Sprintf("config:%s", cfg.LoadedFrom())
+						} else {
+							tokenSource = "config"
+						}
 					}
 				}
 
-				// If we have a token, try to create the service
+				// Build diagnostic info
 				if token != "" {
+					tokenPreview := token[:min(8, len(token))] + "..."
+					githubInfo = fmt.Sprintf("repo=%s/%s token=%s(%s)", owner, repoName, tokenPreview, tokenSource)
+
 					ghSvc, ghErr = github.NewServiceWithToken(owner, repoName, token)
 					if ghErr != nil {
 						// Service creation failed - this is still optional, so continue
+						githubInfo += fmt.Sprintf(" error=%v", ghErr)
 						ghSvc = nil
 					}
+				} else {
+					githubInfo = fmt.Sprintf("repo=%s/%s (no token)", owner, repoName)
 				}
-				// If no token at all, ghSvc remains nil which is fine
+			} else {
+				githubInfo = fmt.Sprintf("remote=%s (not GitHub)", remoteURL)
 			}
+		} else {
+			githubInfo = "no remote configured"
 		}
 
 		// Try to create ticket service based on configured provider
@@ -103,6 +124,7 @@ func (m *Model) initializeServices() tea.Cmd {
 			githubService: ghSvc,
 			ticketService: ticketSvc,
 			ticketError:   ticketErr,
+			githubInfo:    githubInfo,
 			repository:    repo,
 		}
 	}
@@ -185,8 +207,9 @@ func (m *Model) loadPRs() tea.Cmd {
 		}
 	}
 
-	// Capture service reference for the closure
+	// Capture service reference and diagnostic info for the closure
 	ghSvc := m.githubService
+	ghInfo := m.githubInfo
 
 	return func() tea.Msg {
 		// Build filter options from config
@@ -206,7 +229,12 @@ func (m *Model) loadPRs() tea.Cmd {
 
 		prs, err := ghSvc.GetPullRequestsWithOptions(context.Background(), filterOpts)
 		if err != nil {
-			return errorMsg{Err: fmt.Errorf("failed to load PRs: %w", err)}
+			// Include diagnostic info in the error for easier troubleshooting
+			errMsg := fmt.Sprintf("failed to load PRs: %v", err)
+			if ghInfo != "" {
+				errMsg += fmt.Sprintf(" [%s]", ghInfo)
+			}
+			return errorMsg{Err: fmt.Errorf("%s", errMsg)}
 		}
 
 		return prsLoadedMsg{prs: prs}

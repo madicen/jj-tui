@@ -30,8 +30,9 @@ type servicesInitializedMsg struct {
 	jjService     *jj.Service
 	githubService *github.Service
 	ticketService tickets.Service
-	ticketError   error // Error from ticket service initialization (for debugging)
+	ticketError   error  // Error from ticket service initialization (for debugging)
 	repository    *models.Repository
+	githubInfo    string // Diagnostic info about GitHub connection (token source, repo)
 }
 
 // prsLoadedMsg is sent when PRs are loaded from GitHub

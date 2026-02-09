@@ -262,4 +262,3 @@ func (r *Renderer) CreatePR(data CreatePRData) string {
 
 	return strings.Join(lines, "\n")
 }
-

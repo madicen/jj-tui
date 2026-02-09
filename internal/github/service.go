@@ -200,7 +200,27 @@ func prQueryStates(filterOpts PRFilterOptions) []githubv4.PullRequestState {
 
 // GetPullRequestsWithOptions retrieves pull requests with the specified filter options
 // Uses GraphQL to fetch PRs with check status and reviews in a single API call
+// Falls back to REST API if GraphQL fails due to permission issues
 func (s *Service) GetPullRequestsWithOptions(ctx context.Context, filterOpts PRFilterOptions) ([]models.GitHubPR, error) {
+	// Try GraphQL first (includes check status and reviews)
+	prs, err := s.getPullRequestsGraphQL(ctx, filterOpts)
+	if err != nil {
+		// Check if this is a permission/access error - fall back to REST API
+		errStr := err.Error()
+		if strings.Contains(errStr, "Resource not accessible") ||
+			strings.Contains(errStr, "Could not resolve to a Repository") ||
+			strings.Contains(errStr, "403") ||
+			strings.Contains(errStr, "insufficient") {
+			// Fall back to REST API (no check status or reviews, but basic PR info works)
+			return s.getPullRequestsREST(ctx, filterOpts)
+		}
+		return nil, err
+	}
+	return prs, nil
+}
+
+// getPullRequestsGraphQL fetches PRs using GraphQL (includes check status and reviews)
+func (s *Service) getPullRequestsGraphQL(ctx context.Context, filterOpts PRFilterOptions) ([]models.GitHubPR, error) {
 	// Get authenticated username if filtering by user
 	var username string
 	if filterOpts.OnlyMine {
@@ -329,6 +349,92 @@ func (s *Service) GetPullRequestsWithOptions(ctx context.Context, filterOpts PRF
 			break
 		}
 		variables["after"] = githubv4.NewString(query.Repository.PullRequests.PageInfo.EndCursor)
+
+		// Early exit if we've hit the limit
+		if filterOpts.Limit > 0 && len(allPRs) >= filterOpts.Limit {
+			break
+		}
+	}
+
+	return allPRs, nil
+}
+
+// getPullRequestsREST fetches PRs using REST API (fallback when GraphQL permissions are insufficient)
+// This provides basic PR info but no check status or review status
+func (s *Service) getPullRequestsREST(ctx context.Context, filterOpts PRFilterOptions) ([]models.GitHubPR, error) {
+	// Get authenticated username if filtering by user
+	var username string
+	if filterOpts.OnlyMine {
+		var err error
+		username, err = s.GetAuthenticatedUsername(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get username for filtering: %w", err)
+		}
+	}
+
+	// Build state filter for REST API
+	states := []string{"open"}
+	if filterOpts.ShowMerged || filterOpts.ShowClosed {
+		states = append(states, "closed") // REST API doesn't distinguish merged from closed
+	}
+
+	var allPRs []models.GitHubPR
+	opts := &github.PullRequestListOptions{
+		State:     "all", // We'll filter below
+		Sort:      "created",
+		Direction: "desc",
+		ListOptions: github.ListOptions{
+			PerPage: 100,
+		},
+	}
+
+	for {
+		prs, resp, err := s.client.PullRequests.List(ctx, s.owner, s.repo, opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list pull requests: %w", err)
+		}
+
+		for _, pr := range prs {
+			// Filter by author if OnlyMine is set
+			if filterOpts.OnlyMine && pr.GetUser().GetLogin() != username {
+				continue
+			}
+
+			// Determine state - check both GetMerged() and MergedAt for reliability
+			state := pr.GetState()
+			isMerged := pr.GetMerged() || !pr.GetMergedAt().IsZero()
+			if state == "closed" && isMerged {
+				state = "merged"
+				if !filterOpts.ShowMerged {
+					continue
+				}
+			} else if state == "closed" && !filterOpts.ShowClosed {
+				continue
+			}
+
+			allPRs = append(allPRs, models.GitHubPR{
+				Number:       pr.GetNumber(),
+				Title:        pr.GetTitle(),
+				Body:         pr.GetBody(),
+				URL:          pr.GetHTMLURL(),
+				State:        state,
+				BaseBranch:   pr.GetBase().GetRef(),
+				HeadBranch:   pr.GetHead().GetRef(),
+				CheckStatus:  models.CheckStatusNone,  // Not available with REST fallback
+				ReviewStatus: models.ReviewStatusNone, // Not available with REST fallback
+			})
+
+			// Check limit
+			if filterOpts.Limit > 0 && len(allPRs) >= filterOpts.Limit {
+				return allPRs, nil
+			}
+		}
+
+		// Check for more pages
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
 
 		// Early exit if we've hit the limit
 		if filterOpts.Limit > 0 && len(allPRs) >= filterOpts.Limit {
