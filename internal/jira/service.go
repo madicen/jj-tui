@@ -41,13 +41,62 @@ func NewService() (*Service, error) {
 	// Ensure baseURL doesn't have trailing slash
 	baseURL = strings.TrimSuffix(baseURL, "/")
 
-	return &Service{
+	svc := &Service{
 		baseURL:  baseURL,
 		username: username,
 		token:    token,
 		client:   &http.Client{},
-	}, nil
+	}
+
+	// Verify the token has proper permissions by checking BROWSE_PROJECTS
+	if err := svc.checkPermissions(); err != nil {
+		return nil, err
+	}
+
+	return svc, nil
 }
+
+// checkPermissions verifies the API token has necessary permissions
+func (s *Service) checkPermissions() error {
+	ctx := context.Background()
+	
+	// Check if we have BROWSE_PROJECTS permission
+	resp, err := s.doRequest(ctx, "GET", "/rest/api/3/mypermissions?permissions=BROWSE_PROJECTS", nil)
+	if err != nil {
+		return fmt.Errorf("failed to check permissions: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 401 {
+		return fmt.Errorf("authentication failed - check your Jira credentials")
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to check permissions (status %d): %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var result struct {
+		Permissions map[string]struct {
+			HavePermission bool `json:"havePermission"`
+		} `json:"permissions"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return fmt.Errorf("failed to decode permissions response: %w", err)
+	}
+
+	browseProjects, ok := result.Permissions["BROWSE_PROJECTS"]
+	if !ok {
+		return fmt.Errorf("could not determine BROWSE_PROJECTS permission")
+	}
+
+	if !browseProjects.HavePermission {
+		return fmt.Errorf("API token lacks 'Browse Projects' permission - regenerate your token at https://id.atlassian.com/manage-profile/security/api-tokens")
+	}
+
+	return nil
+}
+
 
 // searchResponse represents the response from Jira search API v3
 type searchResponse struct {

@@ -132,7 +132,40 @@ func (m *Model) initializeServices() tea.Cmd {
 
 // createTicketService creates the appropriate ticket service based on configuration
 // Priority: explicit TICKET_PROVIDER env var, then Codecks if configured, then Jira if configured
+// Reads credentials from both environment variables AND config file (env vars take priority)
 func createTicketService() (tickets.Service, error) {
+	// Load config and set env vars from config if not already set
+	// This allows config file credentials to work alongside env vars
+	cfg, _ := config.Load()
+	if cfg != nil {
+		// Jira: set env vars from config if not already set
+		if os.Getenv("JIRA_URL") == "" && cfg.JiraURL != "" {
+			os.Setenv("JIRA_URL", cfg.JiraURL)
+		}
+		if os.Getenv("JIRA_USER") == "" && cfg.JiraUser != "" {
+			os.Setenv("JIRA_USER", cfg.JiraUser)
+		}
+		if os.Getenv("JIRA_TOKEN") == "" && cfg.JiraToken != "" {
+			os.Setenv("JIRA_TOKEN", cfg.JiraToken)
+		}
+
+		// Codecks: set env vars from config if not already set
+		if os.Getenv("CODECKS_SUBDOMAIN") == "" && cfg.CodecksSubdomain != "" {
+			os.Setenv("CODECKS_SUBDOMAIN", cfg.CodecksSubdomain)
+		}
+		if os.Getenv("CODECKS_TOKEN") == "" && cfg.CodecksToken != "" {
+			os.Setenv("CODECKS_TOKEN", cfg.CodecksToken)
+		}
+		if os.Getenv("CODECKS_PROJECT") == "" && cfg.CodecksProject != "" {
+			os.Setenv("CODECKS_PROJECT", cfg.CodecksProject)
+		}
+
+		// Ticket provider selection from config if not set in env
+		if os.Getenv("TICKET_PROVIDER") == "" && cfg.TicketProvider != "" {
+			os.Setenv("TICKET_PROVIDER", cfg.TicketProvider)
+		}
+	}
+
 	provider := os.Getenv("TICKET_PROVIDER")
 
 	switch provider {
