@@ -237,7 +237,6 @@ func (s *Service) DeleteBookmark(ctx context.Context, bookmarkName string) error
 }
 
 // SquashCommit squashes a commit into its parent
-// After squashing, it moves to the squash result (the parent that received the changes)
 func (s *Service) SquashCommit(ctx context.Context, commitID string) error {
 	// Get the description of the commit being squashed
 	sourceDesc, err := s.runJJOutput(ctx, "log", "-r", commitID, "--no-graph", "-T", "description")
@@ -266,14 +265,7 @@ func (s *Service) SquashCommit(ctx context.Context, commitID string) error {
 
 	// Squash the commit into its parent with explicit message to avoid interactive editor
 	args := []string{"squash", "-r", commitID, "-m", combinedDesc}
-	if err := s.runJJ(ctx, args...); err != nil {
-		return err
-	}
-
-	// After squash, @ is a new empty commit on top of the squash result
-	// Use `jj edit @-` to move directly to the parent (squash result)
-	// This abandons the empty commit automatically
-	return s.runJJ(ctx, "edit", "@-")
+	return s.runJJ(ctx, args...)
 }
 
 // NewCommit creates a new commit. If parentCommitID is provided, creates a child of that commit.
@@ -301,6 +293,44 @@ func (s *Service) RebaseCommit(ctx context.Context, sourceCommitID, destCommitID
 	// Using -s (source) instead of -r (revision) so descendants follow along
 	args := []string{"rebase", "-s", sourceCommitID, "-d", destCommitID}
 	return s.runJJ(ctx, args...)
+}
+
+// SplitFileToParent moves a single file from a commit to a new parent commit.
+// This creates a new commit between the current commit and its parent,
+// then moves just the file's changes to that new commit.
+func (s *Service) SplitFileToParent(ctx context.Context, commitID, filePath string) error {
+	// Step 1: Create a new commit inserted BEFORE the target commit
+	// This automatically rebases the target to be a child of the new commit
+	if err := s.runJJ(ctx, "new", "--insert-before", commitID, "-m", "(split)"); err != nil {
+		return fmt.Errorf("failed to create new parent commit: %w", err)
+	}
+
+	// Step 2: Move the file from the original commit to the new commit (now @)
+	// Using squash --from moves changes from the source to the current commit
+	if err := s.runJJ(ctx, "squash", "--from", commitID, "--", filePath); err != nil {
+		return fmt.Errorf("failed to move file to new parent: %w", err)
+	}
+
+	return nil
+}
+
+// MoveFileToChild moves a single file from a commit to a new child commit.
+// This creates a new empty commit after the specified commit, then moves
+// just the file's changes from the parent to the new child.
+func (s *Service) MoveFileToChild(ctx context.Context, commitID, filePath string) error {
+	// Step 1: Create a new empty commit after the current one
+	// Using jj new <commit> to create child of the specified commit
+	if err := s.runJJ(ctx, "new", commitID); err != nil {
+		return fmt.Errorf("failed to create new commit: %w", err)
+	}
+
+	// Step 2: Squash just the specified file from the parent commit to the new commit
+	// jj squash --from <parent> -- <file>
+	if err := s.runJJ(ctx, "squash", "--from", commitID, "--", filePath); err != nil {
+		return fmt.Errorf("failed to move file to new commit: %w", err)
+	}
+
+	return nil
 }
 
 // GetGitRemoteURL returns the URL of the git remote (origin)

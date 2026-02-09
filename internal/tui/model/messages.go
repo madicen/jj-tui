@@ -173,3 +173,10 @@ type cleanupCompletedMsg struct {
 type undoCompletedMsg struct {
 	message string
 }
+
+// fileMoveCompletedMsg is sent when a file is moved to a new commit
+type fileMoveCompletedMsg struct {
+	repository *models.Repository
+	filePath   string
+	direction  string // "up" or "down"
+}

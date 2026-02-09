@@ -143,9 +143,11 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		case ViewCommitGraph:
 			if !m.graphFocused {
-				// Scroll files pane down (if there are files)
-				if len(m.changedFiles) > 0 {
-					m.filesViewport.ScrollDown(1)
+				// Navigate files in files pane
+				if len(m.changedFiles) > 0 && m.selectedFile < len(m.changedFiles)-1 {
+					m.selectedFile++
+					// Scroll viewport if needed to keep selection visible
+					m.ensureFileVisible(m.selectedFile)
 				}
 			} else {
 				// Navigate commits in graph pane
@@ -177,9 +179,11 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		case ViewCommitGraph:
 			if !m.graphFocused {
-				// Scroll files pane up (if there are files)
-				if len(m.changedFiles) > 0 {
-					m.filesViewport.ScrollUp(1)
+				// Navigate files in files pane
+				if len(m.changedFiles) > 0 && m.selectedFile > 0 {
+					m.selectedFile--
+					// Scroll viewport if needed to keep selection visible
+					m.ensureFileVisible(m.selectedFile)
 				}
 			} else {
 				// Navigate commits in graph pane
@@ -287,6 +291,16 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Push updates to PR (for commits with PR branches or their descendants)
 		if m.viewMode == ViewCommitGraph {
 			return m.handleUpdatePR()
+		}
+	case "[":
+		// Move selected file to new parent commit (files pane must be focused)
+		if m.viewMode == ViewCommitGraph && !m.graphFocused {
+			return m.handleMoveFileUp()
+		}
+	case "]":
+		// Move selected file to new child commit (files pane must be focused)
+		if m.viewMode == ViewCommitGraph && !m.graphFocused {
+			return m.handleMoveFileDown()
 		}
 	}
 	return m, nil

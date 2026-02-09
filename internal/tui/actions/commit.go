@@ -78,3 +78,31 @@ func Rebase(svc *jj.Service, sourceChangeID, destChangeID string) tea.Cmd {
 	}
 }
 
+// SplitFileToParent moves a file from a commit to a new parent commit
+func SplitFileToParent(svc *jj.Service, commitID, filePath string) tea.Cmd {
+	return func() tea.Msg {
+		if err := svc.SplitFileToParent(context.Background(), commitID, filePath); err != nil {
+			return ErrorMsg{Err: fmt.Errorf("failed to move file to parent: %w", err)}
+		}
+		repo, err := svc.GetRepository(context.Background())
+		if err != nil {
+			return ErrorMsg{Err: err}
+		}
+		return FileMoveCompletedMsg{Repository: repo, FilePath: filePath, Direction: "up"}
+	}
+}
+
+// MoveFileToChild moves a file from a commit to a new child commit
+func MoveFileToChild(svc *jj.Service, commitID, filePath string) tea.Cmd {
+	return func() tea.Msg {
+		if err := svc.MoveFileToChild(context.Background(), commitID, filePath); err != nil {
+			return ErrorMsg{Err: fmt.Errorf("failed to move file to child: %w", err)}
+		}
+		repo, err := svc.GetRepository(context.Background())
+		if err != nil {
+			return ErrorMsg{Err: err}
+		}
+		return FileMoveCompletedMsg{Repository: repo, FilePath: filePath, Direction: "down"}
+	}
+}
+

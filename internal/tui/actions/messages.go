@@ -61,3 +61,10 @@ type ClipboardCopiedMsg struct {
 	Err     error
 }
 
+// FileMoveCompletedMsg indicates a file was moved to a new commit
+type FileMoveCompletedMsg struct {
+	Repository *models.Repository
+	FilePath   string
+	Direction  string // "up" or "down"
+}
+
