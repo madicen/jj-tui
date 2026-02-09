@@ -372,12 +372,6 @@ func (s *Service) getPullRequestsREST(ctx context.Context, filterOpts PRFilterOp
 		}
 	}
 
-	// Build state filter for REST API
-	states := []string{"open"}
-	if filterOpts.ShowMerged || filterOpts.ShowClosed {
-		states = append(states, "closed") // REST API doesn't distinguish merged from closed
-	}
-
 	var allPRs []models.GitHubPR
 	opts := &github.PullRequestListOptions{
 		State:     "all", // We'll filter below
