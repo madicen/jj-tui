@@ -89,7 +89,7 @@ func (m *Model) handleGraphFoucsMessage() string {
 func (m *Model) handleNavigateToGraphTab() (tea.Model, tea.Cmd) {
 	m.viewMode = ViewCommitGraph
 	m.statusMessage = "Loading commit graph"
-	return m, nil
+	return m, m.refreshRepository()
 }
 
 func (m *Model) handleNavigateToPRTab() (tea.Model, tea.Cmd) {
@@ -232,7 +232,7 @@ func (m *Model) handleOpenPRInBrowser() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleOpenTicketInBrowser() (tea.Model, tea.Cmd) {
-	if m.viewMode == ViewTickets && m.ticketService != nil && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
+	if m.ticketService != nil && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
 		ticket := m.ticketList[m.selectedTicket]
 		ticketURL := m.ticketService.GetTicketURL(ticket)
 		m.statusMessage = fmt.Sprintf("Opening %s...", ticket.DisplayKey)
