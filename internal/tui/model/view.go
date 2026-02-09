@@ -303,6 +303,7 @@ func (m *Model) renderSplitContent() (string, string) {
 }
 
 // renderError renders an error message
+// renderError renders an error message with text wrapping
 func (m *Model) renderError() string {
 	errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555"))
 
@@ -330,7 +331,24 @@ func (m *Model) renderError() string {
 		return strings.Join(lines, "\n")
 	}
 
-	return errorStyle.Render(fmt.Sprintf("Error: %v\n\nPress Ctrl+r to retry, Esc to dismiss, or Ctrl+q to quit.", m.err))
+	// Wrap the error message to fit the terminal width
+	wrapWidth := m.width - 4 // Leave some padding
+	if wrapWidth < 40 {
+		wrapWidth = 40
+	}
+
+	// Format the error message with wrapping
+	errMsg := fmt.Sprintf("Error: %v", m.err)
+	wrappedError := lipgloss.NewStyle().
+		Width(wrapWidth).
+		Foreground(lipgloss.Color("#FF5555")).
+		Render(errMsg)
+
+	instructions := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#8B949E")).
+		Render("Press Ctrl+r to retry, Esc to dismiss, or Ctrl+q to quit.")
+
+	return wrappedError + "\n\n" + instructions
 }
 
 // getGraphResult returns the GraphResult for the commit graph view
@@ -618,13 +636,14 @@ func (m *Model) renderEditDescription() string {
 }
 
 // renderStatusBar renders the status bar with global shortcuts
+// renderStatusBar renders the status bar with global shortcuts (always single line)
 func (m *Model) renderStatusBar() string {
 	status := m.statusMessage
 	if m.loading {
 		status = "⏳ " + status
 	}
 
-	// Sanitize status message: remove newlines and truncate if needed
+	// Sanitize status message: remove literal newlines
 	status = strings.ReplaceAll(status, "\n", " ")
 	status = strings.ReplaceAll(status, "\r", "")
 
@@ -639,7 +658,7 @@ func (m *Model) renderStatusBar() string {
 	var shortcuts []string
 
 	// Add error action buttons first (if there's an error)
-	hasError := m.err != nil
+	hasError := m.err != nil || strings.Contains(strings.ToLower(m.statusMessage), "error") || strings.Contains(strings.ToLower(m.statusMessage), "failed")
 	if hasError {
 		copyBtn := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#FF6B6B")).
@@ -672,17 +691,16 @@ func (m *Model) renderStatusBar() string {
 
 	shortcutsStr := lipgloss.JoinHorizontal(lipgloss.Left, shortcuts...)
 
-	// Calculate available space for status message
-	// Reserve space for: scroll indicator + shortcuts + padding
-	reservedWidth := lipgloss.Width(scrollIndicator) + lipgloss.Width(shortcutsStr) + 4
-	maxStatusWidth := m.width - reservedWidth
+	// Calculate available width for status message
+	shortcutsWidth := lipgloss.Width(shortcutsStr) + lipgloss.Width(scrollIndicator) + 4
+	maxStatusWidth := m.width - shortcutsWidth - 2
 	if maxStatusWidth < 20 {
 		maxStatusWidth = 20
 	}
 
-	// Truncate status if too long
-	if lipgloss.Width(status) > maxStatusWidth {
-		// Truncate and add ellipsis
+	// Always truncate status to fit on single line
+	statusWidth := lipgloss.Width(status)
+	if statusWidth > maxStatusWidth {
 		truncated := ""
 		for _, r := range status {
 			if lipgloss.Width(truncated+"…") >= maxStatusWidth {

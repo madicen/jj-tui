@@ -40,6 +40,7 @@ type Model struct {
 	statusMessage  string
 	err            error
 	loading        bool
+	githubInfo     string // Diagnostic info about GitHub connection
 
 	// Ticket transitions
 	availableTransitions []tickets.Transition
@@ -299,9 +300,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.repository = msg.repository
 			m.repository.PRs = oldPRs // Restore PRs
 			// Don't clear m.err here - let errors persist until dismissed
-			// Only update status if commit count changed
+			// Only update status if commit count changed AND there's no existing error
 			newCount := len(msg.repository.Graph.Commits)
-			if newCount != oldCount {
+			if newCount != oldCount && m.err == nil {
 				m.statusMessage = fmt.Sprintf("Updated: %d commits", newCount)
 			}
 			// Ensure selection is still valid
@@ -334,11 +335,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.githubService = msg.githubService
 		m.ticketService = msg.ticketService
 		m.repository = msg.repository
+		m.githubInfo = msg.githubInfo // Store diagnostic info
 		m.loading = false
 		// Don't clear m.err here - let errors persist until user dismisses them
 		m.statusMessage = fmt.Sprintf("Loaded %d commits", len(msg.repository.Graph.Commits))
 		if m.githubService != nil {
 			m.statusMessage += " (GitHub connected)"
+		} else if msg.githubInfo != "" {
+			// Show brief info when GitHub isn't connected
+			m.statusMessage += fmt.Sprintf(" (GitHub: %s)", msg.githubInfo)
 		}
 		if m.ticketService != nil {
 			m.statusMessage += fmt.Sprintf(" (%s connected)", m.ticketService.GetProviderName())
@@ -372,8 +377,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case prsLoadedMsg:
 		if m.repository != nil {
 			m.repository.PRs = msg.prs
-			m.statusMessage = fmt.Sprintf("Loaded %d PRs", len(msg.prs))
-		} else {
+			// Only update status if there's no existing error
+			if m.err == nil {
+				m.statusMessage = fmt.Sprintf("Loaded %d PRs", len(msg.prs))
+			}
+		} else if m.err == nil {
 			m.statusMessage = fmt.Sprintf("Loaded %d PRs (warning: repository is nil)", len(msg.prs))
 		}
 		return m, nil
@@ -402,11 +410,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ticketsLoadedMsg:
 		m.ticketList = msg.tickets
-		providerName := "tickets"
-		if m.ticketService != nil {
-			providerName = m.ticketService.GetProviderName() + " tickets"
+		// Only update status if there's no existing error
+		if m.err == nil {
+			providerName := "tickets"
+			if m.ticketService != nil {
+				providerName = m.ticketService.GetProviderName() + " tickets"
+			}
+			m.statusMessage = fmt.Sprintf("Loaded %d %s", len(msg.tickets), providerName)
 		}
-		m.statusMessage = fmt.Sprintf("Loaded %d %s", len(msg.tickets), providerName)
 		if len(msg.tickets) > 0 && m.selectedTicket < 0 {
 			m.selectedTicket = 0
 		}
