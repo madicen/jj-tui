@@ -66,6 +66,14 @@ func (m *Model) abandonCommit() tea.Cmd {
 	return actions.Abandon(m.jjService, commit.ChangeID)
 }
 
+func (m *Model) moveFileToParent(commitID, filePath string) tea.Cmd {
+	return actions.SplitFileToParent(m.jjService, commitID, filePath)
+}
+
+func (m *Model) moveFileToChild(commitID, filePath string) tea.Cmd {
+	return actions.MoveFileToChild(m.jjService, commitID, filePath)
+}
+
 func (m *Model) startRebaseMode() {
 	if !m.isSelectedCommitValid() {
 		return

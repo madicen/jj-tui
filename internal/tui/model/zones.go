@@ -59,6 +59,10 @@ const (
 	ZoneGraphPane = "zone:graph:pane"
 	ZoneFilesPane = "zone:files:pane"
 
+	// Changed file action zones
+	ZoneActionMoveFileUp   = "zone:action:movefileup"
+	ZoneActionMoveFileDown = "zone:action:movefiledown"
+
 	// Jira/Ticket action zones
 	ZoneJiraCreateBranch  = "zone:jira:createbranch"
 	ZoneTicketOpenBrowser = "zone:jira:openbrowser"
@@ -137,4 +141,9 @@ func ZoneJiraTicket(index int) string {
 // ZoneExistingBookmark returns the zone ID for an existing bookmark at the given index
 func ZoneExistingBookmark(index int) string {
 	return fmt.Sprintf("zone:bookmark:existing:%d", index)
+}
+
+// ZoneChangedFile returns the zone ID for a changed file at the given index
+func ZoneChangedFile(index int) string {
+	return fmt.Sprintf("zone:file:%d", index)
 }

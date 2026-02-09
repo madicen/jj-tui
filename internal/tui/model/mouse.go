@@ -112,6 +112,12 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 	if userClicked(ZoneActionBookmark) {
 		return m.handleCreateBookmark()
 	}
+	if userClicked(ZoneActionMoveFileUp) {
+		return m.handleMoveFileUp()
+	}
+	if userClicked(ZoneActionMoveFileDown) {
+		return m.handleMoveFileDown()
+	}
 	if userClicked(ZoneActionCreatePR) {
 		return m.handleCreatePR()
 	}
@@ -120,6 +126,16 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 	}
 	if userClicked(ZoneActionUpdatePR) {
 		return m.handleUpdatePR()
+	}
+
+	// Check changed file zones (for clicking to select a file)
+	for i := range m.changedFiles {
+		if userClicked(ZoneChangedFile(i)) {
+			m.selectedFile = i
+			// When clicking a file, switch focus to files pane
+			m.graphFocused = false
+			return m, nil
+		}
 	}
 
 	// Check PR zones

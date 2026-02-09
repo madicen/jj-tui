@@ -165,3 +165,37 @@ func (m *Model) ensureGraphCommitVisible(commitIndex int) {
 		m.viewport.YOffset = 0
 	}
 }
+
+// ensureFileVisible scrolls the files viewport to keep the selected file visible
+// This is called after keyboard navigation changes the file selection
+// The +1 accounts for the "Changed Files" header line
+func (m *Model) ensureFileVisible(fileIndex int) {
+	viewportHeight := m.filesViewport.Height
+	if viewportHeight <= 0 {
+		return
+	}
+
+	// Account for the "Changed Files" header line
+	adjustedLine := fileIndex + 1
+
+	// If selection is above visible area, scroll up
+	if adjustedLine < m.filesViewport.YOffset {
+		m.filesViewport.YOffset = adjustedLine
+	}
+	// If selection is below visible area, scroll down
+	if adjustedLine >= m.filesViewport.YOffset+viewportHeight {
+		m.filesViewport.YOffset = adjustedLine - viewportHeight + 1
+	}
+
+	// Clamp to valid range
+	maxOffset := m.filesViewport.TotalLineCount() - viewportHeight
+	if maxOffset < 0 {
+		maxOffset = 0
+	}
+	if m.filesViewport.YOffset > maxOffset {
+		m.filesViewport.YOffset = maxOffset
+	}
+	if m.filesViewport.YOffset < 0 {
+		m.filesViewport.YOffset = 0
+	}
+}

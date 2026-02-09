@@ -33,6 +33,7 @@ type GraphData struct {
 	CommitBookmark     map[int]string  // Maps commit index to bookmark it can create a PR with (including descendants)
 	ChangedFiles       []ChangedFile   // Changed files for the selected commit
 	GraphFocused       bool            // True if graph pane has focus
+	SelectedFile       int             // Index of selected file in changed files list
 }
 
 // GraphResult contains the split rendering for commit graph view

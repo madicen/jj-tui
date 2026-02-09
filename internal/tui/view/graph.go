@@ -203,7 +203,7 @@ func (r *Renderer) Graph(data GraphData) GraphResult {
 		actionLines = append(actionLines, lipgloss.JoinHorizontal(lipgloss.Left, actionButtons...))
 	}
 
-	// Build changed files section with focus indicator
+	// Build changed files section with focus indicator and tree view
 	if len(data.ChangedFiles) > 0 {
 		focusIndicator := "  "
 		if !data.GraphFocused {
@@ -211,8 +211,9 @@ func (r *Renderer) Graph(data GraphData) GraphResult {
 		}
 		fileLines = append(fileLines, lipgloss.NewStyle().Bold(true).Render(focusIndicator+"Changed Files (Tab to switch):"))
 
-		// Build and render the file tree
-		treeLines := renderFileTree(data.ChangedFiles)
+		// Render files as a tree structure with selection highlighting
+		// Move buttons are rendered inline with the selected file
+		treeLines := r.renderFileTree(data)
 		fileLines = append(fileLines, treeLines...)
 	}
 
@@ -244,55 +245,81 @@ func (r *Renderer) Graph(data GraphData) GraphResult {
 
 // fileTreeNode represents a node in the file tree
 type fileTreeNode struct {
-	name     string
-	status   string                   // Empty for directories
-	children map[string]*fileTreeNode // Child nodes (directories and files)
-	isFile   bool
+	name      string
+	status    string                   // Empty for directories
+	children  map[string]*fileTreeNode // Child nodes (directories and files)
+	isFile    bool
+	fileIndex int // Original index in the files list (for selection tracking)
 }
 
 // renderFileTree builds a tree structure from the changed files and renders it
-func renderFileTree(files []ChangedFile) []string {
+// Accepts GraphData to support selection highlighting
+func (r *Renderer) renderFileTree(data GraphData) []string {
 	// Build the tree
-	root := &fileTreeNode{children: make(map[string]*fileTreeNode)}
+	root := &fileTreeNode{children: make(map[string]*fileTreeNode), fileIndex: -1}
 
-	for _, file := range files {
+	for i, file := range data.ChangedFiles {
 		parts := strings.Split(file.Path, "/")
 		current := root
 
-		for i, part := range parts {
+		for j, part := range parts {
 			if current.children == nil {
 				current.children = make(map[string]*fileTreeNode)
 			}
 
 			if _, exists := current.children[part]; !exists {
 				current.children[part] = &fileTreeNode{
-					name:     part,
-					children: make(map[string]*fileTreeNode),
+					name:      part,
+					children:  make(map[string]*fileTreeNode),
+					fileIndex: -1,
 				}
 			}
 			current = current.children[part]
 
 			// If this is the last part, it's a file
-			if i == len(parts)-1 {
+			if j == len(parts)-1 {
 				current.isFile = true
 				current.status = file.Status
+				current.fileIndex = i // Store original index for selection
 			}
 		}
 	}
 
 	// Render the tree
 	var lines []string
-	renderTreeNode(root, "", &lines, true)
+	r.renderTreeNode(root, "", &lines, true, data)
 	return lines
 }
 
-// renderTreeNode recursively renders a tree node
-func renderTreeNode(node *fileTreeNode, indent string, lines *[]string, isRoot bool) {
+// renderTreeNode recursively renders a tree node with selection support
+func (r *Renderer) renderTreeNode(node *fileTreeNode, indent string, lines *[]string, isRoot bool, data GraphData) {
 	if !isRoot {
 		if node.isFile {
-			// Render file with status
+			// Check if this file is selected
+			isSelected := !data.GraphFocused && node.fileIndex == data.SelectedFile
 			statusStyle, statusChar := GetStatusStyle(node.status)
-			*lines = append(*lines, fmt.Sprintf("%s%s %s", indent, statusStyle.Render(statusChar), node.name))
+
+			var fileLine string
+			if isSelected {
+				// Render with selection highlight
+				selectedStyle := lipgloss.NewStyle().
+					Background(lipgloss.Color("#3d4f5f")).
+					Foreground(lipgloss.Color("#ffffff"))
+				fileLine = fmt.Sprintf("%s%s %s", indent, statusStyle.Render(statusChar), selectedStyle.Render(node.name))
+
+				// Add inline move buttons for mutable commits
+				if data.SelectedCommit >= 0 && data.SelectedCommit < len(data.Repository.Graph.Commits) {
+					selectedCommit := data.Repository.Graph.Commits[data.SelectedCommit]
+					if !selectedCommit.Immutable {
+						moveUp := r.Zone.Mark(ZoneActionMoveFileUp, ButtonStyle.Render("Move Up ([)"))
+						moveDown := r.Zone.Mark(ZoneActionMoveFileDown, ButtonStyle.Render("Move Down (])"))
+						fileLine = fileLine + "  " + moveUp + " " + moveDown
+					}
+				}
+			} else {
+				fileLine = fmt.Sprintf("%s%s %s", indent, statusStyle.Render(statusChar), node.name)
+			}
+			*lines = append(*lines, r.Zone.Mark(ZoneChangedFile(node.fileIndex), fileLine))
 		} else {
 			// Render directory
 			dirStyle := lipgloss.NewStyle().Foreground(ColorPrimary)
@@ -320,9 +347,9 @@ func renderTreeNode(node *fileTreeNode, indent string, lines *[]string, isRoot b
 
 	// Render directories first, then files
 	for _, name := range dirs {
-		renderTreeNode(node.children[name], newIndent, lines, false)
+		r.renderTreeNode(node.children[name], newIndent, lines, false, data)
 	}
 	for _, name := range fileNodes {
-		renderTreeNode(node.children[name], newIndent, lines, false)
+		r.renderTreeNode(node.children[name], newIndent, lines, false, data)
 	}
 }

@@ -90,6 +90,10 @@ const (
 	// Graph view pane zones (for click-to-focus)
 	ZoneGraphPane = "zone:graph:pane"
 	ZoneFilesPane = "zone:files:pane"
+
+	// Changed file action zones
+	ZoneActionMoveFileUp   = "zone:action:movefileup"
+	ZoneActionMoveFileDown = "zone:action:movefiledown"
 )
 
 // ZoneExistingBookmark returns the zone ID for an existing bookmark at the given index
@@ -110,4 +114,9 @@ func ZonePR(index int) string {
 // ZoneJiraTicket returns the zone ID for a Jira ticket at the given index
 func ZoneJiraTicket(index int) string {
 	return fmt.Sprintf("zone:jira:ticket:%d", index)
+}
+
+// ZoneChangedFile returns the zone ID for a changed file at the given index
+func ZoneChangedFile(index int) string {
+	return fmt.Sprintf("zone:file:%d", index)
 }

@@ -467,6 +467,7 @@ func (m *Model) buildGraphData() view.GraphData {
 		CommitBookmark:     commitBookmark,
 		ChangedFiles:       changedFiles,
 		GraphFocused:       m.graphFocused,
+		SelectedFile:       m.selectedFile,
 	}
 }
 

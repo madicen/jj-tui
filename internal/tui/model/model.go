@@ -53,6 +53,7 @@ type Model struct {
 	// Changed files for selected commit
 	changedFiles         []jj.ChangedFile
 	changedFilesCommitID string // Which commit the files are for
+	selectedFile         int    // Index of selected file in changed files list (-1 = none)
 
 	// Viewports for scrollable content
 	viewport      viewport.Model // Main viewport (graph or other content)
@@ -248,6 +249,23 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, m.loadPRs())
 		}
 
+		// Re-sync selection by ChangeID if we have one tracked
+		if m.changedFilesCommitID != "" {
+			found := false
+			for i, commit := range msg.repository.Graph.Commits {
+				if commit.ChangeID == m.changedFilesCommitID {
+					m.selectedCommit = i
+					found = true
+					break
+				}
+			}
+			if !found {
+				// Commit no longer exists, reset selection
+				m.selectedCommit = -1
+				m.changedFilesCommitID = ""
+			}
+		}
+
 		// Auto-select first commit if none selected
 		if m.selectedCommit == -1 && len(msg.repository.Graph.Commits) > 0 {
 			m.selectedCommit = 0
@@ -305,6 +323,24 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if newCount != oldCount && m.err == nil {
 				m.statusMessage = fmt.Sprintf("Updated: %d commits", newCount)
 			}
+
+			// Re-sync selection by ChangeID if we have one tracked
+			if m.changedFilesCommitID != "" {
+				found := false
+				for i, commit := range msg.repository.Graph.Commits {
+					if commit.ChangeID == m.changedFilesCommitID {
+						m.selectedCommit = i
+						found = true
+						break
+					}
+				}
+				if !found {
+					// Commit no longer exists, reset selection
+					m.selectedCommit = -1
+					m.changedFilesCommitID = ""
+				}
+			}
+
 			// Ensure selection is still valid
 			if m.selectedCommit >= newCount {
 				m.selectedCommit = newCount - 1
@@ -547,10 +583,50 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Reload repository to update the view
 		return m, tea.Batch(m.loadRepository(), m.loadPRs())
 
+	case fileMoveCompletedMsg:
+		// Save the ChangeID of the commit we were working on before updating
+		originalCommitID := m.changedFilesCommitID
+
+		// Update repository with new state
+		if m.repository != nil {
+			oldPRs := m.repository.PRs
+			m.repository = msg.repository
+			m.repository.PRs = oldPRs
+		} else {
+			m.repository = msg.repository
+		}
+		directionText := "new parent commit"
+		if msg.direction == "down" {
+			directionText = "new child commit"
+		}
+		m.statusMessage = fmt.Sprintf("Moved %s to %s", msg.filePath, directionText)
+
+		// Find the original commit by ChangeID and update the selected index
+		// This is important because the graph structure may have changed
+		for i, commit := range msg.repository.Graph.Commits {
+			if commit.ChangeID == originalCommitID {
+				m.selectedCommit = i
+				break
+			}
+		}
+
+		// Reload repository and changed files
+		var cmds []tea.Cmd
+		cmds = append(cmds, m.loadRepository())
+
+		// Reload changed files for the commit we were working on
+		if originalCommitID != "" {
+			m.changedFilesCommitID = originalCommitID
+			m.changedFiles = nil // Clear old files
+			cmds = append(cmds, m.loadChangedFiles(originalCommitID))
+		}
+		return m, tea.Batch(cmds...)
+
 	case changedFilesLoadedMsg:
 		// Only update if the files are for the currently selected commit
 		if msg.commitID == m.changedFilesCommitID {
 			m.changedFiles = msg.files
+			m.selectedFile = 0 // Reset file selection when files are loaded
 		}
 		return m, nil
 
@@ -680,6 +756,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case actions.BookmarkDeletedMsg:
 		return m.Update(bookmarkDeletedMsg{bookmarkName: msg.BookmarkName})
+
+	case actions.FileMoveCompletedMsg:
+		return m.Update(fileMoveCompletedMsg{repository: msg.Repository, filePath: msg.FilePath, direction: msg.Direction})
 
 	case actions.ClipboardCopiedMsg:
 		if msg.Success {
