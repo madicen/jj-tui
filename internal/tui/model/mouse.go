@@ -109,11 +109,14 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 	if userClicked(ZoneActionRebase) {
 		return m.handleRebase()
 	}
+	if userClicked(ZoneActionBookmark) {
+		return m.handleCreateBookmark()
+	}
 	if userClicked(ZoneActionCreatePR) {
 		return m.handleCreatePR()
 	}
-	if userClicked(ZoneActionBookmark) {
-		return m.handleCreateBookmark()
+	if userClicked(ZoneActionDelBookmark) {
+		return m.handleDeleteBookmark()
 	}
 	if userClicked(ZoneActionUpdatePR) {
 		return m.handleUpdatePR()

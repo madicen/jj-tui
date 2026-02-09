@@ -201,6 +201,18 @@ func (m *Model) handleCreateBookmark() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m *Model) handleDeleteBookmark() (tea.Model, tea.Cmd) {
+	if m.isSelectedCommitValid() && m.jjService != nil {
+		commit := m.repository.Graph.Commits[m.selectedCommit]
+		if len(commit.Branches) == 0 {
+			m.statusMessage = "No bookmark on this commit to delete"
+			return m, nil
+		}
+		return m, m.deleteBookmark()
+	}
+	return m, nil
+}
+
 func (m *Model) handleUpdatePR() (tea.Model, tea.Cmd) {
 	if m.isSelectedCommitValid() && m.jjService != nil {
 		// Find the PR branch for this commit (could be on this commit or an ancestor)
