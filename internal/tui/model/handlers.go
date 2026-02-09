@@ -3,6 +3,7 @@ package model
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -249,6 +250,192 @@ func (m *Model) handleOpenTicketInBrowser() (tea.Model, tea.Cmd) {
 		ticketURL := m.ticketService.GetTicketURL(ticket)
 		m.statusMessage = fmt.Sprintf("Opening %s...", ticket.DisplayKey)
 		return m, openURL(ticketURL)
+	}
+	return m, nil
+}
+
+func (m *Model) handleMergePR() (tea.Model, tea.Cmd) {
+	if m.viewMode == ViewPullRequests && m.githubService != nil && m.repository != nil && m.selectedPR >= 0 && m.selectedPR < len(m.repository.PRs) {
+		pr := m.repository.PRs[m.selectedPR]
+		if pr.State != "open" {
+			m.statusMessage = "Can only merge open PRs"
+			return m, nil
+		}
+		m.statusMessage = fmt.Sprintf("Merging PR #%d...", pr.Number)
+		return m, m.mergePR(pr.Number)
+	}
+	return m, nil
+}
+
+func (m *Model) handleClosePR() (tea.Model, tea.Cmd) {
+	if m.viewMode == ViewPullRequests && m.githubService != nil && m.repository != nil && m.selectedPR >= 0 && m.selectedPR < len(m.repository.PRs) {
+		pr := m.repository.PRs[m.selectedPR]
+		if pr.State != "open" {
+			m.statusMessage = "Can only close open PRs"
+			return m, nil
+		}
+		m.statusMessage = fmt.Sprintf("Closing PR #%d...", pr.Number)
+		return m, m.closePR(pr.Number)
+	}
+	return m, nil
+}
+
+func (m *Model) handleToggleStatusChangeMode() (tea.Model, tea.Cmd) {
+	if m.viewMode == ViewTickets && m.ticketService != nil && !m.transitionInProgress {
+		m.statusChangeMode = !m.statusChangeMode
+		if m.statusChangeMode {
+			m.statusMessage = "Select a status to apply (i/D/B/N or Esc to cancel)"
+		} else {
+			m.statusMessage = "Ready"
+		}
+	}
+	return m, nil
+}
+
+func (m *Model) handleStartBookmarkFromTicket() (tea.Model, tea.Cmd) {
+	if m.viewMode == ViewTickets && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) && m.jjService != nil {
+		ticket := m.ticketList[m.selectedTicket]
+		m.startBookmarkFromTicket(ticket)
+	}
+	return m, nil
+}
+
+func (m *Model) handleTransitionToInProgress() (tea.Model, tea.Cmd) {
+	if m.viewMode != ViewTickets || m.ticketService == nil || !m.statusChangeMode || m.transitionInProgress {
+		return m, nil
+	}
+	if m.selectedTicket < 0 || m.selectedTicket >= len(m.ticketList) {
+		return m, nil
+	}
+	// Find "in progress" transition (must contain "progress" or "start" but NOT "not start")
+	for _, t := range m.availableTransitions {
+		lowerName := strings.ToLower(t.Name)
+		isInProgress := strings.Contains(lowerName, "progress") ||
+			(strings.Contains(lowerName, "start") && !strings.Contains(lowerName, "not start") && !strings.Contains(lowerName, "not_start"))
+		if isInProgress {
+			m.transitionInProgress = true
+			ticket := m.ticketList[m.selectedTicket]
+			m.statusMessage = fmt.Sprintf("Setting %s to %s...", ticket.DisplayKey, t.Name)
+			return m, m.transitionTicket(t.ID)
+		}
+	}
+	m.statusMessage = "No 'In Progress' transition available"
+	return m, nil
+}
+
+func (m *Model) handleTransitionToDone() (tea.Model, tea.Cmd) {
+	if m.viewMode != ViewTickets || m.ticketService == nil || !m.statusChangeMode || m.transitionInProgress {
+		return m, nil
+	}
+	if m.selectedTicket < 0 || m.selectedTicket >= len(m.ticketList) {
+		return m, nil
+	}
+	// Find "done" transition
+	for _, t := range m.availableTransitions {
+		lowerName := strings.ToLower(t.Name)
+		if strings.Contains(lowerName, "done") || strings.Contains(lowerName, "complete") || strings.Contains(lowerName, "resolve") {
+			m.transitionInProgress = true
+			ticket := m.ticketList[m.selectedTicket]
+			m.statusMessage = fmt.Sprintf("Setting %s to %s...", ticket.DisplayKey, t.Name)
+			return m, m.transitionTicket(t.ID)
+		}
+	}
+	m.statusMessage = "No 'Done' transition available"
+	return m, nil
+}
+
+func (m *Model) handleTransitionToBlocked() (tea.Model, tea.Cmd) {
+	if m.viewMode != ViewTickets || m.ticketService == nil || !m.statusChangeMode || m.transitionInProgress {
+		return m, nil
+	}
+	if m.selectedTicket < 0 || m.selectedTicket >= len(m.ticketList) {
+		return m, nil
+	}
+	// Find "blocked" transition
+	for _, t := range m.availableTransitions {
+		lowerName := strings.ToLower(t.Name)
+		if strings.Contains(lowerName, "block") {
+			m.transitionInProgress = true
+			ticket := m.ticketList[m.selectedTicket]
+			m.statusMessage = fmt.Sprintf("Setting %s to %s...", ticket.DisplayKey, t.Name)
+			return m, m.transitionTicket(t.ID)
+		}
+	}
+	m.statusMessage = "No 'Blocked' transition available"
+	return m, nil
+}
+
+func (m *Model) handleTransitionToNotStarted() (tea.Model, tea.Cmd) {
+	if m.viewMode != ViewTickets || m.ticketService == nil || !m.statusChangeMode || m.transitionInProgress {
+		return m, nil
+	}
+	if m.selectedTicket < 0 || m.selectedTicket >= len(m.ticketList) {
+		return m, nil
+	}
+	// Find "not started" transition
+	for _, t := range m.availableTransitions {
+		lowerName := strings.ToLower(t.Name)
+		if strings.Contains(lowerName, "not") && strings.Contains(lowerName, "start") {
+			m.transitionInProgress = true
+			ticket := m.ticketList[m.selectedTicket]
+			m.statusMessage = fmt.Sprintf("Setting %s to %s...", ticket.DisplayKey, t.Name)
+			return m, m.transitionTicket(t.ID)
+		}
+	}
+	m.statusMessage = "No 'Not Started' transition available"
+	return m, nil
+}
+
+func (m *Model) handleDescriptionSave() (tea.Model, tea.Cmd) {
+	if m.viewMode == ViewEditDescription {
+		return m, m.saveDescription()
+	}
+	return m, nil
+}
+
+func (m *Model) handleDescriptionCancel() (tea.Model, tea.Cmd) {
+	if m.viewMode == ViewEditDescription {
+		m.viewMode = ViewCommitGraph
+		m.editingCommitID = ""
+		m.statusMessage = "Description edit cancelled"
+	}
+	return m, nil
+}
+
+func (m *Model) handleBookmarkCancel() (tea.Model, tea.Cmd) {
+	if m.viewMode == ViewCreateBookmark {
+		m.viewMode = ViewCommitGraph
+		m.statusMessage = "Bookmark creation cancelled"
+	}
+	return m, nil
+}
+
+func (m *Model) handleBookmarkSubmit() (tea.Model, tea.Cmd) {
+	if m.viewMode == ViewCreateBookmark && m.jjService != nil {
+		return m, m.submitBookmark()
+	}
+	return m, nil
+}
+
+func (m *Model) handlePRCancel() (tea.Model, tea.Cmd) {
+	if m.viewMode == ViewCreatePR {
+		m.viewMode = ViewCommitGraph
+		m.statusMessage = "PR creation cancelled"
+	}
+	return m, nil
+}
+
+func (m *Model) handlePRSubmit() (tea.Model, tea.Cmd) {
+	if m.viewMode == ViewCreatePR && m.githubService != nil && m.jjService != nil {
+		return m, m.submitPR()
+	}
+	return m, nil
+}
+
+func (m *Model) handleSettingsCancel() (tea.Model, tea.Cmd) {
+	if m.viewMode == ViewSettings {
+		m.viewMode = ViewCommitGraph
+		m.statusMessage = "Settings cancelled"
 	}
 	return m, nil
 }

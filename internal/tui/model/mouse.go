@@ -139,43 +139,20 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 
 	// Check PR merge button
 	if userClicked(ZonePRMerge) {
-		if m.viewMode == ViewPullRequests && m.githubService != nil && m.repository != nil && m.selectedPR >= 0 && m.selectedPR < len(m.repository.PRs) {
-			pr := m.repository.PRs[m.selectedPR]
-			if pr.State != "open" {
-				m.statusMessage = "Can only merge open PRs"
-				return m, nil
-			}
-			m.statusMessage = fmt.Sprintf("Merging PR #%d...", pr.Number)
-			return m, m.mergePR(pr.Number)
-		}
+		return m.handleMergePR()
 	}
 
 	// Check PR close button
 	if userClicked(ZonePRClose) {
-		if m.viewMode == ViewPullRequests && m.githubService != nil && m.repository != nil && m.selectedPR >= 0 && m.selectedPR < len(m.repository.PRs) {
-			pr := m.repository.PRs[m.selectedPR]
-			if pr.State != "open" {
-				m.statusMessage = "Can only close open PRs"
-				return m, nil
-			}
-			m.statusMessage = fmt.Sprintf("Closing PR #%d...", pr.Number)
-			return m, m.closePR(pr.Number)
-		}
+		return m.handleClosePR()
 	}
 
 	// Description editor zones
 	if userClicked(ZoneDescSave) {
-		if m.viewMode == ViewEditDescription {
-			return m, m.saveDescription()
-		}
+		return m.handleDescriptionSave()
 	}
 	if userClicked(ZoneDescCancel) {
-		if m.viewMode == ViewEditDescription {
-			m.viewMode = ViewCommitGraph
-			m.editingCommitID = ""
-			m.statusMessage = "Description edit cancelled"
-			return m, nil
-		}
+		return m.handleDescriptionCancel()
 	}
 
 	// Bookmark creation zones
@@ -195,15 +172,10 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 			return m, nil
 		}
 		if userClicked(ZoneBookmarkSubmit) {
-			if m.jjService != nil {
-				return m, m.submitBookmark()
-			}
-			return m, nil
+			return m.handleBookmarkSubmit()
 		}
 		if userClicked(ZoneBookmarkCancel) {
-			m.viewMode = ViewCommitGraph
-			m.statusMessage = "Bookmark creation cancelled"
-			return m, nil
+			return m.handleBookmarkCancel()
 		}
 	}
 
@@ -222,15 +194,10 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 			return m, nil
 		}
 		if userClicked(ZonePRSubmit) {
-			if m.githubService != nil && m.jjService != nil {
-				return m, m.submitPR()
-			}
-			return m, nil
+			return m.handlePRSubmit()
 		}
 		if userClicked(ZonePRCancel) {
-			m.viewMode = ViewCommitGraph
-			m.statusMessage = "PR creation cancelled"
-			return m, nil
+			return m.handlePRCancel()
 		}
 	}
 
@@ -244,24 +211,12 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 
 	// Check ticket create branch button
 	if userClicked(ZoneJiraCreateBranch) {
-		if m.viewMode == ViewTickets && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) && m.jjService != nil {
-			ticket := m.ticketList[m.selectedTicket]
-			m.startBookmarkFromTicket(ticket)
-			return m, nil
-		}
+		return m.handleStartBookmarkFromTicket()
 	}
 
 	// Check "Change Status" button to toggle status change mode
 	if userClicked(ZoneJiraChangeStatus) {
-		if m.viewMode == ViewTickets && m.ticketService != nil && !m.transitionInProgress {
-			m.statusChangeMode = !m.statusChangeMode
-			if m.statusChangeMode {
-				m.statusMessage = "Select a status to apply"
-			} else {
-				m.statusMessage = "Ready"
-			}
-			return m, nil
-		}
+		return m.handleToggleStatusChangeMode()
 	}
 
 	// Check ticket transition buttons (only when status change mode is active)
@@ -467,9 +422,7 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 
 		// Cancel button
 		if userClicked(ZoneSettingsCancel) {
-			m.viewMode = ViewCommitGraph
-			m.statusMessage = "Settings cancelled"
-			return m, nil
+			return m.handleSettingsCancel()
 		}
 	}
 
