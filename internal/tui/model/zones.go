@@ -50,7 +50,7 @@ const (
 	ZoneActionDelBookmark = "zone:action:delbookmark"
 
 	// Push action zone
-	ZoneActionPush = "zone:action:push"
+	ZoneActionUpdatePR = "zone:action:push"
 
 	// Init button zone (shown when not in a jj repo)
 	ZoneActionJJInit = "zone:action:jj_init"
@@ -61,11 +61,11 @@ const (
 
 	// Jira/Ticket action zones
 	ZoneJiraCreateBranch  = "zone:jira:createbranch"
-	ZoneJiraOpenBrowser   = "zone:jira:openbrowser"
+	ZoneTicketOpenBrowser = "zone:jira:openbrowser"
 	ZoneJiraSetInProgress = "zone:jira:setinprogress"
 	ZoneJiraSetDone       = "zone:jira:setdone"
-	ZoneJiraChangeStatus  = "zone:jira:changestatus"  // Toggle status change mode
-	ZoneJiraTransition    = "zone:jira:transition:"   // Prefix for dynamic transitions
+	ZoneJiraChangeStatus  = "zone:jira:changestatus" // Toggle status change mode
+	ZoneJiraTransition    = "zone:jira:transition:"  // Prefix for dynamic transitions
 
 	// PR action zones
 	ZonePROpenBrowser = "zone:pr:openbrowser"
@@ -91,12 +91,12 @@ const (
 	ZoneSettingsGitHubShowMerged      = "zone:settings:github_show_merged"
 	ZoneSettingsGitHubShowClosed      = "zone:settings:github_show_closed"
 	ZoneSettingsGitHubOnlyMine        = "zone:settings:github_only_mine"
-	ZoneSettingsGitHubPRLimitDecrease  = "zone:settings:github_pr_limit_decrease"
-	ZoneSettingsGitHubPRLimitIncrease  = "zone:settings:github_pr_limit_increase"
-	ZoneSettingsGitHubRefreshDecrease  = "zone:settings:github_refresh_decrease"
-	ZoneSettingsGitHubRefreshIncrease  = "zone:settings:github_refresh_increase"
-	ZoneSettingsGitHubRefreshToggle    = "zone:settings:github_refresh_toggle"
-	ZoneSettingsGitHubTokenClear       = "zone:settings:github_token_clear"
+	ZoneSettingsGitHubPRLimitDecrease = "zone:settings:github_pr_limit_decrease"
+	ZoneSettingsGitHubPRLimitIncrease = "zone:settings:github_pr_limit_increase"
+	ZoneSettingsGitHubRefreshDecrease = "zone:settings:github_refresh_decrease"
+	ZoneSettingsGitHubRefreshIncrease = "zone:settings:github_refresh_increase"
+	ZoneSettingsGitHubRefreshToggle   = "zone:settings:github_refresh_toggle"
+	ZoneSettingsGitHubTokenClear      = "zone:settings:github_token_clear"
 	ZoneSettingsGitHubLogin           = "zone:settings:github_login"
 	ZoneSettingsJiraURL               = "zone:settings:jira_url"
 	ZoneSettingsJiraURLClear          = "zone:settings:jira_url_clear"

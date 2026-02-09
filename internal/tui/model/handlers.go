@@ -1,0 +1,242 @@
+package model
+
+import (
+	"fmt"
+	"slices"
+
+	tea "github.com/charmbracelet/bubbletea"
+)
+
+func (m *Model) handleCheckoutCommit() (tea.Model, tea.Cmd) {
+	if m.isSelectedCommitValid() && m.jjService != nil {
+		commit := m.repository.Graph.Commits[m.selectedCommit]
+		if commit.Immutable {
+			m.statusMessage = "Cannot edit: commit is immutable"
+			return m, nil
+		}
+		return m, m.checkoutCommit()
+	}
+	return m, nil
+}
+
+func (m *Model) handleSquashCommit() (tea.Model, tea.Cmd) {
+	if m.isSelectedCommitValid() && m.jjService != nil {
+		commit := m.repository.Graph.Commits[m.selectedCommit]
+		if commit.Immutable {
+			m.statusMessage = "Cannot squash: commit is immutable"
+			return m, nil
+		}
+		return m, m.squashCommit()
+	}
+	return m, nil
+}
+
+func (m *Model) handleAbandonCommit() (tea.Model, tea.Cmd) {
+	if m.isSelectedCommitValid() && m.jjService != nil {
+		commit := m.repository.Graph.Commits[m.selectedCommit]
+		if commit.Immutable {
+			m.statusMessage = "Cannot abandon: commit is immutable"
+			return m, nil
+		}
+		return m, m.abandonCommit()
+	}
+	return m, nil
+}
+
+func (m *Model) handleDescribeCommit() (tea.Model, tea.Cmd) {
+	if m.isSelectedCommitValid() && m.jjService != nil {
+		commit := m.repository.Graph.Commits[m.selectedCommit]
+		if commit.Immutable {
+			m.statusMessage = "Cannot edit description: commit is immutable"
+			return m, nil
+		}
+		return m.startEditingDescription(commit)
+	}
+	return m, nil
+}
+
+func (m *Model) handleNewCommit() (tea.Model, tea.Cmd) {
+	if m.jjService != nil {
+		// Create a new commit as a child of the selected commit
+		// This is valid even for immutable commits - we're creating a child, not modifying the parent
+		if m.isSelectedCommitValid() {
+			commit := m.repository.Graph.Commits[m.selectedCommit]
+			m.statusMessage = fmt.Sprintf("Creating new commit from %s...", commit.ShortID)
+		} else {
+			m.statusMessage = "Creating new commit..."
+		}
+		return m, m.createNewCommit()
+	}
+	return m, nil
+}
+
+func (m *Model) handleRebase() (tea.Model, tea.Cmd) {
+	if m.isSelectedCommitValid() && m.jjService != nil {
+		commit := m.repository.Graph.Commits[m.selectedCommit]
+		if commit.Immutable {
+			m.statusMessage = "Cannot rebase: commit is immutable"
+			return m, nil
+		}
+		m.startRebaseMode()
+	}
+	return m, nil
+}
+
+func (m *Model) handleGraphFoucsMessage() string {
+	return If(m.graphFocused, "Graph pane focused", "Files pane focused")
+}
+
+func (m *Model) handleNavigateToGraphTab() (tea.Model, tea.Cmd) {
+	m.viewMode = ViewCommitGraph
+	m.statusMessage = "Loading commit graph"
+	return m, nil
+}
+
+func (m *Model) handleNavigateToPRTab() (tea.Model, tea.Cmd) {
+	m.viewMode = ViewPullRequests
+	// Load PRs when switching to PR view
+	if m.githubService != nil {
+		m.statusMessage = "Loading PRs..."
+		return m, m.loadPRs()
+	}
+	m.statusMessage = "GitHub service not initialized"
+	return m, nil
+}
+
+func (m *Model) handleNavigateToTicketsTab() (tea.Model, tea.Cmd) {
+	m.viewMode = ViewTickets
+	if m.ticketService != nil {
+		m.statusMessage = "Loading tickets..."
+		return m, m.loadTickets()
+	}
+	return m, nil
+}
+
+func (m *Model) handleNavigateToSettingsTab() (tea.Model, tea.Cmd) {
+	m.viewMode = ViewSettings
+	// Focus first input when entering settings
+	m.settingsFocusedField = 0
+	for i := range m.settingsInputs {
+		if i == 0 {
+			m.settingsInputs[i].Focus()
+		} else {
+			m.settingsInputs[i].Blur()
+		}
+	}
+	return m, nil
+}
+
+func (m *Model) handleNavigateToHelpTab() (tea.Model, tea.Cmd) {
+	m.viewMode = ViewHelp
+	m.statusMessage = "Loaded Help"
+	return m, nil
+}
+
+func (m *Model) handleCopyError() (tea.Model, tea.Cmd) {
+	// Copy error to clipboard (works with m.err or status message errors)
+	// Important: capture the error BEFORE changing statusMessage
+	errMsg := m.getErrorMessage()
+	if errMsg != "" {
+		m.statusMessage = "Copying error to clipboard..."
+		return m, m.copyErrorMessageToClipboard(errMsg)
+	}
+	return m, nil
+}
+
+func (m *Model) handleDismissError() (tea.Model, tea.Cmd) {
+	// Dismiss/clear the error and restart auto-refresh
+	m.err = nil
+	m.statusMessage = "Ready"
+	return m, m.tickCmd()
+}
+
+func (m *Model) handleUndo() (tea.Model, tea.Cmd) {
+	if m.jjService != nil {
+		m.statusMessage = "Undoing..."
+		return m, m.undoOperation()
+	}
+	return m, nil
+}
+
+func (m *Model) handleRedo() (tea.Model, tea.Cmd) {
+	if m.jjService != nil {
+		m.statusMessage = "Redoing..."
+		return m, m.redoOperation()
+	}
+	return m, nil
+}
+
+func (m *Model) handleSelectCommit(index int) (tea.Model, tea.Cmd) {
+	m.selectedCommit = index
+	// Load changed files for the selected commit
+	if m.repository != nil && m.selectedCommit >= 0 && m.selectedCommit < len(m.repository.Graph.Commits) {
+		commit := m.repository.Graph.Commits[m.selectedCommit]
+		m.changedFilesCommitID = commit.ChangeID
+		m.changedFiles = nil // Clear old files while loading
+		return m, m.loadChangedFiles(commit.ChangeID)
+	}
+	return m, nil
+}
+
+func (m *Model) handleCreatePR() (tea.Model, tea.Cmd) {
+	if m.githubService == nil {
+		m.statusMessage = "GitHub not connected. Configure in Settings (,)"
+		return m, nil
+	}
+	if m.isSelectedCommitValid() && m.jjService != nil {
+		m.startCreatePR()
+	}
+	return m, nil
+}
+
+func (m *Model) handleCreateBookmark() (tea.Model, tea.Cmd) {
+	if m.isSelectedCommitValid() && m.jjService != nil {
+		commit := m.repository.Graph.Commits[m.selectedCommit]
+		if commit.Immutable {
+			m.statusMessage = "Cannot create bookmark: commit is immutable"
+			return m, nil
+		}
+		m.startCreateBookmark()
+	}
+	return m, nil
+}
+
+func (m *Model) handleUpdatePR() (tea.Model, tea.Cmd) {
+	if m.isSelectedCommitValid() && m.jjService != nil {
+		// Find the PR branch for this commit (could be on this commit or an ancestor)
+		prBranch := m.findPRBranchForCommit(m.selectedCommit)
+		if prBranch == "" {
+			m.statusMessage = "No open PR found for this commit or its ancestors"
+			return m, nil
+		}
+		commit := m.repository.Graph.Commits[m.selectedCommit]
+		// Check if we need to move the bookmark (commit doesn't have it directly)
+		needsMoveBookmark := true
+		if slices.Contains(commit.Branches, prBranch) {
+			needsMoveBookmark = false
+		}
+		return m, m.pushToPR(prBranch, commit.ChangeID, needsMoveBookmark)
+	}
+	return m, nil
+}
+
+func (m *Model) handleOpenPRInBrowser() (tea.Model, tea.Cmd) {
+	if m.repository != nil && m.selectedPR >= 0 && m.selectedPR < len(m.repository.PRs) {
+		pr := m.repository.PRs[m.selectedPR]
+		if pr.URL != "" {
+			m.statusMessage = fmt.Sprintf("Opening PR #%d...", pr.Number)
+			return m, openURL(pr.URL)
+		}
+	}
+	return m, nil
+}
+
+func (m *Model) handleOpenTicketInBrowser() (tea.Model, tea.Cmd) {
+	if m.viewMode == ViewTickets && m.ticketService != nil && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
+		ticket := m.ticketList[m.selectedTicket]
+		ticketURL := m.ticketService.GetTicketURL(ticket)
+		m.statusMessage = fmt.Sprintf("Opening %s...", ticket.DisplayKey)
+		return m, openURL(ticketURL)
+	}
+	return m, nil
+}

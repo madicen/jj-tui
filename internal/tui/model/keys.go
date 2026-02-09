@@ -85,75 +85,33 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+q", "ctrl+c":
 		return m, tea.Quit
 	case "g":
-		m.viewMode = ViewCommitGraph
+		return m.handleNavigateToGraphTab()
 	case "p":
-		m.viewMode = ViewPullRequests
-		// Load PRs when switching to PR view
-		if m.githubService != nil {
-			m.statusMessage = "Loading PRs..."
-			return m, m.loadPRs()
-		} else {
-			m.statusMessage = "GitHub service not initialized"
-		}
+		return m.handleNavigateToPRTab()
 	case "t": // 't' for tickets
-		m.viewMode = ViewJira
-		// Load tickets when switching to Tickets view
-		if m.ticketService != nil {
-			m.statusMessage = "Loading tickets..."
-			return m, m.loadTickets()
-		}
+		return m.handleNavigateToTicketsTab()
 	case ",": // ',' for settings (like many apps use comma for settings)
-		m.viewMode = ViewSettings
-		// Focus first input when entering settings
-		m.settingsFocusedField = 0
-		for i := range m.settingsInputs {
-			if i == 0 {
-				m.settingsInputs[i].Focus()
-			} else {
-				m.settingsInputs[i].Blur()
-			}
-		}
+		return m.handleNavigateToSettingsTab()
 	case "h", "?":
-		m.viewMode = ViewHelp
+		return m.handleNavigateToHelpTab()
 	case "n":
-		if m.viewMode == ViewCommitGraph && m.jjService != nil {
-			// Create a new commit as a child of the selected commit
-			// This is valid even for immutable commits - we're creating a child, not modifying the parent
-			if m.isSelectedCommitValid() {
-				commit := m.repository.Graph.Commits[m.selectedCommit]
-				m.statusMessage = fmt.Sprintf("Creating new commit from %s...", commit.ShortID)
-			} else {
-				m.statusMessage = "Creating new commit..."
-			}
-			return m, m.createNewCommit()
+		if m.viewMode == ViewCommitGraph {
+			return m.handleNewCommit()
 		}
 	case "d":
 		// Edit description of selected commit
-		if m.viewMode == ViewCommitGraph && m.isSelectedCommitValid() && m.jjService != nil {
-			commit := m.repository.Graph.Commits[m.selectedCommit]
-			if commit.Immutable {
-				m.statusMessage = "Cannot edit description: commit is immutable"
-				return m, nil
-			}
-			return m.startEditingDescription(commit)
+		if m.viewMode == ViewCommitGraph {
+			return m.handleDescribeCommit()
 		}
 	case "ctrl+r":
 		return m, m.refreshRepository()
 	case "ctrl+z":
-		// Undo last jj operation
-		if m.jjService != nil {
-			m.statusMessage = "Undoing last operation..."
-			return m, m.undoOperation()
-		}
+		return m.handleUndo()
 	case "ctrl+y":
-		// Redo (undo the undo)
-		if m.jjService != nil {
-			m.statusMessage = "Redoing operation..."
-			return m, m.redoOperation()
-		}
+		return m.handleRedo()
 	case "esc":
 		// Cancel status change mode in Tickets view
-		if m.viewMode == ViewJira && m.statusChangeMode {
+		if m.viewMode == ViewTickets && m.statusChangeMode {
 			m.statusChangeMode = false
 			m.statusMessage = "Ready"
 			return m, nil
@@ -165,21 +123,16 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Switch focus between graph and files panes in graph view
 		if m.viewMode == ViewCommitGraph {
 			m.graphFocused = !m.graphFocused
-			if m.graphFocused {
-				m.statusMessage = "Graph pane focused"
-			} else {
-				m.statusMessage = "Files pane focused"
-			}
+			m.statusMessage = m.handleGraphFoucsMessage()
 		}
 	case "j", "down":
 		switch m.viewMode {
 		case ViewPullRequests:
-			if m.repository != nil && m.selectedPR < len(m.repository.PRs)-1 {
-				m.selectedPR++
-				// Scroll viewport to keep selection visible
-				m.ensureSelectionVisible(m.selectedPR)
+			if m.repository != nil {
+				m.selectedPR = min(m.selectedPR+1, len(m.repository.PRs)-1)
+				m.ensureGraphCommitVisible(m.selectedPR)
 			}
-		case ViewJira:
+		case ViewTickets:
 			if m.selectedTicket < len(m.ticketList)-1 {
 				m.selectedTicket++
 				// Scroll viewport to keep selection visible
@@ -201,11 +154,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					m.selectedCommit++
 					// Scroll viewport to keep selection visible
 					m.ensureGraphCommitVisible(m.selectedCommit)
-					// Load changed files for the newly selected commit
-					commit := m.repository.Graph.Commits[m.selectedCommit]
-					m.changedFilesCommitID = commit.ChangeID
-					m.changedFiles = nil
-					return m, m.loadChangedFiles(commit.ChangeID)
+					return m.handleSelectCommit(m.selectedCommit)
 				}
 			}
 		}
@@ -217,7 +166,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				// Scroll viewport to keep selection visible
 				m.ensureSelectionVisible(m.selectedPR)
 			}
-		case ViewJira:
+		case ViewTickets:
 			if m.selectedTicket > 0 {
 				m.selectedTicket--
 				// Scroll viewport to keep selection visible
@@ -239,17 +188,13 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					m.selectedCommit--
 					// Scroll viewport to keep selection visible
 					m.ensureGraphCommitVisible(m.selectedCommit)
-					// Load changed files for the newly selected commit
-					commit := m.repository.Graph.Commits[m.selectedCommit]
-					m.changedFilesCommitID = commit.ChangeID
-					m.changedFiles = nil
-					return m, m.loadChangedFiles(commit.ChangeID)
+					return m.handleSelectCommit(m.selectedCommit)
 				}
 			}
 		}
 	case "c":
 		// Toggle status change mode (Tickets view only)
-		if m.viewMode == ViewJira && m.ticketService != nil && !m.transitionInProgress {
+		if m.viewMode == ViewTickets && m.ticketService != nil && !m.transitionInProgress {
 			m.statusChangeMode = !m.statusChangeMode
 			if m.statusChangeMode {
 				m.statusMessage = "Select a status to apply (i/D/B or Esc to cancel)"
@@ -258,17 +203,12 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		// Create PR from selected commit (Graph view)
-		if m.viewMode == ViewCommitGraph && m.isSelectedCommitValid() && m.jjService != nil && m.githubService != nil {
-			m.startCreatePR()
-			return m, nil
-		} else if m.viewMode == ViewCommitGraph && m.githubService == nil {
-			m.statusMessage = "GitHub not connected. Configure in Settings (,)"
-			return m, nil
+		if m.viewMode == ViewCommitGraph {
+			return m.handleCreatePR()
 		}
 	case "i":
 		// Set ticket to "In Progress" (Tickets view only, requires status change mode)
-		if m.viewMode == ViewJira && m.ticketService != nil && m.statusChangeMode && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
+		if m.viewMode == ViewTickets && m.ticketService != nil && m.statusChangeMode && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
 			if m.transitionInProgress {
 				return m, nil // Already transitioning
 			}
@@ -288,7 +228,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "D":
 		// Set ticket to "Done" (Tickets view only, requires status change mode)
-		if m.viewMode == ViewJira && m.ticketService != nil && m.statusChangeMode && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
+		if m.viewMode == ViewTickets && m.ticketService != nil && m.statusChangeMode && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
 			if m.transitionInProgress {
 				return m, nil // Already transitioning
 			}
@@ -306,7 +246,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "B":
 		// Set ticket to "Blocked" (Tickets view only, requires status change mode)
-		if m.viewMode == ViewJira && m.ticketService != nil && m.statusChangeMode && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
+		if m.viewMode == ViewTickets && m.ticketService != nil && m.statusChangeMode && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
 			if m.transitionInProgress {
 				return m, nil // Already transitioning
 			}
@@ -324,7 +264,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "N":
 		// Set ticket to "Not Started" (Tickets view only, requires status change mode)
-		if m.viewMode == ViewJira && m.ticketService != nil && m.statusChangeMode && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
+		if m.viewMode == ViewTickets && m.ticketService != nil && m.statusChangeMode && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
 			if m.transitionInProgress {
 				return m, nil // Already transitioning
 			}
@@ -342,19 +282,12 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "o":
 		// Open PR URL in browser (PR view only)
-		if m.viewMode == ViewPullRequests && m.repository != nil && m.selectedPR >= 0 && m.selectedPR < len(m.repository.PRs) {
-			pr := m.repository.PRs[m.selectedPR]
-			if pr.URL != "" {
-				m.statusMessage = fmt.Sprintf("Opening PR #%d...", pr.Number)
-				return m, openURL(pr.URL)
-			}
+		if m.viewMode == ViewPullRequests {
+			return m.handleOpenPRInBrowser()
 		}
 		// Open ticket URL in browser (Tickets view only)
-		if m.viewMode == ViewJira && m.ticketService != nil && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
-			ticket := m.ticketList[m.selectedTicket]
-			ticketURL := m.ticketService.GetTicketURL(ticket)
-			m.statusMessage = fmt.Sprintf("Opening %s...", ticket.DisplayKey)
-			return m, openURL(ticketURL)
+		if m.viewMode == ViewTickets {
+			return m.handleOpenTicketInBrowser()
 		}
 	case "M":
 		// Merge PR (PR view only, open PRs only)
@@ -388,61 +321,30 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		// In Tickets view, start bookmark creation from ticket
-		if m.viewMode == ViewJira && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) && m.jjService != nil {
+		if m.viewMode == ViewTickets && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) && m.jjService != nil {
 			ticket := m.ticketList[m.selectedTicket]
 			m.startBookmarkFromTicket(ticket)
 			return m, nil
 		}
 		// In commit view, edit selected commit (jj edit)
-		if m.viewMode == ViewCommitGraph && m.isSelectedCommitValid() && m.jjService != nil {
-			commit := m.repository.Graph.Commits[m.selectedCommit]
-			if commit.Immutable {
-				m.statusMessage = "Cannot edit: commit is immutable"
-				return m, nil
-			}
-			return m, m.checkoutCommit()
+		if m.viewMode == ViewCommitGraph {
+			return m.handleCheckoutCommit()
 		}
 	case "s":
-		// Squash selected commit
-		if m.isSelectedCommitValid() && m.jjService != nil {
-			commit := m.repository.Graph.Commits[m.selectedCommit]
-			if commit.Immutable {
-				m.statusMessage = "Cannot squash: commit is immutable"
-				return m, nil
-			}
-			return m, m.squashCommit()
+		if m.viewMode == ViewCommitGraph {
+			return m.handleSquashCommit()
 		}
 	case "a":
-		// Abandon selected commit
-		if m.viewMode == ViewCommitGraph && m.isSelectedCommitValid() && m.jjService != nil {
-			commit := m.repository.Graph.Commits[m.selectedCommit]
-			if commit.Immutable {
-				m.statusMessage = "Cannot abandon: commit is immutable"
-				return m, nil
-			}
-			return m, m.abandonCommit()
+		if m.viewMode == ViewCommitGraph {
+			return m.handleAbandonCommit()
 		}
 	case "r":
-		// Start rebase mode
-		if m.viewMode == ViewCommitGraph && m.isSelectedCommitValid() && m.jjService != nil {
-			commit := m.repository.Graph.Commits[m.selectedCommit]
-			if commit.Immutable {
-				m.statusMessage = "Cannot rebase: commit is immutable"
-				return m, nil
-			}
-			m.startRebaseMode()
-			return m, nil
+		if m.viewMode == ViewCommitGraph {
+			return m.handleRebase()
 		}
 	case "b":
-		// Create bookmark on selected commit
-		if m.viewMode == ViewCommitGraph && m.isSelectedCommitValid() && m.jjService != nil {
-			commit := m.repository.Graph.Commits[m.selectedCommit]
-			if commit.Immutable {
-				m.statusMessage = "Cannot create bookmark: commit is immutable"
-				return m, nil
-			}
-			m.startCreateBookmark()
-			return m, nil
+		if m.viewMode == ViewCommitGraph {
+			return m.handleCreateBookmark()
 		}
 	case "x":
 		// Delete bookmark from selected commit
@@ -456,23 +358,8 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "u":
 		// Push updates to PR (for commits with PR branches or their descendants)
-		if m.viewMode == ViewCommitGraph && m.isSelectedCommitValid() && m.jjService != nil {
-			// Find the PR branch for this commit (could be on this commit or an ancestor)
-			prBranch := m.findPRBranchForCommit(m.selectedCommit)
-			if prBranch == "" {
-				m.statusMessage = "No open PR found for this commit or its ancestors"
-				return m, nil
-			}
-			commit := m.repository.Graph.Commits[m.selectedCommit]
-			// Check if we need to move the bookmark (commit doesn't have it directly)
-			needsMoveBookmark := true
-			for _, branch := range commit.Branches {
-				if branch == prBranch {
-					needsMoveBookmark = false
-					break
-				}
-			}
-			return m, m.pushToPR(prBranch, commit.ChangeID, needsMoveBookmark)
+		if m.viewMode == ViewCommitGraph {
+			return m.handleUpdatePR()
 		}
 	}
 	return m, nil

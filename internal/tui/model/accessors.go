@@ -97,8 +97,8 @@ func (m *Model) SetDimensions(width, height int) {
 
 // Close releases resources
 func (m *Model) Close() {
-	if m.zone != nil {
-		m.zone.Close()
+	if m.zoneManager != nil {
+		m.zoneManager.Close()
 	}
 }
 
@@ -165,4 +165,3 @@ func (m *Model) ensureGraphCommitVisible(commitIndex int) {
 		m.viewport.YOffset = 0
 	}
 }
-

@@ -39,12 +39,12 @@ func (m *Model) View() string {
 			viewportContent,
 			statusBar,
 		)
-		return m.zone.Scan(v)
+		return m.zoneManager.Scan(v)
 	}
 
 	// For PR and Jira views, use split rendering with fixed header
 	switch m.viewMode {
-	case ViewPullRequests, ViewJira:
+	case ViewPullRequests, ViewTickets:
 		fixedHeader, scrollableList := m.renderSplitContent()
 
 		// Calculate full content height first (may have been reduced by graph view)
@@ -162,8 +162,8 @@ func (m *Model) View() string {
 			Render(strings.Repeat("─", m.width-2))
 
 		// Wrap viewports in zones for click-to-focus
-		graphPane := m.zone.Mark(ZoneGraphPane, m.viewport.View())
-		filesPane := m.zone.Mark(ZoneFilesPane, m.filesViewport.View())
+		graphPane := m.zoneManager.Mark(ZoneGraphPane, m.viewport.View())
+		filesPane := m.zoneManager.Mark(ZoneFilesPane, m.filesViewport.View())
 
 		v = lipgloss.JoinVertical(
 			lipgloss.Left,
@@ -206,12 +206,12 @@ func (m *Model) View() string {
 	}
 
 	// CRITICAL: Scan the view to register zone positions
-	return m.zone.Scan(v)
+	return m.zoneManager.Scan(v)
 }
 
 // renderer returns a view renderer with the zone manager
 func (m *Model) renderer() *view.Renderer {
-	return view.New(m.zone)
+	return view.New(m.zoneManager)
 }
 
 // renderHeader renders the header with clickable tabs
@@ -223,11 +223,11 @@ func (m *Model) renderHeader() string {
 
 	// Create tabs wrapped in zones (with keyboard shortcuts)
 	tabs := []string{
-		m.zone.Mark(ZoneTabGraph, m.renderTab("Graph (g)", m.viewMode == ViewCommitGraph)),
-		m.zone.Mark(ZoneTabPRs, m.renderTab("PRs (p)", m.viewMode == ViewPullRequests)),
-		m.zone.Mark(ZoneTabJira, m.renderTab("Tickets (t)", m.viewMode == ViewJira)),
-		m.zone.Mark(ZoneTabSettings, m.renderTab("Settings (,)", m.viewMode == ViewSettings)),
-		m.zone.Mark(ZoneTabHelp, m.renderTab("Help (h)", m.viewMode == ViewHelp)),
+		m.zoneManager.Mark(ZoneTabGraph, m.renderTab("Graph (g)", m.viewMode == ViewCommitGraph)),
+		m.zoneManager.Mark(ZoneTabPRs, m.renderTab("PRs (p)", m.viewMode == ViewPullRequests)),
+		m.zoneManager.Mark(ZoneTabJira, m.renderTab("Tickets (t)", m.viewMode == ViewTickets)),
+		m.zoneManager.Mark(ZoneTabSettings, m.renderTab("Settings (,)", m.viewMode == ViewSettings)),
+		m.zoneManager.Mark(ZoneTabHelp, m.renderTab("Help (h)", m.viewMode == ViewHelp)),
 	}
 
 	tabsStr := lipgloss.JoinHorizontal(lipgloss.Left, tabs...)
@@ -262,7 +262,7 @@ func (m *Model) renderContent() string {
 			content = m.renderCommitGraph()
 		case ViewPullRequests:
 			content = m.renderPullRequests()
-		case ViewJira:
+		case ViewTickets:
 			content = m.renderJira()
 		case ViewSettings:
 			content = m.renderSettings()
@@ -295,7 +295,7 @@ func (m *Model) renderSplitContent() (string, string) {
 	switch m.viewMode {
 	case ViewPullRequests:
 		return m.renderPullRequestsSplit()
-	case ViewJira:
+	case ViewTickets:
 		return m.renderJiraSplit()
 	default:
 		return m.renderContent(), ""
@@ -319,7 +319,7 @@ func (m *Model) renderError() string {
 		lines = append(lines, "")
 
 		// Init button
-		initButton := m.zone.Mark(ZoneActionJJInit, view.ButtonStyle.Background(lipgloss.Color("#238636")).Render("Initialize Repository (i)"))
+		initButton := m.zoneManager.Mark(ZoneActionJJInit, view.ButtonStyle.Background(lipgloss.Color("#238636")).Render("Initialize Repository (i)"))
 		lines = append(lines, initButton)
 		lines = append(lines, "")
 		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#8B949E")).Render("This will run: jj git init"))
@@ -649,25 +649,25 @@ func (m *Model) renderStatusBar() string {
 			Foreground(lipgloss.Color("#888888")).
 			Bold(true).
 			Render("[X]")
-		shortcuts = append(shortcuts, m.zone.Mark(ZoneActionCopyError, copyBtn), " ", m.zone.Mark(ZoneActionDismissError, dismissBtn), " │ ")
+		shortcuts = append(shortcuts, m.zoneManager.Mark(ZoneActionCopyError, copyBtn), " ", m.zoneManager.Mark(ZoneActionDismissError, dismissBtn), " │ ")
 	}
 
 	// Add keyboard shortcuts with ^ notation and | separators
 	// Start with undo/redo if in Graph view, then quit and refresh
 	if m.viewMode == ViewCommitGraph && m.jjService != nil {
 		shortcuts = append(shortcuts,
-			m.zone.Mark(ZoneActionUndo, "^z undo"),
+			m.zoneManager.Mark(ZoneActionUndo, "^z undo"),
 			" │ ",
-			m.zone.Mark(ZoneActionRedo, "^y redo"),
+			m.zoneManager.Mark(ZoneActionRedo, "^y redo"),
 			" │ ",
 		)
 	}
 
 	// Always add quit and refresh (in same position for all tabs)
 	shortcuts = append(shortcuts,
-		m.zone.Mark(ZoneActionQuit, "^q quit"),
+		m.zoneManager.Mark(ZoneActionQuit, "^q quit"),
 		" │ ",
-		m.zone.Mark(ZoneActionRefresh, "^r refresh"),
+		m.zoneManager.Mark(ZoneActionRefresh, "^r refresh"),
 	)
 
 	shortcutsStr := lipgloss.JoinHorizontal(lipgloss.Left, shortcuts...)

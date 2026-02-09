@@ -74,7 +74,7 @@ func TestCommitSelectedMsgChangesSelection(t *testing.T) {
 
 	m.selectedCommit = -1 // Reset
 
-	msg := CommitSelectedMsg{Index: 1, CommitID: "def456789012"}
+	msg, _ := m.handleSelectCommit(1)
 	newModel, _ := m.Update(msg)
 	m = newModel.(*Model)
 
@@ -168,7 +168,8 @@ func TestWorkflowWithMessages(t *testing.T) {
 	}
 
 	// Step 2: Select first commit via message
-	newModel, _ := m.Update(CommitSelectedMsg{Index: 0, CommitID: "abc123456789"})
+	msg, _ := m.handleSelectCommit(0)
+	newModel, _ := m.Update(msg)
 	m = newModel.(*Model)
 
 	if m.GetSelectedCommit() != 0 {

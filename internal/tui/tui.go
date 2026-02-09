@@ -15,15 +15,15 @@ type Model = model.Model
 
 // ViewMode constants - re-exported from model package
 const (
-	ViewCommitGraph    = model.ViewCommitGraph
-	ViewPullRequests   = model.ViewPullRequests
-	ViewJira           = model.ViewJira
-	ViewSettings       = model.ViewSettings
-	ViewHelp           = model.ViewHelp
+	ViewCommitGraph     = model.ViewCommitGraph
+	ViewPullRequests    = model.ViewPullRequests
+	ViewJira            = model.ViewTickets
+	ViewSettings        = model.ViewSettings
+	ViewHelp            = model.ViewHelp
 	ViewEditDescription = model.ViewEditDescription
-	ViewCreatePR       = model.ViewCreatePR
-	ViewCreateBookmark = model.ViewCreateBookmark
-	ViewGitHubLogin    = model.ViewGitHubLogin
+	ViewCreatePR        = model.ViewCreatePR
+	ViewCreateBookmark  = model.ViewCreateBookmark
+	ViewGitHubLogin     = model.ViewGitHubLogin
 )
 
 // SelectionMode constants - re-exported from model package
@@ -49,9 +49,8 @@ func ErrorMsg(err error) model.ErrorMsgType {
 
 // Message types for external use
 type (
-	TabSelectedMsg    = model.TabSelectedMsg
-	CommitSelectedMsg = model.CommitSelectedMsg
-	ActionMsg         = model.ActionMsg
+	TabSelectedMsg = model.TabSelectedMsg
+	ActionMsg      = model.ActionMsg
 )
 
 // ActionType constants
@@ -62,4 +61,3 @@ const (
 	ActionCheckout = model.ActionCheckout
 	ActionEdit     = model.ActionEdit
 )
-

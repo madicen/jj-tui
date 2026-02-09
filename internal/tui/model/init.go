@@ -32,8 +32,8 @@ func New(ctx context.Context) *Model {
 	showClosed := true
 	onlyMine := false
 	prLimit := 100
-	prRefreshInterval := 120    // Default: 2 minutes
-	autoInProgress := true      // Default: enabled
+	prRefreshInterval := 120 // Default: 2 minutes
+	autoInProgress := true   // Default: enabled
 	if cfg != nil {
 		showMerged = cfg.ShowMergedPRs()
 		showClosed = cfg.ShowClosedPRs()
@@ -64,7 +64,7 @@ func New(ctx context.Context) *Model {
 
 	return &Model{
 		ctx:                       ctx,
-		zone:                      zone.New(),
+		zoneManager:               zone.New(),
 		viewMode:                  ViewCommitGraph,
 		selectedCommit:            -1,
 		statusMessage:             "Initializing...",

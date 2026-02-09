@@ -8,12 +8,6 @@ type TabSelectedMsg struct {
 	Tab ViewMode
 }
 
-// CommitSelectedMsg is emitted when a commit is clicked
-type CommitSelectedMsg struct {
-	Index    int
-	CommitID string
-}
-
 // ActionMsg is emitted when an action button is clicked
 type ActionMsg struct {
 	Action ActionType
@@ -37,8 +31,8 @@ const (
 type SelectionMode int
 
 const (
-	SelectionNormal SelectionMode = iota // Normal selection
-	SelectionRebaseDestination           // Selecting destination for rebase
+	SelectionNormal            SelectionMode = iota // Normal selection
+	SelectionRebaseDestination                      // Selecting destination for rebase
 )
 
 // ViewMode represents different views in the TUI
@@ -47,7 +41,7 @@ type ViewMode int
 const (
 	ViewCommitGraph ViewMode = iota
 	ViewPullRequests
-	ViewJira
+	ViewTickets
 	ViewSettings
 	ViewHelp
 	ViewCreatePR
@@ -62,7 +56,7 @@ func (v ViewMode) String() string {
 		return "commit_graph"
 	case ViewPullRequests:
 		return "pull_requests"
-	case ViewJira:
+	case ViewTickets:
 		return "jira"
 	case ViewSettings:
 		return "settings"
@@ -80,4 +74,3 @@ func (v ViewMode) String() string {
 		return "unknown"
 	}
 }
-
