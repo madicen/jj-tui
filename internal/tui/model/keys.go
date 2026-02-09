@@ -89,6 +89,8 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleNavigateToPRTab()
 	case "t": // 't' for tickets
 		return m.handleNavigateToTicketsTab()
+	case "R": // 'R' for remote branches (capital to avoid conflict with 'r' for rebase)
+		return m.handleNavigateToBranchesTab()
 	case ",": // ',' for settings (like many apps use comma for settings)
 		return m.handleNavigateToSettingsTab()
 	case "h", "?":
@@ -141,6 +143,11 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.loadingTransitions = true
 				return m, m.loadTransitions()
 			}
+		case ViewBranches:
+			if m.selectedBranch < len(m.branchList)-1 {
+				m.selectedBranch++
+				m.ensureBranchSelectionVisible(m.selectedBranch)
+			}
 		case ViewCommitGraph:
 			if !m.graphFocused {
 				// Navigate files in files pane
@@ -166,6 +173,11 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.selectedPR--
 				// Scroll viewport to keep selection visible
 				m.ensureSelectionVisible(m.selectedPR)
+			}
+		case ViewBranches:
+			if m.selectedBranch > 0 {
+				m.selectedBranch--
+				m.ensureBranchSelectionVisible(m.selectedBranch)
 			}
 		case ViewTickets:
 			if m.selectedTicket > 0 {
@@ -242,6 +254,31 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.viewMode == ViewPullRequests {
 			return m.handleClosePR()
 		}
+	case "T":
+		// Track branch (Branches view only)
+		if m.viewMode == ViewBranches {
+			return m.handleTrackBranch()
+		}
+	case "U":
+		// Untrack branch (Branches view only)
+		if m.viewMode == ViewBranches {
+			return m.handleUntrackBranch()
+		}
+	case "L":
+		// Restore local branch from remote (Branches view only)
+		if m.viewMode == ViewBranches {
+			return m.handleRestoreLocalBranch()
+		}
+	case "P":
+		// Push branch (Branches view only)
+		if m.viewMode == ViewBranches {
+			return m.handlePushBranch()
+		}
+	case "F":
+		// Fetch from all remotes (Branches view only)
+		if m.viewMode == ViewBranches {
+			return m.handleFetchAll()
+		}
 	case "enter", "e":
 		// In PR view, open the PR in browser
 		if m.viewMode == ViewPullRequests && m.repository != nil && m.selectedPR >= 0 && m.selectedPR < len(m.repository.PRs) {
@@ -278,7 +315,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.handleCreateBookmark()
 		}
 	case "x":
-		// Delete bookmark from selected commit
+		// Delete bookmark from selected commit (Graph view)
 		if m.viewMode == ViewCommitGraph && m.isSelectedCommitValid() && m.jjService != nil {
 			commit := m.repository.Graph.Commits[m.selectedCommit]
 			if len(commit.Branches) == 0 {
@@ -286,6 +323,10 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			return m, m.deleteBookmark()
+		}
+		// Delete bookmark (Branches view)
+		if m.viewMode == ViewBranches {
+			return m.handleDeleteBranchBookmark()
 		}
 	case "u":
 		// Push updates to PR (for commits with PR branches or their descendants)

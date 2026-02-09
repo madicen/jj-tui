@@ -133,6 +133,99 @@ func (m *Model) handleNavigateToHelpTab() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m *Model) handleNavigateToBranchesTab() (tea.Model, tea.Cmd) {
+	m.viewMode = ViewBranches
+	m.statusMessage = "Loading branches..."
+	return m, m.loadBranches()
+}
+
+// Branch action handlers
+
+func (m *Model) handleTrackBranch() (tea.Model, tea.Cmd) {
+	if m.viewMode != ViewBranches || len(m.branchList) == 0 {
+		return m, nil
+	}
+	if m.selectedBranch < 0 || m.selectedBranch >= len(m.branchList) {
+		return m, nil
+	}
+	branch := m.branchList[m.selectedBranch]
+	if branch.IsLocal || branch.IsTracked {
+		m.statusMessage = "Branch is already tracked"
+		return m, nil
+	}
+	m.statusMessage = fmt.Sprintf("Tracking branch %s...", branch.Name)
+	return m, m.trackBranch(branch.Name, branch.Remote)
+}
+
+func (m *Model) handleUntrackBranch() (tea.Model, tea.Cmd) {
+	if m.viewMode != ViewBranches || len(m.branchList) == 0 {
+		return m, nil
+	}
+	if m.selectedBranch < 0 || m.selectedBranch >= len(m.branchList) {
+		return m, nil
+	}
+	branch := m.branchList[m.selectedBranch]
+	if !branch.IsTracked {
+		m.statusMessage = "Branch is not tracked"
+		return m, nil
+	}
+	m.statusMessage = fmt.Sprintf("Untracking branch %s...", branch.Name)
+	return m, m.untrackBranch(branch.Name, branch.Remote)
+}
+
+func (m *Model) handleRestoreLocalBranch() (tea.Model, tea.Cmd) {
+	if m.viewMode != ViewBranches || len(m.branchList) == 0 {
+		return m, nil
+	}
+	if m.selectedBranch < 0 || m.selectedBranch >= len(m.branchList) {
+		return m, nil
+	}
+	branch := m.branchList[m.selectedBranch]
+	if !branch.LocalDeleted {
+		m.statusMessage = "Branch local copy is not deleted"
+		return m, nil
+	}
+	m.statusMessage = fmt.Sprintf("Restoring local branch %s...", branch.Name)
+	return m, m.restoreLocalBranch(branch.Name, branch.CommitID)
+}
+
+func (m *Model) handleDeleteBranchBookmark() (tea.Model, tea.Cmd) {
+	if m.viewMode != ViewBranches || len(m.branchList) == 0 {
+		return m, nil
+	}
+	if m.selectedBranch < 0 || m.selectedBranch >= len(m.branchList) {
+		return m, nil
+	}
+	branch := m.branchList[m.selectedBranch]
+	if !branch.IsLocal {
+		m.statusMessage = "Can only delete local bookmarks"
+		return m, nil
+	}
+	m.statusMessage = fmt.Sprintf("Deleting bookmark %s...", branch.Name)
+	return m, m.deleteBranchBookmark(branch.Name)
+}
+
+func (m *Model) handlePushBranch() (tea.Model, tea.Cmd) {
+	if m.viewMode != ViewBranches || len(m.branchList) == 0 {
+		return m, nil
+	}
+	if m.selectedBranch < 0 || m.selectedBranch >= len(m.branchList) {
+		return m, nil
+	}
+	branch := m.branchList[m.selectedBranch]
+	if !branch.IsLocal {
+		m.statusMessage = "Can only push local branches"
+		return m, nil
+	}
+	m.statusMessage = fmt.Sprintf("Pushing branch %s...", branch.Name)
+	return m, m.pushBranch(branch.Name)
+}
+
+func (m *Model) handleFetchAll() (tea.Model, tea.Cmd) {
+	m.statusMessage = "Fetching from all remotes..."
+	return m, m.fetchAllRemotes()
+}
+
 func (m *Model) handleCopyError() (tea.Model, tea.Cmd) {
 	// Copy error to clipboard (works with m.err or status message errors)
 	// Important: capture the error BEFORE changing statusMessage

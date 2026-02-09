@@ -31,6 +31,9 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 	if userClicked(ZoneTabJira) {
 		return m.handleNavigateToTicketsTab()
 	}
+	if userClicked(ZoneTabBranches) {
+		return m.handleNavigateToBranchesTab()
+	}
 	if userClicked(ZoneTabSettings) {
 		return m.handleNavigateToSettingsTab()
 	}
@@ -256,6 +259,37 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 			return m.handleOpenTicketInBrowser()
 		}
 	}
+
+	// Check branch zones
+	for i := range m.branchList {
+		if userClicked(ZoneBranch(i)) {
+			m.selectedBranch = i
+			return m, nil
+		}
+	}
+
+	// Check branch action buttons
+	if m.viewMode == ViewBranches {
+		if userClicked(ZoneBranchTrack) {
+			return m.handleTrackBranch()
+		}
+		if userClicked(ZoneBranchUntrack) {
+			return m.handleUntrackBranch()
+		}
+		if userClicked(ZoneBranchRestore) {
+			return m.handleRestoreLocalBranch()
+		}
+		if userClicked(ZoneBranchDelete) {
+			return m.handleDeleteBranchBookmark()
+		}
+		if userClicked(ZoneBranchPush) {
+			return m.handlePushBranch()
+		}
+		if userClicked(ZoneBranchFetch) {
+			return m.handleFetchAll()
+		}
+	}
+
 	// Settings input field clicks
 	if m.viewMode == ViewSettings {
 		// Settings sub-tabs

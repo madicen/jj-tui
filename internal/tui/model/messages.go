@@ -180,3 +180,16 @@ type fileMoveCompletedMsg struct {
 	filePath   string
 	direction  string // "up" or "down"
 }
+
+// branchesLoadedMsg is sent when branches are loaded
+type branchesLoadedMsg struct {
+	branches []models.Branch
+	err      error
+}
+
+// branchActionMsg is sent when a branch action completes (track, untrack, push, fetch)
+type branchActionMsg struct {
+	action string // "track", "untrack", "push", "fetch"
+	branch string
+	err    error
+}

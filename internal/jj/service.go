@@ -798,6 +798,220 @@ func (s *Service) runJJOutput(ctx context.Context, args ...string) (string, erro
 	return stdout.String(), nil
 }
 
+// ListBranches returns all local and remote branches
+func (s *Service) ListBranches(ctx context.Context) ([]models.Branch, error) {
+	// Get all bookmarks including remote ones
+	out, err := s.runJJOutput(ctx, "bookmark", "list", "--all-remotes")
+	if err != nil {
+		return nil, fmt.Errorf("failed to list bookmarks: %w", err)
+	}
+
+	var branches []models.Branch
+	lines := strings.Split(out, "\n")
+
+	var currentBranch string
+	var isDeleted bool
+
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+
+		// Check if this is a new branch line (not indented - doesn't start with space)
+		if !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "\t") {
+			// Reset state for new branch
+			isDeleted = strings.Contains(line, "(deleted)")
+
+			// Check if this is an untracked remote branch (format: "branch@origin: ...")
+			// These have @ in the name without space before it
+			if strings.Contains(line, "@") && !strings.Contains(line, "(deleted)") {
+				// Format: "branch@origin: change_id commit_id description"
+				atIdx := strings.Index(line, "@")
+				colonIdx := strings.Index(line, ":")
+				if atIdx >= 0 && colonIdx > atIdx {
+					branchName := line[:atIdx]
+					remote := line[atIdx+1 : colonIdx]
+
+					// Skip git remote
+					if remote == "git" {
+						currentBranch = ""
+						continue
+					}
+
+					commitInfo := strings.TrimSpace(line[colonIdx+1:])
+					changeID, shortID := parseCommitInfo(commitInfo)
+
+					branches = append(branches, models.Branch{
+						Name:      branchName,
+						Remote:    remote,
+						CommitID:  changeID,
+						ShortID:   shortID,
+						IsTracked: false, // Untracked remote branch
+						IsLocal:   false,
+					})
+					currentBranch = ""
+					continue
+				}
+			}
+
+			// Check if this is a local branch with commit info
+			// Format: "branch-name: change_id commit_id description"
+			// or "branch-name (deleted)"
+			colonIdx := strings.Index(line, ":")
+			if colonIdx > 0 && !isDeleted {
+				// Local branch with commit info on same line
+				currentBranch = strings.TrimSpace(line[:colonIdx])
+				commitInfo := strings.TrimSpace(line[colonIdx+1:])
+				changeID, shortID := parseCommitInfo(commitInfo)
+
+				branches = append(branches, models.Branch{
+					Name:     currentBranch,
+					CommitID: changeID,
+					ShortID:  shortID,
+					IsLocal:  true,
+				})
+			} else if isDeleted {
+				// Deleted local branch - extract name
+				currentBranch = strings.TrimSpace(strings.TrimSuffix(line, " (deleted)"))
+			} else {
+				// Branch name only (rare case)
+				currentBranch = strings.TrimSpace(line)
+			}
+		} else if strings.HasPrefix(strings.TrimSpace(line), "@") {
+			// This is a remote tracking line (indented)
+			// Format: "  @origin: change_id commit_id description"
+			trimmedLine := strings.TrimSpace(line)
+			if !strings.HasPrefix(trimmedLine, "@") {
+				continue
+			}
+
+			colonIdx := strings.Index(trimmedLine, ":")
+			if colonIdx < 0 {
+				continue
+			}
+
+			remote := trimmedLine[1:colonIdx] // Skip @ prefix
+			// Skip git remote
+			if remote == "git" {
+				continue
+			}
+
+			commitInfo := strings.TrimSpace(trimmedLine[colonIdx+1:])
+			changeID, shortID := parseCommitInfo(commitInfo)
+
+			// Only add remote branch if we have a current branch name
+			if currentBranch != "" {
+				// A branch is tracked if it appears under a branch line (even if deleted)
+				// Untracked branches appear on a single line as "branch@origin:"
+				branches = append(branches, models.Branch{
+					Name:         currentBranch,
+					LocalDeleted: isDeleted, // Track if local copy was deleted
+					Remote:    remote,
+					CommitID:  changeID,
+					ShortID:   shortID,
+					IsTracked: true, // Always tracked if shown as indented @remote: line
+					IsLocal:   false,
+				})
+			}
+		}
+	}
+
+	// Calculate ahead/behind stats for all branches
+	for i := range branches {
+		if branches[i].IsLocal {
+			branches[i].Ahead, branches[i].Behind = s.GetBranchStats(ctx, branches[i].Name, "")
+		} else if branches[i].Remote != "" {
+			branches[i].Ahead, branches[i].Behind = s.GetBranchStats(ctx, branches[i].Name, branches[i].Remote)
+		}
+	}
+
+	return branches, nil
+}
+
+// parseCommitInfo extracts change_id and short commit id from jj output
+// Format: "change_id commit_id description"
+func parseCommitInfo(info string) (changeID, shortID string) {
+	parts := strings.Fields(info)
+	if len(parts) >= 2 {
+		changeID = parts[0]
+		shortID = parts[1]
+	} else if len(parts) == 1 {
+		changeID = parts[0]
+		shortID = parts[0]
+	}
+	return
+}
+
+// countRevisions counts the number of revisions matching a revset
+func (s *Service) countRevisions(ctx context.Context, revset string) int {
+	out, err := s.runJJOutput(ctx, "log", "-r", revset, "--no-graph", "-T", `"x"`)
+	if err != nil {
+		return 0
+	}
+	// Count 'x' characters (one per revision)
+	return strings.Count(out, "x")
+}
+
+// GetBranchStats calculates ahead/behind counts for a branch relative to trunk
+// For local branches, pass empty string for remoteName
+// For remote branches, pass the remote name (e.g., "origin")
+func (s *Service) GetBranchStats(ctx context.Context, branchName string, remoteName string) (ahead, behind int) {
+	// Use trunk() as the base reference (usually main@origin)
+	var branchRef string
+	if remoteName == "" {
+		// Local branch
+		branchRef = branchName
+	} else {
+		// Remote branch: use name@remote format
+		branchRef = fmt.Sprintf("%s@%s", branchName, remoteName)
+	}
+
+	// Commits in branch that are not in trunk (ahead)
+	ahead = s.countRevisions(ctx, fmt.Sprintf("(%s)..(%s)", "trunk()", branchRef))
+
+	// Commits in trunk that are not in branch (behind)
+	behind = s.countRevisions(ctx, fmt.Sprintf("(%s)..(%s)", branchRef, "trunk()"))
+
+	return ahead, behind
+}
+
+// TrackBranch starts tracking a remote branch
+func (s *Service) TrackBranch(ctx context.Context, branchName, remote string) error {
+	args := []string{"bookmark", "track", branchName, "--remote", remote}
+	return s.runJJ(ctx, args...)
+}
+
+// UntrackBranch stops tracking a remote branch
+func (s *Service) UntrackBranch(ctx context.Context, branchName, remote string) error {
+	args := []string{"bookmark", "untrack", branchName, "--remote", remote}
+	return s.runJJ(ctx, args...)
+}
+
+// RestoreLocalBranch restores a deleted local branch from its tracked remote
+func (s *Service) RestoreLocalBranch(ctx context.Context, branchName, commitID string) error {
+	// Use jj bookmark set to create/restore the local bookmark at the remote's revision
+	args := []string{"bookmark", "set", branchName, "-r", commitID}
+	return s.runJJ(ctx, args...)
+}
+
+// PushBranch pushes a local branch to remote
+func (s *Service) PushBranch(ctx context.Context, branchName string) error {
+	args := []string{"git", "push", "--bookmark", branchName}
+	return s.runJJ(ctx, args...)
+}
+
+// FetchFromRemote fetches updates from a remote
+func (s *Service) FetchFromRemote(ctx context.Context, remote string) error {
+	args := []string{"git", "fetch", "--remote", remote}
+	return s.runJJ(ctx, args...)
+}
+
+// FetchAllRemotes fetches from all configured remotes
+func (s *Service) FetchAllRemotes(ctx context.Context) error {
+	args := []string{"git", "fetch", "--all-remotes"}
+	return s.runJJ(ctx, args...)
+}
+
 // isJJRepo checks if a directory is a jj repository
 func isJJRepo(path string) bool {
 	jjDir := filepath.Join(path, ".jj")

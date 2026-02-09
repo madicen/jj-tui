@@ -94,6 +94,14 @@ const (
 	// Changed file action zones
 	ZoneActionMoveFileUp   = "zone:action:movefileup"
 	ZoneActionMoveFileDown = "zone:action:movefiledown"
+
+	// Branch action zones
+	ZoneBranchTrack   = "zone:branch:track"
+	ZoneBranchUntrack = "zone:branch:untrack"
+	ZoneBranchRestore = "zone:branch:restore"
+	ZoneBranchDelete  = "zone:branch:delete"
+	ZoneBranchPush    = "zone:branch:push"
+	ZoneBranchFetch   = "zone:branch:fetch"
 )
 
 // ZoneExistingBookmark returns the zone ID for an existing bookmark at the given index
@@ -119,4 +127,9 @@ func ZoneJiraTicket(index int) string {
 // ZoneChangedFile returns the zone ID for a changed file at the given index
 func ZoneChangedFile(index int) string {
 	return fmt.Sprintf("zone:file:%d", index)
+}
+
+// ZoneBranch returns the zone ID for a branch at the given index
+func ZoneBranch(index int) string {
+	return fmt.Sprintf("zone:branch:%d", index)
 }
