@@ -70,9 +70,9 @@ func (r *Renderer) Graph(data GraphData) GraphResult {
 		selectionPrefix := "  "
 		if data.InRebaseMode {
 			switch {
-			case data.RebaseSourceCommit > -1:
+			case data.RebaseSourceCommit == i:
 				selectionPrefix = "⚡ " // Source being rebased
-			case data.SelectedCommit > -1:
+			case data.SelectedCommit == i:
 				selectionPrefix = "→ " // Target destination
 			}
 		} else if i == data.SelectedCommit {
