@@ -141,6 +141,9 @@ func mergeConfig(dest, source *Config) {
 	if source.TicketAutoInProgress != nil {
 		dest.TicketAutoInProgress = source.TicketAutoInProgress
 	}
+	if source.BranchStatsLimit != nil {
+		dest.BranchStatsLimit = source.BranchStatsLimit
+	}
 }
 
 // Load reads config with the following priority (highest to lowest):

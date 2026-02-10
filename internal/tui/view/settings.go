@@ -383,13 +383,13 @@ func (r *Renderer) renderBranchesSettings(data SettingsData) []string {
 	lines = append(lines, "")
 
 	// Branch Limit control
-	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("  Branch Stats Limit:"))
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("  Branch Limit:"))
 	limitText := lipgloss.NewStyle().Bold(true).Render(fmt.Sprintf("%d", data.BranchLimit))
 	decreaseBtn := r.Zone.Mark(ZoneSettingsBranchLimitDecrease, lipgloss.NewStyle().Foreground(ColorPrimary).Render("[-]"))
 	increaseBtn := r.Zone.Mark(ZoneSettingsBranchLimitIncrease, lipgloss.NewStyle().Foreground(ColorPrimary).Render("[+]"))
 	lines = append(lines, "    "+decreaseBtn+" "+limitText+" "+increaseBtn)
-	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Max branches to calculate ahead/behind stats for"))
-	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    (Higher values = slower loading, 0 = all branches)"))
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Total branches to show (0 = all)"))
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Local always included, remote filtered by recency"))
 
 	return lines
 }

@@ -639,9 +639,11 @@ func (m *Model) loadBranches() tea.Cmd {
 	}
 
 	jjSvc := m.jjService
-	statsLimit := m.settingsBranchLimit
+	branchLimit := m.settingsBranchLimit
 	return func() tea.Msg {
-		branches, err := jjSvc.ListBranches(context.Background(), statsLimit)
+		// Get branches (limited by recency first, then stats calculated)
+		// The limit is applied in ListBranches after sorting by commit timestamp
+		branches, err := jjSvc.ListBranches(context.Background(), branchLimit)
 		if err != nil {
 			return branchesLoadedMsg{err: err}
 		}

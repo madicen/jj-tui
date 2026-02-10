@@ -7,7 +7,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/madicen/jj-tui/internal/models"
@@ -928,20 +931,121 @@ func (s *Service) ListBranches(ctx context.Context, statsLimit int) ([]models.Br
 		}
 	}
 
-	// Calculate ahead/behind stats for branches (limited for performance)
-	// statsLimit of 0 means calculate for all branches
-	maxStats := len(branches)
-	if statsLimit > 0 && statsLimit < maxStats {
-		maxStats = statsLimit
+	// Optimization: Filter remote branches by recency, always keep local branches
+	// Also keep remote counterparts of local branches
+	if statsLimit > 0 {
+		// Build a set of local branch names to keep their remote counterparts
+		localBranchNames := make(map[string]bool)
+		var localBranches, remoteBranches, remoteCounterparts []models.Branch
+
+		for _, b := range branches {
+			if b.IsLocal {
+				localBranches = append(localBranches, b)
+				localBranchNames[b.Name] = true
+			}
+		}
+
+		// Separate remote branches: counterparts of local vs others
+		for _, b := range branches {
+			if !b.IsLocal {
+				if localBranchNames[b.Name] {
+					// This is a remote counterpart of a local branch - always keep
+					remoteCounterparts = append(remoteCounterparts, b)
+				} else {
+					remoteBranches = append(remoteBranches, b)
+				}
+			}
+		}
+
+		// Calculate remaining slots for other remote branches
+		remoteLimit := statsLimit - len(localBranches) - len(remoteCounterparts)
+		if remoteLimit < 0 {
+			remoteLimit = 0
+		}
+
+		if len(remoteBranches) > remoteLimit && remoteLimit > 0 {
+			// Query timestamps for remote branches using branch ref directly
+			// Format: "branch@remote|timestamp\n"
+			var revsets []string
+			branchToRef := make(map[string]string) // ref -> branch index key
+			for _, b := range remoteBranches {
+				if b.Remote != "" {
+					ref := fmt.Sprintf("%s@%s", b.Name, b.Remote)
+					revsets = append(revsets, ref)
+					branchToRef[ref] = ref
+				}
+			}
+
+			if len(revsets) > 0 {
+				// Use a different template that includes the branch ref for matching
+				revset := strings.Join(revsets, " | ")
+				out, err := s.runJJOutput(ctx, "log", "-r", revset, "--no-graph",
+					"-T", `if(bookmarks, bookmarks ++ "|" ++ committer.timestamp().utc().format("%s") ++ "\n", "")`)
+				if err == nil {
+					// Parse timestamps into a map keyed by branch@remote
+					timestamps := make(map[string]int64)
+					for _, line := range strings.Split(out, "\n") {
+						line = strings.TrimSpace(line)
+						if line == "" {
+							continue
+						}
+						parts := strings.Split(line, "|")
+						if len(parts) == 2 {
+							branchRef := strings.TrimSpace(parts[0])
+							if ts, err := strconv.ParseInt(strings.TrimSpace(parts[1]), 10, 64); err == nil {
+								timestamps[branchRef] = ts
+							}
+						}
+					}
+
+					// Sort remote branches by timestamp (most recent first)
+					sort.Slice(remoteBranches, func(i, j int) bool {
+						refI := fmt.Sprintf("%s@%s", remoteBranches[i].Name, remoteBranches[i].Remote)
+						refJ := fmt.Sprintf("%s@%s", remoteBranches[j].Name, remoteBranches[j].Remote)
+						tsI, okI := timestamps[refI]
+						tsJ, okJ := timestamps[refJ]
+						// Branches with timestamps come before those without
+						if okI != okJ {
+							return okI
+						}
+						return tsI > tsJ // Descending - most recent first
+					})
+				}
+				// If timestamp query fails, branches stay in original order
+			}
+
+			// Keep only the N most recent remote branches
+			remoteBranches = remoteBranches[:remoteLimit]
+		} else if len(remoteBranches) > remoteLimit {
+			remoteBranches = remoteBranches[:remoteLimit]
+		}
+
+		// Recombine: local + their remote counterparts + other recent remotes
+		branches = append(localBranches, remoteCounterparts...)
+		branches = append(branches, remoteBranches...)
 	}
 
-	for i := 0; i < maxStats; i++ {
-		if branches[i].IsLocal {
-			branches[i].Ahead, branches[i].Behind = s.GetBranchStats(ctx, branches[i].Name, "")
-		} else if branches[i].Remote != "" {
-			branches[i].Ahead, branches[i].Behind = s.GetBranchStats(ctx, branches[i].Name, branches[i].Remote)
-		}
+	// Calculate ahead/behind stats with parallel fetching
+	const maxConcurrent = 10
+	sem := make(chan struct{}, maxConcurrent)
+	var wg sync.WaitGroup
+
+	for i := range branches {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			sem <- struct{}{}        // Acquire semaphore
+			defer func() { <-sem }() // Release semaphore
+
+			branch := &branches[idx]
+			if branch.IsLocal {
+				branch.Ahead, branch.Behind = s.GetBranchStats(ctx, branch.Name, "")
+			} else if branch.Remote != "" {
+				branch.Ahead, branch.Behind = s.GetBranchStats(ctx, branch.Name, branch.Remote)
+			}
+		}(i)
 	}
+	wg.Wait()
 
 	return branches, nil
 }
