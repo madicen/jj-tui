@@ -34,8 +34,6 @@ func (r *Renderer) PullRequests(data PRData) PRResult {
 
 	// Build fixed header section
 	var headerLines []string
-	headerLines = append(headerLines, TitleStyle.Render("Pull Requests"))
-	headerLines = append(headerLines, "")
 
 	// Show selected PR details in the fixed header
 	if data.SelectedPR >= 0 && data.SelectedPR < len(data.Repository.PRs) {

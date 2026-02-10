@@ -415,52 +415,6 @@ func TestJourney_PRStateColors(t *testing.T) {
 	}
 }
 
-// TestJourney_TicketsViewWithProvider tests the tickets view with different providers
-func TestJourney_TicketsViewWithProvider(t *testing.T) {
-	tests := []struct {
-		name        string
-		mockService *testutil.MockTicketService
-		expectTitle string
-	}{
-		{
-			name:        "JiraProvider",
-			mockService: testutil.NewMockJiraService(),
-			expectTitle: "Jira",
-		},
-		{
-			name:        "CodecksProvider",
-			mockService: testutil.NewMockCodecksService(),
-			expectTitle: "Codecks",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			m := newTestModel()
-			defer m.Close()
-
-			// Set up the mock ticket service
-			m.SetTicketService(tt.mockService)
-			m.SetTicketList(tt.mockService.Tickets)
-			m.SetViewMode(tui.ViewJira)
-
-			view := m.View()
-
-			// Verify the provider name is shown
-			if !containsString(view, tt.expectTitle) {
-				t.Errorf("View should contain provider name '%s'", tt.expectTitle)
-			}
-
-			// Verify tickets are displayed
-			for _, ticket := range tt.mockService.Tickets {
-				if !containsString(view, ticket.Summary) {
-					t.Errorf("View should contain ticket summary '%s'", ticket.Summary)
-				}
-			}
-		})
-	}
-}
-
 // TestJourney_TicketNavigation tests navigating through tickets
 func TestJourney_TicketNavigation(t *testing.T) {
 	m := newTestModel()

@@ -39,12 +39,6 @@ func (r *Renderer) Jira(data JiraData) JiraResult {
 
 	// Build fixed header section
 	var headerLines []string
-	title := "Assigned Tickets"
-	if data.ProviderName != "" {
-		title = fmt.Sprintf("Assigned %s Tickets", data.ProviderName)
-	}
-	headerLines = append(headerLines, TitleStyle.Render(title))
-	headerLines = append(headerLines, "")
 
 	// Show selected ticket details in the fixed header
 	if data.SelectedTicket >= 0 && data.SelectedTicket < len(data.Tickets) {
@@ -238,4 +232,3 @@ func (r *Renderer) Jira(data JiraData) JiraResult {
 		FullContent:    fullContent,
 	}
 }
-

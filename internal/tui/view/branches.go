@@ -37,8 +37,6 @@ func (r *Renderer) Branches(data BranchData) BranchResult {
 
 	// Build fixed header section
 	var headerLines []string
-	headerLines = append(headerLines, TitleStyle.Render("Branches"))
-	headerLines = append(headerLines, "")
 
 	// Show selected branch details
 	if data.SelectedBranch >= 0 && data.SelectedBranch < len(data.Branches) {
@@ -262,7 +260,6 @@ func (r *Renderer) renderBranchGraph(branches []models.Branch, selectedIdx int) 
 			status += " (" + strings.Join(statusParts, ", ") + ")"
 		}
 
-
 		// Choose style based on tracked status
 		nodeStyle := remoteStyle
 		if branch.IsTracked {
@@ -312,4 +309,3 @@ func (r *Renderer) renderGraphBranch(branch models.Branch, idx int, isSelected, 
 
 	return r.Zone.Mark(ZoneBranch(idx), branchLine)
 }
-
