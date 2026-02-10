@@ -631,3 +631,124 @@ func (m *Model) runJJInit() tea.Cmd {
 		return jjInitSuccessMsg{}
 	}
 }
+
+// loadBranches loads the list of local and remote branches
+func (m *Model) loadBranches() tea.Cmd {
+	if m.jjService == nil {
+		return nil
+	}
+
+	jjSvc := m.jjService
+	return func() tea.Msg {
+		branches, err := jjSvc.ListBranches(context.Background())
+		if err != nil {
+			return branchesLoadedMsg{err: err}
+		}
+		// Sort branches: local first, then remote; alphabetically within each group
+		sort.Slice(branches, func(i, j int) bool {
+			// Local branches come before remote
+			if branches[i].IsLocal != branches[j].IsLocal {
+				return branches[i].IsLocal
+			}
+			// Within the same category, sort alphabetically by name
+			return branches[i].Name < branches[j].Name
+		})
+		return branchesLoadedMsg{branches: branches}
+	}
+}
+
+// trackBranch starts tracking a remote branch
+func (m *Model) trackBranch(branchName, remote string) tea.Cmd {
+	if m.jjService == nil {
+		return nil
+	}
+
+	jjSvc := m.jjService
+	return func() tea.Msg {
+		err := jjSvc.TrackBranch(context.Background(), branchName, remote)
+		if err != nil {
+			return branchActionMsg{action: "track", branch: branchName, err: err}
+		}
+		return branchActionMsg{action: "track", branch: branchName}
+	}
+}
+
+// untrackBranch stops tracking a remote branch
+func (m *Model) untrackBranch(branchName, remote string) tea.Cmd {
+	if m.jjService == nil {
+		return nil
+	}
+
+	jjSvc := m.jjService
+	return func() tea.Msg {
+		err := jjSvc.UntrackBranch(context.Background(), branchName, remote)
+		if err != nil {
+			return branchActionMsg{action: "untrack", branch: branchName, err: err}
+		}
+		return branchActionMsg{action: "untrack", branch: branchName}
+	}
+}
+
+// restoreLocalBranch restores a deleted local branch from its tracked remote
+func (m *Model) restoreLocalBranch(branchName, commitID string) tea.Cmd {
+	if m.jjService == nil {
+		return nil
+	}
+
+	jjSvc := m.jjService
+	return func() tea.Msg {
+		err := jjSvc.RestoreLocalBranch(context.Background(), branchName, commitID)
+		if err != nil {
+			return branchActionMsg{action: "restore", branch: branchName, err: err}
+		}
+		return branchActionMsg{action: "restore", branch: branchName}
+	}
+}
+
+// deleteBranchBookmark deletes a local bookmark
+func (m *Model) deleteBranchBookmark(branchName string) tea.Cmd {
+	if m.jjService == nil {
+		return nil
+	}
+
+	jjSvc := m.jjService
+	return func() tea.Msg {
+		err := jjSvc.DeleteBookmark(context.Background(), branchName)
+		if err != nil {
+			return branchActionMsg{action: "delete", branch: branchName, err: err}
+		}
+		return branchActionMsg{action: "delete", branch: branchName}
+	}
+}
+
+// pushBranch pushes a local branch to remote
+func (m *Model) pushBranch(branchName string) tea.Cmd {
+	if m.jjService == nil {
+		return nil
+	}
+
+	jjSvc := m.jjService
+	return func() tea.Msg {
+		err := jjSvc.PushBranch(context.Background(), branchName)
+		if err != nil {
+			return branchActionMsg{action: "push", branch: branchName, err: err}
+		}
+		return branchActionMsg{action: "push", branch: branchName}
+	}
+}
+
+// fetchAllRemotes fetches from all remotes
+func (m *Model) fetchAllRemotes() tea.Cmd {
+	if m.jjService == nil {
+		return nil
+	}
+
+	jjSvc := m.jjService
+	return func() tea.Msg {
+		err := jjSvc.FetchAllRemotes(context.Background())
+		if err != nil {
+			return branchActionMsg{action: "fetch", err: err}
+		}
+		return branchActionMsg{action: "fetch"}
+	}
+}

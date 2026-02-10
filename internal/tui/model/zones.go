@@ -11,6 +11,7 @@ const (
 	ZoneTabGraph    = "zone:tab:graph"
 	ZoneTabPRs      = "zone:tab:prs"
 	ZoneTabJira     = "zone:tab:jira"
+	ZoneTabBranches = "zone:tab:branches"
 	ZoneTabSettings = "zone:tab:settings"
 	ZoneTabHelp     = "zone:tab:help"
 
@@ -75,6 +76,14 @@ const (
 	ZonePROpenBrowser = "zone:pr:openbrowser"
 	ZonePRMerge       = "zone:pr:merge"
 	ZonePRClose       = "zone:pr:close"
+
+	// Branch action zones
+	ZoneBranchTrack   = "zone:branch:track"
+	ZoneBranchUntrack = "zone:branch:untrack"
+	ZoneBranchRestore = "zone:branch:restore"
+	ZoneBranchDelete  = "zone:branch:delete"
+	ZoneBranchPush    = "zone:branch:push"
+	ZoneBranchFetch   = "zone:branch:fetch"
 
 	// Settings sub-tab zones
 	ZoneSettingsTabGitHub   = "zone:settings:tab:github"
@@ -146,4 +155,9 @@ func ZoneExistingBookmark(index int) string {
 // ZoneChangedFile returns the zone ID for a changed file at the given index
 func ZoneChangedFile(index int) string {
 	return fmt.Sprintf("zone:file:%d", index)
+}
+
+// ZoneBranch returns the zone ID for a branch at the given index
+func ZoneBranch(index int) string {
+	return fmt.Sprintf("zone:branch:%d", index)
 }

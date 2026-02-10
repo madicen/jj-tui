@@ -42,6 +42,7 @@ const (
 	ViewCommitGraph ViewMode = iota
 	ViewPullRequests
 	ViewTickets
+	ViewBranches
 	ViewSettings
 	ViewHelp
 	ViewCreatePR
@@ -58,6 +59,8 @@ func (v ViewMode) String() string {
 		return "pull_requests"
 	case ViewTickets:
 		return "jira"
+	case ViewBranches:
+		return "branches"
 	case ViewSettings:
 		return "settings"
 	case ViewHelp:

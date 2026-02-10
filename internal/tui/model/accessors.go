@@ -132,6 +132,47 @@ func (m *Model) ensureSelectionVisible(selectedLine int) {
 	}
 }
 
+// ensureBranchSelectionVisible scrolls the viewport for the branches tab
+// The branch graph has extra lines (trunk, connectors, separator) so we need
+// to calculate the actual line number from the branch index
+func (m *Model) ensureBranchSelectionVisible(branchIndex int) {
+	if len(m.branchList) == 0 {
+		return
+	}
+
+	// Count local branches
+	numLocals := 0
+	for _, b := range m.branchList {
+		if b.IsLocal {
+			numLocals++
+		}
+	}
+
+	// Calculate actual line number in the graph
+	// Graph structure:
+	// - Line 0: trunk
+	// - Local branches: line = 1 + localIndex * 2 (with connectors between)
+	// - Separator (if both): 2 lines
+	// - Remote branches: line = baseOffset + remoteIndex * 2
+	var actualLine int
+	if branchIndex < numLocals {
+		// It's a local branch
+		actualLine = 1 + branchIndex*2
+	} else {
+		// It's a remote branch
+		remoteIndex := branchIndex - numLocals
+		if numLocals > 0 {
+			// After locals + separator
+			actualLine = 2*numLocals + 2 + remoteIndex*2
+		} else {
+			// No locals, just trunk + remotes
+			actualLine = 1 + remoteIndex*2
+		}
+	}
+
+	m.ensureSelectionVisible(actualLine)
+}
+
 // ensureGraphCommitVisible scrolls the graph viewport to keep the selected commit visible
 // This is called after keyboard navigation changes the commit selection
 // The +1 accounts for the focus indicator header line in the graph content

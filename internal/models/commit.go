@@ -89,3 +89,18 @@ type UpdatePRRequest struct {
 	Body      string   `json:"body,omitempty"`
 	CommitIDs []string `json:"commit_ids,omitempty"`
 }
+
+// Branch represents a git branch/bookmark
+type Branch struct {
+	Name         string `json:"name"`          // Branch name (e.g., "main", "feature-x")
+	Remote       string `json:"remote"`        // Remote name if remote branch (e.g., "origin"), empty for local
+	CommitID     string `json:"commit_id"`     // Commit this branch points to
+	ShortID      string `json:"short_id"`      // Short commit ID
+	IsTracked    bool   `json:"is_tracked"`    // True if this remote branch is being tracked locally
+	IsLocal      bool   `json:"is_local"`      // True if this is a local branch
+	LocalDeleted bool   `json:"local_deleted"` // True if local was deleted but remote is still tracked
+	IsCurrent    bool   `json:"is_current"`    // True if this is the current branch
+	Ahead        int    `json:"ahead"`         // Commits ahead of remote (for local branches)
+	Behind       int    `json:"behind"`        // Commits behind remote (for local branches)
+	HasConflict  bool   `json:"has_conflict"`  // True if local and remote have diverged
+}

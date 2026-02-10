@@ -68,6 +68,10 @@ type Model struct {
 	// Ticket state (Jira, Codecks, etc.)
 	ticketList []tickets.Ticket
 
+	// Branch state
+	branchList     []models.Branch
+	selectedBranch int
+
 	// Description editing
 	descriptionInput textarea.Model
 	editingCommitID  string // Change ID of commit being edited
@@ -477,6 +481,43 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMessage = fmt.Sprintf("Ticket %s transitioned to %s", msg.ticketKey, msg.newStatus)
 			// Reload tickets to get updated status
 			return m, m.loadTickets()
+		}
+
+	case branchesLoadedMsg:
+		if msg.err != nil {
+			m.statusMessage = fmt.Sprintf("Failed to load branches: %v", msg.err)
+		} else {
+			m.branchList = msg.branches
+			if m.err == nil {
+				m.statusMessage = fmt.Sprintf("Loaded %d branches", len(msg.branches))
+			}
+			if len(msg.branches) > 0 && m.selectedBranch < 0 {
+				m.selectedBranch = 0
+			}
+		}
+		return m, nil
+
+	case branchActionMsg:
+		if msg.err != nil {
+			m.statusMessage = fmt.Sprintf("Failed to %s branch: %v", msg.action, msg.err)
+			m.err = msg.err
+		} else {
+			switch msg.action {
+			case "track":
+				m.statusMessage = fmt.Sprintf("Now tracking branch %s", msg.branch)
+			case "untrack":
+				m.statusMessage = fmt.Sprintf("Stopped tracking branch %s", msg.branch)
+			case "restore":
+				m.statusMessage = fmt.Sprintf("Restored local branch %s", msg.branch)
+			case "delete":
+				m.statusMessage = fmt.Sprintf("Deleted bookmark %s", msg.branch)
+			case "push":
+				m.statusMessage = fmt.Sprintf("Pushed branch %s to remote", msg.branch)
+			case "fetch":
+				m.statusMessage = "Fetched from all remotes"
+			}
+			// Reload branches and repository (to see new commits in graph)
+			return m, tea.Batch(m.loadBranches(), m.loadRepository())
 		}
 		return m, nil
 
