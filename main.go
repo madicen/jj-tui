@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/tui"
+	"github.com/madicen/jj-tui/internal/version"
 )
 
 func main() {
@@ -23,6 +24,9 @@ func main() {
 
 	// Initialize the TUI application
 	ctx := context.Background()
+
+	// Check for updates in background (non-blocking)
+	version.CheckForUpdates(ctx)
 
 	model := tui.New(ctx)
 	defer model.Close()
