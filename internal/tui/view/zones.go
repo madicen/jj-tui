@@ -63,10 +63,10 @@ const (
 	// Advanced/Maintenance operations
 	ZoneSettingsAdvancedDeleteBookmarks   = "zone:settings:advanced:delete_bookmarks"
 	ZoneSettingsAdvancedAbandonOldCommits = "zone:settings:advanced:abandon_old_commits"
-	ZoneSettingsAdvancedTrackOriginMain   = "zone:settings:advanced:track_origin_main"
 	ZoneSettingsAdvancedConfirmYes        = "zone:settings:advanced:confirm_yes"
 	ZoneSettingsAdvancedConfirmNo         = "zone:settings:advanced:confirm_no"
 	ZoneSettingsAutoInProgress            = "zone:settings:auto_in_progress"
+	ZoneSettingsSanitizeBookmarks         = "zone:settings:sanitize_bookmarks"
 
 	ZoneSettingsSave      = "zone:settings:save"
 	ZoneSettingsSaveLocal = "zone:settings:save_local"

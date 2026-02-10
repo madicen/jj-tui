@@ -127,10 +127,11 @@ type SettingsData struct {
 	AutoInProgressOnBranch bool // Auto-transition ticket to "In Progress" when creating branch
 
 	// Branch settings
-	BranchLimit int // Max branches to calculate stats for
+	BranchLimit        int  // Max branches to calculate stats for
+	SanitizeBookmarks  bool // Auto-fix invalid bookmark names
 
 	// Advanced tab state
-	ConfirmingCleanup string // "" = not confirming, "delete_bookmarks", "abandon_old_commits", "track_origin_main"
+	ConfirmingCleanup string // "" = not confirming, "delete_bookmarks", "abandon_old_commits"
 }
 
 // InputView represents a text input for rendering

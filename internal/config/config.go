@@ -38,7 +38,8 @@ type Config struct {
 	TicketAutoInProgress *bool `json:"ticket_auto_in_progress,omitempty"` // nil = true (auto-set "In Progress" when creating branch)
 
 	// Branch settings
-	BranchStatsLimit *int `json:"branch_limit,omitempty"` // nil = 50 (default limit for branch stats calculation)
+	BranchStatsLimit       *int  `json:"branch_limit,omitempty"`              // nil = 50 (default limit for branch stats calculation)
+	SanitizeBookmarkNames  *bool `json:"sanitize_bookmark_names,omitempty"`   // nil = true (auto-fix invalid bookmark names)
 
 	// Internal: tracks where the config was loaded from
 	loadedFrom string `json:"-"`
@@ -143,6 +144,9 @@ func mergeConfig(dest, source *Config) {
 	}
 	if source.BranchStatsLimit != nil {
 		dest.BranchStatsLimit = source.BranchStatsLimit
+	}
+	if source.SanitizeBookmarkNames != nil {
+		dest.SanitizeBookmarkNames = source.SanitizeBookmarkNames
 	}
 }
 
@@ -370,6 +374,14 @@ func (c *Config) BranchLimit() int {
 		return 50
 	}
 	return *c.BranchStatsLimit
+}
+
+// ShouldSanitizeBookmarkNames returns whether to auto-fix invalid bookmark names (defaults to true)
+func (c *Config) ShouldSanitizeBookmarkNames() bool {
+	if c.SanitizeBookmarkNames == nil {
+		return true // Default: enabled
+	}
+	return *c.SanitizeBookmarkNames
 }
 
 // HasJira returns true if Jira is fully configured

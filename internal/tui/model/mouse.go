@@ -340,13 +340,14 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 				m.startAbandonOldCommits()
 				return m, nil
 			}
-			if userClicked(ZoneSettingsAdvancedTrackOriginMain) {
-				m.startTrackOriginMain()
-				return m, m.trackOriginMain()
-			}
 			// Auto-status toggle
 			if userClicked(ZoneSettingsAutoInProgress) {
 				m.settingsAutoInProgress = !m.settingsAutoInProgress
+				return m, nil
+			}
+			// Sanitize bookmarks toggle
+			if userClicked(ZoneSettingsSanitizeBookmarks) {
+				m.settingsSanitizeBookmarks = !m.settingsSanitizeBookmarks
 				return m, nil
 			}
 			return m, nil

@@ -19,13 +19,6 @@ func (m *Model) startAbandonOldCommits() {
 	m.statusMessage = "Press Y to confirm abandoning commits before origin/main, or N to cancel"
 }
 
-// startTrackOriginMain initiates the track origin/main process
-func (m *Model) startTrackOriginMain() {
-	m.confirmingCleanup = "track_origin_main"
-	m.statusMessage = "Fetching origin/main..."
-	m.loading = true
-}
-
 // deleteAllBookmarks executes the deletion of all bookmarks
 func (m *Model) deleteAllBookmarks() tea.Cmd {
 	if m.jjService == nil || m.repository == nil {
@@ -121,41 +114,6 @@ func (m *Model) abandonCommitsBeforeOriginMain() tea.Cmd {
 	}
 }
 
-// trackOriginMain fetches from origin to update tracking
-func (m *Model) trackOriginMain() tea.Cmd {
-	if m.jjService == nil {
-		return func() tea.Msg {
-			return cleanupCompletedMsg{
-				success: false,
-				err:     fmt.Errorf("jj service not initialized"),
-			}
-		}
-	}
-
-	return func() tea.Msg {
-		ctx := context.Background()
-		fetchOut, err := m.jjService.FetchFromGit(ctx)
-		if err != nil {
-			return cleanupCompletedMsg{
-				success: false,
-				err:     fmt.Errorf("failed to fetch from origin: %w", err),
-			}
-		}
-
-		// After fetching, we'll return success - the repository will be reloaded
-		// which will show the updated remote bookmarks
-		message := "Fetched remote updates. Remote bookmarks have been updated."
-		if fetchOut != "" {
-			message += "\n" + fetchOut
-		}
-
-		return cleanupCompletedMsg{
-			success: true,
-			message: message,
-		}
-	}
-}
-
 // cancelCleanup cancels the current cleanup operation
 func (m *Model) cancelCleanup() {
 	m.confirmingCleanup = ""
@@ -171,9 +129,6 @@ func (m *Model) confirmCleanup() tea.Cmd {
 	case "abandon_old_commits":
 		m.confirmingCleanup = ""
 		return m.abandonCommitsBeforeOriginMain()
-	case "track_origin_main":
-		m.confirmingCleanup = ""
-		return m.trackOriginMain()
 	default:
 		return nil
 	}

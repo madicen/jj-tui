@@ -412,6 +412,16 @@ func (r *Renderer) renderAdvancedSettings(data SettingsData) []string {
 	lines = append(lines, "  "+autoBtn)
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Automatically transition ticket to 'In Progress' when creating a branch from it"))
 	lines = append(lines, "")
+
+	// Sanitize bookmark names toggle
+	sanitizeToggle := "[ ]"
+	if data.SanitizeBookmarks {
+		sanitizeToggle = "[✓]"
+	}
+	sanitizeBtn := r.Zone.Mark(ZoneSettingsSanitizeBookmarks, toggleStyle.Render(sanitizeToggle+" Auto-fix bookmark names"))
+	lines = append(lines, "  "+sanitizeBtn)
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Replace spaces and invalid characters with hyphens"))
+	lines = append(lines, "")
 	lines = append(lines, "")
 
 	// Advanced Maintenance section
@@ -446,11 +456,6 @@ func (r *Renderer) renderAdvancedSettings(data SettingsData) []string {
 	abandonBtn := r.Zone.Mark(ZoneSettingsAdvancedAbandonOldCommits, ButtonStyle.Render("Abandon Old Commits"))
 	lines = append(lines, "  "+abandonBtn)
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Abandon commits before origin/main"))
-	lines = append(lines, "")
-
-	trackBtn := r.Zone.Mark(ZoneSettingsAdvancedTrackOriginMain, ButtonStyle.Render("Track origin/main"))
-	lines = append(lines, "  "+trackBtn)
-	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Fetch and track origin/main"))
 
 	return lines
 }

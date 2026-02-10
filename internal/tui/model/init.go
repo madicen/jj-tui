@@ -33,8 +33,9 @@ func New(ctx context.Context) *Model {
 	onlyMine := false
 	prLimit := 100
 	prRefreshInterval := 120 // Default: 2 minutes
-	autoInProgress := true   // Default: enabled
-	branchLimit := 50        // Default: 50 branches
+	autoInProgress := true     // Default: enabled
+	branchLimit := 50          // Default: 50 branches
+	sanitizeBookmarks := true  // Default: enabled
 	if cfg != nil {
 		showMerged = cfg.ShowMergedPRs()
 		showClosed = cfg.ShowClosedPRs()
@@ -43,6 +44,7 @@ func New(ctx context.Context) *Model {
 		prRefreshInterval = cfg.PRRefreshInterval()
 		autoInProgress = cfg.AutoInProgressOnBranch()
 		branchLimit = cfg.BranchLimit()
+		sanitizeBookmarks = cfg.ShouldSanitizeBookmarkNames()
 	}
 
 	// PR title input
@@ -80,6 +82,7 @@ func New(ctx context.Context) *Model {
 		settingsPRRefreshInterval: prRefreshInterval,
 		settingsAutoInProgress:    autoInProgress,
 		settingsBranchLimit:       branchLimit,
+		settingsSanitizeBookmarks: sanitizeBookmarks,
 		prTitleInput:              prTitle,
 		prBodyInput:               prBody,
 		prBaseBranch:              "main",

@@ -28,6 +28,7 @@ type SettingsParams struct {
 	PRRefreshInterval       int
 	AutoInProgress          bool
 	BranchLimit             int
+	SanitizeBookmarks       bool
 }
 
 // SettingsSavedMsg indicates settings were saved
@@ -68,6 +69,7 @@ func SaveSettings(params SettingsParams) tea.Cmd {
 		cfg.CodecksProject = params.CodecksProject
 		cfg.CodecksExcludedStatuses = params.CodecksExcludedStatuses
 		cfg.BranchStatsLimit = &params.BranchLimit
+		cfg.SanitizeBookmarkNames = &params.SanitizeBookmarks
 
 		_ = cfg.Save()
 
@@ -91,6 +93,7 @@ func SaveSettingsLocal(params SettingsParams) tea.Cmd {
 			GitHubRefreshInterval:   &params.PRRefreshInterval,
 			TicketAutoInProgress:    &params.AutoInProgress,
 			BranchStatsLimit:        &params.BranchLimit,
+			SanitizeBookmarkNames:   &params.SanitizeBookmarks,
 			JiraExcludedStatuses:    params.JiraExcludedStatuses,
 			CodecksProject:          params.CodecksProject,
 			CodecksExcludedStatuses: params.CodecksExcludedStatuses,
