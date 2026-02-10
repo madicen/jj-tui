@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/madicen/jj-tui/internal/version"
 )
 
 // clearButtonStyle for the clear buttons
@@ -83,6 +84,21 @@ func (r *Renderer) Settings(data SettingsData) string {
 	} else {
 		lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("  ○ Tickets not connected"))
 	}
+
+	// Version info
+	lines = append(lines, "")
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("Version:"))
+	versionStr := version.GetVersion()
+	versionLine := lipgloss.NewStyle().Foreground(ColorMuted).Render("  " + versionStr)
+	if updateInfo := version.GetUpdateInfo(); updateInfo != nil {
+		if updateInfo.UpdateAvailable {
+			versionLine += lipgloss.NewStyle().Foreground(lipgloss.Color("#FFB86C")).Render(
+				fmt.Sprintf(" → %s available", updateInfo.LatestVersion))
+		} else if updateInfo.LatestVersion != "" && updateInfo.LatestVersion != "dev" {
+			versionLine += lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B")).Render(" (up to date)")
+		}
+	}
+	lines = append(lines, versionLine)
 
 	lines = append(lines, "")
 	lines = append(lines, "")

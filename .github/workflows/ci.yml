@@ -36,7 +36,10 @@ jobs:
           jj --version
 
       - name: Build
-        run: go build -v ./...
+        run: |
+          # Inject version info (short commit SHA for dev builds)
+          VERSION="dev-${GITHUB_SHA::7}"
+          go build -v -ldflags "-X github.com/madicen/jj-tui/internal/version.Version=${VERSION}" ./...
 
       - name: Run unit tests
         run: go test -v ./internal/tui/... ./internal/config/... ./internal/codecks/...

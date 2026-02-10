@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/tui/view"
+	"github.com/madicen/jj-tui/internal/version"
 )
 
 // View implements tea.Model
@@ -718,6 +719,15 @@ func (m *Model) renderStatusBar() string {
 		" │ ",
 		m.zoneManager.Mark(ZoneActionRefresh, "^r refresh"),
 	)
+
+	// Add update notification if available
+	if updateInfo := version.GetUpdateInfo(); updateInfo != nil && updateInfo.UpdateAvailable {
+		updateNotice := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FFB86C")).
+			Bold(true).
+			Render(fmt.Sprintf(" │ Update: %s", updateInfo.LatestVersion))
+		shortcuts = append(shortcuts, updateNotice)
+	}
 
 	shortcutsStr := lipgloss.JoinHorizontal(lipgloss.Left, shortcuts...)
 
