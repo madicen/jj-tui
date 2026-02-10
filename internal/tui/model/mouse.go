@@ -308,13 +308,17 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 			m.settingsTab = 2
 			return m, nil
 		}
-		if userClicked(ZoneSettingsTabAdvanced) {
+		if userClicked(ZoneSettingsTabBranches) {
 			m.settingsTab = 3
+			return m, nil
+		}
+		if userClicked(ZoneSettingsTabAdvanced) {
+			m.settingsTab = 4
 			return m, nil
 		}
 
 		// Handle Advanced tab operations
-		if m.settingsTab == 3 {
+		if m.settingsTab == 4 {
 			// Cleanup confirmation buttons
 			if m.confirmingCleanup != "" {
 				if userClicked(ZoneSettingsAdvancedConfirmYes) {
@@ -402,6 +406,24 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 				m.settingsPRRefreshInterval = 120 // Enable at 2 minutes (default)
 			} else {
 				m.settingsPRRefreshInterval = 0 // Disable
+			}
+			return m, nil
+		}
+
+		// Branch Limit controls
+		if userClicked(ZoneSettingsBranchLimitDecrease) {
+			if m.settingsBranchLimit > 10 {
+				m.settingsBranchLimit -= 10
+			} else if m.settingsBranchLimit > 0 {
+				m.settingsBranchLimit = 0 // 0 means unlimited
+			}
+			return m, nil
+		}
+		if userClicked(ZoneSettingsBranchLimitIncrease) {
+			if m.settingsBranchLimit == 0 {
+				m.settingsBranchLimit = 10 // Start at 10
+			} else if m.settingsBranchLimit < 200 {
+				m.settingsBranchLimit += 10 // Increase by 10 (max 200)
 			}
 			return m, nil
 		}

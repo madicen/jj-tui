@@ -27,6 +27,7 @@ type SettingsParams struct {
 	PRLimit                 int
 	PRRefreshInterval       int
 	AutoInProgress          bool
+	BranchLimit             int
 }
 
 // SettingsSavedMsg indicates settings were saved
@@ -66,6 +67,7 @@ func SaveSettings(params SettingsParams) tea.Cmd {
 		cfg.CodecksToken = params.CodecksToken
 		cfg.CodecksProject = params.CodecksProject
 		cfg.CodecksExcludedStatuses = params.CodecksExcludedStatuses
+		cfg.BranchStatsLimit = &params.BranchLimit
 
 		_ = cfg.Save()
 
@@ -88,6 +90,7 @@ func SaveSettingsLocal(params SettingsParams) tea.Cmd {
 			GitHubPRLimit:           &params.PRLimit,
 			GitHubRefreshInterval:   &params.PRRefreshInterval,
 			TicketAutoInProgress:    &params.AutoInProgress,
+			BranchStatsLimit:        &params.BranchLimit,
 			JiraExcludedStatuses:    params.JiraExcludedStatuses,
 			CodecksProject:          params.CodecksProject,
 			CodecksExcludedStatuses: params.CodecksExcludedStatuses,

@@ -597,6 +597,7 @@ func (m *Model) renderSettings() string {
 		PRLimit:                m.settingsPRLimit,
 		PRRefreshInterval:      m.settingsPRRefreshInterval,
 		AutoInProgressOnBranch: m.settingsAutoInProgress,
+		BranchLimit:            m.settingsBranchLimit,
 		ConfirmingCleanup:      m.confirmingCleanup,
 	})
 }

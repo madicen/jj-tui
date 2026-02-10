@@ -22,10 +22,15 @@ const (
 	ZonePRClose       = "zone:pr:close"
 
 	// Settings sub-tabs
-	ZoneSettingsTabGitHub   = "zone:settings:tab:github"
-	ZoneSettingsTabJira     = "zone:settings:tab:jira"
-	ZoneSettingsTabCodecks  = "zone:settings:tab:codecks"
-	ZoneSettingsTabAdvanced = "zone:settings:tab:advanced"
+	ZoneSettingsTabGitHub    = "zone:settings:tab:github"
+	ZoneSettingsTabJira      = "zone:settings:tab:jira"
+	ZoneSettingsTabCodecks   = "zone:settings:tab:codecks"
+	ZoneSettingsTabBranches  = "zone:settings:tab:branches"
+	ZoneSettingsTabAdvanced  = "zone:settings:tab:advanced"
+
+	// Branch settings zones
+	ZoneSettingsBranchLimitDecrease = "zone:settings:branch_limit_decrease"
+	ZoneSettingsBranchLimitIncrease = "zone:settings:branch_limit_increase"
 
 	ZoneSettingsGitHubToken           = "zone:settings:github_token"
 	ZoneSettingsGitHubTokenClear      = "zone:settings:github_token_clear"

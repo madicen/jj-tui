@@ -37,6 +37,9 @@ type Config struct {
 	// Ticket workflow settings
 	TicketAutoInProgress *bool `json:"ticket_auto_in_progress,omitempty"` // nil = true (auto-set "In Progress" when creating branch)
 
+	// Branch settings
+	BranchStatsLimit *int `json:"branch_limit,omitempty"` // nil = 50 (default limit for branch stats calculation)
+
 	// Internal: tracks where the config was loaded from
 	loadedFrom string `json:"-"`
 }
@@ -137,6 +140,9 @@ func mergeConfig(dest, source *Config) {
 	}
 	if source.TicketAutoInProgress != nil {
 		dest.TicketAutoInProgress = source.TicketAutoInProgress
+	}
+	if source.BranchStatsLimit != nil {
+		dest.BranchStatsLimit = source.BranchStatsLimit
 	}
 }
 
@@ -355,6 +361,15 @@ func (c *Config) AutoInProgressOnBranch() bool {
 		return true // Default: enabled
 	}
 	return *c.TicketAutoInProgress
+}
+
+// BranchLimit returns the maximum number of branches to calculate stats for (defaults to 50)
+// Branches beyond this limit will still show but without ahead/behind counts
+func (c *Config) BranchLimit() int {
+	if c.BranchStatsLimit == nil {
+		return 50
+	}
+	return *c.BranchStatsLimit
 }
 
 // HasJira returns true if Jira is fully configured
