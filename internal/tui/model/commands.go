@@ -644,13 +644,22 @@ func (m *Model) loadBranches() tea.Cmd {
 		if err != nil {
 			return branchesLoadedMsg{err: err}
 		}
-		// Sort branches: local first, then remote; alphabetically within each group
+		// Sort branches: local first (alphabetically), then remote (by distance from trunk)
 		sort.Slice(branches, func(i, j int) bool {
 			// Local branches come before remote
 			if branches[i].IsLocal != branches[j].IsLocal {
 				return branches[i].IsLocal
 			}
-			// Within the same category, sort alphabetically by name
+			// For local branches, sort alphabetically
+			if branches[i].IsLocal {
+				return branches[i].Name < branches[j].Name
+			}
+			// For remote branches, sort by behind count (closest to trunk first)
+			// This puts branches that are most up-to-date near the top
+			if branches[i].Behind != branches[j].Behind {
+				return branches[i].Behind < branches[j].Behind
+			}
+			// Tiebreaker: alphabetically by name
 			return branches[i].Name < branches[j].Name
 		})
 		return branchesLoadedMsg{branches: branches}
