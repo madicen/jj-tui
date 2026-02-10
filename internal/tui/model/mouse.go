@@ -121,6 +121,9 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 	if userClicked(ZoneActionMoveFileDown) {
 		return m.handleMoveFileDown()
 	}
+	if userClicked(ZoneActionRevertFile) {
+		return m.handleRevertFile()
+	}
 	if userClicked(ZoneActionCreatePR) {
 		return m.handleCreatePR()
 	}

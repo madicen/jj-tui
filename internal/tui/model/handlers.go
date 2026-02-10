@@ -556,11 +556,10 @@ func (m *Model) handleMoveFileUp() (tea.Model, tea.Cmd) {
 	}
 
 	file := m.changedFiles[m.selectedFile]
-	// Use the selected commit's ChangeID directly (not the cached changedFilesCommitID)
 	commitID := commit.ChangeID
-	// "Up" in the graph view means toward newer commits (children)
-	m.statusMessage = fmt.Sprintf("Moving %s to new child commit...", file.Path)
-	return m, m.moveFileToChild(commitID, file.Path)
+	// "Move to Parent" - creates a new commit BEFORE this one (toward main/root)
+	m.statusMessage = fmt.Sprintf("Moving %s to new parent commit...", file.Path)
+	return m, m.moveFileToParent(commitID, file.Path)
 }
 
 func (m *Model) handleMoveFileDown() (tea.Model, tea.Cmd) {
@@ -585,9 +584,35 @@ func (m *Model) handleMoveFileDown() (tea.Model, tea.Cmd) {
 	}
 
 	file := m.changedFiles[m.selectedFile]
-	// Use the selected commit's ChangeID directly (not the cached changedFilesCommitID)
 	commitID := commit.ChangeID
-	// "Down" in the graph view means toward older commits (parents)
-	m.statusMessage = fmt.Sprintf("Moving %s to new parent commit...", file.Path)
-	return m, m.moveFileToParent(commitID, file.Path)
+	// "Move to Child" - creates a new commit AFTER this one (toward tips/branches)
+	m.statusMessage = fmt.Sprintf("Moving %s to new child commit...", file.Path)
+	return m, m.moveFileToChild(commitID, file.Path)
+}
+
+func (m *Model) handleRevertFile() (tea.Model, tea.Cmd) {
+	if m.viewMode != ViewCommitGraph || m.graphFocused {
+		return m, nil
+	}
+	if m.jjService == nil || len(m.changedFiles) == 0 {
+		return m, nil
+	}
+	if m.selectedFile < 0 || m.selectedFile >= len(m.changedFiles) {
+		return m, nil
+	}
+
+	// Get the selected commit and verify it's mutable
+	if m.repository == nil || m.selectedCommit < 0 || m.selectedCommit >= len(m.repository.Graph.Commits) {
+		return m, nil
+	}
+	commit := m.repository.Graph.Commits[m.selectedCommit]
+	if commit.Immutable {
+		m.statusMessage = "Cannot revert file: commit is immutable"
+		return m, nil
+	}
+
+	file := m.changedFiles[m.selectedFile]
+	commitID := commit.ChangeID
+	m.statusMessage = fmt.Sprintf("Reverting changes to %s...", file.Path)
+	return m, m.revertFile(commitID, file.Path)
 }

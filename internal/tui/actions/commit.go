@@ -106,3 +106,17 @@ func MoveFileToChild(svc *jj.Service, commitID, filePath string) tea.Cmd {
 	}
 }
 
+// RevertFile reverts all changes to a file in a commit
+func RevertFile(svc *jj.Service, commitID, filePath string) tea.Cmd {
+	return func() tea.Msg {
+		if err := svc.RevertFile(context.Background(), commitID, filePath); err != nil {
+			return ErrorMsg{Err: fmt.Errorf("failed to revert file: %w", err)}
+		}
+		repo, err := svc.GetRepository(context.Background())
+		if err != nil {
+			return ErrorMsg{Err: err}
+		}
+		return FileRevertedMsg{Repository: repo, FilePath: filePath}
+	}
+}
+

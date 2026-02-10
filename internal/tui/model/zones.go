@@ -63,6 +63,7 @@ const (
 	// Changed file action zones
 	ZoneActionMoveFileUp   = "zone:action:movefileup"
 	ZoneActionMoveFileDown = "zone:action:movefiledown"
+	ZoneActionRevertFile   = "zone:action:revertfile"
 
 	// Jira/Ticket action zones
 	ZoneJiraCreateBranch  = "zone:jira:createbranch"

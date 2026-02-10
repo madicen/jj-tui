@@ -683,6 +683,32 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Batch(cmds...)
 
+	case fileRevertedMsg:
+		// Save the ChangeID of the commit we were working on
+		originalCommitID := m.changedFilesCommitID
+
+		// Update repository with new state
+		if m.repository != nil {
+			oldPRs := m.repository.PRs
+			m.repository = msg.repository
+			m.repository.PRs = oldPRs
+		} else {
+			m.repository = msg.repository
+		}
+		m.statusMessage = fmt.Sprintf("Reverted changes to %s", msg.filePath)
+
+		// Reload repository and changed files
+		var cmds []tea.Cmd
+		cmds = append(cmds, m.loadRepository())
+
+		// Reload changed files for the commit we were working on
+		if originalCommitID != "" {
+			m.changedFilesCommitID = originalCommitID
+			m.changedFiles = nil // Clear old files
+			cmds = append(cmds, m.loadChangedFiles(originalCommitID))
+		}
+		return m, tea.Batch(cmds...)
+
 	case changedFilesLoadedMsg:
 		// Only update if the files are for the currently selected commit
 		if msg.commitID == m.changedFilesCommitID {
@@ -820,6 +846,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case actions.FileMoveCompletedMsg:
 		return m.Update(fileMoveCompletedMsg{repository: msg.Repository, filePath: msg.FilePath, direction: msg.Direction})
+
+	case actions.FileRevertedMsg:
+		return m.Update(fileRevertedMsg{repository: msg.Repository, filePath: msg.FilePath})
 
 	case actions.ClipboardCopiedMsg:
 		if msg.Success {

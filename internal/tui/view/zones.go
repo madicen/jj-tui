@@ -94,6 +94,7 @@ const (
 	// Changed file action zones
 	ZoneActionMoveFileUp   = "zone:action:movefileup"
 	ZoneActionMoveFileDown = "zone:action:movefiledown"
+	ZoneActionRevertFile   = "zone:action:revertfile"
 
 	// Branch action zones
 	ZoneBranchTrack   = "zone:branch:track"

@@ -343,6 +343,11 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.viewMode == ViewCommitGraph && !m.graphFocused {
 			return m.handleMoveFileDown()
 		}
+	case "v":
+		// Revert selected file changes (files pane must be focused)
+		if m.viewMode == ViewCommitGraph && !m.graphFocused {
+			return m.handleRevertFile()
+		}
 	}
 	return m, nil
 }

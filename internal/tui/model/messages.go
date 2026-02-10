@@ -181,6 +181,12 @@ type fileMoveCompletedMsg struct {
 	direction  string // "up" or "down"
 }
 
+// fileRevertedMsg is sent when a file's changes are reverted
+type fileRevertedMsg struct {
+	repository *models.Repository
+	filePath   string
+}
+
 // branchesLoadedMsg is sent when branches are loaded
 type branchesLoadedMsg struct {
 	branches []models.Branch
