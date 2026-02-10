@@ -74,6 +74,10 @@ func (m *Model) moveFileToChild(commitID, filePath string) tea.Cmd {
 	return actions.MoveFileToChild(m.jjService, commitID, filePath)
 }
 
+func (m *Model) revertFile(commitID, filePath string) tea.Cmd {
+	return actions.RevertFile(m.jjService, commitID, filePath)
+}
+
 func (m *Model) startRebaseMode() {
 	if !m.isSelectedCommitValid() {
 		return

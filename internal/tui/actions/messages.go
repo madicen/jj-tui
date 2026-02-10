@@ -68,3 +68,9 @@ type FileMoveCompletedMsg struct {
 	Direction  string // "up" or "down"
 }
 
+// FileRevertedMsg indicates a file's changes were reverted
+type FileRevertedMsg struct {
+	Repository *models.Repository
+	FilePath   string
+}
+

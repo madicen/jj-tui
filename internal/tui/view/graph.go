@@ -124,83 +124,111 @@ func (r *Renderer) Graph(data GraphData) GraphResult {
 		}
 	}
 
-	// Add action buttons
-	actionLines = append(actionLines, "Actions:")
+	// Add action buttons - context-aware based on focus
+	// When files pane is focused: show file actions
+	// When graph pane is focused: show commit actions
+	if !data.GraphFocused && len(data.ChangedFiles) > 0 && data.SelectedFile >= 0 {
+		// File actions mode
+		actionLines = append(actionLines, "File Actions:")
 
-	// Always show "New" action
-	actionButtons := []string{
-		r.Zone.Mark(ZoneActionNewCommit, ButtonStyle.Render("New (n)")),
-	}
+		var fileActionButtons []string
 
-	// Add commit-specific actions if a commit is selected
-	if data.SelectedCommit >= 0 && data.SelectedCommit < len(data.Repository.Graph.Commits) {
-		commit := data.Repository.Graph.Commits[data.SelectedCommit]
+		// Check if commit is mutable (file actions only work on mutable commits)
+		isMutable := false
+		if data.SelectedCommit >= 0 && data.SelectedCommit < len(data.Repository.Graph.Commits) {
+			commit := data.Repository.Graph.Commits[data.SelectedCommit]
+			isMutable = !commit.Immutable
+		}
 
-		if commit.Immutable {
-			// For immutable commits, only show delete bookmark if it has one
-			if len(commit.Branches) > 0 {
-				actionButtons = append(actionButtons,
-					r.Zone.Mark(ZoneActionDelBookmark, ButtonStyle.Render("Del Bookmark (x)")),
-				)
-			}
-			actionLines = append(actionLines, lipgloss.JoinHorizontal(lipgloss.Left, actionButtons...))
-			actionLines = append(actionLines, "")
-			actionLines = append(actionLines, lipgloss.NewStyle().Foreground(ColorMuted).Render("◆ Selected commit is immutable (pushed to remote)"))
-		} else {
-			actionButtons = append(actionButtons,
-				r.Zone.Mark(ZoneActionCheckout, ButtonStyle.Render("Edit (e)")),
-				r.Zone.Mark(ZoneActionDescribe, ButtonStyle.Render("Describe (d)")),
-				r.Zone.Mark(ZoneActionSquash, ButtonStyle.Render("Squash (s)")),
-				r.Zone.Mark(ZoneActionRebase, ButtonStyle.Render("Rebase (r)")),
-				r.Zone.Mark(ZoneActionAbandon, ButtonStyle.Render("Abandon (a)")),
-				r.Zone.Mark(ZoneActionBookmark, ButtonStyle.Render("Bookmark (b)")),
+		if isMutable {
+			fileActionButtons = append(fileActionButtons,
+				r.Zone.Mark(ZoneActionMoveFileUp, ButtonStyle.Render("Move to Parent ([)")),
+				r.Zone.Mark(ZoneActionMoveFileDown, ButtonStyle.Render("Move to Child (])")),
+				r.Zone.Mark(ZoneActionRevertFile, ButtonStyle.Render("Revert Changes (v)")),
 			)
-
-			// Show delete bookmark button if commit has bookmarks
-			if len(commit.Branches) > 0 {
-				actionButtons = append(actionButtons,
-					r.Zone.Mark(ZoneActionDelBookmark, ButtonStyle.Render("Del Bookmark (x)")),
-				)
-			}
-
-			// Check if this commit can push to a PR (either has the bookmark or is a descendant)
-			prBranch := ""
-			if data.CommitPRBranch != nil {
-				prBranch = data.CommitPRBranch[data.SelectedCommit]
-			}
-
-			if prBranch != "" {
-				// This commit (or an ancestor) has an open PR - show Update PR button
-				buttonLabel := "Update PR (u)"
-				if len(commit.Branches) == 0 {
-					// This is a descendant without the bookmark - indicate we'll add commits to the PR
-					buttonLabel = fmt.Sprintf("Update PR [%s] (u)", prBranch)
-				}
-				actionButtons = append(actionButtons,
-					r.Zone.Mark(ZoneActionPush, ButtonStyle.Render(buttonLabel)),
-				)
-			} else {
-				// Check if this commit can create a PR (has a bookmark or is a descendant of one)
-				createPRBranch := ""
-				if data.CommitBookmark != nil {
-					createPRBranch = data.CommitBookmark[data.SelectedCommit]
-				}
-				if createPRBranch != "" {
-					// Can create a NEW PR - show button
-					buttonLabel := "Create PR (c)"
-					if len(commit.Branches) == 0 {
-						// This is a descendant - indicate we'll move the bookmark to include all commits
-						buttonLabel = fmt.Sprintf("Create PR [%s] (c)", createPRBranch)
-					}
-					actionButtons = append(actionButtons,
-						r.Zone.Mark(ZoneActionCreatePR, ButtonStyle.Render(buttonLabel)),
-					)
-				}
-			}
-			actionLines = append(actionLines, lipgloss.JoinHorizontal(lipgloss.Left, actionButtons...))
+			actionLines = append(actionLines, lipgloss.JoinHorizontal(lipgloss.Left, fileActionButtons...))
+		} else {
+			actionLines = append(actionLines, lipgloss.NewStyle().Foreground(ColorMuted).Render("◆ Cannot modify files in immutable commits"))
 		}
 	} else {
-		actionLines = append(actionLines, lipgloss.JoinHorizontal(lipgloss.Left, actionButtons...))
+		// Commit actions mode
+		actionLines = append(actionLines, "Actions:")
+
+		// Always show "New" action
+		actionButtons := []string{
+			r.Zone.Mark(ZoneActionNewCommit, ButtonStyle.Render("New (n)")),
+		}
+
+		// Add commit-specific actions if a commit is selected
+		if data.SelectedCommit >= 0 && data.SelectedCommit < len(data.Repository.Graph.Commits) {
+			commit := data.Repository.Graph.Commits[data.SelectedCommit]
+
+			if commit.Immutable {
+				// For immutable commits, only show delete bookmark if it has one
+				if len(commit.Branches) > 0 {
+					actionButtons = append(actionButtons,
+						r.Zone.Mark(ZoneActionDelBookmark, ButtonStyle.Render("Del Bookmark (x)")),
+					)
+				}
+				actionLines = append(actionLines, lipgloss.JoinHorizontal(lipgloss.Left, actionButtons...))
+				actionLines = append(actionLines, "")
+				actionLines = append(actionLines, lipgloss.NewStyle().Foreground(ColorMuted).Render("◆ Selected commit is immutable (pushed to remote)"))
+			} else {
+				actionButtons = append(actionButtons,
+					r.Zone.Mark(ZoneActionCheckout, ButtonStyle.Render("Edit (e)")),
+					r.Zone.Mark(ZoneActionDescribe, ButtonStyle.Render("Describe (d)")),
+					r.Zone.Mark(ZoneActionSquash, ButtonStyle.Render("Squash (s)")),
+					r.Zone.Mark(ZoneActionRebase, ButtonStyle.Render("Rebase (r)")),
+					r.Zone.Mark(ZoneActionAbandon, ButtonStyle.Render("Abandon (a)")),
+					r.Zone.Mark(ZoneActionBookmark, ButtonStyle.Render("Bookmark (b)")),
+				)
+
+				// Show delete bookmark button if commit has bookmarks
+				if len(commit.Branches) > 0 {
+					actionButtons = append(actionButtons,
+						r.Zone.Mark(ZoneActionDelBookmark, ButtonStyle.Render("Del Bookmark (x)")),
+					)
+				}
+
+				// Check if this commit can push to a PR (either has the bookmark or is a descendant)
+				prBranch := ""
+				if data.CommitPRBranch != nil {
+					prBranch = data.CommitPRBranch[data.SelectedCommit]
+				}
+
+				if prBranch != "" {
+					// This commit (or an ancestor) has an open PR - show Update PR button
+					buttonLabel := "Update PR (u)"
+					if len(commit.Branches) == 0 {
+						// This is a descendant without the bookmark - indicate we'll add commits to the PR
+						buttonLabel = fmt.Sprintf("Update PR [%s] (u)", prBranch)
+					}
+					actionButtons = append(actionButtons,
+						r.Zone.Mark(ZoneActionPush, ButtonStyle.Render(buttonLabel)),
+					)
+				} else {
+					// Check if this commit can create a PR (has a bookmark or is a descendant of one)
+					createPRBranch := ""
+					if data.CommitBookmark != nil {
+						createPRBranch = data.CommitBookmark[data.SelectedCommit]
+					}
+					if createPRBranch != "" {
+						// Can create a NEW PR - show button
+						buttonLabel := "Create PR (c)"
+						if len(commit.Branches) == 0 {
+							// This is a descendant - indicate we'll move the bookmark to include all commits
+							buttonLabel = fmt.Sprintf("Create PR [%s] (c)", createPRBranch)
+						}
+						actionButtons = append(actionButtons,
+							r.Zone.Mark(ZoneActionCreatePR, ButtonStyle.Render(buttonLabel)),
+						)
+					}
+				}
+				actionLines = append(actionLines, lipgloss.JoinHorizontal(lipgloss.Left, actionButtons...))
+			}
+		} else {
+			actionLines = append(actionLines, lipgloss.JoinHorizontal(lipgloss.Left, actionButtons...))
+		}
 	}
 
 	// Build changed files section with focus indicator and tree view
@@ -306,16 +334,6 @@ func (r *Renderer) renderTreeNode(node *fileTreeNode, indent string, lines *[]st
 					Background(lipgloss.Color("#3d4f5f")).
 					Foreground(lipgloss.Color("#ffffff"))
 				fileLine = fmt.Sprintf("%s%s %s", indent, statusStyle.Render(statusChar), selectedStyle.Render(node.name))
-
-				// Add inline move buttons for mutable commits
-				if data.SelectedCommit >= 0 && data.SelectedCommit < len(data.Repository.Graph.Commits) {
-					selectedCommit := data.Repository.Graph.Commits[data.SelectedCommit]
-					if !selectedCommit.Immutable {
-						moveUp := r.Zone.Mark(ZoneActionMoveFileUp, ButtonStyle.Render("Move Up ([)"))
-						moveDown := r.Zone.Mark(ZoneActionMoveFileDown, ButtonStyle.Render("Move Down (])"))
-						fileLine = fileLine + "  " + moveUp + " " + moveDown
-					}
-				}
 			} else {
 				fileLine = fmt.Sprintf("%s%s %s", indent, statusStyle.Render(statusChar), node.name)
 			}

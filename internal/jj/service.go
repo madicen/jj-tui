@@ -315,13 +315,14 @@ func (s *Service) SplitFileToParent(ctx context.Context, commitID, filePath stri
 }
 
 // MoveFileToChild moves a single file from a commit to a new child commit.
-// This creates a new empty commit after the specified commit, then moves
-// just the file's changes from the parent to the new child.
+// This creates a new commit AFTER the specified commit (between it and its children),
+// then moves just the file's changes from the parent to the new child.
 func (s *Service) MoveFileToChild(ctx context.Context, commitID, filePath string) error {
-	// Step 1: Create a new empty commit after the current one
-	// Using jj new <commit> to create child of the specified commit
-	if err := s.runJJ(ctx, "new", commitID); err != nil {
-		return fmt.Errorf("failed to create new commit: %w", err)
+	// Step 1: Create a new commit inserted AFTER the target commit
+	// Using --insert-after automatically rebases existing children onto the new commit
+	// Example: A -> B -> C becomes A -> NewCommit -> B -> C
+	if err := s.runJJ(ctx, "new", "--insert-after", commitID, "-m", "(split)"); err != nil {
+		return fmt.Errorf("failed to create new child commit: %w", err)
 	}
 
 	// Step 2: Squash just the specified file from the parent commit to the new commit
@@ -331,6 +332,16 @@ func (s *Service) MoveFileToChild(ctx context.Context, commitID, filePath string
 	}
 
 	return nil
+}
+
+// RevertFile reverts the changes to a file in a given commit,
+// restoring it from the commit's parent.
+func (s *Service) RevertFile(ctx context.Context, commitID, filePath string) error {
+	// jj restore --to <commit> --from parents(<commit>) -- <file>
+	// Using parents() function instead of ~ suffix to avoid revset parsing issues
+	parentRev := fmt.Sprintf("parents(%s)", commitID)
+	args := []string{"restore", "--to", commitID, "--from", parentRev, "--", filePath}
+	return s.runJJ(ctx, args...)
 }
 
 // GetGitRemoteURL returns the URL of the git remote (origin)
