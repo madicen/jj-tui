@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -118,7 +119,11 @@ type Model struct {
 	githubUserCode        string // Code user needs to enter
 	githubVerificationURL string // URL user needs to visit
 	githubLoginPolling    bool   // True if currently polling for token
+	githubPollInterval    int    // Current polling interval in seconds
 }
+
+// doPollMsg is a message used to trigger a GitHub token poll.
+type doPollMsg struct{}
 
 // SetRepository sets the repository data
 func (m *Model) SetRepository(repo *models.Repository) {
@@ -558,17 +563,31 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.githubUserCode = msg.userCode
 		m.githubVerificationURL = msg.verificationURL
 		m.githubLoginPolling = true
+		m.githubPollInterval = msg.interval
 		m.viewMode = ViewGitHubLogin
 		m.statusMessage = "Waiting for GitHub authorization..."
 		// Start polling for the token
 		return m, tea.Batch(
 			openURL(msg.verificationURL),
-			m.pollGitHubToken(msg.interval),
+			m.pollGitHubToken(), // Start first poll immediately
 		)
 
 	case githubLoginPollMsg:
 		if m.githubLoginPolling {
-			return m, m.pollGitHubToken(msg.interval)
+			// Check for slow_down signal
+			if msg.interval > 0 {
+				m.githubPollInterval += msg.interval
+			}
+			// Schedule the next poll
+			return m, tea.Tick(time.Duration(m.githubPollInterval)*time.Second, func(t time.Time) tea.Msg {
+				return doPollMsg{}
+			})
+		}
+		return m, nil
+
+	case doPollMsg:
+		if m.githubLoginPolling {
+			return m, m.pollGitHubToken()
 		}
 		return m, nil
 
@@ -576,6 +595,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.githubLoginPolling = false
 		m.githubDeviceCode = ""
 		m.githubUserCode = ""
+		m.githubPollInterval = 0
 		m.viewMode = ViewSettings
 		m.statusMessage = "GitHub login successful!"
 		// Save the token to config
