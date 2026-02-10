@@ -36,8 +36,6 @@ var toggleOffStyle = lipgloss.NewStyle().
 // Settings renders the settings view with sub-tabs
 func (r *Renderer) Settings(data SettingsData) string {
 	var lines []string
-	lines = append(lines, TitleStyle.Render("Settings"))
-	lines = append(lines, "")
 
 	// Show config source
 	if data.ConfigSource != "" {
