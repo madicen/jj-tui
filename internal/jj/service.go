@@ -977,13 +977,15 @@ func (s *Service) GetBranchStats(ctx context.Context, branchName string, remoteN
 
 // TrackBranch starts tracking a remote branch
 func (s *Service) TrackBranch(ctx context.Context, branchName, remote string) error {
-	args := []string{"bookmark", "track", branchName, "--remote", remote}
+	remoteBranch := fmt.Sprintf("%s@%s", branchName, remote)
+	args := []string{"bookmark", "track", remoteBranch}
 	return s.runJJ(ctx, args...)
 }
 
 // UntrackBranch stops tracking a remote branch
 func (s *Service) UntrackBranch(ctx context.Context, branchName, remote string) error {
-	args := []string{"bookmark", "untrack", branchName, "--remote", remote}
+	remoteBranch := fmt.Sprintf("%s@%s", branchName, remote)
+	args := []string{"bookmark", "untrack", remoteBranch}
 	return s.runJJ(ctx, args...)
 }
 

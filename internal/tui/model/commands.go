@@ -583,9 +583,9 @@ func (m *Model) startGitHubLogin() tea.Cmd {
 	}
 }
 
-// pollGitHubToken polls GitHub for the access token
-func (m *Model) pollGitHubToken(interval int) tea.Cmd {
-	return tea.Tick(time.Duration(interval)*time.Second, func(t time.Time) tea.Msg {
+// pollGitHubToken returns a command that polls for the GitHub access token in the background.
+func (m *Model) pollGitHubToken() tea.Cmd {
+	return func() tea.Msg {
 		if m.githubDeviceCode == "" {
 			return nil
 		}
@@ -593,8 +593,8 @@ func (m *Model) pollGitHubToken(interval int) tea.Cmd {
 		token, err := github.PollForToken(m.githubDeviceCode)
 		if err != nil {
 			if err.Error() == "slow_down" {
-				// Increase interval and continue polling
-				return githubLoginPollMsg{interval: interval + 5}
+				// Signal to handler to increase poll interval.
+				return githubLoginPollMsg{interval: 5} // Use interval to signal slow down
 			}
 			return errorMsg{Err: fmt.Errorf("GitHub login failed: %w", err)}
 		}
@@ -603,9 +603,9 @@ func (m *Model) pollGitHubToken(interval int) tea.Cmd {
 			return githubLoginSuccessMsg{token: token}
 		}
 
-		// Still waiting for user authorization
-		return githubLoginPollMsg{interval: interval}
-	})
+		// Still waiting for user authorization. The handler will trigger the next poll.
+		return githubLoginPollMsg{interval: 0}
+	}
 }
 
 // runJJInit runs jj git init to initialize a new repository
