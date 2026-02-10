@@ -102,6 +102,7 @@ const (
 	SettingsTabGitHub SettingsTab = iota
 	SettingsTabJira
 	SettingsTabCodecks
+	SettingsTabBranches
 	SettingsTabAdvanced
 )
 
@@ -124,6 +125,9 @@ type SettingsData struct {
 
 	// Ticket workflow settings
 	AutoInProgressOnBranch bool // Auto-transition ticket to "In Progress" when creating branch
+
+	// Branch settings
+	BranchLimit int // Max branches to calculate stats for
 
 	// Advanced tab state
 	ConfirmingCleanup string // "" = not confirming, "delete_bookmarks", "abandon_old_commits", "track_origin_main"

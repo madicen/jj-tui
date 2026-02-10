@@ -503,16 +503,16 @@ func (m *Model) handleSettingsKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Previous sub-tab
 		m.settingsTab--
 		if m.settingsTab < 0 {
-			m.settingsTab = 3
+			m.settingsTab = 4
 		}
 		return m, nil
 	case "ctrl+k":
 		// Next sub-tab
-		m.settingsTab = (m.settingsTab + 1) % 4
+		m.settingsTab = (m.settingsTab + 1) % 5
 		return m, nil
 	case "ctrl+s", "enter":
 		// Handle Advanced tab specially
-		if m.settingsTab == 3 {
+		if m.settingsTab == 4 {
 			// Advanced tab - these don't use settings saving, they use direct actions
 			return m, nil
 		}

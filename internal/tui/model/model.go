@@ -89,6 +89,7 @@ type Model struct {
 	settingsPRLimit           int
 	settingsPRRefreshInterval int  // in seconds, 0 = disabled
 	settingsAutoInProgress    bool // auto-set ticket to "In Progress" when creating branch
+	settingsBranchLimit       int  // max branches to calculate stats for
 
 	// Advanced settings state
 	confirmingCleanup string // "" = not confirming, "delete_bookmarks", "abandon_old_commits", "track_origin_main"

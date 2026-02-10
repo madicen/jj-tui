@@ -67,6 +67,8 @@ func (r *Renderer) Settings(data SettingsData) string {
 		lines = append(lines, r.renderJiraSettings(data)...)
 	case SettingsTabCodecks:
 		lines = append(lines, r.renderCodecksSettings(data)...)
+	case SettingsTabBranches:
+		lines = append(lines, r.renderBranchesSettings(data)...)
 	case SettingsTabAdvanced:
 		lines = append(lines, r.renderAdvancedSettings(data)...)
 	}
@@ -117,6 +119,7 @@ func (r *Renderer) renderSettingsTabs(activeTab SettingsTab) string {
 	githubStyle := settingsTabStyle
 	jiraStyle := settingsTabStyle
 	codecksStyle := settingsTabStyle
+	branchesStyle := settingsTabStyle
 	advancedStyle := settingsTabStyle
 
 	switch activeTab {
@@ -126,6 +129,8 @@ func (r *Renderer) renderSettingsTabs(activeTab SettingsTab) string {
 		jiraStyle = settingsTabActiveStyle
 	case SettingsTabCodecks:
 		codecksStyle = settingsTabActiveStyle
+	case SettingsTabBranches:
+		branchesStyle = settingsTabActiveStyle
 	case SettingsTabAdvanced:
 		advancedStyle = settingsTabActiveStyle
 	}
@@ -133,9 +138,10 @@ func (r *Renderer) renderSettingsTabs(activeTab SettingsTab) string {
 	githubTab := r.Zone.Mark(ZoneSettingsTabGitHub, githubStyle.Render("GitHub"))
 	jiraTab := r.Zone.Mark(ZoneSettingsTabJira, jiraStyle.Render("Jira"))
 	codecksTab := r.Zone.Mark(ZoneSettingsTabCodecks, codecksStyle.Render("Codecks"))
+	branchesTab := r.Zone.Mark(ZoneSettingsTabBranches, branchesStyle.Render("Branches"))
 	advancedTab := r.Zone.Mark(ZoneSettingsTabAdvanced, advancedStyle.Render("Advanced"))
 
-	return lipgloss.JoinHorizontal(lipgloss.Left, githubTab, " │ ", jiraTab, " │ ", codecksTab, " │ ", advancedTab)
+	return lipgloss.JoinHorizontal(lipgloss.Left, githubTab, " │ ", jiraTab, " │ ", codecksTab, " │ ", branchesTab, " │ ", advancedTab)
 }
 
 // renderGitHubSettings renders the GitHub settings content
@@ -363,6 +369,27 @@ func (r *Renderer) renderCodecksSettings(data SettingsData) []string {
 		lines = append(lines, "  "+r.Zone.Mark(ZoneSettingsCodecksExcluded, data.Inputs[8].View)+" "+clearBtn)
 	}
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Comma-separated list (e.g., done, archived)"))
+
+	return lines
+}
+
+// renderBranchesSettings renders the Branches settings content
+func (r *Renderer) renderBranchesSettings(data SettingsData) []string {
+	var lines []string
+
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("Branch Settings"))
+	lines = append(lines, "")
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("Configure how branches are loaded and displayed."))
+	lines = append(lines, "")
+
+	// Branch Limit control
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("  Branch Stats Limit:"))
+	limitText := lipgloss.NewStyle().Bold(true).Render(fmt.Sprintf("%d", data.BranchLimit))
+	decreaseBtn := r.Zone.Mark(ZoneSettingsBranchLimitDecrease, lipgloss.NewStyle().Foreground(ColorPrimary).Render("[-]"))
+	increaseBtn := r.Zone.Mark(ZoneSettingsBranchLimitIncrease, lipgloss.NewStyle().Foreground(ColorPrimary).Render("[+]"))
+	lines = append(lines, "    "+decreaseBtn+" "+limitText+" "+increaseBtn)
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Max branches to calculate ahead/behind stats for"))
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    (Higher values = slower loading, 0 = all branches)"))
 
 	return lines
 }

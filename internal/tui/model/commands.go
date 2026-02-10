@@ -639,8 +639,9 @@ func (m *Model) loadBranches() tea.Cmd {
 	}
 
 	jjSvc := m.jjService
+	statsLimit := m.settingsBranchLimit
 	return func() tea.Msg {
-		branches, err := jjSvc.ListBranches(context.Background())
+		branches, err := jjSvc.ListBranches(context.Background(), statsLimit)
 		if err != nil {
 			return branchesLoadedMsg{err: err}
 		}

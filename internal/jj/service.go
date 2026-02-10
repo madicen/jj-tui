@@ -810,7 +810,8 @@ func (s *Service) runJJOutput(ctx context.Context, args ...string) (string, erro
 }
 
 // ListBranches returns all local and remote branches
-func (s *Service) ListBranches(ctx context.Context) ([]models.Branch, error) {
+// statsLimit controls how many branches get ahead/behind stats calculated (0 = all)
+func (s *Service) ListBranches(ctx context.Context, statsLimit int) ([]models.Branch, error) {
 	// Get all bookmarks including remote ones
 	out, err := s.runJJOutput(ctx, "bookmark", "list", "--all-remotes")
 	if err != nil {
@@ -927,8 +928,14 @@ func (s *Service) ListBranches(ctx context.Context) ([]models.Branch, error) {
 		}
 	}
 
-	// Calculate ahead/behind stats for all branches
-	for i := range branches {
+	// Calculate ahead/behind stats for branches (limited for performance)
+	// statsLimit of 0 means calculate for all branches
+	maxStats := len(branches)
+	if statsLimit > 0 && statsLimit < maxStats {
+		maxStats = statsLimit
+	}
+
+	for i := 0; i < maxStats; i++ {
 		if branches[i].IsLocal {
 			branches[i].Ahead, branches[i].Behind = s.GetBranchStats(ctx, branches[i].Name, "")
 		} else if branches[i].Remote != "" {

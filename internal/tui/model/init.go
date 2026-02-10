@@ -34,6 +34,7 @@ func New(ctx context.Context) *Model {
 	prLimit := 100
 	prRefreshInterval := 120 // Default: 2 minutes
 	autoInProgress := true   // Default: enabled
+	branchLimit := 50        // Default: 50 branches
 	if cfg != nil {
 		showMerged = cfg.ShowMergedPRs()
 		showClosed = cfg.ShowClosedPRs()
@@ -41,6 +42,7 @@ func New(ctx context.Context) *Model {
 		prLimit = cfg.PRLimit()
 		prRefreshInterval = cfg.PRRefreshInterval()
 		autoInProgress = cfg.AutoInProgressOnBranch()
+		branchLimit = cfg.BranchLimit()
 	}
 
 	// PR title input
@@ -77,6 +79,7 @@ func New(ctx context.Context) *Model {
 		settingsPRLimit:           prLimit,
 		settingsPRRefreshInterval: prRefreshInterval,
 		settingsAutoInProgress:    autoInProgress,
+		settingsBranchLimit:       branchLimit,
 		prTitleInput:              prTitle,
 		prBodyInput:               prBody,
 		prBaseBranch:              "main",
