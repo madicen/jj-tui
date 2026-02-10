@@ -906,11 +906,11 @@ func (s *Service) ListBranches(ctx context.Context) ([]models.Branch, error) {
 				branches = append(branches, models.Branch{
 					Name:         currentBranch,
 					LocalDeleted: isDeleted, // Track if local copy was deleted
-					Remote:    remote,
-					CommitID:  changeID,
-					ShortID:   shortID,
-					IsTracked: true, // Always tracked if shown as indented @remote: line
-					IsLocal:   false,
+					Remote:       remote,
+					CommitID:     changeID,
+					ShortID:      shortID,
+					IsTracked:    true, // Always tracked if shown as indented @remote: line
+					IsLocal:      false,
 				})
 			}
 		}
@@ -998,7 +998,7 @@ func (s *Service) RestoreLocalBranch(ctx context.Context, branchName, commitID s
 
 // PushBranch pushes a local branch to remote
 func (s *Service) PushBranch(ctx context.Context, branchName string) error {
-	args := []string{"git", "push", "--bookmark", branchName}
+	args := []string{"git", "push", "--allow-new", "--bookmark", branchName}
 	return s.runJJ(ctx, args...)
 }
 
