@@ -858,8 +858,8 @@ func TestRebaseModeFlow(t *testing.T) {
 		m.selectedCommit = 0
 		m.repository.Graph.Commits[0].Immutable = true
 
-		// Press 'b' - should not enter rebase mode
-		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}}
+		// Press 'm' - should not enter rebase mode
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}}
 		newModel, _ := m.Update(msg)
 		m = newModel.(*Model)
 

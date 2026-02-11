@@ -87,11 +87,11 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleNavigateToGraphTab()
 	case "p":
 		return m.handleNavigateToPRTab()
-	case "t": // 't' for tickets
+	case "t":
 		return m.handleNavigateToTicketsTab()
-	case "R": // 'R' for remote branches (capital to avoid conflict with 'r' for rebase)
+	case "b":
 		return m.handleNavigateToBranchesTab()
-	case ",": // ',' for settings (like many apps use comma for settings)
+	case ",":
 		return m.handleNavigateToSettingsTab()
 	case "h", "?":
 		return m.handleNavigateToHelpTab()
@@ -310,7 +310,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.viewMode == ViewCommitGraph {
 			return m.handleRebase()
 		}
-	case "b":
+	case "m":
 		if m.viewMode == ViewCommitGraph {
 			return m.handleCreateBookmark()
 		}
