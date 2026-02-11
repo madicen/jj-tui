@@ -87,10 +87,11 @@ type Model struct {
 	settingsShowClosed        bool
 	settingsOnlyMine          bool
 	settingsPRLimit           int
-	settingsPRRefreshInterval int  // in seconds, 0 = disabled
-	settingsAutoInProgress    bool // auto-set ticket to "In Progress" when creating branch
-	settingsBranchLimit       int  // max branches to calculate stats for
-	settingsSanitizeBookmarks bool // auto-fix invalid bookmark names
+	settingsPRRefreshInterval int    // in seconds, 0 = disabled
+	settingsAutoInProgress    bool   // auto-set ticket to "In Progress" when creating branch
+	settingsBranchLimit       int    // max branches to calculate stats for
+	settingsSanitizeBookmarks bool   // auto-fix invalid bookmark names
+	settingsTicketProvider    string // explicit ticket provider: "jira", "codecks", "github_issues", or ""
 
 	// Advanced settings state
 	confirmingCleanup string // "" = not confirming, "delete_bookmarks", "abandon_old_commits"

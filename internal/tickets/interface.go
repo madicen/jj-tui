@@ -49,9 +49,10 @@ type Service interface {
 type Provider string
 
 const (
-	ProviderNone    Provider = ""
-	ProviderJira    Provider = "jira"
-	ProviderCodecks Provider = "codecks"
+	ProviderNone         Provider = ""
+	ProviderJira         Provider = "jira"
+	ProviderCodecks      Provider = "codecks"
+	ProviderGitHubIssues Provider = "github_issues"
 )
 
 // Common transition names for convenience

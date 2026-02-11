@@ -308,17 +308,47 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 			m.settingsTab = 2
 			return m, nil
 		}
-		if userClicked(ZoneSettingsTabBranches) {
+		if userClicked(ZoneSettingsTabTickets) {
 			m.settingsTab = 3
 			return m, nil
 		}
-		if userClicked(ZoneSettingsTabAdvanced) {
+		if userClicked(ZoneSettingsTabBranches) {
 			m.settingsTab = 4
 			return m, nil
 		}
+		if userClicked(ZoneSettingsTabAdvanced) {
+			m.settingsTab = 5
+			return m, nil
+		}
+
+		// Handle Tickets tab operations
+		if m.settingsTab == 3 {
+			// Ticket provider selection
+			if userClicked(ZoneSettingsTicketProviderNone) {
+				m.settingsTicketProvider = ""
+				return m, nil
+			}
+			if userClicked(ZoneSettingsTicketProviderJira) {
+				m.settingsTicketProvider = "jira"
+				return m, nil
+			}
+			if userClicked(ZoneSettingsTicketProviderCodecks) {
+				m.settingsTicketProvider = "codecks"
+				return m, nil
+			}
+			if userClicked(ZoneSettingsTicketProviderGitHubIssues) {
+				m.settingsTicketProvider = "github_issues"
+				return m, nil
+			}
+			// Auto-status toggle (now in Tickets tab)
+			if userClicked(ZoneSettingsAutoInProgress) {
+				m.settingsAutoInProgress = !m.settingsAutoInProgress
+				return m, nil
+			}
+		}
 
 		// Handle Advanced tab operations
-		if m.settingsTab == 4 {
+		if m.settingsTab == 5 {
 			// Cleanup confirmation buttons
 			if m.confirmingCleanup != "" {
 				if userClicked(ZoneSettingsAdvancedConfirmYes) {
@@ -338,11 +368,6 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 			}
 			if userClicked(ZoneSettingsAdvancedAbandonOldCommits) {
 				m.startAbandonOldCommits()
-				return m, nil
-			}
-			// Auto-status toggle
-			if userClicked(ZoneSettingsAutoInProgress) {
-				m.settingsAutoInProgress = !m.settingsAutoInProgress
 				return m, nil
 			}
 			// Sanitize bookmarks toggle

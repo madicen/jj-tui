@@ -34,6 +34,9 @@ type Config struct {
 	CodecksProject          string `json:"codecks_project,omitempty"`          // Optional: filter by project name
 	CodecksExcludedStatuses string `json:"codecks_excluded_statuses,omitempty"` // Comma-separated statuses to hide
 
+	// GitHub Issues settings (uses existing GitHubToken for auth)
+	GitHubIssuesExcludedStatuses string `json:"github_issues_excluded_statuses,omitempty"` // Comma-separated statuses to hide (e.g., "closed")
+
 	// Ticket workflow settings
 	TicketAutoInProgress *bool `json:"ticket_auto_in_progress,omitempty"` // nil = true (auto-set "In Progress" when creating branch)
 
@@ -138,6 +141,9 @@ func mergeConfig(dest, source *Config) {
 	}
 	if source.CodecksExcludedStatuses != "" {
 		dest.CodecksExcludedStatuses = source.CodecksExcludedStatuses
+	}
+	if source.GitHubIssuesExcludedStatuses != "" {
+		dest.GitHubIssuesExcludedStatuses = source.GitHubIssuesExcludedStatuses
 	}
 	if source.TicketAutoInProgress != nil {
 		dest.TicketAutoInProgress = source.TicketAutoInProgress
@@ -406,6 +412,14 @@ func (c *Config) GetTicketProvider() string {
 	if c.HasJira() {
 		return "jira"
 	}
+	// Note: github_issues is not auto-detected since it shares the GitHub token
+	// User must explicitly set ticket_provider: "github_issues" to use it
 	return ""
+}
+
+// HasGitHubIssues returns true if GitHub Issues can be used as a ticket provider
+// (requires GitHub to be configured)
+func (c *Config) HasGitHubIssues() bool {
+	return c.HasGitHub()
 }
 

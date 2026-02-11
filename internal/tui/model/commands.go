@@ -81,9 +81,10 @@ func (m *Model) initializeServices() tea.Cmd {
 		var ghSvc *github.Service
 		var ghErr error
 		var githubInfo string
+		var owner, repoName string // Needed for GitHub Issues ticket provider
 		remoteURL, err := jjSvc.GetGitRemoteURL(ctx)
 		if err == nil {
-			owner, repoName, err := github.ParseGitHubURL(remoteURL)
+			owner, repoName, err = github.ParseGitHubURL(remoteURL)
 			if err == nil {
 				// Track token source for diagnostics
 				tokenSource := ""
@@ -129,7 +130,8 @@ func (m *Model) initializeServices() tea.Cmd {
 		}
 
 		// Try to create ticket service based on configured provider
-		ticketSvc, ticketErr := createTicketService()
+		// Pass owner/repo for GitHub Issues provider (empty strings if not a GitHub repo)
+		ticketSvc, ticketErr := createTicketService(owner, repoName)
 
 		return servicesInitializedMsg{
 			jjService:     jjSvc,
@@ -145,7 +147,8 @@ func (m *Model) initializeServices() tea.Cmd {
 // createTicketService creates the appropriate ticket service based on configuration
 // Priority: explicit TICKET_PROVIDER env var, then Codecks if configured, then Jira if configured
 // Reads credentials from both environment variables AND config file (env vars take priority)
-func createTicketService() (tickets.Service, error) {
+// The owner/repo parameters are needed for GitHub Issues provider
+func createTicketService(owner, repo string) (tickets.Service, error) {
 	// Load config and set env vars from config if not already set
 	// This allows config file credentials to work alongside env vars
 	cfg, _ := config.Load()
@@ -199,8 +202,26 @@ func createTicketService() (tickets.Service, error) {
 			return svc, nil
 		}
 		return nil, fmt.Errorf("TICKET_PROVIDER=jira but Jira env vars not set")
+	case "github_issues":
+		// Get GitHub token from env or config
+		token := os.Getenv("GITHUB_TOKEN")
+		if token == "" && cfg != nil {
+			token = cfg.GitHubToken
+		}
+		if token == "" {
+			return nil, fmt.Errorf("TICKET_PROVIDER=github_issues but GITHUB_TOKEN not set")
+		}
+		if owner == "" || repo == "" {
+			return nil, fmt.Errorf("TICKET_PROVIDER=github_issues but not in a GitHub repository")
+		}
+		svc, err := github.NewIssuesServiceWithToken(owner, repo, token)
+		if err != nil {
+			return nil, fmt.Errorf("github_issues: %w", err)
+		}
+		return svc, nil
 	default:
 		// Auto-detect: try Codecks first (if configured), then Jira
+		// Note: GitHub Issues is NOT auto-detected - must be explicitly configured
 		if codecks.IsConfigured() {
 			svc, err := codecks.NewService()
 			if err != nil {
@@ -347,10 +368,13 @@ func (m *Model) loadTickets() tea.Cmd {
 			// Build excluded statuses set based on provider
 			excludedStatuses := make(map[string]bool)
 			var excludedStr string
-			if svc.GetProviderName() == "Jira" {
+			switch svc.GetProviderName() {
+			case "Jira":
 				excludedStr = cfg.JiraExcludedStatuses
-			} else if svc.GetProviderName() == "Codecks" {
+			case "Codecks":
 				excludedStr = cfg.CodecksExcludedStatuses
+			case "GitHub Issues":
+				excludedStr = cfg.GitHubIssuesExcludedStatuses
 			}
 
 			if excludedStr != "" {

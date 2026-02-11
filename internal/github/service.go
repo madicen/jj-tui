@@ -663,6 +663,16 @@ func PollForToken(deviceCode string) (string, error) {
 	return "", nil
 }
 
+// GetOwner returns the repository owner
+func (s *Service) GetOwner() string {
+	return s.owner
+}
+
+// GetRepo returns the repository name
+func (s *Service) GetRepo() string {
+	return s.repo
+}
+
 // NewServiceWithToken creates a new GitHub service with a provided token
 func NewServiceWithToken(owner, repo, token string) (*Service, error) {
 	if token == "" {

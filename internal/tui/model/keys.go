@@ -503,16 +503,16 @@ func (m *Model) handleSettingsKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Previous sub-tab
 		m.settingsTab--
 		if m.settingsTab < 0 {
-			m.settingsTab = 4
+			m.settingsTab = 5 // 6 tabs (0-5)
 		}
 		return m, nil
 	case "ctrl+k":
 		// Next sub-tab
-		m.settingsTab = (m.settingsTab + 1) % 5
+		m.settingsTab = (m.settingsTab + 1) % 6 // 6 tabs
 		return m, nil
 	case "ctrl+s", "enter":
-		// Handle Advanced tab specially
-		if m.settingsTab == 4 {
+		// Handle Advanced tab specially (now at index 5)
+		if m.settingsTab == 5 {
 			// Advanced tab - these don't use settings saving, they use direct actions
 			return m, nil
 		}
@@ -535,8 +535,8 @@ func (m *Model) handleSettingsKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Save settings to local .jj-tui.json
 		return m, m.saveSettingsLocal()
 	case "tab", "down":
-		// Skip tab for Advanced (no input fields)
-		if m.settingsTab == 3 {
+		// Skip tab for Branches and Advanced tabs (no input fields)
+		if m.settingsTab == 4 || m.settingsTab == 5 {
 			return m, nil
 		}
 		// Move to next field
@@ -550,8 +550,8 @@ func (m *Model) handleSettingsKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "shift+tab", "up":
-		// Skip tab for Advanced (no input fields)
-		if m.settingsTab == 3 {
+		// Skip tab for Branches and Advanced tabs (no input fields)
+		if m.settingsTab == 4 || m.settingsTab == 5 {
 			return m, nil
 		}
 		// Move to previous field
@@ -569,8 +569,8 @@ func (m *Model) handleSettingsKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Skip input handling for Advanced tab
-	if m.settingsTab == 3 {
+	// Skip input handling for Branches and Advanced tabs
+	if m.settingsTab == 4 || m.settingsTab == 5 {
 		return m, nil
 	}
 
