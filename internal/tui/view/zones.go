@@ -77,6 +77,20 @@ const (
 	ZoneSettingsAutoInProgress            = "zone:settings:auto_in_progress"
 	ZoneSettingsSanitizeBookmarks         = "zone:settings:sanitize_bookmarks"
 
+	// Bookmark conflict resolution zones
+	ZoneConflictKeepLocal   = "zone:conflict:keep_local"
+	ZoneConflictResetRemote = "zone:conflict:reset_remote"
+	ZoneConflictConfirm     = "zone:conflict:confirm"
+	ZoneConflictCancel      = "zone:conflict:cancel"
+
+	// Branch conflict resolution
+	ZoneBranchResolveConflict = "zone:branch:resolve_conflict"
+
+	// Divergent commit resolution zones
+	ZoneDivergentConfirm       = "zone:divergent:confirm"
+	ZoneDivergentCancel        = "zone:divergent:cancel"
+	ZoneActionResolveDivergent = "zone:action:resolve_divergent"
+
 	ZoneSettingsSave      = "zone:settings:save"
 	ZoneSettingsSaveLocal = "zone:settings:save_local"
 	ZoneSettingsCancel    = "zone:settings:cancel"
@@ -147,4 +161,9 @@ func ZoneChangedFile(index int) string {
 // ZoneBranch returns the zone ID for a branch at the given index
 func ZoneBranch(index int) string {
 	return fmt.Sprintf("zone:branch:%d", index)
+}
+
+// ZoneDivergentCommit returns the zone ID for a divergent commit option at the given index
+func ZoneDivergentCommit(index int) string {
+	return fmt.Sprintf("zone:divergent:commit:%d", index)
 }

@@ -109,6 +109,9 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 	if userClicked(ZoneActionAbandon) {
 		return m.handleAbandonCommit()
 	}
+	if userClicked(ZoneActionResolveDivergent) {
+		return m.handleResolveDivergentCommit()
+	}
 	if userClicked(ZoneActionRebase) {
 		return m.handleRebase()
 	}
@@ -201,6 +204,54 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 		}
 	}
 
+	// Bookmark conflict resolution zones
+	if m.viewMode == ViewBookmarkConflict {
+		if userClicked(ZoneConflictKeepLocal) {
+			m.conflictSelectedOption = 0
+			return m, nil
+		}
+		if userClicked(ZoneConflictResetRemote) {
+			m.conflictSelectedOption = 1
+			return m, nil
+		}
+		if userClicked(ZoneConflictConfirm) {
+			resolution := "keep_local"
+			if m.conflictSelectedOption == 1 {
+				resolution = "reset_remote"
+			}
+			m.statusMessage = "Resolving bookmark conflict..."
+			return m, m.resolveBookmarkConflict(m.conflictBookmarkName, resolution)
+		}
+		if userClicked(ZoneConflictCancel) {
+			m.viewMode = ViewBranches
+			m.statusMessage = "Conflict resolution cancelled"
+			return m, nil
+		}
+	}
+
+	// Divergent commit resolution zones
+	if m.viewMode == ViewDivergentCommit {
+		// Check for clicks on divergent commit options
+		for i := range m.divergentCommitIDs {
+			if userClicked(ZoneDivergentCommit(i)) {
+				m.divergentSelectedIdx = i
+				return m, nil
+			}
+		}
+		if userClicked(ZoneDivergentConfirm) {
+			if len(m.divergentCommitIDs) > 0 && m.divergentSelectedIdx < len(m.divergentCommitIDs) {
+				keepCommitID := m.divergentCommitIDs[m.divergentSelectedIdx]
+				m.statusMessage = "Resolving divergent commit..."
+				return m, m.resolveDivergentCommit(m.divergentChangeID, keepCommitID)
+			}
+		}
+		if userClicked(ZoneDivergentCancel) {
+			m.viewMode = ViewCommitGraph
+			m.statusMessage = "Divergent commit resolution cancelled"
+			return m, nil
+		}
+	}
+
 	// PR creation zones
 	if m.viewMode == ViewCreatePR {
 		if userClicked(ZonePRTitle) {
@@ -290,6 +341,9 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 		}
 		if userClicked(ZoneBranchFetch) {
 			return m.handleFetchAll()
+		}
+		if userClicked(ZoneBranchResolveConflict) {
+			return m.handleResolveBookmarkConflict()
 		}
 	}
 

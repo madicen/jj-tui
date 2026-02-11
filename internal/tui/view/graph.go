@@ -79,26 +79,44 @@ func (r *Renderer) Graph(data GraphData) GraphResult {
 			selectionPrefix = "► "
 		}
 
-		// Show conflict indicator
-		conflictIndicator := ""
+		// Show conflict/divergent indicators
+		statusIndicator := ""
 		if commit.Conflicts {
-			conflictIndicator = " ⚠"
+			statusIndicator = " ⚠"
+		}
+		if commit.Divergent {
+			// Divergent commit - multiple versions of this change ID exist
+			statusIndicator += lipgloss.NewStyle().Foreground(lipgloss.Color("#FF79C6")).Render(" ⑂ divergent")
 		}
 
-		// Show branches/bookmarks
+		// Show branches/bookmarks with diverged indicator
 		branchStr := ""
 		if len(commit.Branches) > 0 {
-			branchStr = " " + lipgloss.NewStyle().Foreground(ColorSecondary).Render("["+strings.Join(commit.Branches, ", ")+"]")
+			// Build branch display with conflict markers for diverged bookmarks
+			var branchParts []string
+			conflictedSet := make(map[string]bool)
+			for _, cb := range commit.ConflictedBranches {
+				conflictedSet[cb] = true
+			}
+			for _, b := range commit.Branches {
+				if conflictedSet[b] {
+					// Diverged bookmark - show warning indicator
+					branchParts = append(branchParts, lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555")).Render(b+" ⚠"))
+				} else {
+					branchParts = append(branchParts, b)
+				}
+			}
+			branchStr = " " + lipgloss.NewStyle().Foreground(ColorSecondary).Render("["+strings.Join(branchParts, ", ")+"]")
 		}
 
-		// Format the commit line: selection + graph + commit_id + summary + branches + conflict
+		// Format the commit line: selection + graph + commit_id + summary + branches + status
 		commitLine := fmt.Sprintf("%s%s%s %s%s%s",
 			selectionPrefix,
 			graphPrefix,
 			CommitIDStyle.Render(commit.ShortID),
 			commit.Summary,
 			branchStr,
-			conflictIndicator,
+			statusIndicator,
 		)
 
 		// Wrap in zone for click detection
@@ -187,6 +205,14 @@ func (r *Renderer) Graph(data GraphData) GraphResult {
 				if len(commit.Branches) > 0 {
 					actionButtons = append(actionButtons,
 						r.Mark(ZoneActionDelBookmark, ButtonStyle.Render("Del Bookmark (x)")),
+					)
+				}
+
+				// Show resolve divergent button if commit is divergent
+				if commit.Divergent {
+					divergentBtnStyle := ButtonStyle.Background(lipgloss.Color("#FF79C6"))
+					actionButtons = append(actionButtons,
+						r.Mark(ZoneActionResolveDivergent, divergentBtnStyle.Render("Resolve Divergent (a)")),
 					)
 				}
 

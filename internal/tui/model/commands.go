@@ -29,7 +29,7 @@ func isNilInterface(i any) bool {
 		return true
 	}
 	v := reflect.ValueOf(i)
-	return v.Kind() == reflect.Ptr && v.IsNil()
+	return v.Kind() == reflect.Pointer && v.IsNil()
 }
 
 // tickCmd returns a command that sends a tick after the refresh interval
@@ -819,5 +819,82 @@ func (m *Model) fetchAllRemotes() tea.Cmd {
 			return branchActionMsg{action: "fetch", err: err}
 		}
 		return branchActionMsg{action: "fetch"}
+	}
+}
+
+// loadBookmarkConflictInfo loads information about a conflicted bookmark
+func (m *Model) loadBookmarkConflictInfo(bookmarkName string) tea.Cmd {
+	if m.jjService == nil {
+		return nil
+	}
+
+	jjSvc := m.jjService
+	return func() tea.Msg {
+		localID, remoteID, localSummary, remoteSummary, err := jjSvc.GetBookmarkConflictInfo(context.Background(), bookmarkName)
+		return bookmarkConflictInfoMsg{
+			bookmarkName:  bookmarkName,
+			localID:       localID,
+			remoteID:      remoteID,
+			localSummary:  localSummary,
+			remoteSummary: remoteSummary,
+			err:           err,
+		}
+	}
+}
+
+// resolveBookmarkConflict resolves a bookmark conflict with the given resolution
+func (m *Model) resolveBookmarkConflict(bookmarkName, resolution string) tea.Cmd {
+	if m.jjService == nil {
+		return nil
+	}
+
+	jjSvc := m.jjService
+	return func() tea.Msg {
+		var err error
+		if resolution == "keep_local" {
+			err = jjSvc.ResolveBookmarkConflictKeepLocal(context.Background(), bookmarkName)
+		} else {
+			err = jjSvc.ResolveBookmarkConflictResetToRemote(context.Background(), bookmarkName)
+		}
+		return bookmarkConflictResolvedMsg{
+			bookmarkName: bookmarkName,
+			resolution:   resolution,
+			err:          err,
+		}
+	}
+}
+
+// loadDivergentCommitInfo loads information about all versions of a divergent commit
+func (m *Model) loadDivergentCommitInfo(changeID string) tea.Cmd {
+	if m.jjService == nil {
+		return nil
+	}
+
+	jjSvc := m.jjService
+	return func() tea.Msg {
+		commitIDs, summaries, err := jjSvc.GetDivergentCommitInfo(context.Background(), changeID)
+		return divergentCommitInfoMsg{
+			changeID:  changeID,
+			commitIDs: commitIDs,
+			summaries: summaries,
+			err:       err,
+		}
+	}
+}
+
+// resolveDivergentCommit resolves a divergent commit by keeping the selected version
+func (m *Model) resolveDivergentCommit(changeID, keepCommitID string) tea.Cmd {
+	if m.jjService == nil {
+		return nil
+	}
+
+	jjSvc := m.jjService
+	return func() tea.Msg {
+		err := jjSvc.ResolveDivergentCommit(context.Background(), changeID, keepCommitID)
+		return divergentCommitResolvedMsg{
+			changeID:     changeID,
+			keptCommitID: keepCommitID,
+			err:          err,
+		}
 	}
 }

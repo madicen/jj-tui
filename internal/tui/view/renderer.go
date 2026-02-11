@@ -189,3 +189,21 @@ type BookmarkData struct {
 	FromJira          bool     // True if creating bookmark from Jira ticket
 	JiraTicketKey     string   // Jira ticket key when FromJira is true
 }
+
+// BookmarkConflictData contains data needed for bookmark conflict resolution view
+type BookmarkConflictData struct {
+	BookmarkName   string // Name of the conflicted bookmark
+	LocalCommitID  string // Local commit ID
+	RemoteCommitID string // Remote commit ID
+	LocalSummary   string // Local commit summary
+	RemoteSummary  string // Remote commit summary
+	SelectedOption int    // 0=Keep Local, 1=Reset to Remote
+}
+
+// DivergentCommitData contains data needed for divergent commit resolution view
+type DivergentCommitData struct {
+	ChangeID    string   // The change ID that's divergent
+	CommitIDs   []string // All commit hashes sharing this change ID
+	Summaries   []string // Summary of each divergent commit
+	SelectedIdx int      // Which commit to keep (0-indexed)
+}
