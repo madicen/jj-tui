@@ -13,9 +13,6 @@ func (r *Renderer) Bookmark(data BookmarkData) string {
 
 	// Different title and info for Jira flow
 	if data.FromJira {
-		lines = append(lines, TitleStyle.Render("Create Branch from Jira Ticket"))
-		lines = append(lines, "")
-
 		// Show Jira ticket info
 		jiraBox := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
@@ -27,9 +24,6 @@ func (r *Renderer) Bookmark(data BookmarkData) string {
 		lines = append(lines, jiraBox)
 		lines = append(lines, "")
 	} else {
-		lines = append(lines, TitleStyle.Render("Create or Move Bookmark"))
-		lines = append(lines, "")
-
 		// Show commit info
 		if data.Repository != nil && data.CommitIndex >= 0 && data.CommitIndex < len(data.Repository.Graph.Commits) {
 			commit := data.Repository.Graph.Commits[data.CommitIndex]
@@ -106,4 +100,3 @@ func (r *Renderer) Bookmark(data BookmarkData) string {
 
 	return strings.Join(lines, "\n")
 }
-
