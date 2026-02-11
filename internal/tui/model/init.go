@@ -32,10 +32,11 @@ func New(ctx context.Context) *Model {
 	showClosed := true
 	onlyMine := false
 	prLimit := 100
-	prRefreshInterval := 120 // Default: 2 minutes
+	prRefreshInterval := 120   // Default: 2 minutes
 	autoInProgress := true     // Default: enabled
 	branchLimit := 50          // Default: 50 branches
 	sanitizeBookmarks := true  // Default: enabled
+	ticketProvider := ""       // Default: none selected (will use legacy auto-detect on save)
 	if cfg != nil {
 		showMerged = cfg.ShowMergedPRs()
 		showClosed = cfg.ShowClosedPRs()
@@ -45,6 +46,7 @@ func New(ctx context.Context) *Model {
 		autoInProgress = cfg.AutoInProgressOnBranch()
 		branchLimit = cfg.BranchLimit()
 		sanitizeBookmarks = cfg.ShouldSanitizeBookmarkNames()
+		ticketProvider = cfg.TicketProvider
 	}
 
 	// PR title input
@@ -83,6 +85,7 @@ func New(ctx context.Context) *Model {
 		settingsAutoInProgress:    autoInProgress,
 		settingsBranchLimit:       branchLimit,
 		settingsSanitizeBookmarks: sanitizeBookmarks,
+		settingsTicketProvider:    ticketProvider,
 		prTitleInput:              prTitle,
 		prBodyInput:               prBody,
 		prBaseBranch:              "main",
@@ -97,7 +100,7 @@ func New(ctx context.Context) *Model {
 
 // createSettingsInputs creates and initializes all settings input fields
 func createSettingsInputs(cfg *config.Config) []textinput.Model {
-	settingsInputs := make([]textinput.Model, 9)
+	settingsInputs := make([]textinput.Model, 10)
 
 	// GitHub Token (index 0)
 	settingsInputs[0] = textinput.New()
@@ -175,6 +178,15 @@ func createSettingsInputs(cfg *config.Config) []textinput.Model {
 	settingsInputs[8].Width = 50
 	if cfg != nil {
 		settingsInputs[8].SetValue(cfg.CodecksExcludedStatuses)
+	}
+
+	// GitHub Issues Excluded Statuses (index 9)
+	settingsInputs[9] = textinput.New()
+	settingsInputs[9].Placeholder = "closed (comma-separated)"
+	settingsInputs[9].CharLimit = 200
+	settingsInputs[9].Width = 50
+	if cfg != nil {
+		settingsInputs[9].SetValue(cfg.GitHubIssuesExcludedStatuses)
 	}
 
 	return settingsInputs

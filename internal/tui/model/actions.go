@@ -342,6 +342,7 @@ func (m *Model) saveSettings() tea.Cmd {
 		JiraUser:             strings.TrimSpace(m.settingsInputs[2].Value()),
 		JiraToken:            strings.TrimSpace(m.settingsInputs[3].Value()),
 		JiraExcludedStatuses: strings.TrimSpace(m.settingsInputs[4].Value()),
+		TicketProvider:       m.settingsTicketProvider,
 		ShowMerged:           m.settingsShowMerged,
 		ShowClosed:           m.settingsShowClosed,
 		OnlyMine:             m.settingsOnlyMine,
@@ -356,6 +357,14 @@ func (m *Model) saveSettings() tea.Cmd {
 		params.CodecksToken = strings.TrimSpace(m.settingsInputs[6].Value())
 		params.CodecksProject = strings.TrimSpace(m.settingsInputs[7].Value())
 		params.CodecksExcludedStatuses = strings.TrimSpace(m.settingsInputs[8].Value())
+	}
+	if len(m.settingsInputs) > 9 {
+		params.GitHubIssuesExcludedStatuses = strings.TrimSpace(m.settingsInputs[9].Value())
+	}
+	// Pass GitHub repo info for GitHub Issues provider
+	if m.githubService != nil {
+		params.GitHubOwner = m.githubService.GetOwner()
+		params.GitHubRepo = m.githubService.GetRepo()
 	}
 	return actions.SaveSettings(params)
 }
@@ -367,6 +376,7 @@ func (m *Model) saveSettingsLocal() tea.Cmd {
 		JiraUser:             strings.TrimSpace(m.settingsInputs[2].Value()),
 		JiraToken:            strings.TrimSpace(m.settingsInputs[3].Value()),
 		JiraExcludedStatuses: strings.TrimSpace(m.settingsInputs[4].Value()),
+		TicketProvider:       m.settingsTicketProvider,
 		ShowMerged:           m.settingsShowMerged,
 		ShowClosed:           m.settingsShowClosed,
 		OnlyMine:             m.settingsOnlyMine,
@@ -381,6 +391,14 @@ func (m *Model) saveSettingsLocal() tea.Cmd {
 		params.CodecksToken = strings.TrimSpace(m.settingsInputs[6].Value())
 		params.CodecksProject = strings.TrimSpace(m.settingsInputs[7].Value())
 		params.CodecksExcludedStatuses = strings.TrimSpace(m.settingsInputs[8].Value())
+	}
+	if len(m.settingsInputs) > 9 {
+		params.GitHubIssuesExcludedStatuses = strings.TrimSpace(m.settingsInputs[9].Value())
+	}
+	// Pass GitHub repo info for GitHub Issues provider
+	if m.githubService != nil {
+		params.GitHubOwner = m.githubService.GetOwner()
+		params.GitHubRepo = m.githubService.GetRepo()
 	}
 	return actions.SaveSettingsLocal(params)
 }

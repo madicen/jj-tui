@@ -583,6 +583,21 @@ func (m *Model) renderSettings() string {
 		configSource = cfg.LoadedFrom()
 	}
 
+	// Get ticket provider display name
+	var ticketProviderName string
+	if m.ticketService != nil {
+		ticketProviderName = m.ticketService.GetProviderName()
+	}
+
+	// Check what's configured for provider availability
+	jiraConfigured := strings.TrimSpace(m.settingsInputs[1].Value()) != "" &&
+		strings.TrimSpace(m.settingsInputs[2].Value()) != "" &&
+		strings.TrimSpace(m.settingsInputs[3].Value()) != ""
+	codecksConfigured := len(m.settingsInputs) > 6 &&
+		strings.TrimSpace(m.settingsInputs[5].Value()) != "" &&
+		strings.TrimSpace(m.settingsInputs[6].Value()) != ""
+	githubIssuesConfigured := m.githubService != nil
+
 	return m.renderer().Settings(view.SettingsData{
 		Inputs:                 inputs,
 		FocusedField:           m.settingsFocusedField,
@@ -596,7 +611,12 @@ func (m *Model) renderSettings() string {
 		OnlyMyPRs:              m.settingsOnlyMine,
 		PRLimit:                m.settingsPRLimit,
 		PRRefreshInterval:      m.settingsPRRefreshInterval,
+		TicketProvider:         m.settingsTicketProvider,
+		TicketProviderName:     ticketProviderName,
 		AutoInProgressOnBranch: m.settingsAutoInProgress,
+		JiraConfigured:         jiraConfigured,
+		CodecksConfigured:      codecksConfigured,
+		GitHubIssuesConfigured: githubIssuesConfigured,
 		BranchLimit:            m.settingsBranchLimit,
 		SanitizeBookmarks:      m.settingsSanitizeBookmarks,
 		ConfirmingCleanup:      m.confirmingCleanup,

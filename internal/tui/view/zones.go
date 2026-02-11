@@ -25,8 +25,17 @@ const (
 	ZoneSettingsTabGitHub    = "zone:settings:tab:github"
 	ZoneSettingsTabJira      = "zone:settings:tab:jira"
 	ZoneSettingsTabCodecks   = "zone:settings:tab:codecks"
+	ZoneSettingsTabTickets   = "zone:settings:tab:tickets"
 	ZoneSettingsTabBranches  = "zone:settings:tab:branches"
 	ZoneSettingsTabAdvanced  = "zone:settings:tab:advanced"
+
+	// Ticket provider selection zones
+	ZoneSettingsTicketProviderNone         = "zone:settings:ticket_provider:none"
+	ZoneSettingsTicketProviderJira         = "zone:settings:ticket_provider:jira"
+	ZoneSettingsTicketProviderCodecks      = "zone:settings:ticket_provider:codecks"
+	ZoneSettingsTicketProviderGitHubIssues = "zone:settings:ticket_provider:github_issues"
+	ZoneSettingsGitHubIssuesExcluded       = "zone:settings:github_issues_excluded"
+	ZoneSettingsGitHubIssuesExcludedClear  = "zone:settings:github_issues_excluded_clear"
 
 	// Branch settings zones
 	ZoneSettingsBranchLimitDecrease = "zone:settings:branch_limit_decrease"

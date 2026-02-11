@@ -67,6 +67,8 @@ func (r *Renderer) Settings(data SettingsData) string {
 		lines = append(lines, r.renderJiraSettings(data)...)
 	case SettingsTabCodecks:
 		lines = append(lines, r.renderCodecksSettings(data)...)
+	case SettingsTabTickets:
+		lines = append(lines, r.renderTicketsSettings(data)...)
 	case SettingsTabBranches:
 		lines = append(lines, r.renderBranchesSettings(data)...)
 	case SettingsTabAdvanced:
@@ -119,6 +121,7 @@ func (r *Renderer) renderSettingsTabs(activeTab SettingsTab) string {
 	githubStyle := settingsTabStyle
 	jiraStyle := settingsTabStyle
 	codecksStyle := settingsTabStyle
+	ticketsStyle := settingsTabStyle
 	branchesStyle := settingsTabStyle
 	advancedStyle := settingsTabStyle
 
@@ -129,6 +132,8 @@ func (r *Renderer) renderSettingsTabs(activeTab SettingsTab) string {
 		jiraStyle = settingsTabActiveStyle
 	case SettingsTabCodecks:
 		codecksStyle = settingsTabActiveStyle
+	case SettingsTabTickets:
+		ticketsStyle = settingsTabActiveStyle
 	case SettingsTabBranches:
 		branchesStyle = settingsTabActiveStyle
 	case SettingsTabAdvanced:
@@ -138,10 +143,11 @@ func (r *Renderer) renderSettingsTabs(activeTab SettingsTab) string {
 	githubTab := r.Mark(ZoneSettingsTabGitHub, githubStyle.Render("GitHub"))
 	jiraTab := r.Mark(ZoneSettingsTabJira, jiraStyle.Render("Jira"))
 	codecksTab := r.Mark(ZoneSettingsTabCodecks, codecksStyle.Render("Codecks"))
+	ticketsTab := r.Mark(ZoneSettingsTabTickets, ticketsStyle.Render("Tickets"))
 	branchesTab := r.Mark(ZoneSettingsTabBranches, branchesStyle.Render("Branches"))
 	advancedTab := r.Mark(ZoneSettingsTabAdvanced, advancedStyle.Render("Advanced"))
 
-	return lipgloss.JoinHorizontal(lipgloss.Left, githubTab, " │ ", jiraTab, " │ ", codecksTab, " │ ", branchesTab, " │ ", advancedTab)
+	return lipgloss.JoinHorizontal(lipgloss.Left, githubTab, " │ ", jiraTab, " │ ", codecksTab, " │ ", ticketsTab, " │ ", branchesTab, " │ ", advancedTab)
 }
 
 // renderGitHubSettings renders the GitHub settings content
@@ -373,6 +379,100 @@ func (r *Renderer) renderCodecksSettings(data SettingsData) []string {
 	return lines
 }
 
+// renderTicketsSettings renders the Tickets settings tab with provider selection
+func (r *Renderer) renderTicketsSettings(data SettingsData) []string {
+	var lines []string
+
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("Ticket Provider"))
+	lines = append(lines, "")
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("Choose which ticket service to use for the Tickets tab."))
+	lines = append(lines, "")
+
+	// Provider selection radio buttons
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("  Active Provider:"))
+	lines = append(lines, "")
+
+	// Helper to render a radio option
+	renderRadio := func(label, provider, zone string, available bool) string {
+		selected := data.TicketProvider == provider
+		var radioText string
+		if selected {
+			radioText = toggleOnStyle.Render("(●) " + label)
+		} else if available {
+			radioText = lipgloss.NewStyle().Foreground(ColorPrimary).Render("( ) " + label)
+		} else {
+			radioText = lipgloss.NewStyle().Foreground(ColorMuted).Render("( ) " + label + " (not configured)")
+		}
+		if available || selected {
+			return r.Mark(zone, radioText)
+		}
+		return radioText
+	}
+
+	// None/Disabled option
+	lines = append(lines, "    "+renderRadio("None (Disabled)", "", ZoneSettingsTicketProviderNone, true))
+
+	// Jira option
+	lines = append(lines, "    "+renderRadio("Jira", "jira", ZoneSettingsTicketProviderJira, data.JiraConfigured))
+
+	// Codecks option
+	lines = append(lines, "    "+renderRadio("Codecks", "codecks", ZoneSettingsTicketProviderCodecks, data.CodecksConfigured))
+
+	// GitHub Issues option
+	lines = append(lines, "    "+renderRadio("GitHub Issues", "github_issues", ZoneSettingsTicketProviderGitHubIssues, data.GitHubIssuesConfigured))
+
+	lines = append(lines, "")
+
+	// Show current connection status
+	if data.JiraService && data.TicketProviderName != "" {
+		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B")).Render(
+			"  ✓ Connected to "+data.TicketProviderName))
+	} else if data.TicketProvider != "" {
+		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#FFB86C")).Render(
+			"  ○ "+data.TicketProvider+" selected but not connected (check credentials)"))
+	} else {
+		lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render(
+			"  ○ No ticket provider selected"))
+	}
+
+	lines = append(lines, "")
+	lines = append(lines, "")
+
+	// Ticket Workflow section (moved from Advanced)
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("Ticket Workflow"))
+	lines = append(lines, "")
+
+	// Auto-transition toggle
+	autoInProgressToggle := "[ ]"
+	if data.AutoInProgressOnBranch {
+		autoInProgressToggle = "[✓]"
+	}
+	toggleStyle := lipgloss.NewStyle().Foreground(ColorPrimary).Bold(true)
+	autoBtn := r.Mark(ZoneSettingsAutoInProgress, toggleStyle.Render(autoInProgressToggle+" Auto-set 'In Progress' on branch creation"))
+	lines = append(lines, "  "+autoBtn)
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Automatically transition ticket when creating a branch from it"))
+	lines = append(lines, "")
+
+	// GitHub Issues excluded statuses (only show if GitHub Issues is selected)
+	if data.TicketProvider == "github_issues" {
+		lines = append(lines, "")
+		lines = append(lines, lipgloss.NewStyle().Bold(true).Render("  GitHub Issues Filters:"))
+		excludedLabel := "  Exclude Statuses:"
+		excludedStyle := lipgloss.NewStyle()
+		if data.FocusedField == 9 { // Index for GitHub Issues excluded statuses input
+			excludedStyle = excludedStyle.Bold(true).Foreground(ColorPrimary)
+		}
+		lines = append(lines, excludedStyle.Render(excludedLabel))
+		if len(data.Inputs) > 9 {
+			clearBtn := r.Mark(ZoneSettingsGitHubIssuesExcludedClear, clearButtonStyle.Render("[Clear]"))
+			lines = append(lines, "  "+r.Mark(ZoneSettingsGitHubIssuesExcluded, data.Inputs[9].View)+" "+clearBtn)
+		}
+		lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Comma-separated list (e.g., closed)"))
+	}
+
+	return lines
+}
+
 // renderBranchesSettings renders the Branches settings content
 func (r *Renderer) renderBranchesSettings(data SettingsData) []string {
 	var lines []string
@@ -398,19 +498,8 @@ func (r *Renderer) renderBranchesSettings(data SettingsData) []string {
 func (r *Renderer) renderAdvancedSettings(data SettingsData) []string {
 	var lines []string
 
-	// Ticket Workflow section
-	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("Ticket Workflow"))
-	lines = append(lines, "")
-
-	// Auto-transition toggle
-	autoInProgressToggle := "[ ]"
-	if data.AutoInProgressOnBranch {
-		autoInProgressToggle = "[✓]"
-	}
-	toggleStyle := lipgloss.NewStyle().Foreground(ColorPrimary).Bold(true)
-	autoBtn := r.Mark(ZoneSettingsAutoInProgress, toggleStyle.Render(autoInProgressToggle+" Auto-set 'In Progress' on branch creation"))
-	lines = append(lines, "  "+autoBtn)
-	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Automatically transition ticket to 'In Progress' when creating a branch from it"))
+	// Bookmark Settings section
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("Bookmark Settings"))
 	lines = append(lines, "")
 
 	// Sanitize bookmark names toggle
@@ -418,6 +507,7 @@ func (r *Renderer) renderAdvancedSettings(data SettingsData) []string {
 	if data.SanitizeBookmarks {
 		sanitizeToggle = "[✓]"
 	}
+	toggleStyle := lipgloss.NewStyle().Foreground(ColorPrimary).Bold(true)
 	sanitizeBtn := r.Mark(ZoneSettingsSanitizeBookmarks, toggleStyle.Render(sanitizeToggle+" Auto-fix bookmark names"))
 	lines = append(lines, "  "+sanitizeBtn)
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Replace spaces and invalid characters with hyphens"))

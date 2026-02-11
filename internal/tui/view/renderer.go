@@ -115,6 +115,7 @@ const (
 	SettingsTabGitHub SettingsTab = iota
 	SettingsTabJira
 	SettingsTabCodecks
+	SettingsTabTickets // New tab for ticket provider selection
 	SettingsTabBranches
 	SettingsTabAdvanced
 )
@@ -136,12 +137,19 @@ type SettingsData struct {
 	PRLimit           int
 	PRRefreshInterval int // in seconds, 0 = disabled
 
-	// Ticket workflow settings
-	AutoInProgressOnBranch bool // Auto-transition ticket to "In Progress" when creating branch
+	// Ticket provider settings
+	TicketProvider         string // Current provider: "jira", "codecks", "github_issues", or ""
+	TicketProviderName     string // Display name of current provider
+	AutoInProgressOnBranch bool   // Auto-transition ticket to "In Progress" when creating branch
+
+	// Provider availability (based on what's configured)
+	JiraConfigured         bool
+	CodecksConfigured      bool
+	GitHubIssuesConfigured bool // true if GitHub is connected (can use GitHub Issues)
 
 	// Branch settings
-	BranchLimit        int  // Max branches to calculate stats for
-	SanitizeBookmarks  bool // Auto-fix invalid bookmark names
+	BranchLimit       int  // Max branches to calculate stats for
+	SanitizeBookmarks bool // Auto-fix invalid bookmark names
 
 	// Advanced tab state
 	ConfirmingCleanup string // "" = not confirming, "delete_bookmarks", "abandon_old_commits"
