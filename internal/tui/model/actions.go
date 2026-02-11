@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/madicen/jj-tui/internal/jj"
 	"github.com/madicen/jj-tui/internal/models"
 	"github.com/madicen/jj-tui/internal/tui/actions"
 )
@@ -168,6 +169,12 @@ func (m *Model) submitBookmark() tea.Cmd {
 	}
 
 	bookmarkName := strings.TrimSpace(m.bookmarkNameInput.Value())
+
+	// Sanitize bookmark name if setting is enabled
+	if m.settingsSanitizeBookmarks {
+		bookmarkName = jj.SanitizeBookmarkName(bookmarkName)
+	}
+
 	if err := actions.ValidateBookmarkName(bookmarkName); err != "" {
 		m.statusMessage = err
 		return nil
@@ -179,6 +186,12 @@ func (m *Model) submitBookmark() tea.Cmd {
 
 func (m *Model) submitBookmarkFromJira() tea.Cmd {
 	bookmarkName := strings.TrimSpace(m.bookmarkNameInput.Value())
+
+	// Sanitize bookmark name if setting is enabled
+	if m.settingsSanitizeBookmarks {
+		bookmarkName = jj.SanitizeBookmarkName(bookmarkName)
+	}
+
 	if err := actions.ValidateBookmarkName(bookmarkName); err != "" {
 		m.statusMessage = err
 		return nil
@@ -336,6 +349,7 @@ func (m *Model) saveSettings() tea.Cmd {
 		PRRefreshInterval:    m.settingsPRRefreshInterval,
 		AutoInProgress:       m.settingsAutoInProgress,
 		BranchLimit:          m.settingsBranchLimit,
+		SanitizeBookmarks:    m.settingsSanitizeBookmarks,
 	}
 	if len(m.settingsInputs) > 8 {
 		params.CodecksSubdomain = strings.TrimSpace(m.settingsInputs[5].Value())
@@ -360,6 +374,7 @@ func (m *Model) saveSettingsLocal() tea.Cmd {
 		PRRefreshInterval:    m.settingsPRRefreshInterval,
 		AutoInProgress:       m.settingsAutoInProgress,
 		BranchLimit:          m.settingsBranchLimit,
+		SanitizeBookmarks:    m.settingsSanitizeBookmarks,
 	}
 	if len(m.settingsInputs) > 8 {
 		params.CodecksSubdomain = strings.TrimSpace(m.settingsInputs[5].Value())

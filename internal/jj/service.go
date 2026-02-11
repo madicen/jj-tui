@@ -21,6 +21,37 @@ type Service struct {
 	RepoPath string
 }
 
+// SanitizeBookmarkName converts a string into a valid bookmark name
+// Replaces spaces with hyphens, removes invalid characters, etc.
+func SanitizeBookmarkName(name string) string {
+	// Replace common problematic characters
+	name = strings.ReplaceAll(name, " ", "-")
+	name = strings.ReplaceAll(name, "\t", "-")
+	name = strings.ReplaceAll(name, "/", "-")
+	name = strings.ReplaceAll(name, "\\", "-")
+	name = strings.ReplaceAll(name, ":", "-")
+	name = strings.ReplaceAll(name, "~", "-")
+	name = strings.ReplaceAll(name, "^", "-")
+	name = strings.ReplaceAll(name, "?", "-")
+	name = strings.ReplaceAll(name, "*", "-")
+	name = strings.ReplaceAll(name, "[", "-")
+	name = strings.ReplaceAll(name, "]", "-")
+	name = strings.ReplaceAll(name, "@", "-")
+
+	// Collapse multiple hyphens into one
+	for strings.Contains(name, "--") {
+		name = strings.ReplaceAll(name, "--", "-")
+	}
+
+	// Trim leading/trailing hyphens
+	name = strings.Trim(name, "-")
+
+	// Ensure it doesn't start with a dot
+	name = strings.TrimPrefix(name, ".")
+
+	return name
+}
+
 // NewService creates a new jj service
 func NewService(repoPath string) (*Service, error) {
 	// Verify jj is installed
