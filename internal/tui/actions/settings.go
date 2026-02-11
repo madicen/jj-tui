@@ -146,10 +146,17 @@ func buildSettingsSavedMsg(githubToken, ticketProvider string, savedLocal bool) 
 		githubConnected = true
 	}
 
+	// Important: Only assign to ticketSvc if the service was successfully created.
+	// Assigning a typed nil pointer (e.g., (*jira.Service)(nil)) to an interface
+	// makes the interface non-nil, which would bypass nil checks and cause panics.
 	if ticketProvider == "codecks" && codecks.IsConfigured() {
-		ticketSvc, _ = codecks.NewService()
+		if svc, err := codecks.NewService(); err == nil && svc != nil {
+			ticketSvc = svc
+		}
 	} else if ticketProvider == "jira" && jira.IsConfigured() {
-		ticketSvc, _ = jira.NewService()
+		if svc, err := jira.NewService(); err == nil && svc != nil {
+			ticketSvc = svc
+		}
 	}
 
 	return SettingsSavedMsg{

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -19,6 +20,17 @@ import (
 	"github.com/madicen/jj-tui/internal/models"
 	"github.com/madicen/jj-tui/internal/tickets"
 )
+
+// isNilInterface checks if an interface contains a nil concrete value.
+// In Go, an interface is only nil if both its type and value are nil.
+// An interface holding a nil pointer (e.g., (*Service)(nil)) is NOT nil.
+func isNilInterface(i interface{}) bool {
+	if i == nil {
+		return true
+	}
+	v := reflect.ValueOf(i)
+	return v.Kind() == reflect.Ptr && v.IsNil()
+}
 
 // tickCmd returns a command that sends a tick after the refresh interval
 func (m *Model) tickCmd() tea.Cmd {
@@ -171,12 +183,20 @@ func createTicketService() (tickets.Service, error) {
 	switch provider {
 	case "codecks":
 		if codecks.IsConfigured() {
-			return codecks.NewService()
+			svc, err := codecks.NewService()
+			if err != nil {
+				return nil, fmt.Errorf("codecks: %w", err)
+			}
+			return svc, nil
 		}
 		return nil, fmt.Errorf("TICKET_PROVIDER=codecks but CODECKS_SUBDOMAIN or CODECKS_TOKEN not set")
 	case "jira":
 		if jira.IsConfigured() {
-			return jira.NewService()
+			svc, err := jira.NewService()
+			if err != nil {
+				return nil, fmt.Errorf("jira: %w", err)
+			}
+			return svc, nil
 		}
 		return nil, fmt.Errorf("TICKET_PROVIDER=jira but Jira env vars not set")
 	default:
@@ -304,7 +324,9 @@ func (m *Model) closePR(prNumber int) tea.Cmd {
 
 // loadTickets loads tickets from the configured ticket service
 func (m *Model) loadTickets() tea.Cmd {
-	if m.ticketService == nil {
+	// Check if ticketService is nil or contains a nil pointer
+	// (Go interfaces can be non-nil while containing nil concrete values)
+	if m.ticketService == nil || isNilInterface(m.ticketService) {
 		return func() tea.Msg {
 			return ticketsLoadedMsg{tickets: []tickets.Ticket{}}
 		}
