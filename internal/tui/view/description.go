@@ -39,8 +39,8 @@ func (r *Renderer) Description(data DescriptionData) string {
 	// Clickable action buttons
 	actionButtons := lipgloss.JoinHorizontal(
 		lipgloss.Left,
-		r.Zone.Mark(ZoneDescSave, ButtonStyle.Render("Save (Ctrl+S)")),
-		r.Zone.Mark(ZoneDescCancel, ButtonStyle.Render("Cancel (Esc)")),
+		r.Mark(ZoneDescSave, ButtonStyle.Render("Save (Ctrl+S)")),
+		r.Mark(ZoneDescCancel, ButtonStyle.Render("Cancel (Esc)")),
 	)
 
 	return lipgloss.JoinVertical(

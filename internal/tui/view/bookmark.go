@@ -59,7 +59,7 @@ func (r *Renderer) Bookmark(data BookmarkData) string {
 					style = CommitSelectedStyle
 				}
 				bookmarkLine := fmt.Sprintf("%s%s", prefix, bookmark)
-				lines = append(lines, r.Zone.Mark(ZoneExistingBookmark(i), style.Render(bookmarkLine)))
+				lines = append(lines, r.Mark(ZoneExistingBookmark(i), style.Render(bookmarkLine)))
 			}
 			lines = append(lines, "")
 			lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("─────────────────────────────────"))
@@ -88,7 +88,7 @@ func (r *Renderer) Bookmark(data BookmarkData) string {
 		inputStyle = inputStyle.Foreground(ColorPrimary)
 	}
 	lines = append(lines, inputStyle.Render("Name:"))
-	lines = append(lines, r.Zone.Mark(ZoneBookmarkName, "  "+data.NameInput))
+	lines = append(lines, r.Mark(ZoneBookmarkName, "  "+data.NameInput))
 	lines = append(lines, "")
 
 	// Action buttons
@@ -100,8 +100,8 @@ func (r *Renderer) Bookmark(data BookmarkData) string {
 	} else {
 		submitLabel = "Create (Enter)"
 	}
-	submitButton := r.Zone.Mark(ZoneBookmarkSubmit, ButtonStyle.Render(submitLabel))
-	cancelButton := r.Zone.Mark(ZoneBookmarkCancel, ButtonStyle.Render("Cancel (Esc)"))
+	submitButton := r.Mark(ZoneBookmarkSubmit, ButtonStyle.Render(submitLabel))
+	cancelButton := r.Mark(ZoneBookmarkCancel, ButtonStyle.Render("Cancel (Esc)"))
 	lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Left, submitButton, " ", cancelButton))
 
 	return strings.Join(lines, "\n")

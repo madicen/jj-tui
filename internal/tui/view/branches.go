@@ -101,32 +101,32 @@ func (r *Renderer) Branches(data BranchData) BranchResult {
 		if branch.IsLocal {
 			// Local branch: can push or delete
 			actionButtons = append(actionButtons,
-				r.Zone.Mark(ZoneBranchPush, ButtonStyle.Render("Push (P)")),
+				r.Mark(ZoneBranchPush, ButtonStyle.Render("Push (P)")),
 			)
 			actionButtons = append(actionButtons,
-				r.Zone.Mark(ZoneBranchDelete, ButtonStyle.Render("Delete (x)")),
+				r.Mark(ZoneBranchDelete, ButtonStyle.Render("Delete (x)")),
 			)
 		} else if branch.IsTracked {
 			// Tracked remote branch: can untrack
 			actionButtons = append(actionButtons,
-				r.Zone.Mark(ZoneBranchUntrack, ButtonStyle.Render("Untrack (U)")),
+				r.Mark(ZoneBranchUntrack, ButtonStyle.Render("Untrack (U)")),
 			)
 			// If local was deleted, offer to restore it
 			if branch.LocalDeleted {
 				actionButtons = append(actionButtons,
-					r.Zone.Mark(ZoneBranchRestore, ButtonStyle.Render("Restore Local (L)")),
+					r.Mark(ZoneBranchRestore, ButtonStyle.Render("Restore Local (L)")),
 				)
 			}
 		} else {
 			// Untracked remote branch: can track
 			actionButtons = append(actionButtons,
-				r.Zone.Mark(ZoneBranchTrack, ButtonStyle.Render("Track (T)")),
+				r.Mark(ZoneBranchTrack, ButtonStyle.Render("Track (T)")),
 			)
 		}
 
 		// Fetch is always available
 		actionButtons = append(actionButtons,
-			r.Zone.Mark(ZoneBranchFetch, ButtonStyle.Render("Fetch All (F)")),
+			r.Mark(ZoneBranchFetch, ButtonStyle.Render("Fetch All (F)")),
 		)
 
 		headerLines = append(headerLines, strings.Join(actionButtons, " "))
@@ -307,5 +307,5 @@ func (r *Renderer) renderGraphBranch(branch models.Branch, idx int, isSelected, 
 		status,
 	)
 
-	return r.Zone.Mark(ZoneBranch(idx), branchLine)
+	return r.Mark(ZoneBranch(idx), branchLine)
 }
