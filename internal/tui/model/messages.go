@@ -145,6 +145,38 @@ type bookmarkDeletedMsg struct {
 	bookmarkName string
 }
 
+// bookmarkConflictInfoMsg contains info about a conflicted bookmark
+type bookmarkConflictInfoMsg struct {
+	bookmarkName  string
+	localID       string
+	remoteID      string
+	localSummary  string
+	remoteSummary string
+	err           error
+}
+
+// bookmarkConflictResolvedMsg is sent when a bookmark conflict is resolved
+type bookmarkConflictResolvedMsg struct {
+	bookmarkName string
+	resolution   string // "keep_local" or "reset_remote"
+	err          error
+}
+
+// divergentCommitInfoMsg contains info about divergent commits
+type divergentCommitInfoMsg struct {
+	changeID  string
+	commitIDs []string
+	summaries []string
+	err       error
+}
+
+// divergentCommitResolvedMsg is sent when a divergent commit is resolved
+type divergentCommitResolvedMsg struct {
+	changeID     string
+	keptCommitID string
+	err          error
+}
+
 // changedFilesLoadedMsg is sent when changed files for a commit are loaded
 type changedFilesLoadedMsg struct {
 	commitID string

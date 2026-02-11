@@ -79,12 +79,13 @@ const (
 	ZonePRClose       = "zone:pr:close"
 
 	// Branch action zones
-	ZoneBranchTrack   = "zone:branch:track"
-	ZoneBranchUntrack = "zone:branch:untrack"
-	ZoneBranchRestore = "zone:branch:restore"
-	ZoneBranchDelete  = "zone:branch:delete"
-	ZoneBranchPush    = "zone:branch:push"
-	ZoneBranchFetch   = "zone:branch:fetch"
+	ZoneBranchTrack           = "zone:branch:track"
+	ZoneBranchUntrack         = "zone:branch:untrack"
+	ZoneBranchRestore         = "zone:branch:restore"
+	ZoneBranchDelete          = "zone:branch:delete"
+	ZoneBranchPush            = "zone:branch:push"
+	ZoneBranchFetch           = "zone:branch:fetch"
+	ZoneBranchResolveConflict = "zone:branch:resolve_conflict"
 
 	// Settings sub-tab zones
 	ZoneSettingsTabGitHub    = "zone:settings:tab:github"
@@ -145,6 +146,17 @@ const (
 	ZoneSettingsSave                  = "zone:settings:save"
 	ZoneSettingsSaveLocal             = "zone:settings:save_local"
 	ZoneSettingsCancel                = "zone:settings:cancel"
+
+	// Bookmark conflict resolution zones
+	ZoneConflictKeepLocal   = "zone:conflict:keep_local"
+	ZoneConflictResetRemote = "zone:conflict:reset_remote"
+	ZoneConflictConfirm     = "zone:conflict:confirm"
+	ZoneConflictCancel      = "zone:conflict:cancel"
+
+	// Divergent commit resolution zones
+	ZoneDivergentConfirm       = "zone:divergent:confirm"
+	ZoneDivergentCancel        = "zone:divergent:cancel"
+	ZoneActionResolveDivergent = "zone:action:resolve_divergent"
 )
 
 // ZoneCommit returns the zone ID for a commit at the given index
@@ -175,4 +187,9 @@ func ZoneChangedFile(index int) string {
 // ZoneBranch returns the zone ID for a branch at the given index
 func ZoneBranch(index int) string {
 	return fmt.Sprintf("zone:branch:%d", index)
+}
+
+// ZoneDivergentCommit returns the zone ID for a divergent commit option at the given index
+func ZoneDivergentCommit(index int) string {
+	return fmt.Sprintf("zone:divergent:commit:%d", index)
 }

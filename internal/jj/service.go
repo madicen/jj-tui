@@ -270,6 +270,110 @@ func (s *Service) DeleteBookmark(ctx context.Context, bookmarkName string) error
 	return s.runJJ(ctx, args...)
 }
 
+// ResolveBookmarkConflictKeepLocal resolves a diverged bookmark by force-pushing local to remote
+func (s *Service) ResolveBookmarkConflictKeepLocal(ctx context.Context, bookmarkName string) error {
+	// Force push the local bookmark to overwrite remote
+	args := []string{"git", "push", "--bookmark", bookmarkName, "--force"}
+	return s.runJJ(ctx, args...)
+}
+
+// ResolveBookmarkConflictResetToRemote resolves a diverged bookmark by resetting local to remote
+func (s *Service) ResolveBookmarkConflictResetToRemote(ctx context.Context, bookmarkName string) error {
+	// Set the local bookmark to match the remote
+	// This uses the @origin suffix to reference the remote version
+	args := []string{"bookmark", "set", bookmarkName, "-r", bookmarkName + "@origin"}
+	return s.runJJ(ctx, args...)
+}
+
+// GetBookmarkConflictInfo retrieves information about a conflicted bookmark
+// Returns local commit ID, remote commit ID, local summary, remote summary
+func (s *Service) GetBookmarkConflictInfo(ctx context.Context, bookmarkName string) (localID, remoteID, localSummary, remoteSummary string, err error) {
+	// Get local bookmark info
+	localOut, err := s.runJJOutput(ctx, "log", "-r", bookmarkName, "--no-graph", "-T", `change_id.short(8) ++ "|" ++ if(description, description.first_line(), "(no description)")`)
+	if err != nil {
+		return "", "", "", "", fmt.Errorf("failed to get local bookmark info: %w", err)
+	}
+	localParts := strings.SplitN(strings.TrimSpace(localOut), "|", 2)
+	if len(localParts) >= 2 {
+		localID = localParts[0]
+		localSummary = localParts[1]
+	} else if len(localParts) == 1 {
+		localID = localParts[0]
+	}
+
+	// Get remote bookmark info
+	remoteOut, err := s.runJJOutput(ctx, "log", "-r", bookmarkName+"@origin", "--no-graph", "-T", `change_id.short(8) ++ "|" ++ if(description, description.first_line(), "(no description)")`)
+	if err != nil {
+		return localID, "", localSummary, "", fmt.Errorf("failed to get remote bookmark info: %w", err)
+	}
+	remoteParts := strings.SplitN(strings.TrimSpace(remoteOut), "|", 2)
+	if len(remoteParts) >= 2 {
+		remoteID = remoteParts[0]
+		remoteSummary = remoteParts[1]
+	} else if len(remoteParts) == 1 {
+		remoteID = remoteParts[0]
+	}
+
+	return localID, remoteID, localSummary, remoteSummary, nil
+}
+
+// GetDivergentCommitInfo retrieves information about all versions of a divergent change ID
+// Returns slice of commit IDs and their summaries
+func (s *Service) GetDivergentCommitInfo(ctx context.Context, changeID string) (commitIDs []string, summaries []string, err error) {
+	// Query all commits with this change ID using change_id() function
+	// This is required for divergent change IDs - jj won't accept bare change ID
+	// Format: commit_id|summary\n for each version
+	template := `commit_id.short(12) ++ "|" ++ if(description, description.first_line(), "(no description)") ++ "\n"`
+	out, err := s.runJJOutput(ctx, "log", "-r", fmt.Sprintf("change_id(%s)", changeID), "--no-graph", "-T", template)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get divergent commit info: %w", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "|", 2)
+		if len(parts) >= 2 {
+			commitIDs = append(commitIDs, strings.TrimSpace(parts[0]))
+			summaries = append(summaries, strings.TrimSpace(parts[1]))
+		} else if len(parts) == 1 {
+			commitIDs = append(commitIDs, strings.TrimSpace(parts[0]))
+			summaries = append(summaries, "(no description)")
+		}
+	}
+
+	if len(commitIDs) < 2 {
+		return nil, nil, fmt.Errorf("commit is not divergent (only %d version found)", len(commitIDs))
+	}
+
+	return commitIDs, summaries, nil
+}
+
+// ResolveDivergentCommit resolves a divergent commit by keeping one version and abandoning others
+// keepCommitID is the commit hash (not change ID) to keep
+func (s *Service) ResolveDivergentCommit(ctx context.Context, changeID, keepCommitID string) error {
+	// Get all commit IDs for this change ID
+	commitIDs, _, err := s.GetDivergentCommitInfo(ctx, changeID)
+	if err != nil {
+		return err
+	}
+
+	// Abandon all versions except the one we want to keep
+	for _, commitID := range commitIDs {
+		if commitID != keepCommitID {
+			err := s.runJJ(ctx, "abandon", commitID)
+			if err != nil {
+				return fmt.Errorf("failed to abandon commit %s: %w", commitID, err)
+			}
+		}
+	}
+
+	return nil
+}
+
 // SquashCommit squashes a commit into its parent
 func (s *Service) SquashCommit(ctx context.Context, commitID string) error {
 	// Get the description of the commit being squashed
@@ -540,8 +644,8 @@ func (s *Service) cleanupAfterFetch(ctx context.Context) error {
 // These are commits auto-created by jj to keep the working copy valid
 func (s *Service) abandonOrphanedEmptyCommits(ctx context.Context) error {
 	// Find empty, mutable commits with no bookmarks
-	// Exclude: the working copy (@), commits on bookmarks
-	orphans, _ := s.runJJOutput(ctx, "log", "-r", "empty() & mutable() & ~bookmarks() & ~@", "--no-graph", "-T", "change_id")
+	// Exclude: the working copy (@), commits on bookmarks, divergent commits (can't abandon directly)
+	orphans, _ := s.runJJOutput(ctx, "log", "-r", "empty() & mutable() & ~bookmarks() & ~@ & ~divergent()", "--no-graph", "-T", "change_id")
 	if strings.TrimSpace(orphans) == "" {
 		return nil
 	}
@@ -550,6 +654,7 @@ func (s *Service) abandonOrphanedEmptyCommits(ctx context.Context) error {
 	for _, changeID := range strings.Split(strings.TrimSpace(orphans), "\n") {
 		changeID = strings.TrimSpace(changeID)
 		if changeID != "" {
+			// Silently ignore errors (e.g., if commit became divergent between query and abandon)
 			_ = s.runJJ(ctx, "abandon", changeID)
 		}
 	}
@@ -561,7 +666,7 @@ func (s *Service) abandonOrphanedEmptyCommits(ctx context.Context) error {
 func (s *Service) getCommitGraph(ctx context.Context) (*models.CommitGraph, error) {
 	// Use a custom template with a unique marker to separate graph prefix from data
 	// The marker "<<<COMMIT>>>" lets us identify where the graph ends and data begins
-	// Format after marker: change_id|commit_id|author|date|description|parents|bookmarks|is_working|has_conflict|immutable
+	// Format after marker: change_id|commit_id|author|date|description|parents|bookmarks|is_working|has_conflict|immutable|divergent
 	template := `concat(
 		"<<<COMMIT>>>",
 		change_id.short(8), "|",
@@ -573,7 +678,8 @@ func (s *Service) getCommitGraph(ctx context.Context) (*models.CommitGraph, erro
 		bookmarks.join(","), "|",
 		if(self.current_working_copy(), "true", "false"), "|",
 		if(self.conflict(), "true", "false"), "|",
-		if(immutable, "true", "false"),
+		if(immutable, "true", "false"), "|",
+		if(divergent, "true", "false"),
 		"\n"
 	)`
 
@@ -625,7 +731,7 @@ func (s *Service) getCommitGraph(ctx context.Context) (*models.CommitGraph, erro
 		data := line[markerIdx+len("<<<COMMIT>>>"):]
 
 		parts := strings.Split(data, "|")
-		if len(parts) < 10 {
+		if len(parts) < 11 {
 			continue
 		}
 
@@ -639,6 +745,7 @@ func (s *Service) getCommitGraph(ctx context.Context) (*models.CommitGraph, erro
 		isWorking := strings.TrimSpace(parts[7]) == "true"
 		hasConflict := strings.TrimSpace(parts[8]) == "true"
 		isImmutable := strings.TrimSpace(parts[9]) == "true"
+		isDivergent := strings.TrimSpace(parts[10]) == "true"
 
 		// Parse parents
 		var parents []string
@@ -649,12 +756,20 @@ func (s *Service) getCommitGraph(ctx context.Context) (*models.CommitGraph, erro
 		// Parse branches/bookmarks
 		// Strip @remote suffixes (e.g., "main@origin" -> "main")
 		// Strip * suffix (indicates current bookmark)
+		// Track ? suffix (indicates conflicted/diverged bookmark)
 		var branches []string
+		var conflictedBranches []string
 		if branchesStr != "" {
 			for _, b := range strings.Split(branchesStr, ",") {
 				b = strings.TrimSpace(b)
 				// Remove * suffix (current bookmark indicator)
 				b = strings.TrimSuffix(b, "*")
+				// Check for ? suffix (conflicted bookmark) before stripping
+				isConflicted := strings.Contains(b, "?")
+				// Remove ? suffixes (conflicted bookmark indicator)
+				for strings.HasSuffix(b, "?") {
+					b = strings.TrimSuffix(b, "?")
+				}
 				// Remove @remote suffix if present (e.g., "feature@origin" -> "feature")
 				if idx := strings.Index(b, "@"); idx > 0 {
 					b = b[:idx]
@@ -669,6 +784,9 @@ func (s *Service) getCommitGraph(ctx context.Context) (*models.CommitGraph, erro
 				}
 				if !found && b != "" {
 					branches = append(branches, b)
+					if isConflicted {
+						conflictedBranches = append(conflictedBranches, b)
+					}
 				}
 			}
 		}
@@ -680,20 +798,22 @@ func (s *Service) getCommitGraph(ctx context.Context) (*models.CommitGraph, erro
 		}
 
 		commit := models.Commit{
-			ID:          commitID,
-			ShortID:     commitID,
-			ChangeID:    changeID,
-			Author:      author,
-			Email:       author,
-			Date:        date,
-			Summary:     description,
-			Description: description,
-			Parents:     parents,
-			Branches:    branches,
-			IsWorking:   isWorking,
-			Conflicts:   hasConflict,
-			Immutable:   isImmutable,
-			GraphPrefix: graphPrefix,
+			ID:                 commitID,
+			ShortID:            commitID,
+			ChangeID:           changeID,
+			Author:             author,
+			Email:              author,
+			Date:               date,
+			Summary:            description,
+			Description:        description,
+			Parents:            parents,
+			Branches:           branches,
+			ConflictedBranches: conflictedBranches,
+			IsWorking:          isWorking,
+			Conflicts:          hasConflict,
+			Immutable:          isImmutable,
+			Divergent:          isDivergent,
+			GraphPrefix:        graphPrefix,
 		}
 
 		commits = append(commits, commit)
@@ -903,18 +1023,27 @@ func (s *Service) ListBranches(ctx context.Context, statsLimit int) ([]models.Br
 			// Check if this is a local branch with commit info
 			// Format: "branch-name: change_id commit_id description"
 			// or "branch-name (deleted)"
+			// May have ? suffix indicating conflict (local/remote diverged)
 			colonIdx := strings.Index(line, ":")
 			if colonIdx > 0 && !isDeleted {
 				// Local branch with commit info on same line
-				currentBranch = strings.TrimSpace(line[:colonIdx])
+				rawBranchName := strings.TrimSpace(line[:colonIdx])
+				// Check for conflict indicator (? suffix) before cleaning
+				hasConflict := strings.Contains(rawBranchName, "?")
+				// Clean the branch name (strip * and ? suffixes)
+				currentBranch = strings.TrimSuffix(rawBranchName, "*")
+				for strings.HasSuffix(currentBranch, "?") {
+					currentBranch = strings.TrimSuffix(currentBranch, "?")
+				}
 				commitInfo := strings.TrimSpace(line[colonIdx+1:])
 				changeID, shortID := parseCommitInfo(commitInfo)
 
 				branches = append(branches, models.Branch{
-					Name:     currentBranch,
-					CommitID: changeID,
-					ShortID:  shortID,
-					IsLocal:  true,
+					Name:        currentBranch,
+					CommitID:    changeID,
+					ShortID:     shortID,
+					IsLocal:     true,
+					HasConflict: hasConflict,
 				})
 			} else if isDeleted {
 				// Deleted local branch - extract name

@@ -6,23 +6,25 @@ import (
 
 // Commit represents a jujutsu commit
 type Commit struct {
-	ID          string    `json:"id"`
-	ShortID     string    `json:"short_id"`
-	ChangeID    string    `json:"change_id"`
-	Author      string    `json:"author"`
-	Email       string    `json:"email"`
-	Date        time.Time `json:"date"`
-	Summary     string    `json:"summary"`
-	Description string    `json:"description"`
-	Parents     []string  `json:"parents"`
-	Children    []string  `json:"children"`
-	Branches    []string  `json:"branches"`
-	Tags        []string  `json:"tags"`
-	IsWorking   bool      `json:"is_working"`
-	Conflicts   bool      `json:"conflicts"`
-	Immutable   bool      `json:"immutable"`
-	GraphPrefix string    `json:"graph_prefix"` // ASCII art graph prefix from jj (e.g., "│ ○  ")
-	GraphLines  []string  `json:"graph_lines"`  // Connector lines after this commit (e.g., ["│", "├─╯"])
+	ID                 string    `json:"id"`
+	ShortID            string    `json:"short_id"`
+	ChangeID           string    `json:"change_id"`
+	Author             string    `json:"author"`
+	Email              string    `json:"email"`
+	Date               time.Time `json:"date"`
+	Summary            string    `json:"summary"`
+	Description        string    `json:"description"`
+	Parents            []string  `json:"parents"`
+	Children           []string  `json:"children"`
+	Branches           []string  `json:"branches"`
+	ConflictedBranches []string  `json:"conflicted_branches"` // Bookmarks that have diverged (local vs remote)
+	Tags               []string  `json:"tags"`
+	IsWorking          bool      `json:"is_working"`
+	Conflicts          bool      `json:"conflicts"`
+	Immutable          bool      `json:"immutable"`
+	Divergent          bool      `json:"divergent"` // True if this change ID has multiple versions
+	GraphPrefix        string    `json:"graph_prefix"` // ASCII art graph prefix from jj (e.g., "│ ○  ")
+	GraphLines         []string  `json:"graph_lines"`  // Connector lines after this commit (e.g., ["│", "├─╯"])
 }
 
 // CommitGraph represents the visual structure of commits

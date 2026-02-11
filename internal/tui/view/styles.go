@@ -32,6 +32,12 @@ var (
 			Padding(0, 1).
 			MarginRight(1)
 
+	ButtonSecondaryStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#F8F8F2")).
+				Background(lipgloss.Color("#6272A4")).
+				Padding(0, 1).
+				MarginRight(1)
+
 	HelpKeyStyle = lipgloss.NewStyle().
 			Foreground(ColorPrimary).
 			Bold(true)

@@ -39,7 +39,24 @@ func (m *Model) handleAbandonCommit() (tea.Model, tea.Cmd) {
 			m.statusMessage = "Cannot abandon: commit is immutable"
 			return m, nil
 		}
+		if commit.Divergent {
+			// Show divergent commit resolution dialog
+			return m.handleResolveDivergentCommit()
+		}
 		return m, m.abandonCommit()
+	}
+	return m, nil
+}
+
+func (m *Model) handleResolveDivergentCommit() (tea.Model, tea.Cmd) {
+	if m.isSelectedCommitValid() && m.jjService != nil {
+		commit := m.repository.Graph.Commits[m.selectedCommit]
+		if !commit.Divergent {
+			m.statusMessage = "This commit is not divergent"
+			return m, nil
+		}
+		m.statusMessage = "Loading divergent commit info..."
+		return m, m.loadDivergentCommitInfo(commit.ChangeID)
 	}
 	return m, nil
 }
@@ -201,8 +218,29 @@ func (m *Model) handleDeleteBranchBookmark() (tea.Model, tea.Cmd) {
 		m.statusMessage = "Can only delete local bookmarks"
 		return m, nil
 	}
+	// If the branch has a conflict, prompt user to resolve it first
+	if branch.HasConflict {
+		m.statusMessage = "This bookmark has diverged. Resolve the conflict first (press 'c')."
+		return m, nil
+	}
 	m.statusMessage = fmt.Sprintf("Deleting bookmark %s...", branch.Name)
 	return m, m.deleteBranchBookmark(branch.Name)
+}
+
+func (m *Model) handleResolveBookmarkConflict() (tea.Model, tea.Cmd) {
+	if m.viewMode != ViewBranches || len(m.branchList) == 0 {
+		return m, nil
+	}
+	if m.selectedBranch < 0 || m.selectedBranch >= len(m.branchList) {
+		return m, nil
+	}
+	branch := m.branchList[m.selectedBranch]
+	if !branch.HasConflict {
+		m.statusMessage = "This bookmark is not conflicted"
+		return m, nil
+	}
+	m.statusMessage = "Loading conflict info..."
+	return m, m.loadBookmarkConflictInfo(branch.Name)
 }
 
 func (m *Model) handlePushBranch() (tea.Model, tea.Cmd) {

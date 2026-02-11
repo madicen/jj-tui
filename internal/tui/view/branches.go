@@ -106,6 +106,13 @@ func (r *Renderer) Branches(data BranchData) BranchResult {
 			actionButtons = append(actionButtons,
 				r.Mark(ZoneBranchDelete, ButtonStyle.Render("Delete (x)")),
 			)
+			// Show resolve conflict button if branch has diverged
+			if branch.HasConflict {
+				conflictBtnStyle := ButtonStyle.Background(lipgloss.Color("#FF5555"))
+				actionButtons = append(actionButtons,
+					r.Mark(ZoneBranchResolveConflict, conflictBtnStyle.Render("Resolve Conflict (c)")),
+				)
+			}
 		} else if branch.IsTracked {
 			// Tracked remote branch: can untrack
 			actionButtons = append(actionButtons,
@@ -291,12 +298,19 @@ func (r *Renderer) renderGraphBranch(branch models.Branch, idx int, isSelected, 
 		nodeChar = "◆"
 	}
 
+	// Add conflict indicator for diverged bookmarks
+	conflictIndicator := ""
+	if branch.HasConflict {
+		conflictIndicator = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555")).Render(" ⚠ diverged")
+	}
+
 	// Build the branch line with clickable zone
-	branchLine := fmt.Sprintf("    %s─%s %s%s",
+	branchLine := fmt.Sprintf("    %s─%s %s%s%s",
 		trunkStyle.Render(connector),
 		nodeStyle.Render(nodeChar),
 		nameStyle.Render(branchName),
 		status,
+		conflictIndicator,
 	)
 
 	return r.Mark(ZoneBranch(idx), branchLine)

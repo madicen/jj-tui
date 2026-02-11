@@ -280,6 +280,10 @@ func (m *Model) renderContent() string {
 			content = m.renderCreateBookmark()
 		case ViewGitHubLogin:
 			content = m.renderGitHubLogin()
+		case ViewBookmarkConflict:
+			content = m.renderBookmarkConflict()
+		case ViewDivergentCommit:
+			content = m.renderDivergentCommit()
 		}
 	}
 
@@ -676,6 +680,28 @@ func (m *Model) renderCreateBookmark() string {
 		SelectedBookmark:  m.selectedBookmarkIdx,
 		FromJira:          m.bookmarkFromJira,
 		JiraTicketKey:     m.bookmarkJiraTicketKey,
+	})
+}
+
+// renderBookmarkConflict renders the bookmark conflict resolution view
+func (m *Model) renderBookmarkConflict() string {
+	return m.renderer().BookmarkConflict(view.BookmarkConflictData{
+		BookmarkName:   m.conflictBookmarkName,
+		LocalCommitID:  m.conflictLocalCommitID,
+		RemoteCommitID: m.conflictRemoteCommitID,
+		LocalSummary:   m.conflictLocalSummary,
+		RemoteSummary:  m.conflictRemoteSummary,
+		SelectedOption: m.conflictSelectedOption,
+	})
+}
+
+// renderDivergentCommit renders the divergent commit resolution view
+func (m *Model) renderDivergentCommit() string {
+	return m.renderer().DivergentCommit(view.DivergentCommitData{
+		ChangeID:    m.divergentChangeID,
+		CommitIDs:   m.divergentCommitIDs,
+		Summaries:   m.divergentCommitSummaries,
+		SelectedIdx: m.divergentSelectedIdx,
 	})
 }
 

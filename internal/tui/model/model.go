@@ -96,6 +96,20 @@ type Model struct {
 	// Advanced settings state
 	confirmingCleanup string // "" = not confirming, "delete_bookmarks", "abandon_old_commits"
 
+	// Bookmark conflict resolution state
+	conflictBookmarkName   string // Name of the conflicted bookmark
+	conflictLocalCommitID  string // Local commit ID
+	conflictRemoteCommitID string // Remote commit ID
+	conflictLocalSummary   string // Local commit summary
+	conflictRemoteSummary  string // Remote commit summary
+	conflictSelectedOption int    // 0=Keep Local, 1=Reset to Remote
+
+	// Divergent commit resolution state
+	divergentChangeID       string   // The change ID that's divergent
+	divergentCommitIDs      []string // All commit hashes sharing this change ID
+	divergentCommitSummaries []string // Summary of each divergent commit
+	divergentSelectedIdx    int      // Which commit to keep (0-indexed)
+
 	// PR creation state
 	prTitleInput        textinput.Model
 	prBodyInput         textarea.Model
@@ -646,6 +660,60 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusMessage = fmt.Sprintf("Bookmark '%s' deleted", msg.bookmarkName)
 		// Reload repository to update the view
 		return m, tea.Batch(m.loadRepository(), m.loadPRs())
+
+	case bookmarkConflictInfoMsg:
+		if msg.err != nil {
+			m.statusMessage = fmt.Sprintf("Error loading conflict info: %v", msg.err)
+			m.viewMode = ViewBranches
+			return m, nil
+		}
+		// Populate conflict state and show the dialog
+		m.conflictBookmarkName = msg.bookmarkName
+		m.conflictLocalCommitID = msg.localID
+		m.conflictRemoteCommitID = msg.remoteID
+		m.conflictLocalSummary = msg.localSummary
+		m.conflictRemoteSummary = msg.remoteSummary
+		m.conflictSelectedOption = 0 // Default to "Keep Local"
+		m.viewMode = ViewBookmarkConflict
+		return m, nil
+
+	case bookmarkConflictResolvedMsg:
+		if msg.err != nil {
+			m.statusMessage = fmt.Sprintf("Error resolving conflict: %v", msg.err)
+		} else {
+			resolutionDesc := "kept local version"
+			if msg.resolution == "reset_remote" {
+				resolutionDesc = "reset to remote"
+			}
+			m.statusMessage = fmt.Sprintf("Bookmark '%s' conflict resolved (%s)", msg.bookmarkName, resolutionDesc)
+		}
+		m.viewMode = ViewBranches
+		// Reload branches to reflect the change
+		return m, tea.Batch(m.loadRepository(), m.loadBranches())
+
+	case divergentCommitInfoMsg:
+		if msg.err != nil {
+			m.statusMessage = fmt.Sprintf("Error loading divergent info: %v", msg.err)
+			m.viewMode = ViewCommitGraph
+			return m, nil
+		}
+		// Populate divergent state and show the dialog
+		m.divergentChangeID = msg.changeID
+		m.divergentCommitIDs = msg.commitIDs
+		m.divergentCommitSummaries = msg.summaries
+		m.divergentSelectedIdx = 0 // Default to first option
+		m.viewMode = ViewDivergentCommit
+		return m, nil
+
+	case divergentCommitResolvedMsg:
+		if msg.err != nil {
+			m.statusMessage = fmt.Sprintf("Error resolving divergent commit: %v", msg.err)
+		} else {
+			m.statusMessage = fmt.Sprintf("Divergent commit resolved (kept %s)", msg.keptCommitID)
+		}
+		m.viewMode = ViewCommitGraph
+		// Reload repository to reflect the change
+		return m, m.loadRepository()
 
 	case fileMoveCompletedMsg:
 		// Save the ChangeID of the commit we were working on before updating

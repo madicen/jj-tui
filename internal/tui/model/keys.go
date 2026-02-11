@@ -54,6 +54,16 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleCreateBookmarkKeyMsg(msg)
 	}
 
+	// Special handling for bookmark conflict resolution view
+	if m.viewMode == ViewBookmarkConflict {
+		return m.handleBookmarkConflictKeyMsg(msg)
+	}
+
+	// Special handling for divergent commit resolution view
+	if m.viewMode == ViewDivergentCommit {
+		return m.handleDivergentCommitKeyMsg(msg)
+	}
+
 	// Special handling for GitHub login view
 	if m.viewMode == ViewGitHubLogin {
 		if msg.String() == "esc" {
@@ -214,6 +224,10 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		if m.viewMode == ViewCommitGraph {
 			return m.handleCreatePR()
+		}
+		// Resolve bookmark conflict (Branches view)
+		if m.viewMode == ViewBranches {
+			return m.handleResolveBookmarkConflict()
 		}
 	case "i":
 		// Set ticket to "In Progress" (Tickets view only, requires status change mode)
@@ -400,6 +414,85 @@ func (m *Model) handleCreateBookmarkKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 		return m, nil
 	}
 
+	return m, nil
+}
+
+// handleBookmarkConflictKeyMsg handles keyboard input in bookmark conflict resolution mode
+func (m *Model) handleBookmarkConflictKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		// Cancel and return to branches view
+		m.viewMode = ViewBranches
+		m.statusMessage = "Conflict resolution cancelled"
+		return m, nil
+	case "enter":
+		// Confirm the selected resolution
+		resolution := "keep_local"
+		if m.conflictSelectedOption == 1 {
+			resolution = "reset_remote"
+		}
+		m.statusMessage = "Resolving bookmark conflict..."
+		return m, m.resolveBookmarkConflict(m.conflictBookmarkName, resolution)
+	case "j", "down":
+		// Navigate down (select "Reset to Remote")
+		if m.conflictSelectedOption < 1 {
+			m.conflictSelectedOption = 1
+		}
+		return m, nil
+	case "k", "up":
+		// Navigate up (select "Keep Local")
+		if m.conflictSelectedOption > 0 {
+			m.conflictSelectedOption = 0
+		}
+		return m, nil
+	case "l", "L":
+		// Quick select "Keep Local"
+		m.conflictSelectedOption = 0
+		return m, nil
+	case "r", "R":
+		// Quick select "Reset to Remote"
+		m.conflictSelectedOption = 1
+		return m, nil
+	}
+	return m, nil
+}
+
+// handleDivergentCommitKeyMsg handles keyboard input in divergent commit resolution mode
+func (m *Model) handleDivergentCommitKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		// Cancel and return to graph view
+		m.viewMode = ViewCommitGraph
+		m.statusMessage = "Divergent commit resolution cancelled"
+		return m, nil
+	case "enter":
+		// Confirm the selected version to keep
+		if len(m.divergentCommitIDs) == 0 || m.divergentSelectedIdx >= len(m.divergentCommitIDs) {
+			return m, nil
+		}
+		keepCommitID := m.divergentCommitIDs[m.divergentSelectedIdx]
+		m.statusMessage = "Resolving divergent commit..."
+		return m, m.resolveDivergentCommit(m.divergentChangeID, keepCommitID)
+	case "j", "down":
+		// Navigate down
+		if m.divergentSelectedIdx < len(m.divergentCommitIDs)-1 {
+			m.divergentSelectedIdx++
+		}
+		return m, nil
+	case "k", "up":
+		// Navigate up
+		if m.divergentSelectedIdx > 0 {
+			m.divergentSelectedIdx--
+		}
+		return m, nil
+	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
+		// Quick select by number
+		idx := int(msg.String()[0] - '1')
+		if idx >= 0 && idx < len(m.divergentCommitIDs) {
+			m.divergentSelectedIdx = idx
+		}
+		return m, nil
+	}
 	return m, nil
 }
 

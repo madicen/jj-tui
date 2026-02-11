@@ -48,7 +48,9 @@ const (
 	ViewCreatePR
 	ViewEditDescription
 	ViewCreateBookmark
-	ViewGitHubLogin // GitHub Device Flow login
+	ViewGitHubLogin          // GitHub Device Flow login
+	ViewBookmarkConflict     // Bookmark conflict resolution dialog
+	ViewDivergentCommit      // Divergent commit resolution dialog
 )
 
 func (v ViewMode) String() string {
@@ -73,6 +75,10 @@ func (v ViewMode) String() string {
 		return "create_bookmark"
 	case ViewGitHubLogin:
 		return "github_login"
+	case ViewBookmarkConflict:
+		return "bookmark_conflict"
+	case ViewDivergentCommit:
+		return "divergent_commit"
 	default:
 		return "unknown"
 	}
