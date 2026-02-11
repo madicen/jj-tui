@@ -666,14 +666,19 @@ func (m *Model) loadBranches() tea.Cmd {
 		}
 
 		// Sort branches for the tree visualization:
-		// 1. Ahead branches first (most ahead at top) - these appear ABOVE trunk
-		// 2. Behind/at-trunk branches next (least behind at top) - these appear BELOW trunk
-		// Within each group: local before remote, then alphabetically
+		// 1. Local branches first, then remote branches
+		// 2. Within each group: ahead branches first, then behind/at-trunk
+		// 3. Ahead sorted by count descending, behind sorted by count ascending
 		sort.Slice(branches, func(i, j int) bool {
+			// First: local before remote
+			if branches[i].IsLocal != branches[j].IsLocal {
+				return branches[i].IsLocal
+			}
+
+			// Within same locality group: ahead branches first
 			iAhead := branches[i].Ahead > 0 && branches[i].Behind == 0
 			jAhead := branches[j].Ahead > 0 && branches[j].Behind == 0
 
-			// Ahead branches come before behind/at-trunk branches
 			if iAhead != jAhead {
 				return iAhead
 			}
@@ -684,11 +689,7 @@ func (m *Model) loadBranches() tea.Cmd {
 					return branches[i].Ahead > branches[j].Ahead
 				}
 			} else {
-				// Both behind/at-trunk: local before remote
-				if branches[i].IsLocal != branches[j].IsLocal {
-					return branches[i].IsLocal
-				}
-				// Then by behind count ascending (closest to trunk first)
+				// Both behind/at-trunk: sort by behind count ascending (closest to trunk first)
 				if branches[i].Behind != branches[j].Behind {
 					return branches[i].Behind < branches[j].Behind
 				}
