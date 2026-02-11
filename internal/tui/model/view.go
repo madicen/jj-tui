@@ -227,7 +227,7 @@ func (m *Model) renderHeader() string {
 		m.zoneManager.Mark(ZoneTabGraph, m.renderTab("Graph (g)", m.viewMode == ViewCommitGraph)),
 		m.zoneManager.Mark(ZoneTabPRs, m.renderTab("PRs (p)", m.viewMode == ViewPullRequests)),
 		m.zoneManager.Mark(ZoneTabJira, m.renderTab("Tickets (t)", m.viewMode == ViewTickets)),
-		m.zoneManager.Mark(ZoneTabBranches, m.renderTab("Branches (R)", m.viewMode == ViewBranches)),
+		m.zoneManager.Mark(ZoneTabBranches, m.renderTab("Branches (b)", m.viewMode == ViewBranches)),
 		m.zoneManager.Mark(ZoneTabSettings, m.renderTab("Settings (,)", m.viewMode == ViewSettings)),
 		m.zoneManager.Mark(ZoneTabHelp, m.renderTab("Help (h)", m.viewMode == ViewHelp)),
 	}

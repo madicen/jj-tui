@@ -180,7 +180,7 @@ func (r *Renderer) Graph(data GraphData) GraphResult {
 					r.Mark(ZoneActionSquash, ButtonStyle.Render("Squash (s)")),
 					r.Mark(ZoneActionRebase, ButtonStyle.Render("Rebase (r)")),
 					r.Mark(ZoneActionAbandon, ButtonStyle.Render("Abandon (a)")),
-					r.Mark(ZoneActionBookmark, ButtonStyle.Render("Bookmark (b)")),
+					r.Mark(ZoneActionBookmark, ButtonStyle.Render("Bookmark (m)")),
 				)
 
 				// Show delete bookmark button if commit has bookmarks
