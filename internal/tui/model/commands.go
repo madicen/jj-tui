@@ -354,7 +354,7 @@ func (m *Model) loadTickets() tea.Cmd {
 			}
 
 			if excludedStr != "" {
-				for _, status := range strings.Split(excludedStr, ",") {
+				for status := range strings.SplitSeq(excludedStr, ",") {
 					status = strings.TrimSpace(strings.ToLower(status))
 					if status != "" {
 						excludedStatuses[status] = true
