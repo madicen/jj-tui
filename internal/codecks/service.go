@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/madicen/jj-tui/internal/tickets"
@@ -259,6 +260,12 @@ func (s *Service) GetAssignedTickets(ctx context.Context) ([]tickets.Ticket, err
 	return s.getAllCards(ctx)
 }
 
+// ticketWithSeq holds a ticket with its sequence number for sorting
+type ticketWithSeq struct {
+	ticket     tickets.Ticket
+	accountSeq int
+}
+
 // getAllCards fetches all cards from the account (no project filter)
 func (s *Service) getAllCards(ctx context.Context) ([]tickets.Ticket, error) {
 	query := map[string]any{
@@ -266,14 +273,14 @@ func (s *Service) getAllCards(ctx context.Context) ([]tickets.Ticket, error) {
 			"_root": []any{
 				map[string]any{
 					"account": []any{
-						                        map[string]interface{}{
-						                            "cards": []string{"title", "status", "priority", "content", "accountSeq", "visibility", "deck"},
-						                        },
-						                    },
-						                },
-						            },
-						        },
-						    }
+						map[string]interface{}{
+							"cards": []string{"title", "status", "priority", "content", "accountSeq", "visibility", "deck"},
+						},
+					},
+				},
+			},
+		},
+	}
 	respBody, err := s.doRequest(ctx, query)
 	if err != nil {
 		return nil, err
@@ -289,7 +296,7 @@ func (s *Service) getAllCards(ctx context.Context) ([]tickets.Ticket, error) {
 		return nil, fmt.Errorf("unexpected response format: missing 'card' object")
 	}
 
-	ticketList := make([]tickets.Ticket, 0)
+	ticketsWithSeqs := make([]ticketWithSeq, 0)
 	for cardID, cardData := range cardsMap {
 		cardMap, ok := cardData.(map[string]any)
 		if !ok {
@@ -308,16 +315,30 @@ func (s *Service) getAllCards(ctx context.Context) ([]tickets.Ticket, error) {
 		accountSeq := getInt(cardMap, "accountSeq")
 		displayKey := "$" + encodeShortID(accountSeq)
 
-		ticketList = append(ticketList, tickets.Ticket{
-			Key:         cardID,
-			DisplayKey:  displayKey,
-			Summary:     getString(cardMap, "title"),
-			Status:      mapCodecksStatus(status),
-			Priority:    mapCodecksPriority(getString(cardMap, "priority")),
-			Type:        "Card",
-			Description: getString(cardMap, "content"),
-			DeckID:      getString(cardMap, "deck"),
+		ticketsWithSeqs = append(ticketsWithSeqs, ticketWithSeq{
+			ticket: tickets.Ticket{
+				Key:         cardID,
+				DisplayKey:  displayKey,
+				Summary:     getString(cardMap, "title"),
+				Status:      mapCodecksStatus(status),
+				Priority:    mapCodecksPriority(getString(cardMap, "priority")),
+				Type:        "Card",
+				Description: getString(cardMap, "content"),
+				DeckID:      getString(cardMap, "deck"),
+			},
+			accountSeq: accountSeq,
 		})
+	}
+
+	// Sort by accountSeq descending (higher seq = more recently created)
+	sort.Slice(ticketsWithSeqs, func(i, j int) bool {
+		return ticketsWithSeqs[i].accountSeq > ticketsWithSeqs[j].accountSeq
+	})
+
+	// Extract just the tickets
+	ticketList := make([]tickets.Ticket, len(ticketsWithSeqs))
+	for i, tws := range ticketsWithSeqs {
+		ticketList[i] = tws.ticket
 	}
 
 	return ticketList, nil
@@ -332,21 +353,32 @@ func (s *Service) getCardsFromProject(ctx context.Context, projectID string) ([]
 	}
 
 	// Query cards from each deck
-	ticketList := make([]tickets.Ticket, 0)
+	ticketsWithSeqs := make([]ticketWithSeq, 0)
 	for _, deckID := range deckIDs {
 		cards, err := s.getCardsFromDeck(ctx, deckID)
 		if err != nil {
 			// Skip decks that fail to load
 			continue
 		}
-		ticketList = append(ticketList, cards...)
+		ticketsWithSeqs = append(ticketsWithSeqs, cards...)
+	}
+
+	// Sort by accountSeq descending (higher seq = more recently created)
+	sort.Slice(ticketsWithSeqs, func(i, j int) bool {
+		return ticketsWithSeqs[i].accountSeq > ticketsWithSeqs[j].accountSeq
+	})
+
+	// Extract just the tickets
+	ticketList := make([]tickets.Ticket, len(ticketsWithSeqs))
+	for i, tws := range ticketsWithSeqs {
+		ticketList[i] = tws.ticket
 	}
 
 	return ticketList, nil
 }
 
 // getCardsFromDeck fetches cards from a specific deck
-func (s *Service) getCardsFromDeck(ctx context.Context, deckID string) ([]tickets.Ticket, error) {
+func (s *Service) getCardsFromDeck(ctx context.Context, deckID string) ([]ticketWithSeq, error) {
 	query := map[string]any{
 		"query": map[string]any{
 			fmt.Sprintf("deck(%s)", deckID): []interface{}{
@@ -369,10 +401,10 @@ func (s *Service) getCardsFromDeck(ctx context.Context, deckID string) ([]ticket
 
 	cardsMap, ok := rawResult["card"].(map[string]any)
 	if !ok {
-		return []tickets.Ticket{}, nil
+		return []ticketWithSeq{}, nil
 	}
 
-	ticketList := make([]tickets.Ticket, 0)
+	ticketsWithSeqs := make([]ticketWithSeq, 0)
 	for cardID, cardData := range cardsMap {
 		cardMap, ok := cardData.(map[string]any)
 		if !ok {
@@ -391,19 +423,22 @@ func (s *Service) getCardsFromDeck(ctx context.Context, deckID string) ([]ticket
 		accountSeq := getInt(cardMap, "accountSeq")
 		displayKey := "$" + encodeShortID(accountSeq)
 
-		ticketList = append(ticketList, tickets.Ticket{
-			Key:         cardID,
-			DisplayKey:  displayKey,
-			Summary:     getString(cardMap, "title"),
-			Status:      mapCodecksStatus(status),
-			Priority:    mapCodecksPriority(getString(cardMap, "priority")),
-			Type:        "Card",
-			Description: getString(cardMap, "content"),
-			DeckID:      deckID, // Already known from the query
+		ticketsWithSeqs = append(ticketsWithSeqs, ticketWithSeq{
+			ticket: tickets.Ticket{
+				Key:         cardID,
+				DisplayKey:  displayKey,
+				Summary:     getString(cardMap, "title"),
+				Status:      mapCodecksStatus(status),
+				Priority:    mapCodecksPriority(getString(cardMap, "priority")),
+				Type:        "Card",
+				Description: getString(cardMap, "content"),
+				DeckID:      deckID, // Already known from the query
+			},
+			accountSeq: accountSeq,
 		})
 	}
 
-	return ticketList, nil
+	return ticketsWithSeqs, nil
 }
 
 // getString safely extracts a string from a map
@@ -421,6 +456,7 @@ func getInt(m map[string]any, key string) int {
 	}
 	return 0
 }
+
 
 // slugify converts a string to a URL-friendly slug
 // Example: "Add Codecks support to jj-tui" -> "add-codecks-support-to-jj-tui"
