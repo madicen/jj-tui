@@ -3,27 +3,12 @@ package view
 import (
 	"fmt"
 	"strings"
-
-	"github.com/charmbracelet/lipgloss"
-	"github.com/madicen/jj-tui/internal/version"
 )
 
 // Help renders the help view
 func (r *Renderer) Help() string {
 	var lines []string
 
-	// Version header
-	versionStr := version.GetVersion()
-	versionLine := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("jj-tui") +
-		lipgloss.NewStyle().Foreground(ColorMuted).Render(" version " + versionStr)
-
-	// Check for updates
-	if updateInfo := version.GetUpdateInfo(); updateInfo != nil && updateInfo.UpdateAvailable {
-		versionLine += lipgloss.NewStyle().Foreground(lipgloss.Color("#FFB86C")).Render(
-			fmt.Sprintf("  (Update available: %s)", updateInfo.LatestVersion))
-	}
-
-	lines = append(lines, versionLine)
 	lines = append(lines, "")
 
 	lines = append(lines, TitleStyle.Render("Commit Graph Shortcuts"))
@@ -146,4 +131,3 @@ func (r *Renderer) Help() string {
 
 	return strings.Join(lines, "\n")
 }
-
