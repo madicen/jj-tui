@@ -13,7 +13,20 @@ type Renderer struct {
 
 // New creates a new Renderer
 func New(z *zone.Manager) *Renderer {
+	// Ensure zone manager is never nil
+	if z == nil {
+		z = zone.New()
+	}
 	return &Renderer{Zone: z}
+}
+
+// Mark safely wraps the zone manager's Mark function
+// If Zone is nil (shouldn't happen but defensive), returns content unchanged
+func (r *Renderer) Mark(id, content string) string {
+	if r == nil || r.Zone == nil {
+		return content
+	}
+	return r.Zone.Mark(id, content)
 }
 
 // ChangedFile represents a file changed in a commit

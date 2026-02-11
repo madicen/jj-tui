@@ -102,7 +102,7 @@ func (r *Renderer) Graph(data GraphData) GraphResult {
 		)
 
 		// Wrap in zone for click detection
-		graphLines = append(graphLines, r.Zone.Mark(ZoneCommit(i), style.Render(commitLine)))
+		graphLines = append(graphLines, r.Mark(ZoneCommit(i), style.Render(commitLine)))
 
 		// Render graph connector lines after this commit (if any)
 		for _, graphLine := range commit.GraphLines {
@@ -142,9 +142,9 @@ func (r *Renderer) Graph(data GraphData) GraphResult {
 
 		if isMutable {
 			fileActionButtons = append(fileActionButtons,
-				r.Zone.Mark(ZoneActionMoveFileUp, ButtonStyle.Render("Move to Parent ([)")),
-				r.Zone.Mark(ZoneActionMoveFileDown, ButtonStyle.Render("Move to Child (])")),
-				r.Zone.Mark(ZoneActionRevertFile, ButtonStyle.Render("Revert Changes (v)")),
+				r.Mark(ZoneActionMoveFileUp, ButtonStyle.Render("Move to Parent ([)")),
+				r.Mark(ZoneActionMoveFileDown, ButtonStyle.Render("Move to Child (])")),
+				r.Mark(ZoneActionRevertFile, ButtonStyle.Render("Revert Changes (v)")),
 			)
 			actionLines = append(actionLines, lipgloss.JoinHorizontal(lipgloss.Left, fileActionButtons...))
 		} else {
@@ -156,7 +156,7 @@ func (r *Renderer) Graph(data GraphData) GraphResult {
 
 		// Always show "New" action
 		actionButtons := []string{
-			r.Zone.Mark(ZoneActionNewCommit, ButtonStyle.Render("New (n)")),
+			r.Mark(ZoneActionNewCommit, ButtonStyle.Render("New (n)")),
 		}
 
 		// Add commit-specific actions if a commit is selected
@@ -167,7 +167,7 @@ func (r *Renderer) Graph(data GraphData) GraphResult {
 				// For immutable commits, only show delete bookmark if it has one
 				if len(commit.Branches) > 0 {
 					actionButtons = append(actionButtons,
-						r.Zone.Mark(ZoneActionDelBookmark, ButtonStyle.Render("Del Bookmark (x)")),
+						r.Mark(ZoneActionDelBookmark, ButtonStyle.Render("Del Bookmark (x)")),
 					)
 				}
 				actionLines = append(actionLines, lipgloss.JoinHorizontal(lipgloss.Left, actionButtons...))
@@ -175,18 +175,18 @@ func (r *Renderer) Graph(data GraphData) GraphResult {
 				actionLines = append(actionLines, lipgloss.NewStyle().Foreground(ColorMuted).Render("◆ Selected commit is immutable (pushed to remote)"))
 			} else {
 				actionButtons = append(actionButtons,
-					r.Zone.Mark(ZoneActionCheckout, ButtonStyle.Render("Edit (e)")),
-					r.Zone.Mark(ZoneActionDescribe, ButtonStyle.Render("Describe (d)")),
-					r.Zone.Mark(ZoneActionSquash, ButtonStyle.Render("Squash (s)")),
-					r.Zone.Mark(ZoneActionRebase, ButtonStyle.Render("Rebase (r)")),
-					r.Zone.Mark(ZoneActionAbandon, ButtonStyle.Render("Abandon (a)")),
-					r.Zone.Mark(ZoneActionBookmark, ButtonStyle.Render("Bookmark (b)")),
+					r.Mark(ZoneActionCheckout, ButtonStyle.Render("Edit (e)")),
+					r.Mark(ZoneActionDescribe, ButtonStyle.Render("Describe (d)")),
+					r.Mark(ZoneActionSquash, ButtonStyle.Render("Squash (s)")),
+					r.Mark(ZoneActionRebase, ButtonStyle.Render("Rebase (r)")),
+					r.Mark(ZoneActionAbandon, ButtonStyle.Render("Abandon (a)")),
+					r.Mark(ZoneActionBookmark, ButtonStyle.Render("Bookmark (b)")),
 				)
 
 				// Show delete bookmark button if commit has bookmarks
 				if len(commit.Branches) > 0 {
 					actionButtons = append(actionButtons,
-						r.Zone.Mark(ZoneActionDelBookmark, ButtonStyle.Render("Del Bookmark (x)")),
+						r.Mark(ZoneActionDelBookmark, ButtonStyle.Render("Del Bookmark (x)")),
 					)
 				}
 
@@ -204,7 +204,7 @@ func (r *Renderer) Graph(data GraphData) GraphResult {
 						buttonLabel = fmt.Sprintf("Update PR [%s] (u)", prBranch)
 					}
 					actionButtons = append(actionButtons,
-						r.Zone.Mark(ZoneActionPush, ButtonStyle.Render(buttonLabel)),
+						r.Mark(ZoneActionPush, ButtonStyle.Render(buttonLabel)),
 					)
 				} else {
 					// Check if this commit can create a PR (has a bookmark or is a descendant of one)
@@ -220,7 +220,7 @@ func (r *Renderer) Graph(data GraphData) GraphResult {
 							buttonLabel = fmt.Sprintf("Create PR [%s] (c)", createPRBranch)
 						}
 						actionButtons = append(actionButtons,
-							r.Zone.Mark(ZoneActionCreatePR, ButtonStyle.Render(buttonLabel)),
+							r.Mark(ZoneActionCreatePR, ButtonStyle.Render(buttonLabel)),
 						)
 					}
 				}
@@ -337,7 +337,7 @@ func (r *Renderer) renderTreeNode(node *fileTreeNode, indent string, lines *[]st
 			} else {
 				fileLine = fmt.Sprintf("%s%s %s", indent, statusStyle.Render(statusChar), node.name)
 			}
-			*lines = append(*lines, r.Zone.Mark(ZoneChangedFile(node.fileIndex), fileLine))
+			*lines = append(*lines, r.Mark(ZoneChangedFile(node.fileIndex), fileLine))
 		} else {
 			// Render directory
 			dirStyle := lipgloss.NewStyle().Foreground(ColorPrimary)
