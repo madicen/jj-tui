@@ -282,7 +282,7 @@ func (s *Service) getPullRequestsGraphQL(ctx context.Context, filterOpts PRFilte
 		first = filterOpts.Limit
 	}
 
-	variables := map[string]interface{}{
+	variables := map[string]any{
 		"owner":  githubv4.String(s.owner),
 		"name":   githubv4.String(s.repo),
 		"first":  githubv4.Int(first),

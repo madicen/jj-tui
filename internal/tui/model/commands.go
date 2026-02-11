@@ -24,7 +24,7 @@ import (
 // isNilInterface checks if an interface contains a nil concrete value.
 // In Go, an interface is only nil if both its type and value are nil.
 // An interface holding a nil pointer (e.g., (*Service)(nil)) is NOT nil.
-func isNilInterface(i interface{}) bool {
+func isNilInterface(i any) bool {
 	if i == nil {
 		return true
 	}
@@ -374,11 +374,6 @@ func (m *Model) loadTickets() tea.Cmd {
 				ticketList = filtered
 			}
 		}
-
-		// Sort tickets by DisplayKey descending (most recent first)
-		sort.Slice(ticketList, func(i, j int) bool {
-			return ticketList[i].DisplayKey > ticketList[j].DisplayKey
-		})
 
 		return ticketsLoadedMsg{tickets: ticketList}
 	}

@@ -89,21 +89,21 @@ func (s *Service) loadProjects(ctx context.Context) error {
 
 	// Query projects with their decks, including archived projects and deleted deck status
 	// Also fetch deck metadata (accountSeq, title) for URL construction
-	query := map[string]interface{}{
-		"query": map[string]interface{}{
-			"_root": []interface{}{
-				map[string]interface{}{
-					"account": []interface{}{
+	query := map[string]any{
+		"query": map[string]any{
+			"_root": []any{
+				map[string]any{
+					"account": []any{
 						"name",
-						map[string]interface{}{
-							"projects": []interface{}{
+						map[string]any{
+							"projects": []any{
 								"id", "name",
-								map[string]interface{}{
+								map[string]any{
 									"decks": []string{"id", "isDeleted", "accountSeq", "title"},
 								},
 							},
 						},
-						map[string]interface{}{
+						map[string]any{
 							"archivedProjects": []string{"id", "name"},
 						},
 					},
@@ -117,16 +117,16 @@ func (s *Service) loadProjects(ctx context.Context) error {
 		return err
 	}
 
-	var rawResult map[string]interface{}
+	var rawResult map[string]any
 	if err := json.Unmarshal(respBody, &rawResult); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
 
 	// Track archived projects from the account's archivedProjects relation
-	if account, ok := rawResult["account"].(map[string]interface{}); ok {
+	if account, ok := rawResult["account"].(map[string]any); ok {
 		for _, accData := range account {
-			if accMap, ok := accData.(map[string]interface{}); ok {
-				if archivedList, ok := accMap["archivedProjects"].([]interface{}); ok {
+			if accMap, ok := accData.(map[string]any); ok {
+				if archivedList, ok := accMap["archivedProjects"].([]any); ok {
 					for _, projID := range archivedList {
 						if pid, ok := projID.(string); ok {
 							archivedProjects[pid] = true
@@ -138,9 +138,9 @@ func (s *Service) loadProjects(ctx context.Context) error {
 	}
 
 	// Track deleted decks and store deck metadata for URL construction
-	if decksMap, ok := rawResult["deck"].(map[string]interface{}); ok {
+	if decksMap, ok := rawResult["deck"].(map[string]any); ok {
 		for deckID, deckData := range decksMap {
-			if deck, ok := deckData.(map[string]interface{}); ok {
+			if deck, ok := deckData.(map[string]any); ok {
 				if isDeleted, ok := deck["isDeleted"].(bool); ok && isDeleted {
 					deletedDecks[deckID] = true
 				}
@@ -159,7 +159,7 @@ func (s *Service) loadProjects(ctx context.Context) error {
 	}
 
 	// Projects are in the normalized "project" object
-	projectsMap, ok := rawResult["project"].(map[string]interface{})
+	projectsMap, ok := rawResult["project"].(map[string]any)
 	if ok {
 		for projID, projData := range projectsMap {
 			// Skip archived projects
@@ -167,12 +167,12 @@ func (s *Service) loadProjects(ctx context.Context) error {
 				continue
 			}
 
-			if proj, ok := projData.(map[string]interface{}); ok {
+			if proj, ok := projData.(map[string]any); ok {
 				if name, ok := proj["name"].(string); ok {
 					s.projectIDs[name] = projID
 				}
 				// Get deck list for this project (excluding deleted decks)
-				if deckList, ok := proj["decks"].([]interface{}); ok {
+				if deckList, ok := proj["decks"].([]any); ok {
 					for _, deckID := range deckList {
 						if did, ok := deckID.(string); ok {
 							// Skip deleted decks
@@ -206,7 +206,7 @@ func (s *Service) GetProjectFilter() string {
 }
 
 // doRequest performs an authenticated request to the Codecks API
-func (s *Service) doRequest(ctx context.Context, body interface{}) ([]byte, error) {
+func (s *Service) doRequest(ctx context.Context, body any) ([]byte, error) {
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
@@ -261,38 +261,37 @@ func (s *Service) GetAssignedTickets(ctx context.Context) ([]tickets.Ticket, err
 
 // getAllCards fetches all cards from the account (no project filter)
 func (s *Service) getAllCards(ctx context.Context) ([]tickets.Ticket, error) {
-	query := map[string]interface{}{
-		"query": map[string]interface{}{
-			"_root": []interface{}{
-				map[string]interface{}{
-					"account": []interface{}{
-						map[string]interface{}{
-							"cards": []string{"title", "status", "priority", "content", "accountSeq", "visibility", "deck"},
-						},
-					},
-				},
-			},
-		},
-	}
-
+	query := map[string]any{
+		"query": map[string]any{
+			"_root": []any{
+				map[string]any{
+					"account": []any{
+						                        map[string]interface{}{
+						                            "cards": []string{"title", "status", "priority", "content", "accountSeq", "visibility", "deck"},
+						                        },
+						                    },
+						                },
+						            },
+						        },
+						    }
 	respBody, err := s.doRequest(ctx, query)
 	if err != nil {
 		return nil, err
 	}
 
-	var rawResult map[string]interface{}
+	var rawResult map[string]any
 	if err := json.Unmarshal(respBody, &rawResult); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 
-	cardsMap, ok := rawResult["card"].(map[string]interface{})
+	cardsMap, ok := rawResult["card"].(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("unexpected response format: missing 'card' object")
 	}
 
 	ticketList := make([]tickets.Ticket, 0)
 	for cardID, cardData := range cardsMap {
-		cardMap, ok := cardData.(map[string]interface{})
+		cardMap, ok := cardData.(map[string]any)
 		if !ok {
 			continue
 		}
@@ -348,8 +347,8 @@ func (s *Service) getCardsFromProject(ctx context.Context, projectID string) ([]
 
 // getCardsFromDeck fetches cards from a specific deck
 func (s *Service) getCardsFromDeck(ctx context.Context, deckID string) ([]tickets.Ticket, error) {
-	query := map[string]interface{}{
-		"query": map[string]interface{}{
+	query := map[string]any{
+		"query": map[string]any{
 			fmt.Sprintf("deck(%s)", deckID): []interface{}{
 				map[string]interface{}{
 					"cards": []string{"title", "status", "priority", "content", "accountSeq", "visibility"},
@@ -363,19 +362,19 @@ func (s *Service) getCardsFromDeck(ctx context.Context, deckID string) ([]ticket
 		return nil, err
 	}
 
-	var rawResult map[string]interface{}
+	var rawResult map[string]any
 	if err := json.Unmarshal(respBody, &rawResult); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 
-	cardsMap, ok := rawResult["card"].(map[string]interface{})
+	cardsMap, ok := rawResult["card"].(map[string]any)
 	if !ok {
 		return []tickets.Ticket{}, nil
 	}
 
 	ticketList := make([]tickets.Ticket, 0)
 	for cardID, cardData := range cardsMap {
-		cardMap, ok := cardData.(map[string]interface{})
+		cardMap, ok := cardData.(map[string]any)
 		if !ok {
 			continue
 		}
@@ -408,7 +407,7 @@ func (s *Service) getCardsFromDeck(ctx context.Context, deckID string) ([]ticket
 }
 
 // getString safely extracts a string from a map
-func getString(m map[string]interface{}, key string) string {
+func getString(m map[string]any, key string) string {
 	if v, ok := m[key].(string); ok {
 		return v
 	}
@@ -416,7 +415,7 @@ func getString(m map[string]interface{}, key string) string {
 }
 
 // getInt safely extracts an integer from a map (handles float64 from JSON)
-func getInt(m map[string]interface{}, key string) int {
+func getInt(m map[string]any, key string) int {
 	if v, ok := m[key].(float64); ok {
 		return int(v)
 	}
@@ -516,8 +515,8 @@ func mapCodecksPriority(priority string) string {
 func (s *Service) GetTicket(ctx context.Context, key string) (*tickets.Ticket, error) {
 	// If it's a short ID, we need to find the full ID first
 	// For now, we only support full IDs in GetTicket
-	query := map[string]interface{}{
-		"query": map[string]interface{}{
+	query := map[string]any{
+		"query": map[string]any{
 			fmt.Sprintf("card(%s)", key): []string{
 				"title", "content", "status", "priority", "accountSeq", "visibility", "deck",
 			},
@@ -529,18 +528,18 @@ func (s *Service) GetTicket(ctx context.Context, key string) (*tickets.Ticket, e
 		return nil, err
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.Unmarshal(respBody, &result); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 
 	// Response is normalized: card data is in result["card"][key]
-	cardsMap, ok := result["card"].(map[string]interface{})
+	cardsMap, ok := result["card"].(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("card %s not found", key)
 	}
 
-	cardData, ok := cardsMap[key].(map[string]interface{})
+	cardData, ok := cardsMap[key].(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("card %s not found", key)
 	}
@@ -614,7 +613,7 @@ func (s *Service) GetAvailableTransitions(ctx context.Context, ticketKey string)
 // See: https://manual.codecks.io/api/
 func (s *Service) TransitionTicket(ctx context.Context, ticketKey string, transitionID string) error {
 	// Build the update payload
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"id":     ticketKey,
 		"status": transitionID,
 	}
@@ -625,7 +624,7 @@ func (s *Service) TransitionTicket(ctx context.Context, ticketKey string, transi
 	}
 
 	// Check for errors in the response
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.Unmarshal(respBody, &result); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
@@ -639,7 +638,7 @@ func (s *Service) TransitionTicket(ctx context.Context, ticketKey string, transi
 }
 
 // doDispatchRequest performs a write operation to the Codecks dispatch API
-func (s *Service) doDispatchRequest(ctx context.Context, action string, body interface{}) ([]byte, error) {
+func (s *Service) doDispatchRequest(ctx context.Context, action string, body any) ([]byte, error) {
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
