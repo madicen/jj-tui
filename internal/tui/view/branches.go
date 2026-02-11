@@ -159,7 +159,7 @@ func findBranchIndex(branches []models.Branch, target models.Branch) int {
 }
 
 // renderBranchGraph renders a visual tree showing all branches relative to trunk
-// Branches ahead of trunk appear ABOVE the trunk line, branches behind appear BELOW
+// Order: trunk line (key), local branches (ahead first), separator, remote branches (ahead first)
 func (r *Renderer) renderBranchGraph(branches []models.Branch, selectedIdx int) string {
 	if len(branches) == 0 {
 		return ""
@@ -176,18 +176,6 @@ func (r *Renderer) renderBranchGraph(branches []models.Branch, selectedIdx int) 
 	behindStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFB86C"))
 	selectedStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF79C6"))
 
-	// Separate branches into ahead (above trunk) and behind/at (below trunk)
-	var aheadBranches, behindBranches []models.Branch
-	for _, b := range branches {
-		if b.Ahead > 0 && b.Behind == 0 {
-			// Purely ahead of trunk - show above
-			aheadBranches = append(aheadBranches, b)
-		} else {
-			// Behind, at trunk, or diverged - show below
-			behindBranches = append(behindBranches, b)
-		}
-	}
-
 	// Helper to build status string
 	buildStatus := func(branch models.Branch) string {
 		var statusParts []string
@@ -203,70 +191,29 @@ func (r *Renderer) renderBranchGraph(branches []models.Branch, selectedIdx int) 
 		return lipgloss.NewStyle().Foreground(ColorMuted).Render(" (up to date)")
 	}
 
-	// Helper to get style for branch
-	getStyle := func(branch models.Branch) lipgloss.Style {
-		if branch.IsLocal {
-			return localStyle
-		}
-		if branch.IsTracked {
-			return trackedStyle
-		}
-		return remoteStyle
-	}
-
-	// Render branches ABOVE trunk (ahead branches) - in reverse order so most ahead is at top
-	// Use upward connectors (└ at bottom, │ going up, ┌ at top)
-	if len(aheadBranches) > 0 {
-		for i := len(aheadBranches) - 1; i >= 0; i-- {
-			branch := aheadBranches[i]
-			idx := findBranchIndex(branches, branch)
-			isSelected := idx == selectedIdx
-
-			status := buildStatus(branch)
-			if !branch.IsLocal && branch.Remote != "" {
-				status = lipgloss.NewStyle().Foreground(ColorMuted).Render(fmt.Sprintf(" @%s", branch.Remote)) + status
-			}
-
-			nodeStyle := getStyle(branch)
-
-			// Use upward tree connectors
-			connector := "│"
-			if i == 0 {
-				connector = "┌" // Bottom of ahead section (connects to trunk)
-			}
-
-			lines = append(lines, r.renderGraphBranchWithConnector(branch, idx, isSelected, nodeStyle, selectedStyle, trunkStyle, status, connector))
-
-			// Add vertical connector after branch (except at bottom)
-			if i > 0 {
-				lines = append(lines, trunkStyle.Render("    │"))
-			}
+	// Separate branches into local and remote
+	var localBranches, remoteBranches []models.Branch
+	for _, b := range branches {
+		if b.IsLocal {
+			localBranches = append(localBranches, b)
+		} else {
+			remoteBranches = append(remoteBranches, b)
 		}
 	}
 
-	// Trunk line
+	// Trunk line (key) - always at the top
 	trunkLine := trunkStyle.Render("trunk ─────────────────────────────● (tip)")
 	lines = append(lines, trunkLine)
 
-	// Separate behind branches into local and remote for grouping
-	var localBehind, remoteBehind []models.Branch
-	for _, b := range behindBranches {
-		if b.IsLocal {
-			localBehind = append(localBehind, b)
-		} else {
-			remoteBehind = append(remoteBehind, b)
-		}
-	}
-
-	totalBehind := len(localBehind) + len(remoteBehind)
+	totalBranches := len(localBranches) + len(remoteBranches)
 	branchCount := 0
 
-	// Render local branches below trunk
-	for i, branch := range localBehind {
+	// Render local branches (ahead first, then behind - already sorted this way)
+	for i, branch := range localBranches {
 		branchCount++
 		idx := findBranchIndex(branches, branch)
 		isSelected := idx == selectedIdx
-		isLast := branchCount == totalBehind
+		isLast := branchCount == totalBranches && len(remoteBranches) == 0
 
 		// Add vertical connector before branch (except first)
 		if i > 0 {
@@ -277,18 +224,20 @@ func (r *Renderer) renderBranchGraph(branches []models.Branch, selectedIdx int) 
 		lines = append(lines, r.renderGraphBranch(branch, idx, isSelected, isLast, localStyle, selectedStyle, trunkStyle, status))
 	}
 
-	// Add section separator if we have both local and remote below trunk
-	if len(localBehind) > 0 && len(remoteBehind) > 0 {
+	// Add section separator if we have both local and remote
+	if len(localBranches) > 0 && len(remoteBranches) > 0 {
 		lines = append(lines, trunkStyle.Render("    │"))
+		lines = append(lines, trunkStyle.Render("    │  ")+remoteStyle.Render("── Remote ──"))
+	} else if len(localBranches) == 0 && len(remoteBranches) > 0 {
+		// Only remote branches - still show the separator
 		lines = append(lines, trunkStyle.Render("    │  ")+remoteStyle.Render("── Remote ──"))
 	}
 
-	// Render remote branches below trunk
-	for i, branch := range remoteBehind {
-		branchCount++
+	// Render remote branches (ahead first, then behind - already sorted this way)
+	for i, branch := range remoteBranches {
 		idx := findBranchIndex(branches, branch)
 		isSelected := idx == selectedIdx
-		isLast := i == len(remoteBehind)-1
+		isLast := i == len(remoteBranches)-1
 
 		// Add vertical connector before branch (except first remote after separator)
 		if i > 0 {
@@ -313,38 +262,6 @@ func (r *Renderer) renderBranchGraph(branches []models.Branch, selectedIdx int) 
 	}
 
 	return strings.Join(lines, "\n")
-}
-
-// renderGraphBranchWithConnector renders a branch with a specific connector character (for above-trunk branches)
-func (r *Renderer) renderGraphBranchWithConnector(branch models.Branch, idx int, isSelected bool, nodeStyle, selectedStyle, trunkStyle lipgloss.Style, status, connector string) string {
-	// Node character based on type
-	var nodeChar string
-	if branch.IsLocal {
-		nodeChar = "●"
-	} else if branch.IsTracked {
-		nodeChar = "◐"
-	} else {
-		nodeChar = "○"
-	}
-
-	// Branch name with selection indicator
-	branchName := branch.Name
-	nameStyle := nodeStyle
-	if isSelected {
-		branchName = "► " + branchName
-		nameStyle = selectedStyle
-		nodeChar = "◆"
-	}
-
-	// Build the branch line
-	branchLine := fmt.Sprintf("    %s─%s %s%s",
-		trunkStyle.Render(connector),
-		nodeStyle.Render(nodeChar),
-		nameStyle.Render(branchName),
-		status,
-	)
-
-	return r.Mark(ZoneBranch(idx), branchLine)
 }
 
 // renderGraphBranch renders a single branch in the graph
