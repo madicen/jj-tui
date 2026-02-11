@@ -5,9 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/mod/semver"
 )
 
 // Version is set at build time via -ldflags "-X github.com/madicen/jj-tui/internal/version.Version=v1.0.0"
@@ -137,26 +138,5 @@ func CheckForUpdates(ctx context.Context) {
 // isNewerVersion compares two semantic version strings
 // Returns true if latest is newer than current
 func isNewerVersion(latest, current string) bool {
-	// Strip 'v' prefix if present
-	latest = strings.TrimPrefix(latest, "v")
-	current = strings.TrimPrefix(current, "v")
-
-	// Simple string comparison for now (works for semver)
-	// For more robust comparison, could use a semver library
-	latestParts := strings.Split(latest, ".")
-	currentParts := strings.Split(current, ".")
-
-	// Compare each part
-	for i := 0; i < len(latestParts) && i < len(currentParts); i++ {
-		if latestParts[i] > currentParts[i] {
-			return true
-		}
-		if latestParts[i] < currentParts[i] {
-			return false
-		}
-	}
-
-	// If all compared parts are equal, longer version is newer
-	return len(latestParts) > len(currentParts)
+	return semver.Compare(latest, current) > 0
 }
-
