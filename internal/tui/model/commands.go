@@ -669,21 +669,36 @@ func (m *Model) loadBranches() tea.Cmd {
 		if err != nil {
 			return branchesLoadedMsg{err: err}
 		}
-		// Sort branches: local first (alphabetically), then remote (by distance from trunk)
+
+		// Sort branches for the tree visualization:
+		// 1. Ahead branches first (most ahead at top) - these appear ABOVE trunk
+		// 2. Behind/at-trunk branches next (least behind at top) - these appear BELOW trunk
+		// Within each group: local before remote, then alphabetically
 		sort.Slice(branches, func(i, j int) bool {
-			// Local branches come before remote
-			if branches[i].IsLocal != branches[j].IsLocal {
-				return branches[i].IsLocal
+			iAhead := branches[i].Ahead > 0 && branches[i].Behind == 0
+			jAhead := branches[j].Ahead > 0 && branches[j].Behind == 0
+
+			// Ahead branches come before behind/at-trunk branches
+			if iAhead != jAhead {
+				return iAhead
 			}
-			// For local branches, sort alphabetically
-			if branches[i].IsLocal {
-				return branches[i].Name < branches[j].Name
+
+			if iAhead {
+				// Both ahead: sort by ahead count descending (most ahead first)
+				if branches[i].Ahead != branches[j].Ahead {
+					return branches[i].Ahead > branches[j].Ahead
+				}
+			} else {
+				// Both behind/at-trunk: local before remote
+				if branches[i].IsLocal != branches[j].IsLocal {
+					return branches[i].IsLocal
+				}
+				// Then by behind count ascending (closest to trunk first)
+				if branches[i].Behind != branches[j].Behind {
+					return branches[i].Behind < branches[j].Behind
+				}
 			}
-			// For remote branches, sort by behind count (closest to trunk first)
-			// This puts branches that are most up-to-date near the top
-			if branches[i].Behind != branches[j].Behind {
-				return branches[i].Behind < branches[j].Behind
-			}
+
 			// Tiebreaker: alphabetically by name
 			return branches[i].Name < branches[j].Name
 		})
