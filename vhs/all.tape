@@ -1,15 +1,23 @@
 # VHS tape for capturing a demo GIF of the TUI
 # Run with: vhs vhs/all.tape
 # 
-# This tape generates a GIF showing navigation through all views.
+# This tape shows a realistic workflow through the TUI:
+# - Review current work in progress
+# - Create a new commit
+# - Find and select a ticket
+# - Create a bookmark and PR
+# - Review and merge a PR
+# - Update ticket status
+# - Return to commit graph
 
 Output "screenshots/demo.gif"
 
 Set FontSize 14
 Set Width 1300
-Set Height 600
+Set Height 650
 Set Shell "bash"
 Set Theme "Builtin Dark"
+Set TypingSpeed 75ms
 
 # Color support is forced in demo mode via lipgloss.SetColorProfile()
 
@@ -20,35 +28,94 @@ Enter
 Sleep 3s
 Show
 
-# Graph view is default - pause to show it
+# === SCENE 1: Review current work ===
+# Graph view shows our work in progress
 Sleep 2s
 
-# Navigate to PRs
-Type "p"
-Sleep 2s
+# Move down to see more commits
+Down
+Sleep 500ms
+Down
+Sleep 1.5s
 
-# Navigate to Tickets
+# === SCENE 2: Create a new commit from current changes ===
+# Press 'n' to create new commit
+Type "n"
+Sleep 1.5s
+
+# === SCENE 3: Describe the commit ===
+# Press 'd' to describe
+Type "d"
+Sleep 1s
+# Type a commit message
+Type "Extract utility functions to separate file"
+Sleep 500ms
+Enter
+Sleep 1.5s
+
+# === SCENE 4: Find a ticket to work on ===
+# Navigate to Tickets tab
 Type "t"
 Sleep 2s
 
-# Navigate to Branches
+# Scroll down through tickets
+Down
+Sleep 500ms
+Down
+Sleep 500ms
+Down
+Sleep 1.5s
+
+# === SCENE 5: Check ticket details ===
+# Select a ticket (first one is already selected)
+Up
+Sleep 500ms
+Up
+Sleep 1.5s
+
+# === SCENE 6: Go to PRs tab ===
+Type "p"
+Sleep 2s
+
+# === SCENE 7: Review PRs ===
+# Move through PR list
+Down
+Sleep 500ms
+Down
+Sleep 1.5s
+
+# === SCENE 8: Open PR in browser (simulated) ===
+# Press 'o' to open in browser
+Type "o"
+Sleep 1.5s
+
+# === SCENE 9: Go back to Tickets to update status ===
+Type "t"
+Sleep 1.5s
+
+# Change ticket status
+Type "c"
+Sleep 1s
+
+# Select "Done" transition
+Down
+Sleep 500ms
+Enter
+Sleep 1.5s
+
+# === SCENE 10: Check Branches view ===
 Type "b"
 Sleep 2s
 
-# Navigate to Settings
-Type ","
+# === SCENE 11: Return to Graph ===
+Type "g"
 Sleep 2s
 
-Hide
-# Exit Settings
-Escape
-
-# Navigate to Help
+# === SCENE 12: Quick look at Help ===
 Type "h"
-Show
 Sleep 2s
 
+# === END: Clean exit ===
 Hide
-# Exit cleanly
 Ctrl+q
 
