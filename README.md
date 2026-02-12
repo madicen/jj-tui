@@ -2,23 +2,23 @@
 
 A modern Terminal User Interface (TUI) for managing [Jujutsu](https://github.com/martinvonz/jj) repositories. Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lip Gloss](https://github.com/charmbracelet/lipgloss) for an intuitive and beautiful command-line experience.
 
-Initialization
-<img width="1292" height="587" alt="image" src="https://github.com/user-attachments/assets/9035644c-aba6-4e63-9a9d-0af153c8c290" />
+### Graph
+![Graph](screenshots/graph.png)
 
-Graph
-<img width="1288" height="585" alt="image" src="https://github.com/user-attachments/assets/4bf3a935-e0b8-4516-b7b2-3ea99fd704d8" />
+### Pull Requests
+![Pull Requests](screenshots/prs.png)
 
-Pull Requests
-<img width="1294" height="591" alt="image" src="https://github.com/user-attachments/assets/4096f42d-02ea-4549-8b96-a806ed8f2bd3" />
+### Tickets
+![Tickets](screenshots/tickets.png)
 
-Tickets
-<img width="1287" height="584" alt="image" src="https://github.com/user-attachments/assets/33875430-08f3-4243-85c8-91c5b4a5e4c0" />
+### Branches
+![Branches](screenshots/branches.png)
 
-Settings
-<img width="1292" height="587" alt="image" src="https://github.com/user-attachments/assets/b839729b-6277-40dd-a3c1-a2a690366575" />
+### Settings
+![Settings](screenshots/settings.png)
 
-Help
-<img width="1292" height="587" alt="image" src="https://github.com/user-attachments/assets/b7bba41a-e6e8-4351-bbab-36fef0551dcf" />
+### Help
+![Help](screenshots/help.png)
 
 ## Features
 
@@ -392,6 +392,9 @@ jj-tui/
 │   │   └── service.go
 │   ├── tickets/            # Generic ticket service interface
 │   │   └── interface.go
+│   ├── mock/               # Mock services for demo mode
+│   │   ├── tickets.go
+│   │   └── github.go
 │   ├── config/             # Configuration management
 │   │   └── config.go
 │   ├── models/             # Data models
@@ -421,6 +424,12 @@ jj-tui/
 │           └── help.go
 ├── integration_tests/      # Integration tests
 │   └── main_test.go
+├── fixtures/               # Demo repository for screenshots
+│   └── setup-demo-repo.sh
+├── vhs/                    # VHS tapes for screenshot generation
+│   └── *.tape
+├── screenshots/            # Generated screenshots (used in README)
+├── Makefile
 └── README.md
 ```
 
@@ -429,6 +438,27 @@ jj-tui/
 ```bash
 go mod tidy
 go build -o jj-tui .
+```
+
+### Updating Screenshots
+
+Screenshots are generated using [VHS](https://github.com/charmbracelet/vhs) with mock data for consistent, reproducible images.
+
+```bash
+# Generate all screenshots
+make screenshots
+
+# Or run individual tapes
+vhs vhs/graph.tape
+```
+
+This creates a demo jj repository and runs the app in `--demo` mode, which uses mock ticket and PR data.
+
+**Demo Mode**: You can also run the app manually in demo mode for testing:
+
+```bash
+make demo
+# Or: ./jj-tui --demo
 ```
 
 ### Testing

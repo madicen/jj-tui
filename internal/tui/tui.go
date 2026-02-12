@@ -42,6 +42,12 @@ func NewWithServices(ctx context.Context, jjSvc *jj.Service, ghSvc *github.Servi
 	return model.NewWithServices(ctx, jjSvc, ghSvc)
 }
 
+// NewDemo creates a new Model in demo mode with mock services
+// This is used for VHS screenshots and visual testing
+func NewDemo(ctx context.Context) *Model {
+	return model.NewDemo(ctx)
+}
+
 // ErrorMsg creates an error message for testing purposes
 func ErrorMsg(err error) model.ErrorMsgType {
 	return model.ErrorMsg(err)

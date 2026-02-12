@@ -17,6 +17,7 @@ import (
 	"github.com/madicen/jj-tui/internal/github"
 	"github.com/madicen/jj-tui/internal/jira"
 	"github.com/madicen/jj-tui/internal/jj"
+	"github.com/madicen/jj-tui/internal/mock"
 	"github.com/madicen/jj-tui/internal/models"
 	"github.com/madicen/jj-tui/internal/tickets"
 )
@@ -57,13 +58,14 @@ func (m *Model) prTickCmd() tea.Cmd {
 
 // initializeServices sets up the jj service, GitHub service, and loads initial data
 func (m *Model) initializeServices() tea.Cmd {
+	demoMode := m.demoMode // Capture for closure
 	return func() tea.Msg {
 		ctx := context.Background()
 
 		// Get current directory for error reporting
 		cwd, _ := os.Getwd()
 
-		// Try to create jj service
+		// Try to create jj service (always real, even in demo mode)
 		jjSvc, err := jj.NewService("")
 		if err != nil {
 			// Check if this is a "not a jj repository" error
@@ -75,6 +77,26 @@ func (m *Model) initializeServices() tea.Cmd {
 		repo, err := jjSvc.GetRepository(ctx)
 		if err != nil {
 			return errorMsg{Err: err}
+		}
+
+		// In demo mode, use mock services for GitHub and tickets
+		if demoMode {
+			// Get ticket provider from config or default to "jira"
+			cfg, _ := config.Load()
+			ticketProvider := "jira"
+			if cfg != nil && cfg.TicketProvider != "" {
+				ticketProvider = cfg.TicketProvider
+			}
+
+			return servicesInitializedMsg{
+				jjService:     jjSvc,
+				githubService: nil, // Mock PRs will be loaded separately
+				ticketService: mock.NewTicketService(ticketProvider),
+				ticketError:   nil,
+				githubInfo:    "demo mode (mock services)",
+				repository:    repo,
+				demoMode:      true,
+			}
 		}
 
 		// Try to create GitHub service (optional - won't fail if no token)
@@ -274,6 +296,13 @@ func (m *Model) loadRepositorySilent() tea.Cmd {
 
 // loadPRs loads pull requests from GitHub
 func (m *Model) loadPRs() tea.Cmd {
+	// In demo mode, return mock PRs
+	if m.demoMode {
+		return func() tea.Msg {
+			return prsLoadedMsg{prs: mock.DemoPullRequests()}
+		}
+	}
+
 	if m.githubService == nil {
 		return func() tea.Msg {
 			// Return a status message to show GitHub isn't connected

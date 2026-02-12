@@ -199,3 +199,11 @@ func NewWithServices(ctx context.Context, jjSvc *jj.Service, ghSvc *github.Servi
 	m.githubService = ghSvc
 	return m
 }
+
+// NewDemo creates a new Model in demo mode with mock services
+// This is used for VHS screenshots and visual testing
+func NewDemo(ctx context.Context) *Model {
+	m := New(ctx)
+	m.demoMode = true
+	return m
+}

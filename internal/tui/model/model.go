@@ -30,6 +30,7 @@ type Model struct {
 	githubService *github.Service
 	ticketService tickets.Service // Generic ticket service (Jira, Codecks, etc.)
 	repository    *models.Repository
+	demoMode      bool // When true, uses mock services for screenshots/testing
 
 	// UI state
 	viewMode       ViewMode
@@ -398,10 +399,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ticketService = msg.ticketService
 		m.repository = msg.repository
 		m.githubInfo = msg.githubInfo // Store diagnostic info
+		m.demoMode = msg.demoMode     // Set demo mode from message
 		m.loading = false
 		// Don't clear m.err here - let errors persist until user dismisses them
 		m.statusMessage = fmt.Sprintf("Loaded %d commits", len(msg.repository.Graph.Commits))
-		if m.githubService != nil {
+		if m.demoMode {
+			m.statusMessage += " (demo mode)"
+		} else if m.githubService != nil {
 			m.statusMessage += " (GitHub connected)"
 		} else if msg.githubInfo != "" {
 			// Show brief info when GitHub isn't connected
@@ -417,9 +421,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmds []tea.Cmd
 		cmds = append(cmds, m.tickCmd())
 
-		// Load PRs on startup if GitHub is connected (needed for Update PR button)
+		// Load PRs on startup if GitHub is connected or in demo mode
 		// Also start PR auto-refresh timer
-		if m.githubService != nil {
+		if m.githubService != nil || m.demoMode {
 			cmds = append(cmds, m.loadPRs())
 			if prTickCmd := m.prTickCmd(); prTickCmd != nil {
 				cmds = append(cmds, prTickCmd)
