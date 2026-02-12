@@ -20,7 +20,7 @@ func (r *Renderer) Help() string {
 	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("d"), HelpDescStyle.Render("Edit commit description")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("s"), HelpDescStyle.Render("Squash commit into parent")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("r"), HelpDescStyle.Render("Rebase commit (with descendants)")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("a"), HelpDescStyle.Render("Abandon commit")))
+	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("a"), HelpDescStyle.Render("Abandon commit (or resolve divergent)")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("n"), HelpDescStyle.Render("Create new commit from selected")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("b"), HelpDescStyle.Render("Create/move bookmark on commit")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("x"), HelpDescStyle.Render("Delete bookmark from commit")))
@@ -51,6 +51,7 @@ func (r *Renderer) Help() string {
 	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("k/↑"), HelpDescStyle.Render("Move up")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("Enter"), HelpDescStyle.Render("Create branch from ticket")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("o"), HelpDescStyle.Render("Open ticket in browser")))
+	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("c"), HelpDescStyle.Render("Change ticket status")))
 
 	lines = append(lines, "")
 	lines = append(lines, TitleStyle.Render("Branches Shortcuts"))
@@ -63,6 +64,7 @@ func (r *Renderer) Help() string {
 	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("x"), HelpDescStyle.Render("Delete local bookmark")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("P"), HelpDescStyle.Render("Push local branch to remote")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("F"), HelpDescStyle.Render("Fetch from all remotes")))
+	lines = append(lines, fmt.Sprintf("  %s  %s", HelpKeyStyle.Width(10).Render("c"), HelpDescStyle.Render("Resolve conflicted bookmark")))
 
 	lines = append(lines, "")
 	lines = append(lines, TitleStyle.Render("Settings Shortcuts"))
@@ -93,6 +95,7 @@ func (r *Renderer) Help() string {
 	lines = append(lines, "  ○  Mutable commit (can be edited)")
 	lines = append(lines, "  ◆  Immutable commit (pushed to remote)")
 	lines = append(lines, "  ⚠  Commit has conflicts")
+	lines = append(lines, "  ⑂  Divergent commit (same change ID in multiple versions)")
 
 	lines = append(lines, "")
 	lines = append(lines, TitleStyle.Render("PR Status Symbols"))
