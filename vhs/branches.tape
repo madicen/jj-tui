@@ -9,8 +9,12 @@ Set Height 600
 Set Shell "bash"
 Set Theme "Catppuccin Mocha"
 
+# Force color support for Lipgloss/Bubble Tea
+Set Env "TERM" "xterm-256color"
+Set Env "COLORTERM" "truecolor"
+
 # Setup: Run in demo mode from the demo repo
-Type "cd fixtures/demo-repo && ../../jj-tui --demo"
+Type "cd fixtures/demo-repo && CLICOLOR_FORCE=1 ../../jj-tui --demo"
 Enter
 Sleep 3s
 
