@@ -37,14 +37,16 @@ Sleep 2s
 Type ","
 Sleep 2s
 
+Hide
 # Exit Settings
 Escape
 
 # Navigate to Help
 Type "h"
+Show
 Sleep 2s
 
+Hide
 # Exit cleanly
 Ctrl+q
-Sleep 500ms
 
