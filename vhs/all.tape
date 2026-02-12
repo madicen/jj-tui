@@ -9,15 +9,13 @@ Set FontSize 14
 Set Width 1300
 Set Height 600
 Set Shell "bash"
-Set Theme "Catppuccin Mocha"
+Set Theme "Builtin Dark"
 
-# Force color support for Lipgloss/Bubble Tea
-Env TERM "xterm-256color"
-Env COLORTERM "truecolor"
+# Color support is forced in demo mode via lipgloss.SetColorProfile()
 
 # Setup: Run in demo mode from the demo repo
 Hide
-Type "cd fixtures/demo-repo && CLICOLOR_FORCE=1 ../../jj-tui --demo"
+Type "cd fixtures/demo-repo && ../../jj-tui --demo"
 Enter
 Sleep 3s
 Show

@@ -7,6 +7,8 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/tui"
 	"github.com/madicen/jj-tui/internal/version"
@@ -16,6 +18,12 @@ func main() {
 	// Parse command-line flags
 	demoMode := flag.Bool("demo", false, "Run in demo mode with mock services (for screenshots/testing)")
 	flag.Parse()
+
+	// Force color output in demo mode (for VHS screenshots)
+	// This ensures colors render even when TTY detection fails
+	if *demoMode || os.Getenv("FORCE_COLOR") == "1" {
+		lipgloss.SetColorProfile(termenv.TrueColor)
+	}
 
 	// Load saved configuration
 	cfg, err := config.Load()
