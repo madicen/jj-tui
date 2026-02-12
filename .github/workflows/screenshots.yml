@@ -63,10 +63,13 @@ jobs:
           # Install VHS from releases
           VHS_VERSION=$(curl -s https://api.github.com/repos/charmbracelet/vhs/releases/latest | jq -r '.tag_name')
           curl -LsSf "https://github.com/charmbracelet/vhs/releases/download/${VHS_VERSION}/vhs_${VHS_VERSION#v}_Linux_x86_64.tar.gz" -o /tmp/vhs.tar.gz
-          # Extract to temp dir and move binary (tarball contains vhs in root)
+          # Extract to temp dir and find the binary
           mkdir -p /tmp/vhs-extract
           tar xzf /tmp/vhs.tar.gz -C /tmp/vhs-extract
-          sudo mv /tmp/vhs-extract/vhs /usr/local/bin/
+          echo "Contents of extracted archive:"
+          find /tmp/vhs-extract -type f
+          # Find and move the vhs binary
+          sudo mv $(find /tmp/vhs-extract -name 'vhs' -type f | head -1) /usr/local/bin/
           rm -rf /tmp/vhs.tar.gz /tmp/vhs-extract
           vhs --version
 
