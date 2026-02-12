@@ -3,3 +3,6 @@ jj-tui
 
 # Config
 .jj-tui.json
+
+# Generated demo repo (created by make demo-repo)
+fixtures/demo-repo/

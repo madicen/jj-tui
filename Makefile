@@ -25,7 +25,6 @@ demo-repo:
 
 # Generate all screenshots using VHS
 # Requires: vhs (https://github.com/charmbracelet/vhs)
-# VHS outputs frames to directories; we extract the last frame as the final screenshot
 screenshots: build demo-repo
 	@echo "Generating screenshots..."
 	@mkdir -p screenshots

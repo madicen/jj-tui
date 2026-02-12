@@ -1,0 +1,116 @@
+name: Generate Screenshots
+
+on:
+  # Run on release to update screenshots
+  release:
+    types: [published]
+  # Allow manual trigger
+  workflow_dispatch:
+  # Optionally run on pushes to main that change relevant files
+  push:
+    branches: [main]
+    paths:
+      - 'internal/tui/**'
+      - 'internal/mock/**'
+      - 'vhs/**'
+      - 'fixtures/**'
+
+permissions:
+  contents: write
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Need full history for commits
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Install jj
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          JJ_VERSION=$(gh api repos/martinvonz/jj/releases/latest --jq '.tag_name')
+          echo "Installing jj version: ${JJ_VERSION}"
+          curl -LsSf "https://github.com/martinvonz/jj/releases/download/${JJ_VERSION}/jj-${JJ_VERSION}-x86_64-unknown-linux-musl.tar.gz" -o /tmp/jj.tar.gz
+          sudo tar xzf /tmp/jj.tar.gz -C /usr/local/bin --strip-components=1 ./jj
+          rm /tmp/jj.tar.gz
+          jj --version
+
+      - name: Configure git for jj
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+
+      - name: Build jj-tui
+        run: go build -o jj-tui .
+
+      - name: Setup demo repository
+        run: ./fixtures/setup-demo-repo.sh
+
+      # Generate screenshots using VHS action
+      - name: Generate Graph screenshot
+        uses: charmbracelet/vhs-action@v2
+        with:
+          path: vhs/graph.tape
+
+      - name: Generate PRs screenshot
+        uses: charmbracelet/vhs-action@v2
+        with:
+          path: vhs/prs.tape
+
+      - name: Generate Tickets screenshot
+        uses: charmbracelet/vhs-action@v2
+        with:
+          path: vhs/tickets.tape
+
+      - name: Generate Branches screenshot
+        uses: charmbracelet/vhs-action@v2
+        with:
+          path: vhs/branches.tape
+
+      - name: Generate Settings screenshot
+        uses: charmbracelet/vhs-action@v2
+        with:
+          path: vhs/settings.tape
+
+      - name: Generate Help screenshot
+        uses: charmbracelet/vhs-action@v2
+        with:
+          path: vhs/help.tape
+
+      - name: Generate Demo GIF
+        uses: charmbracelet/vhs-action@v2
+        with:
+          path: vhs/all.tape
+
+      - name: List generated files
+        run: ls -la screenshots/
+
+      # Commit screenshots back to repo (only on main branch or release)
+      - name: Commit updated screenshots
+        if: github.ref == 'refs/heads/main' || github.event_name == 'release'
+        run: |
+          git add screenshots/
+          if git diff --staged --quiet; then
+            echo "No changes to screenshots"
+          else
+            git commit -m "chore: update screenshots [skip ci]"
+            git push
+          fi
+
+      # Upload as artifacts for PR review
+      - name: Upload screenshots as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: screenshots/
+          retention-days: 7
+

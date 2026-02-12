@@ -446,9 +446,18 @@ go build -o jj-tui .
 
 Screenshots are generated using [VHS](https://github.com/charmbracelet/vhs) with mock data for consistent, reproducible images.
 
+**Automatic (CI)**: Screenshots are automatically regenerated on:
+- Every release
+- Pushes to `main` that change TUI/mock/VHS files
+- Manual workflow dispatch
+
+**Manual (Local)**:
 ```bash
 # Generate all screenshots
 make screenshots
+
+# Generate demo GIF
+make demo-gif
 
 # Or run individual tapes
 vhs vhs/graph.tape
