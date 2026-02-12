@@ -619,9 +619,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.githubPollInterval = 0
 		m.viewMode = ViewSettings
 		m.statusMessage = "GitHub login successful!"
-		// Save the token to config
+		// Save the token to config with Device Flow auth method
 		cfg, _ := config.Load()
-		cfg.GitHubToken = msg.token
+		cfg.SetGitHubToken(msg.token, config.GitHubAuthDeviceFlow)
 		_ = cfg.Save()
 		// Explicitly set the token in env (override any existing value)
 		_ = os.Setenv("GITHUB_TOKEN", msg.token)
@@ -631,6 +631,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Reinitialize services
 		return m, m.initializeServices()
+
+	case githubReauthNeededMsg:
+		// GitHub authentication expired - prompt for reauthorization
+		m.statusMessage = msg.reason
+		// Clear the old token and start a new Device Flow
+		cfg, _ := config.Load()
+		if cfg != nil {
+			cfg.ClearGitHub()
+			_ = cfg.Save()
+		}
+		// Clear env var too
+		_ = os.Unsetenv("GITHUB_TOKEN")
+		m.githubService = nil
+		// Start the Device Flow login automatically
+		return m, m.startGitHubLogin()
 
 	case prCreatedMsg:
 		m.viewMode = ViewCommitGraph
@@ -927,7 +942,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case actions.ClipboardCopiedMsg:
 		if msg.Success {
-			m.statusMessage = "Error copied to clipboard!"
+			// Different message depending on context
+			if m.viewMode == ViewGitHubLogin {
+				m.statusMessage = "Code copied to clipboard! Paste it in your browser."
+			} else {
+				m.statusMessage = "Copied to clipboard!"
+			}
 		} else {
 			m.statusMessage = fmt.Sprintf("Failed to copy: %v", msg.Err)
 		}

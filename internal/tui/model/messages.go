@@ -232,3 +232,8 @@ type branchActionMsg struct {
 	branch string
 	err    error
 }
+
+// githubReauthNeededMsg is sent when GitHub authentication has expired and reauth is needed
+type githubReauthNeededMsg struct {
+	reason string // Human-readable reason for reauth
+}

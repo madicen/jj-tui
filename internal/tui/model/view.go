@@ -846,6 +846,10 @@ func (m *Model) renderGitHubLogin() string {
 			MarginLeft(3)
 		lines = append(lines, codeStyle.Render(m.githubUserCode))
 		lines = append(lines, "")
+
+		// Add copy button
+		copyButton := view.ButtonStyle.Render("Copy Code (c)")
+		lines = append(lines, "   "+m.renderer().Mark(ZoneGitHubLoginCopyCode, copyButton))
 		lines = append(lines, "")
 
 		if m.githubLoginPolling {

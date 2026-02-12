@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
+	"github.com/madicen/jj-tui/internal/tui/actions"
 )
 
 // handleZoneClick handles clicks detected by bubblezone
@@ -19,6 +20,12 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 	if userClicked(ZoneActionJJInit) && m.notJJRepo {
 		m.statusMessage = "Initializing repository..."
 		return m, m.runJJInit()
+	}
+
+	// GitHub login copy code button
+	if userClicked(ZoneGitHubLoginCopyCode) && m.githubUserCode != "" {
+		m.statusMessage = "Copying code to clipboard..."
+		return m, actions.CopyToClipboard(m.githubUserCode)
 	}
 
 	// Check tab zones

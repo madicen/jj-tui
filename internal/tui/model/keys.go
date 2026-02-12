@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/madicen/jj-tui/internal/tui/actions"
 )
 
 // handleKeyMsg handles keyboard input
@@ -66,12 +67,20 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	// Special handling for GitHub login view
 	if m.viewMode == ViewGitHubLogin {
-		if msg.String() == "esc" {
+		switch msg.String() {
+		case "esc":
 			m.githubLoginPolling = false
 			m.githubDeviceCode = ""
 			m.githubUserCode = ""
 			m.viewMode = ViewSettings
 			m.statusMessage = "GitHub login cancelled"
+			return m, nil
+		case "c":
+			// Copy the user code to clipboard
+			if m.githubUserCode != "" {
+				m.statusMessage = "Copying code to clipboard..."
+				return m, actions.CopyToClipboard(m.githubUserCode)
+			}
 			return m, nil
 		}
 		return m, nil
