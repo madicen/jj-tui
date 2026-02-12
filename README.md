@@ -28,11 +28,14 @@ Help
 - **Keyboard & Mouse Support**: Full keyboard navigation with zone-based mouse support for clickable UI elements
 - **GitHub Integration**: Create and manage GitHub Pull Requests directly from the TUI
 - **GitHub Device Flow**: Login to GitHub via browser - no token copying required
-- **Ticket Integration**: View assigned tickets from Jira or Codecks and create branches with auto-populated names
+- **Ticket Integration**: View assigned tickets from Jira, Codecks, or GitHub Issues and create branches with auto-populated names
+- **Ticket Status Transitions**: Change ticket statuses directly from the TUI (In Progress, Done, etc.)
 - **Commit Management**: Edit, squash, describe, abandon, rebase, and manage commits with simple key presses
 - **New Commits from Immutable Parents**: Create new commits based on `main` or other immutable commits
 - **Bookmark Management**: Create, move, and delete bookmarks on commits
 - **Immutable Commit Detection**: Automatically detects and protects immutable commits (pushed to remote)
+- **Divergent Commit Resolution**: Detect and resolve divergent commits (same change ID in multiple versions)
+- **Conflicted Bookmark Resolution**: Resolve bookmark conflicts when local and remote have diverged
 - **Repository Cleanup Tools**: Abandon old commits, delete all bookmarks, track remote branches
 - **Auto-Initialize**: Prompt to run `jj git init` when opening a non-jj repository
 - **Real-time Updates**: Auto-refresh repository state and see changes immediately
@@ -153,11 +156,12 @@ The graph view has two panes: the commit graph (left) and changed files (right).
 - `Enter`, `e`: Open PR in browser
 - `Ctrl+r`: Refresh PR list
 
-### Tickets View (Jira / Codecks)
+### Tickets View (Jira / Codecks / GitHub Issues)
 
 - `↑/↓`, `j/k`: Navigate tickets
 - `Enter`: Create branch from selected ticket
 - `o`: Open ticket in browser
+- `c`: Change ticket status (transitions to In Progress, Done, etc.)
 - `Ctrl+r`: Refresh ticket list
 
 ### Settings View
@@ -251,6 +255,25 @@ Get your API token from: https://id.atlassian.com/manage-profile/security/api-to
    - Rebases your current work onto the new branch
    - Pre-populates PR title with "PROJ-123 - Ticket Summary" when you create a PR
 
+## GitHub Issues Integration
+
+If you're using GitHub Issues for task tracking, they work automatically with your GitHub authentication:
+
+1. Login to GitHub (via browser or token)
+2. Select "GitHub Issues" as your ticket provider in Settings
+3. Issues assigned to you will appear in the Tickets tab
+
+### GitHub Issues Workflow
+
+1. Press `t` to open the Tickets view
+2. Navigate through your assigned issues with `j/k` or arrow keys
+3. Press `Enter` to create a branch from the selected issue
+   - Creates a new commit branched from main
+   - Creates a bookmark with a sanitized name (e.g., `123-issue-summary`)
+   - Pre-populates PR title with "#123 - Issue Summary" when you create a PR
+4. Press `c` to change issue status (Open ↔ Closed)
+5. Press `o` to open the issue in your browser
+
 ## Codecks Integration
 
 [Codecks](https://www.codecks.io/) is a project management tool designed for game developers. To use Codecks features, set your credentials:
@@ -329,15 +352,26 @@ jj-tui
 ```json
 {
   "github_token": "ghp_...",
-  "ticket_provider": "codecks",
+  "ticket_provider": "github_issues",
   "jira_url": "https://company.atlassian.net",
   "jira_user": "user@example.com",
   "jira_token": "...",
+  "jira_excluded_statuses": "Done,Closed",
   "codecks_subdomain": "myteam",
   "codecks_token": "...",
-  "codecks_project": "Project Name"
+  "codecks_project": "Project Name",
+  "codecks_excluded_statuses": "done,resolved",
+  "github_issues_excluded_statuses": "closed"
 }
 ```
+
+### Ticket Provider Options
+
+The `ticket_provider` field can be one of:
+- `"jira"` - Use Jira for tickets
+- `"codecks"` - Use Codecks for tickets  
+- `"github_issues"` - Use GitHub Issues for tickets
+- `""` (empty) - Auto-detect based on configured credentials
 
 ## Development
 
@@ -350,7 +384,8 @@ jj-tui/
 │   ├── jj/                 # Jujutsu command integration
 │   │   └── service.go
 │   ├── github/             # GitHub API integration
-│   │   └── service.go
+│   │   ├── service.go      # GitHub PR service
+│   │   └── issues_service.go # GitHub Issues ticket provider
 │   ├── jira/               # Jira API integration
 │   │   └── service.go
 │   ├── codecks/            # Codecks API integration
@@ -454,21 +489,28 @@ The application supports these key user workflows:
 - Push from descendant commits (bookmark auto-moves)
 - Login to GitHub via browser (Device Flow) - no token copying needed
 
-### 5. Ticket Integration (Jira & Codecks)
-- View assigned tickets from Jira or Codecks cards
+### 5. Ticket Integration (Jira, Codecks & GitHub Issues)
+- View assigned tickets from Jira, Codecks cards, or GitHub Issues
 - Create branches from tickets with auto-named bookmarks
 - PR titles auto-populated from ticket info
 - Commit descriptions pre-populated with ticket IDs (Codecks)
+- Change ticket status directly from the TUI (In Progress, Done, etc.)
 - Open tickets directly in browser
 - Consistent layout with description placeholders
 
 ### 6. Repository Monitoring
 - Real-time repository state updates
 - Conflict detection and display
+- Divergent commit detection with visual indicator (⑂)
 - Bookmark visualization
 - Working copy indicator
 
-### 7. Repository Setup & Cleanup
+### 7. Conflict Resolution
+- Resolve divergent commits (choose which version to keep)
+- Resolve conflicted bookmarks (keep local or reset to remote)
+- Visual indicators in Graph and Branches views
+
+### 8. Repository Setup & Cleanup
 - Auto-detect non-jj repositories and offer to initialize
 - Initialize with `jj git init` and automatically track `main@origin`
 - Abandon old commits after merging PRs
