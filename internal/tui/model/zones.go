@@ -115,6 +115,9 @@ const (
 	ZoneSettingsAutoInProgress            = "zone:settings:auto_in_progress"
 	ZoneSettingsSanitizeBookmarks         = "zone:settings:sanitize_bookmarks"
 
+	// GitHub login zones
+	ZoneGitHubLoginCopyCode = "zone:github_login:copy_code"
+
 	// Settings zones
 	ZoneSettingsGitHubToken           = "zone:settings:github_token"
 	ZoneSettingsGitHubShowMerged      = "zone:settings:github_show_merged"

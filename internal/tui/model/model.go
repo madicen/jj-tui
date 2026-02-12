@@ -942,7 +942,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case actions.ClipboardCopiedMsg:
 		if msg.Success {
-			m.statusMessage = "Error copied to clipboard!"
+			// Different message depending on context
+			if m.viewMode == ViewGitHubLogin {
+				m.statusMessage = "Code copied to clipboard! Paste it in your browser."
+			} else {
+				m.statusMessage = "Copied to clipboard!"
+			}
 		} else {
 			m.statusMessage = fmt.Sprintf("Failed to copy: %v", msg.Err)
 		}
