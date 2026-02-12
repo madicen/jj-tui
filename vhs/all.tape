@@ -12,9 +12,11 @@ Set Shell "bash"
 Set Theme "Catppuccin Mocha"
 
 # Setup: Run in demo mode from the demo repo
+Hide
 Type "cd fixtures/demo-repo && ../../jj-tui --demo"
 Enter
 Sleep 3s
+Show
 
 # Graph view is default - pause to show it
 Sleep 2s
@@ -34,6 +36,9 @@ Sleep 2s
 # Navigate to Settings
 Type ","
 Sleep 2s
+
+# Exit Settings
+Escape
 
 # Navigate to Help
 Type "h"

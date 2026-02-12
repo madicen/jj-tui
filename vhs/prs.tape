@@ -18,3 +18,4 @@ Sleep 3s
 Type "p"
 Sleep 2s
 
+Screenshot "screenshots/prs.png"

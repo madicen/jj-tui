@@ -8,6 +8,7 @@ import (
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/tui/view"
 	"github.com/madicen/jj-tui/internal/version"
+	"github.com/mattn/go-runewidth"
 )
 
 // View implements tea.Model
@@ -218,9 +219,6 @@ func (m *Model) renderer() *view.Renderer {
 // renderHeader renders the header with clickable tabs
 func (m *Model) renderHeader() string {
 	title := TitleStyle.Render("jj-tui")
-	if m.repository != nil {
-		title += " " + lipgloss.NewStyle().Foreground(colorMuted).Render(m.repository.Path)
-	}
 
 	// Create tabs wrapped in zones (with keyboard shortcuts)
 	tabs := []string{
@@ -232,13 +230,25 @@ func (m *Model) renderHeader() string {
 		m.zoneManager.Mark(ZoneTabHelp, m.renderTab("Help (h)", m.viewMode == ViewHelp)),
 	}
 
-	tabsStr := lipgloss.JoinHorizontal(lipgloss.Left, tabs...)
+	tabsStr := lipgloss.JoinHorizontal(lipgloss.Right, tabs...)
+
+	repo := ""
+	if m.repository != nil {
+		// Max width for the repo string is what's left over.
+		// -2 for the same fudge factor as original padding calculation
+		// -1 for the leading space on the repo string
+		maxWidth := m.width - lipgloss.Width(title) - lipgloss.Width(tabsStr) - 3
+		if maxWidth > 5 { // Only show if there's a reasonable amount of space
+			repoPath := runewidth.Truncate(m.repository.Path, maxWidth, "...")
+			repo = " " + lipgloss.NewStyle().Foreground(colorMuted).Render(repoPath)
+		}
+	}
 
 	// Layout: title on left, tabs on right
-	padding := max(m.width-lipgloss.Width(title)-lipgloss.Width(tabsStr)-2, 0)
+	padding := max(m.width-lipgloss.Width(title)-lipgloss.Width(repo)-lipgloss.Width(tabsStr)-2, 0)
 
 	return HeaderStyle.Width(m.width).Render(
-		title + strings.Repeat(" ", padding) + tabsStr,
+		title + repo + strings.Repeat(" ", padding) + tabsStr,
 	)
 }
 

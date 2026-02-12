@@ -14,6 +14,4 @@ Type "cd fixtures/demo-repo && ../../jj-tui --demo"
 Enter
 Sleep 4s
 
-# Graph view is the default - screenshot is captured here
-# (VHS captures the last frame before recording ends)
-
+Screenshot "screenshots/graph.png"

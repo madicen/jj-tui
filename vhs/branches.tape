@@ -18,3 +18,4 @@ Sleep 3s
 Type "b"
 Sleep 2s
 
+Screenshot "screenshots/branches.png"

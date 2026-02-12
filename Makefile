@@ -31,17 +31,11 @@ screenshots: build demo-repo
 	@mkdir -p screenshots
 	@rm -rf screenshots/*.png
 	vhs vhs/graph.tape
-	@cp "$$(ls -1 screenshots/graph.png/frame-*.png | tail -1)" screenshots/graph-final.png && rm -rf screenshots/graph.png && mv screenshots/graph-final.png screenshots/graph.png
 	vhs vhs/prs.tape
-	@cp "$$(ls -1 screenshots/prs.png/frame-*.png | tail -1)" screenshots/prs-final.png && rm -rf screenshots/prs.png && mv screenshots/prs-final.png screenshots/prs.png
 	vhs vhs/tickets.tape
-	@cp "$$(ls -1 screenshots/tickets.png/frame-*.png | tail -1)" screenshots/tickets-final.png && rm -rf screenshots/tickets.png && mv screenshots/tickets-final.png screenshots/tickets.png
 	vhs vhs/branches.tape
-	@cp "$$(ls -1 screenshots/branches.png/frame-*.png | tail -1)" screenshots/branches-final.png && rm -rf screenshots/branches.png && mv screenshots/branches-final.png screenshots/branches.png
 	vhs vhs/settings.tape
-	@cp "$$(ls -1 screenshots/settings.png/frame-*.png | tail -1)" screenshots/settings-final.png && rm -rf screenshots/settings.png && mv screenshots/settings-final.png screenshots/settings.png
 	vhs vhs/help.tape
-	@cp "$$(ls -1 screenshots/help.png/frame-*.png | tail -1)" screenshots/help-final.png && rm -rf screenshots/help.png && mv screenshots/help-final.png screenshots/help.png
 	@echo "Screenshots saved to screenshots/"
 
 # Generate a demo GIF showing the TUI in action
