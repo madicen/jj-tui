@@ -8,9 +8,22 @@ import (
 	"path/filepath"
 )
 
+// GitHubAuthMethod represents how the user authenticated with GitHub
+type GitHubAuthMethod string
+
+const (
+	// GitHubAuthNone means no authentication
+	GitHubAuthNone GitHubAuthMethod = ""
+	// GitHubAuthDeviceFlow means authentication via Device Flow (needs periodic reauth)
+	GitHubAuthDeviceFlow GitHubAuthMethod = "device_flow"
+	// GitHubAuthToken means authentication via manual token entry
+	GitHubAuthToken GitHubAuthMethod = "token"
+)
+
 // Config holds the persistent configuration
 type Config struct {
-	GitHubToken string `json:"github_token,omitempty"`
+	GitHubToken      string           `json:"github_token,omitempty"`
+	GitHubAuthMethod GitHubAuthMethod `json:"github_auth_method,omitempty"` // How the token was obtained
 
 	// GitHub filter settings
 	GitHubShowMerged      *bool `json:"github_show_merged,omitempty"`       // nil = true (show by default)
@@ -99,6 +112,9 @@ func mergeConfig(dest, source *Config) {
 	}
 	if source.GitHubToken != "" {
 		dest.GitHubToken = source.GitHubToken
+	}
+	if source.GitHubAuthMethod != "" {
+		dest.GitHubAuthMethod = source.GitHubAuthMethod
 	}
 	if source.GitHubShowMerged != nil {
 		dest.GitHubShowMerged = source.GitHubShowMerged
@@ -321,6 +337,23 @@ func (c *Config) UpdateFromEnvironment() {
 // HasGitHub returns true if GitHub is configured
 func (c *Config) HasGitHub() bool {
 	return c.GitHubToken != ""
+}
+
+// UsedDeviceFlow returns true if the GitHub token was obtained via Device Flow
+func (c *Config) UsedDeviceFlow() bool {
+	return c.GitHubAuthMethod == GitHubAuthDeviceFlow
+}
+
+// SetGitHubToken sets the GitHub token and auth method
+func (c *Config) SetGitHubToken(token string, method GitHubAuthMethod) {
+	c.GitHubToken = token
+	c.GitHubAuthMethod = method
+}
+
+// ClearGitHub clears the GitHub token and auth method
+func (c *Config) ClearGitHub() {
+	c.GitHubToken = ""
+	c.GitHubAuthMethod = GitHubAuthNone
 }
 
 // ShowMergedPRs returns whether to show merged PRs (defaults to true)

@@ -332,6 +332,16 @@ func (m *Model) loadPRs() tea.Cmd {
 
 		prs, err := ghSvc.GetPullRequestsWithOptions(context.Background(), filterOpts)
 		if err != nil {
+			// Check if this is an auth error that needs reauthorization
+			if github.IsAuthError(err) {
+				// Check if we used Device Flow - if so, prompt for reauth
+				cfg, _ := config.Load()
+				if cfg != nil && cfg.UsedDeviceFlow() {
+					return githubReauthNeededMsg{
+						reason: "Your GitHub authorization has expired. Please reauthorize to continue.",
+					}
+				}
+			}
 			// Include diagnostic info in the error for easier troubleshooting
 			errMsg := fmt.Sprintf("failed to load PRs: %v", err)
 			if ghInfo != "" {

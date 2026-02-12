@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -35,6 +36,34 @@ type TokenResponse struct {
 	Scope       string `json:"scope"`
 	Error       string `json:"error"`
 	ErrorDesc   string `json:"error_description"`
+}
+
+// AuthError represents a GitHub authentication error that may require reauthorization
+type AuthError struct {
+	Err        error
+	StatusCode int
+}
+
+func (e *AuthError) Error() string {
+	return e.Err.Error()
+}
+
+func (e *AuthError) Unwrap() error {
+	return e.Err
+}
+
+// IsAuthError checks if an error is an authentication error that needs reauth
+func IsAuthError(err error) bool {
+	var authErr *AuthError
+	return err != nil && (strings.Contains(err.Error(), "401") ||
+		strings.Contains(err.Error(), "Bad credentials") ||
+		strings.Contains(err.Error(), "authentication") ||
+		errors.As(err, &authErr))
+}
+
+// NewAuthError creates a new AuthError
+func NewAuthError(err error, statusCode int) *AuthError {
+	return &AuthError{Err: err, StatusCode: statusCode}
 }
 
 // PRFilterOptions contains options for filtering PRs
@@ -168,8 +197,12 @@ func (s *Service) GetAuthenticatedUsername(ctx context.Context) (string, error) 
 		return s.username, nil
 	}
 
-	user, _, err := s.client.Users.Get(ctx, "")
+	user, resp, err := s.client.Users.Get(ctx, "")
 	if err != nil {
+		// Check for authentication errors (401 Bad credentials, etc.)
+		if resp != nil && (resp.StatusCode == 401 || resp.StatusCode == 403) {
+			return "", NewAuthError(fmt.Errorf("GitHub authentication failed: %w", err), resp.StatusCode)
+		}
 		return "", fmt.Errorf("failed to get authenticated user: %w", err)
 	}
 

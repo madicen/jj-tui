@@ -56,7 +56,19 @@ func SaveSettings(params SettingsParams) tea.Cmd {
 			cfg = &config.Config{}
 		}
 
-		cfg.GitHubToken = params.GitHubToken
+		// If a new token is being entered manually (not via Device Flow),
+		// set the auth method to Token
+		if params.GitHubToken != "" && params.GitHubToken != cfg.GitHubToken {
+			// Token changed - set auth method to manual token
+			cfg.SetGitHubToken(params.GitHubToken, config.GitHubAuthToken)
+		} else if params.GitHubToken == "" {
+			// Token cleared
+			cfg.ClearGitHub()
+		} else {
+			// Token unchanged - keep existing auth method
+			cfg.GitHubToken = params.GitHubToken
+		}
+
 		cfg.GitHubShowMerged = &params.ShowMerged
 		cfg.GitHubShowClosed = &params.ShowClosed
 		cfg.GitHubOnlyMine = &params.OnlyMine
