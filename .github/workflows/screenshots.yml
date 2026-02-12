@@ -87,10 +87,20 @@ jobs:
       - name: List generated files
         run: ls -la screenshots/
 
+      # Upload as artifacts (do this first so we get artifacts even if commit fails)
+      - name: Upload screenshots as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: screenshots/
+          retention-days: 7
+
       # Commit screenshots back to repo (only on main branch or release)
       - name: Commit updated screenshots
         if: github.ref == 'refs/heads/main' || github.event_name == 'release'
         run: |
+          # Pull any changes that happened during the run
+          git pull --rebase origin main || true
           git add screenshots/
           if git diff --staged --quiet; then
             echo "No changes to screenshots"
@@ -98,12 +108,4 @@ jobs:
             git commit -m "chore: update screenshots [skip ci]"
             git push
           fi
-
-      # Upload as artifacts for PR review
-      - name: Upload screenshots as artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: screenshots
-          path: screenshots/
-          retention-days: 7
 
