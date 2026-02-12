@@ -491,7 +491,7 @@ func (m *Model) renderPullRequests() string {
 	result := m.renderer().PullRequests(view.PRData{
 		Repository:    m.repository,
 		SelectedPR:    m.selectedPR,
-		GithubService: m.githubService != nil,
+		GithubService: m.githubService != nil || m.demoMode,
 		Width:         m.width,
 	})
 	return result.FullContent
@@ -503,7 +503,7 @@ func (m *Model) renderPullRequestsSplit() (string, string) {
 	result := m.renderer().PullRequests(view.PRData{
 		Repository:    m.repository,
 		SelectedPR:    m.selectedPR,
-		GithubService: m.githubService != nil,
+		GithubService: m.githubService != nil || m.demoMode,
 		Width:         m.width,
 	})
 	// If there's no scrollable list (error states), return full content as the "header"
@@ -661,7 +661,7 @@ func (m *Model) renderCreatePR() string {
 	return m.renderer().CreatePR(view.CreatePRData{
 		Repository:     m.repository,
 		SelectedCommit: m.prCommitIndex,
-		GithubService:  m.githubService != nil,
+		GithubService:  m.githubService != nil || m.demoMode,
 		TitleInput:     m.prTitleInput.View(),
 		BodyInput:      m.prBodyInput.View(),
 		HeadBranch:     m.prHeadBranch,

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 
@@ -12,6 +13,10 @@ import (
 )
 
 func main() {
+	// Parse command-line flags
+	demoMode := flag.Bool("demo", false, "Run in demo mode with mock services (for screenshots/testing)")
+	flag.Parse()
+
 	// Load saved configuration
 	cfg, err := config.Load()
 	if err != nil {
@@ -28,7 +33,13 @@ func main() {
 	// Check for updates in background (non-blocking)
 	version.CheckForUpdates(ctx)
 
-	model := tui.New(ctx)
+	// Create the model (demo mode uses mock services)
+	var model *tui.Model
+	if *demoMode {
+		model = tui.NewDemo(ctx)
+	} else {
+		model = tui.New(ctx)
+	}
 	defer model.Close()
 
 	// Create the Bubble Tea program

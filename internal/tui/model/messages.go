@@ -33,6 +33,7 @@ type servicesInitializedMsg struct {
 	ticketError   error  // Error from ticket service initialization (for debugging)
 	repository    *models.Repository
 	githubInfo    string // Diagnostic info about GitHub connection (token source, repo)
+	demoMode      bool   // True if running in demo mode with mock services
 }
 
 // prsLoadedMsg is sent when PRs are loaded from GitHub
