@@ -18,3 +18,4 @@ Sleep 3s
 Type "h"
 Sleep 2s
 
+Screenshot "screenshots/help.png"

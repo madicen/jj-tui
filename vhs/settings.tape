@@ -18,3 +18,4 @@ Sleep 3s
 Type ","
 Sleep 2s
 
+Screenshot "screenshots/settings.png"

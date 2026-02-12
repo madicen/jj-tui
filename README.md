@@ -1,5 +1,7 @@
 # Jujutsu TUI
 
+![Demo](screenshots/demo.gif)
+
 A modern Terminal User Interface (TUI) for managing [Jujutsu](https://github.com/martinvonz/jj) repositories. Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lip Gloss](https://github.com/charmbracelet/lipgloss) for an intuitive and beautiful command-line experience.
 
 ### Graph
