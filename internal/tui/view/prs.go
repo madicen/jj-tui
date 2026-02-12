@@ -64,14 +64,14 @@ func (r *Renderer) PullRequests(data PRData) PRResult {
 			checkPart = lipgloss.NewStyle().Foreground(lipgloss.Color("#6a737d")).Render("· No checks")
 		}
 
-		// Review status
+		// Review status (using text symbols for consistent terminal rendering)
 		switch pr.ReviewStatus {
 		case models.ReviewStatusApproved:
-			reviewPart = lipgloss.NewStyle().Foreground(lipgloss.Color("#2ea44f")).Render("👍 Approved")
+			reviewPart = lipgloss.NewStyle().Foreground(lipgloss.Color("#2ea44f")).Render("✓ Approved")
 		case models.ReviewStatusChangesRequested:
-			reviewPart = lipgloss.NewStyle().Foreground(lipgloss.Color("#cb2431")).Render("📝 Changes requested")
+			reviewPart = lipgloss.NewStyle().Foreground(lipgloss.Color("#cb2431")).Render("✗ Changes requested")
 		case models.ReviewStatusPending:
-			reviewPart = lipgloss.NewStyle().Foreground(lipgloss.Color("#dbab09")).Render("⏳ Review pending")
+			reviewPart = lipgloss.NewStyle().Foreground(lipgloss.Color("#dbab09")).Render("○ Review pending")
 		default:
 			reviewPart = lipgloss.NewStyle().Foreground(lipgloss.Color("#6a737d")).Render("· No reviews")
 		}
