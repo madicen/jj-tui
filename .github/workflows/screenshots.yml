@@ -55,41 +55,28 @@ jobs:
       - name: Setup demo repository
         run: ./fixtures/setup-demo-repo.sh
 
-      # Generate screenshots using VHS action
-      - name: Generate Graph screenshot
-        uses: charmbracelet/vhs-action@v2
-        with:
-          path: vhs/graph.tape
+      # Install VHS and dependencies manually (VHS action has issues with ffmpeg)
+      - name: Install VHS and dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg ttyd
+          # Install VHS from releases
+          VHS_VERSION=$(curl -s https://api.github.com/repos/charmbracelet/vhs/releases/latest | jq -r '.tag_name')
+          curl -LsSf "https://github.com/charmbracelet/vhs/releases/download/${VHS_VERSION}/vhs_${VHS_VERSION#v}_Linux_x86_64.tar.gz" -o /tmp/vhs.tar.gz
+          sudo tar xzf /tmp/vhs.tar.gz -C /usr/local/bin vhs
+          rm /tmp/vhs.tar.gz
+          vhs --version
 
-      - name: Generate PRs screenshot
-        uses: charmbracelet/vhs-action@v2
-        with:
-          path: vhs/prs.tape
-
-      - name: Generate Tickets screenshot
-        uses: charmbracelet/vhs-action@v2
-        with:
-          path: vhs/tickets.tape
-
-      - name: Generate Branches screenshot
-        uses: charmbracelet/vhs-action@v2
-        with:
-          path: vhs/branches.tape
-
-      - name: Generate Settings screenshot
-        uses: charmbracelet/vhs-action@v2
-        with:
-          path: vhs/settings.tape
-
-      - name: Generate Help screenshot
-        uses: charmbracelet/vhs-action@v2
-        with:
-          path: vhs/help.tape
-
-      - name: Generate Demo GIF
-        uses: charmbracelet/vhs-action@v2
-        with:
-          path: vhs/all.tape
+      # Generate screenshots using VHS directly
+      - name: Generate screenshots
+        run: |
+          vhs vhs/graph.tape
+          vhs vhs/prs.tape
+          vhs vhs/tickets.tape
+          vhs vhs/branches.tape
+          vhs vhs/settings.tape
+          vhs vhs/help.tape
+          vhs vhs/all.tape
 
       - name: List generated files
         run: ls -la screenshots/
