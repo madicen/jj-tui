@@ -32,3 +32,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
 
+  # Update screenshots after release
+  screenshots:
+    needs: goreleaser
+    uses: ./.github/workflows/screenshots.yml
+    permissions:
+      contents: write
+
