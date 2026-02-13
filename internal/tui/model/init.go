@@ -100,7 +100,7 @@ func New(ctx context.Context) *Model {
 
 // createSettingsInputs creates and initializes all settings input fields
 func createSettingsInputs(cfg *config.Config) []textinput.Model {
-	settingsInputs := make([]textinput.Model, 10)
+	settingsInputs := make([]textinput.Model, 12)
 
 	// GitHub Token (index 0)
 	settingsInputs[0] = textinput.New()
@@ -139,54 +139,76 @@ func createSettingsInputs(cfg *config.Config) []textinput.Model {
 	settingsInputs[3].EchoCharacter = '•'
 	settingsInputs[3].SetValue(os.Getenv("JIRA_TOKEN"))
 
-	// Jira Excluded Statuses (index 4)
+	// Jira Project filter (index 4)
 	settingsInputs[4] = textinput.New()
-	settingsInputs[4].Placeholder = "Done, Won't Do, Cancelled (comma-separated)"
+	settingsInputs[4].Placeholder = "PROJ or PROJ,TEAM (comma-separated, optional)"
 	settingsInputs[4].CharLimit = 200
 	settingsInputs[4].Width = 50
+	jiraProject := os.Getenv("JIRA_PROJECT")
+	if jiraProject == "" && cfg != nil {
+		jiraProject = cfg.JiraProject
+	}
+	settingsInputs[4].SetValue(jiraProject)
+
+	// Jira JQL filter (index 5)
+	settingsInputs[5] = textinput.New()
+	settingsInputs[5].Placeholder = "sprint in openSprints() (optional custom JQL)"
+	settingsInputs[5].CharLimit = 500
+	settingsInputs[5].Width = 50
+	jiraJQL := os.Getenv("JIRA_JQL")
+	if jiraJQL == "" && cfg != nil {
+		jiraJQL = cfg.JiraJQL
+	}
+	settingsInputs[5].SetValue(jiraJQL)
+
+	// Jira Excluded Statuses (index 6)
+	settingsInputs[6] = textinput.New()
+	settingsInputs[6].Placeholder = "Done, Won't Do, Cancelled (comma-separated)"
+	settingsInputs[6].CharLimit = 200
+	settingsInputs[6].Width = 50
 	if cfg != nil {
-		settingsInputs[4].SetValue(cfg.JiraExcludedStatuses)
+		settingsInputs[6].SetValue(cfg.JiraExcludedStatuses)
 	}
 
-	// Codecks Subdomain (index 5)
-	settingsInputs[5] = textinput.New()
-	settingsInputs[5].Placeholder = "your-team (from your-team.codecks.io)"
-	settingsInputs[5].CharLimit = 100
-	settingsInputs[5].Width = 50
-	settingsInputs[5].SetValue(os.Getenv("CODECKS_SUBDOMAIN"))
-
-	// Codecks Token (index 6)
-	settingsInputs[6] = textinput.New()
-	settingsInputs[6].Placeholder = "Codecks API Token (from browser cookie 'at')"
-	settingsInputs[6].CharLimit = 256
-	settingsInputs[6].Width = 50
-	settingsInputs[6].EchoMode = textinput.EchoPassword
-	settingsInputs[6].EchoCharacter = '•'
-	settingsInputs[6].SetValue(os.Getenv("CODECKS_TOKEN"))
-
-	// Codecks Project (index 7)
+	// Codecks Subdomain (index 7)
 	settingsInputs[7] = textinput.New()
-	settingsInputs[7].Placeholder = "Project name (optional, filters cards)"
+	settingsInputs[7].Placeholder = "your-team (from your-team.codecks.io)"
 	settingsInputs[7].CharLimit = 100
 	settingsInputs[7].Width = 50
-	settingsInputs[7].SetValue(os.Getenv("CODECKS_PROJECT"))
+	settingsInputs[7].SetValue(os.Getenv("CODECKS_SUBDOMAIN"))
 
-	// Codecks Excluded Statuses (index 8)
+	// Codecks Token (index 8)
 	settingsInputs[8] = textinput.New()
-	settingsInputs[8].Placeholder = "done, archived (comma-separated)"
-	settingsInputs[8].CharLimit = 200
+	settingsInputs[8].Placeholder = "Codecks API Token (from browser cookie 'at')"
+	settingsInputs[8].CharLimit = 256
 	settingsInputs[8].Width = 50
+	settingsInputs[8].EchoMode = textinput.EchoPassword
+	settingsInputs[8].EchoCharacter = '•'
+	settingsInputs[8].SetValue(os.Getenv("CODECKS_TOKEN"))
+
+	// Codecks Project (index 9)
+	settingsInputs[9] = textinput.New()
+	settingsInputs[9].Placeholder = "Project name (optional, filters cards)"
+	settingsInputs[9].CharLimit = 100
+	settingsInputs[9].Width = 50
+	settingsInputs[9].SetValue(os.Getenv("CODECKS_PROJECT"))
+
+	// Codecks Excluded Statuses (index 10)
+	settingsInputs[10] = textinput.New()
+	settingsInputs[10].Placeholder = "done, archived (comma-separated)"
+	settingsInputs[10].CharLimit = 200
+	settingsInputs[10].Width = 50
 	if cfg != nil {
-		settingsInputs[8].SetValue(cfg.CodecksExcludedStatuses)
+		settingsInputs[10].SetValue(cfg.CodecksExcludedStatuses)
 	}
 
-	// GitHub Issues Excluded Statuses (index 9)
-	settingsInputs[9] = textinput.New()
-	settingsInputs[9].Placeholder = "closed (comma-separated)"
-	settingsInputs[9].CharLimit = 200
-	settingsInputs[9].Width = 50
+	// GitHub Issues Excluded Statuses (index 11)
+	settingsInputs[11] = textinput.New()
+	settingsInputs[11].Placeholder = "closed (comma-separated)"
+	settingsInputs[11].CharLimit = 200
+	settingsInputs[11].Width = 50
 	if cfg != nil {
-		settingsInputs[9].SetValue(cfg.GitHubIssuesExcludedStatuses)
+		settingsInputs[11].SetValue(cfg.GitHubIssuesExcludedStatuses)
 	}
 
 	return settingsInputs

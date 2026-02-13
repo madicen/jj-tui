@@ -781,9 +781,9 @@ func (m *Model) renderSettings() string {
 	jiraConfigured := strings.TrimSpace(m.settingsInputs[1].Value()) != "" &&
 		strings.TrimSpace(m.settingsInputs[2].Value()) != "" &&
 		strings.TrimSpace(m.settingsInputs[3].Value()) != ""
-	codecksConfigured := len(m.settingsInputs) > 6 &&
-		strings.TrimSpace(m.settingsInputs[5].Value()) != "" &&
-		strings.TrimSpace(m.settingsInputs[6].Value()) != ""
+	codecksConfigured := len(m.settingsInputs) > 8 &&
+		strings.TrimSpace(m.settingsInputs[7].Value()) != "" &&
+		strings.TrimSpace(m.settingsInputs[8].Value()) != ""
 	githubIssuesConfigured := m.isGitHubAvailable()
 
 	return m.renderer().Settings(view.SettingsData{

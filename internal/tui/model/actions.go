@@ -372,7 +372,9 @@ func (m *Model) saveSettings() tea.Cmd {
 		JiraURL:              strings.TrimSpace(m.settingsInputs[1].Value()),
 		JiraUser:             strings.TrimSpace(m.settingsInputs[2].Value()),
 		JiraToken:            strings.TrimSpace(m.settingsInputs[3].Value()),
-		JiraExcludedStatuses: strings.TrimSpace(m.settingsInputs[4].Value()),
+		JiraProject:          strings.TrimSpace(m.settingsInputs[4].Value()),
+		JiraJQL:              strings.TrimSpace(m.settingsInputs[5].Value()),
+		JiraExcludedStatuses: strings.TrimSpace(m.settingsInputs[6].Value()),
 		TicketProvider:       m.settingsTicketProvider,
 		ShowMerged:           m.settingsShowMerged,
 		ShowClosed:           m.settingsShowClosed,
@@ -383,14 +385,14 @@ func (m *Model) saveSettings() tea.Cmd {
 		BranchLimit:          m.settingsBranchLimit,
 		SanitizeBookmarks:    m.settingsSanitizeBookmarks,
 	}
-	if len(m.settingsInputs) > 8 {
-		params.CodecksSubdomain = strings.TrimSpace(m.settingsInputs[5].Value())
-		params.CodecksToken = strings.TrimSpace(m.settingsInputs[6].Value())
-		params.CodecksProject = strings.TrimSpace(m.settingsInputs[7].Value())
-		params.CodecksExcludedStatuses = strings.TrimSpace(m.settingsInputs[8].Value())
+	if len(m.settingsInputs) > 10 {
+		params.CodecksSubdomain = strings.TrimSpace(m.settingsInputs[7].Value())
+		params.CodecksToken = strings.TrimSpace(m.settingsInputs[8].Value())
+		params.CodecksProject = strings.TrimSpace(m.settingsInputs[9].Value())
+		params.CodecksExcludedStatuses = strings.TrimSpace(m.settingsInputs[10].Value())
 	}
-	if len(m.settingsInputs) > 9 {
-		params.GitHubIssuesExcludedStatuses = strings.TrimSpace(m.settingsInputs[9].Value())
+	if len(m.settingsInputs) > 11 {
+		params.GitHubIssuesExcludedStatuses = strings.TrimSpace(m.settingsInputs[11].Value())
 	}
 	// Pass GitHub repo info for GitHub Issues provider
 	if m.githubService != nil {
@@ -406,7 +408,9 @@ func (m *Model) saveSettingsLocal() tea.Cmd {
 		JiraURL:              strings.TrimSpace(m.settingsInputs[1].Value()),
 		JiraUser:             strings.TrimSpace(m.settingsInputs[2].Value()),
 		JiraToken:            strings.TrimSpace(m.settingsInputs[3].Value()),
-		JiraExcludedStatuses: strings.TrimSpace(m.settingsInputs[4].Value()),
+		JiraProject:          strings.TrimSpace(m.settingsInputs[4].Value()),
+		JiraJQL:              strings.TrimSpace(m.settingsInputs[5].Value()),
+		JiraExcludedStatuses: strings.TrimSpace(m.settingsInputs[6].Value()),
 		TicketProvider:       m.settingsTicketProvider,
 		ShowMerged:           m.settingsShowMerged,
 		ShowClosed:           m.settingsShowClosed,
@@ -417,14 +421,14 @@ func (m *Model) saveSettingsLocal() tea.Cmd {
 		BranchLimit:          m.settingsBranchLimit,
 		SanitizeBookmarks:    m.settingsSanitizeBookmarks,
 	}
-	if len(m.settingsInputs) > 8 {
-		params.CodecksSubdomain = strings.TrimSpace(m.settingsInputs[5].Value())
-		params.CodecksToken = strings.TrimSpace(m.settingsInputs[6].Value())
-		params.CodecksProject = strings.TrimSpace(m.settingsInputs[7].Value())
-		params.CodecksExcludedStatuses = strings.TrimSpace(m.settingsInputs[8].Value())
+	if len(m.settingsInputs) > 10 {
+		params.CodecksSubdomain = strings.TrimSpace(m.settingsInputs[7].Value())
+		params.CodecksToken = strings.TrimSpace(m.settingsInputs[8].Value())
+		params.CodecksProject = strings.TrimSpace(m.settingsInputs[9].Value())
+		params.CodecksExcludedStatuses = strings.TrimSpace(m.settingsInputs[10].Value())
 	}
-	if len(m.settingsInputs) > 9 {
-		params.GitHubIssuesExcludedStatuses = strings.TrimSpace(m.settingsInputs[9].Value())
+	if len(m.settingsInputs) > 11 {
+		params.GitHubIssuesExcludedStatuses = strings.TrimSpace(m.settingsInputs[11].Value())
 	}
 	// Pass GitHub repo info for GitHub Issues provider
 	if m.githubService != nil {

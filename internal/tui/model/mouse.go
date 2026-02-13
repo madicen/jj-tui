@@ -562,18 +562,21 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 		}
 
 		// Clear buttons for each field (in order of input indices)
-		// 0=GitHub Token, 1=Jira URL, 2=Jira User, 3=Jira Token, 4=Jira Excluded,
-		// 5=Codecks Subdomain, 6=Codecks Token, 7=Codecks Project, 8=Codecks Excluded
+		// 0=GitHub Token, 1=Jira URL, 2=Jira User, 3=Jira Token, 4=Jira Project, 5=Jira JQL, 6=Jira Excluded,
+		// 7=Codecks Subdomain, 8=Codecks Token, 9=Codecks Project, 10=Codecks Excluded, 11=GitHub Issues Excluded
 		clearZones := []string{
-			ZoneSettingsGitHubTokenClear,      // 0
-			ZoneSettingsJiraURLClear,          // 1
-			ZoneSettingsJiraUserClear,         // 2
-			ZoneSettingsJiraTokenClear,        // 3
-			ZoneSettingsJiraExcludedClear,     // 4
-			ZoneSettingsCodecksSubdomainClear, // 5
-			ZoneSettingsCodecksTokenClear,     // 6
-			ZoneSettingsCodecksProjectClear,   // 7
-			ZoneSettingsCodecksExcludedClear,  // 8
+			ZoneSettingsGitHubTokenClear,         // 0
+			ZoneSettingsJiraURLClear,             // 1
+			ZoneSettingsJiraUserClear,            // 2
+			ZoneSettingsJiraTokenClear,           // 3
+			ZoneSettingsJiraProjectClear,         // 4
+			ZoneSettingsJiraJQLClear,             // 5
+			ZoneSettingsJiraExcludedClear,        // 6
+			ZoneSettingsCodecksSubdomainClear,    // 7
+			ZoneSettingsCodecksTokenClear,        // 8
+			ZoneSettingsCodecksProjectClear,      // 9
+			ZoneSettingsCodecksExcludedClear,     // 10
+			ZoneSettingsGitHubIssuesExcludedClear, // 11
 		}
 		for i, zoneID := range clearZones {
 			if userClicked(zoneID) {
@@ -594,15 +597,18 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 
 		// Input field zones (in order of input indices)
 		settingsZones := []string{
-			ZoneSettingsGitHubToken,      // 0
-			ZoneSettingsJiraURL,          // 1
-			ZoneSettingsJiraUser,         // 2
-			ZoneSettingsJiraToken,        // 3
-			ZoneSettingsJiraExcluded,     // 4
-			ZoneSettingsCodecksSubdomain, // 5
-			ZoneSettingsCodecksToken,     // 6
-			ZoneSettingsCodecksProject,   // 7
-			ZoneSettingsCodecksExcluded,  // 8
+			ZoneSettingsGitHubToken,         // 0
+			ZoneSettingsJiraURL,             // 1
+			ZoneSettingsJiraUser,            // 2
+			ZoneSettingsJiraToken,           // 3
+			ZoneSettingsJiraProject,         // 4
+			ZoneSettingsJiraJQL,             // 5
+			ZoneSettingsJiraExcluded,        // 6
+			ZoneSettingsCodecksSubdomain,    // 7
+			ZoneSettingsCodecksToken,        // 8
+			ZoneSettingsCodecksProject,      // 9
+			ZoneSettingsCodecksExcluded,     // 10
+			ZoneSettingsGitHubIssuesExcluded, // 11
 		}
 		for i, zoneID := range settingsZones {
 			if userClicked(zoneID) {

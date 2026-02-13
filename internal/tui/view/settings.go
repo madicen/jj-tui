@@ -293,17 +293,47 @@ func (r *Renderer) renderJiraSettings(data SettingsData) []string {
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Get from: https://id.atlassian.com/manage-profile/security/api-tokens"))
 	lines = append(lines, "")
 
-	// Jira Excluded Statuses field (index 4)
+	// Jira Filters section
 	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("  Ticket Filters:"))
+
+	// Jira Project filter field (index 4)
+	projectLabel := "  Project(s):"
+	projectStyle := lipgloss.NewStyle()
+	if data.FocusedField == 4 {
+		projectStyle = projectStyle.Bold(true).Foreground(ColorPrimary)
+	}
+	lines = append(lines, projectStyle.Render(projectLabel))
+	if len(data.Inputs) > 4 {
+		clearBtn := r.Mark(ZoneSettingsJiraProjectClear, clearButtonStyle.Render("[Clear]"))
+		lines = append(lines, "  "+r.Mark(ZoneSettingsJiraProject, data.Inputs[4].View)+" "+clearBtn)
+	}
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Project key(s) to filter (e.g., PROJ or PROJ,TEAM)"))
+	lines = append(lines, "")
+
+	// Jira JQL filter field (index 5)
+	jqlLabel := "  Custom JQL:"
+	jqlStyle := lipgloss.NewStyle()
+	if data.FocusedField == 5 {
+		jqlStyle = jqlStyle.Bold(true).Foreground(ColorPrimary)
+	}
+	lines = append(lines, jqlStyle.Render(jqlLabel))
+	if len(data.Inputs) > 5 {
+		clearBtn := r.Mark(ZoneSettingsJiraJQLClear, clearButtonStyle.Render("[Clear]"))
+		lines = append(lines, "  "+r.Mark(ZoneSettingsJiraJQL, data.Inputs[5].View)+" "+clearBtn)
+	}
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Additional JQL filter (e.g., sprint in openSprints())"))
+	lines = append(lines, "")
+
+	// Jira Excluded Statuses field (index 6)
 	excludedLabel := "  Exclude Statuses:"
 	excludedStyle := lipgloss.NewStyle()
-	if data.FocusedField == 4 {
+	if data.FocusedField == 6 {
 		excludedStyle = excludedStyle.Bold(true).Foreground(ColorPrimary)
 	}
 	lines = append(lines, excludedStyle.Render(excludedLabel))
-	if len(data.Inputs) > 4 {
+	if len(data.Inputs) > 6 {
 		clearBtn := r.Mark(ZoneSettingsJiraExcludedClear, clearButtonStyle.Render("[Clear]"))
-		lines = append(lines, "  "+r.Mark(ZoneSettingsJiraExcluded, data.Inputs[4].View)+" "+clearBtn)
+		lines = append(lines, "  "+r.Mark(ZoneSettingsJiraExcluded, data.Inputs[6].View)+" "+clearBtn)
 	}
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Comma-separated list (e.g., Done, Won't Do, Cancelled)"))
 
@@ -311,7 +341,7 @@ func (r *Renderer) renderJiraSettings(data SettingsData) []string {
 }
 
 // renderCodecksSettings renders the Codecks settings content
-// Input indices: 5=Subdomain, 6=Token, 7=Project, 8=Excluded Statuses
+// Input indices: 7=Subdomain, 8=Token, 9=Project, 10=Excluded Statuses
 func (r *Renderer) renderCodecksSettings(data SettingsData) []string {
 	var lines []string
 
@@ -320,59 +350,59 @@ func (r *Renderer) renderCodecksSettings(data SettingsData) []string {
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("Connect to Codecks for card management."))
 	lines = append(lines, "")
 
-	// Codecks Subdomain field (index 5)
+	// Codecks Subdomain field (index 7)
 	codecksSubdomainLabel := "  Subdomain:"
 	codecksSubdomainStyle := lipgloss.NewStyle()
-	if data.FocusedField == 5 {
+	if data.FocusedField == 7 {
 		codecksSubdomainStyle = codecksSubdomainStyle.Bold(true).Foreground(ColorPrimary)
 	}
 	lines = append(lines, codecksSubdomainStyle.Render(codecksSubdomainLabel))
-	if len(data.Inputs) > 5 {
+	if len(data.Inputs) > 7 {
 		clearBtn := r.Mark(ZoneSettingsCodecksSubdomainClear, clearButtonStyle.Render("[Clear]"))
-		lines = append(lines, "  "+r.Mark(ZoneSettingsCodecksSubdomain, data.Inputs[5].View)+" "+clearBtn)
+		lines = append(lines, "  "+r.Mark(ZoneSettingsCodecksSubdomain, data.Inputs[7].View)+" "+clearBtn)
 	}
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Your team name (e.g., 'myteam' from myteam.codecks.io)"))
 	lines = append(lines, "")
 
-	// Codecks Token field (index 6)
+	// Codecks Token field (index 8)
 	codecksTokenLabel := "  Auth Token:"
 	codecksTokenStyle := lipgloss.NewStyle()
-	if data.FocusedField == 6 {
+	if data.FocusedField == 8 {
 		codecksTokenStyle = codecksTokenStyle.Bold(true).Foreground(ColorPrimary)
 	}
 	lines = append(lines, codecksTokenStyle.Render(codecksTokenLabel))
-	if len(data.Inputs) > 6 {
+	if len(data.Inputs) > 8 {
 		clearBtn := r.Mark(ZoneSettingsCodecksTokenClear, clearButtonStyle.Render("[Clear]"))
-		lines = append(lines, "  "+r.Mark(ZoneSettingsCodecksToken, data.Inputs[6].View)+" "+clearBtn)
+		lines = append(lines, "  "+r.Mark(ZoneSettingsCodecksToken, data.Inputs[8].View)+" "+clearBtn)
 	}
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Extract 'at' cookie from browser DevTools"))
 	lines = append(lines, "")
 
-	// Codecks Project field (index 7)
+	// Codecks Project field (index 9)
 	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("  Card Filters:"))
 	codecksProjectLabel := "  Project Filter:"
 	codecksProjectStyle := lipgloss.NewStyle()
-	if data.FocusedField == 7 {
+	if data.FocusedField == 9 {
 		codecksProjectStyle = codecksProjectStyle.Bold(true).Foreground(ColorPrimary)
 	}
 	lines = append(lines, codecksProjectStyle.Render(codecksProjectLabel))
-	if len(data.Inputs) > 7 {
+	if len(data.Inputs) > 9 {
 		clearBtn := r.Mark(ZoneSettingsCodecksProjectClear, clearButtonStyle.Render("[Clear]"))
-		lines = append(lines, "  "+r.Mark(ZoneSettingsCodecksProject, data.Inputs[7].View)+" "+clearBtn)
+		lines = append(lines, "  "+r.Mark(ZoneSettingsCodecksProject, data.Inputs[9].View)+" "+clearBtn)
 	}
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Optional: Only show cards from this project"))
 	lines = append(lines, "")
 
-	// Codecks Excluded Statuses field (index 8)
+	// Codecks Excluded Statuses field (index 10)
 	excludedLabel := "  Exclude Statuses:"
 	excludedStyle := lipgloss.NewStyle()
-	if data.FocusedField == 8 {
+	if data.FocusedField == 10 {
 		excludedStyle = excludedStyle.Bold(true).Foreground(ColorPrimary)
 	}
 	lines = append(lines, excludedStyle.Render(excludedLabel))
-	if len(data.Inputs) > 8 {
+	if len(data.Inputs) > 10 {
 		clearBtn := r.Mark(ZoneSettingsCodecksExcludedClear, clearButtonStyle.Render("[Clear]"))
-		lines = append(lines, "  "+r.Mark(ZoneSettingsCodecksExcluded, data.Inputs[8].View)+" "+clearBtn)
+		lines = append(lines, "  "+r.Mark(ZoneSettingsCodecksExcluded, data.Inputs[10].View)+" "+clearBtn)
 	}
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Comma-separated list (e.g., done, archived)"))
 
@@ -459,13 +489,13 @@ func (r *Renderer) renderTicketsSettings(data SettingsData) []string {
 		lines = append(lines, lipgloss.NewStyle().Bold(true).Render("  GitHub Issues Filters:"))
 		excludedLabel := "  Exclude Statuses:"
 		excludedStyle := lipgloss.NewStyle()
-		if data.FocusedField == 9 { // Index for GitHub Issues excluded statuses input
+		if data.FocusedField == 11 { // Index for GitHub Issues excluded statuses input
 			excludedStyle = excludedStyle.Bold(true).Foreground(ColorPrimary)
 		}
 		lines = append(lines, excludedStyle.Render(excludedLabel))
-		if len(data.Inputs) > 9 {
+		if len(data.Inputs) > 11 {
 			clearBtn := r.Mark(ZoneSettingsGitHubIssuesExcludedClear, clearButtonStyle.Render("[Clear]"))
-			lines = append(lines, "  "+r.Mark(ZoneSettingsGitHubIssuesExcluded, data.Inputs[9].View)+" "+clearBtn)
+			lines = append(lines, "  "+r.Mark(ZoneSettingsGitHubIssuesExcluded, data.Inputs[11].View)+" "+clearBtn)
 		}
 		lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Comma-separated list (e.g., closed)"))
 	}

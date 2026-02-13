@@ -17,6 +17,8 @@ type SettingsParams struct {
 	JiraURL                      string
 	JiraUser                     string
 	JiraToken                    string
+	JiraProject                  string
+	JiraJQL                      string
 	JiraExcludedStatuses         string
 	CodecksSubdomain             string
 	CodecksToken                 string
@@ -79,6 +81,8 @@ func SaveSettings(params SettingsParams) tea.Cmd {
 		cfg.JiraURL = params.JiraURL
 		cfg.JiraUser = params.JiraUser
 		cfg.JiraToken = params.JiraToken
+		cfg.JiraProject = params.JiraProject
+		cfg.JiraJQL = params.JiraJQL
 		cfg.JiraExcludedStatuses = params.JiraExcludedStatuses
 		cfg.CodecksSubdomain = params.CodecksSubdomain
 		cfg.CodecksToken = params.CodecksToken
@@ -109,6 +113,8 @@ func SaveSettingsLocal(params SettingsParams) tea.Cmd {
 			TicketAutoInProgress:         &params.AutoInProgress,
 			BranchStatsLimit:             &params.BranchLimit,
 			SanitizeBookmarkNames:        &params.SanitizeBookmarks,
+			JiraProject:                  params.JiraProject,
+			JiraJQL:                      params.JiraJQL,
 			JiraExcludedStatuses:         params.JiraExcludedStatuses,
 			CodecksProject:               params.CodecksProject,
 			CodecksExcludedStatuses:      params.CodecksExcludedStatuses,
@@ -135,6 +141,16 @@ func setEnvParams(params SettingsParams) {
 	os.Setenv("JIRA_URL", params.JiraURL)
 	os.Setenv("JIRA_USER", params.JiraUser)
 	os.Setenv("JIRA_TOKEN", params.JiraToken)
+	if params.JiraProject != "" {
+		os.Setenv("JIRA_PROJECT", params.JiraProject)
+	} else {
+		os.Unsetenv("JIRA_PROJECT")
+	}
+	if params.JiraJQL != "" {
+		os.Setenv("JIRA_JQL", params.JiraJQL)
+	} else {
+		os.Unsetenv("JIRA_JQL")
+	}
 	os.Setenv("CODECKS_SUBDOMAIN", params.CodecksSubdomain)
 	os.Setenv("CODECKS_TOKEN", params.CodecksToken)
 	if params.CodecksProject != "" {
