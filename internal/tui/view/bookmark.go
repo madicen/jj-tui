@@ -83,6 +83,16 @@ func (r *Renderer) Bookmark(data BookmarkData) string {
 	}
 	lines = append(lines, inputStyle.Render("Name:"))
 	lines = append(lines, r.Mark(ZoneBookmarkName, "  "+data.NameInput))
+
+	// Show warning if bookmark name already exists
+	if data.NameExists {
+		warningStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#E3B341")).
+			Bold(true)
+		lines = append(lines, "")
+		lines = append(lines, warningStyle.Render("⚠ A bookmark with this name already exists"))
+		lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("  Creating will move the existing bookmark to this commit"))
+	}
 	lines = append(lines, "")
 
 	// Action buttons

@@ -149,6 +149,7 @@ func (m *Model) startCreateBookmark() {
 	m.bookmarkNameInput.Width = m.width - 10
 	m.existingBookmarks = actions.GetExistingBookmarks(m.repository, m.selectedCommit)
 	m.selectedBookmarkIdx = -1
+	m.bookmarkNameExists = false // Reset when starting
 
 	m.viewMode = ViewCreateBookmark
 	m.statusMessage = fmt.Sprintf("Create or move bookmark on %s", commit.ShortID)

@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
+	"github.com/madicen/jj-tui/internal/jj"
 	"github.com/madicen/jj-tui/internal/models"
 )
 
@@ -130,4 +131,57 @@ func (m *Model) findCommitsWithEmptyDescriptions() []models.Commit {
 	}
 
 	return emptyDescCommits
+}
+
+// checkBookmarkNameExists checks if a bookmark name already exists in the repository
+func (m *Model) checkBookmarkNameExists(name string) bool {
+	if name == "" {
+		return false
+	}
+
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return false
+	}
+
+	// Check against the full branch list (includes all local and remote branches)
+	// This is the most comprehensive source
+	for _, branch := range m.branchList {
+		if branch.Name == name {
+			return true
+		}
+	}
+
+	// Also check against branches on commits in the graph
+	// This serves as a backup if branchList isn't loaded yet
+	if m.repository != nil {
+		for _, commit := range m.repository.Graph.Commits {
+			for _, branchName := range commit.Branches {
+				if branchName == name {
+					return true
+				}
+			}
+		}
+	}
+
+	// Also check the existingBookmarks list (bookmarks that can be moved)
+	for _, bookmark := range m.existingBookmarks {
+		if bookmark == name {
+			return true
+		}
+	}
+
+	return false
+}
+
+// updateBookmarkNameExists updates the bookmarkNameExists flag based on current input
+func (m *Model) updateBookmarkNameExists() {
+	name := m.bookmarkNameInput.Value()
+
+	// If sanitization is enabled, check the sanitized name
+	if m.settingsSanitizeBookmarks {
+		name = jj.SanitizeBookmarkName(name)
+	}
+
+	m.bookmarkNameExists = m.checkBookmarkNameExists(name)
 }

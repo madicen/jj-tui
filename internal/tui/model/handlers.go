@@ -341,6 +341,8 @@ func (m *Model) handleCreateBookmark() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.startCreateBookmark()
+		// Load branches in the background to ensure duplicate checking has full data
+		return m, m.loadBranches()
 	}
 	return m, nil
 }
@@ -365,6 +367,18 @@ func (m *Model) handleUpdatePR() (tea.Model, tea.Cmd) {
 			m.statusMessage = "No open PR found for this commit or its ancestors"
 			return m, nil
 		}
+
+		// Check for commits with empty descriptions
+		emptyDescCommits := m.findCommitsWithEmptyDescriptions()
+		if len(emptyDescCommits) > 0 {
+			m.showWarningModal = true
+			m.warningTitle = "Commits Need Descriptions"
+			m.warningMessage = "GitHub requires commit descriptions. Please add descriptions before updating the PR."
+			m.warningCommits = emptyDescCommits
+			m.warningSelectedIdx = 0
+			return m, nil
+		}
+
 		commit := m.repository.Graph.Commits[m.selectedCommit]
 		// Check if we need to move the bookmark (commit doesn't have it directly)
 		needsMoveBookmark := true

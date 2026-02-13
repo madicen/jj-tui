@@ -188,6 +188,7 @@ type BookmarkData struct {
 	SelectedBookmark  int      // Index of selected existing bookmark (-1 for new)
 	FromJira          bool     // True if creating bookmark from Jira ticket
 	JiraTicketKey     string   // Jira ticket key when FromJira is true
+	NameExists        bool     // True if the entered name matches an existing bookmark
 }
 
 // BookmarkConflictData contains data needed for bookmark conflict resolution view
