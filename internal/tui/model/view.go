@@ -17,32 +17,55 @@ func (m *Model) View() string {
 		return "Loading..."
 	}
 
+	var v string
+
+	// Handle errors first - regular errors show as centered modal, "not a jj repo" shows welcome screen
+	if m.err != nil {
+		if m.notJJRepo {
+			// "Not a jj repo" shows a welcome screen with normal UI
+			header := m.renderHeader()
+			statusBar := m.renderStatusBar()
+			headerHeight := strings.Count(header, "\n") + 1
+			statusHeight := strings.Count(statusBar, "\n") + 1
+			fullContentHeight := max(m.height-headerHeight-statusHeight, 1)
+			m.viewport.Height = fullContentHeight
+
+			errorContent := m.renderError()
+			m.viewport.SetContent(errorContent)
+			viewportContent := m.viewport.View()
+
+			v = lipgloss.JoinVertical(
+				lipgloss.Left,
+				header,
+				viewportContent,
+				statusBar,
+			)
+			return m.zoneManager.Scan(v)
+		}
+
+		// Regular errors: show centered modal without header/tabs/status bar
+		errorModal := m.renderError()
+
+		// Center the modal both horizontally and vertically
+		modalHeight := strings.Count(errorModal, "\n") + 1
+		topPadding := (m.height - modalHeight) / 2
+		if topPadding < 0 {
+			topPadding = 0
+		}
+
+		centeredModal := lipgloss.NewStyle().
+			Width(m.width).
+			Height(m.height).
+			Align(lipgloss.Center).
+			AlignVertical(lipgloss.Center).
+			Render(errorModal)
+
+		return m.zoneManager.Scan(centeredModal)
+	}
+
 	// Build the view with zone markers
 	header := m.renderHeader()
 	statusBar := m.renderStatusBar()
-
-	var v string
-
-	// Handle errors first - especially "not a jj repo" which needs special UI
-	if m.err != nil {
-		headerHeight := strings.Count(header, "\n") + 1
-		statusHeight := strings.Count(statusBar, "\n") + 1
-		fullContentHeight := max(m.height-headerHeight-statusHeight, 1)
-		m.viewport.Height = fullContentHeight
-
-		// Render error content (includes init button for non-jj repos)
-		errorContent := m.renderError()
-		m.viewport.SetContent(errorContent)
-		viewportContent := m.viewport.View()
-
-		v = lipgloss.JoinVertical(
-			lipgloss.Left,
-			header,
-			viewportContent,
-			statusBar,
-		)
-		return m.zoneManager.Scan(v)
-	}
 
 	// For PR, Jira, and Branches views, use split rendering with fixed header
 	switch m.viewMode {
@@ -325,16 +348,17 @@ func (m *Model) renderSplitContent() (string, string) {
 // renderError renders an error message
 // renderError renders an error message with text wrapping
 func (m *Model) renderError() string {
-	errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555"))
-
-	// Special handling for "not a jj repo" error - show init button
+	// Special handling for "not a jj repo" - show a welcome/setup screen instead of an error
 	if m.notJJRepo {
+		mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#8B949E"))
+		pathStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#58A6FF"))
+
 		var lines []string
-		lines = append(lines, view.TitleStyle.Render("Not a Jujutsu Repository"))
+		lines = append(lines, view.TitleStyle.Render("Welcome to jj-tui"))
 		lines = append(lines, "")
-		lines = append(lines, errorStyle.Render(fmt.Sprintf("Directory: %s", m.currentPath)))
+		lines = append(lines, fmt.Sprintf("Directory: %s", pathStyle.Render(m.currentPath)))
 		lines = append(lines, "")
-		lines = append(lines, "This directory is not initialized as a Jujutsu repository.")
+		lines = append(lines, "This directory is not yet a Jujutsu repository.")
 		lines = append(lines, "")
 		lines = append(lines, lipgloss.NewStyle().Bold(true).Render("Would you like to initialize it?"))
 		lines = append(lines, "")
@@ -343,32 +367,79 @@ func (m *Model) renderError() string {
 		initButton := m.zoneManager.Mark(ZoneActionJJInit, view.ButtonStyle.Background(lipgloss.Color("#238636")).Render("Initialize Repository (i)"))
 		lines = append(lines, initButton)
 		lines = append(lines, "")
-		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#8B949E")).Render("This will run: jj git init"))
-		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#8B949E")).Render("and try to track main@origin if available"))
+		lines = append(lines, mutedStyle.Render("This will run: jj git init"))
+		lines = append(lines, mutedStyle.Render("and try to track main@origin if available"))
 		lines = append(lines, "")
-		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#8B949E")).Render("Press Ctrl+q to quit"))
+		lines = append(lines, mutedStyle.Render("Press Ctrl+q to quit"))
 
 		return strings.Join(lines, "\n")
 	}
 
-	// Wrap the error message to fit the terminal width
-	wrapWidth := m.width - 4 // Leave some padding
-	if wrapWidth < 40 {
-		wrapWidth = 40
+	// Render error as a modal dialog box
+	modalWidth := m.width - 8
+	if modalWidth < 50 {
+		modalWidth = 50
+	}
+	if modalWidth > 80 {
+		modalWidth = 80
 	}
 
-	// Format the error message with wrapping
-	errMsg := fmt.Sprintf("Error: %v", m.err)
-	wrappedError := lipgloss.NewStyle().
-		Width(wrapWidth).
+	// Styles
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
 		Foreground(lipgloss.Color("#FF5555")).
-		Render(errMsg)
+		MarginBottom(1)
 
-	instructions := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#8B949E")).
-		Render("Press Ctrl+r to retry, Esc to dismiss, or Ctrl+q to quit.")
+	errorStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#FFFFFF")).
+		Width(modalWidth - 4)
 
-	return wrappedError + "\n\n" + instructions
+	mutedStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#8B949E"))
+
+	buttonStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#FFFFFF")).
+		Background(lipgloss.Color("#30363d")).
+		Padding(0, 1).
+		Bold(true)
+
+	// Build modal content
+	var content strings.Builder
+	content.WriteString(titleStyle.Render("⚠ Error"))
+	content.WriteString("\n\n")
+	content.WriteString(errorStyle.Render(m.err.Error()))
+	content.WriteString("\n\n")
+	content.WriteString(mutedStyle.Render("─────────────────────────────────────"))
+	content.WriteString("\n\n")
+
+	// Clickable button row
+	dismissBtn := m.zoneManager.Mark(ZoneActionDismissError, buttonStyle.Render("Dismiss (Esc)"))
+
+	// Show "Copied!" indicator if error was just copied
+	var copyBtn string
+	if m.errorCopied {
+		copiedStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#2ea44f")).
+			Bold(true)
+		copyBtn = copiedStyle.Render("✓ Copied!")
+	} else {
+		copyBtn = m.zoneManager.Mark(ZoneActionCopyError, buttonStyle.Render("Copy (c)"))
+	}
+
+	retryBtn := m.zoneManager.Mark(ZoneActionRetry, buttonStyle.Render("Retry (^r)"))
+	quitBtn := m.zoneManager.Mark(ZoneActionQuit, buttonStyle.Background(lipgloss.Color("#c9302c")).Render("Quit (^q)"))
+
+	content.WriteString(dismissBtn + "  " + copyBtn + "  " + retryBtn + "  " + quitBtn)
+
+	// Create the modal box with border
+	modalBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#FF5555")).
+		Padding(1, 2).
+		Width(modalWidth).
+		Render(content.String())
+
+	return modalBox
 }
 
 // getGraphResult returns the GraphResult for the commit graph view
@@ -746,8 +817,8 @@ func (m *Model) renderStatusBar() string {
 	// Build shortcuts list
 	var shortcuts []string
 
-	// Add error action buttons first (if there's an error)
-	hasError := m.err != nil || strings.Contains(strings.ToLower(m.statusMessage), "error") || strings.Contains(strings.ToLower(m.statusMessage), "failed")
+	// Add error action buttons first (if there's an error, but not for "not a jj repo" which shows a welcome screen)
+	hasError := (m.err != nil && !m.notJJRepo) || strings.Contains(strings.ToLower(m.statusMessage), "error") || strings.Contains(strings.ToLower(m.statusMessage), "failed")
 	if hasError {
 		copyBtn := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#FF6B6B")).

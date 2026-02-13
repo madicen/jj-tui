@@ -16,10 +16,31 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 
 	userClicked := m.createIsZoneClickedFunc(clickedZone)
 
-	// Check for JJ init button (shown when not in a jj repo)
-	if userClicked(ZoneActionJJInit) && m.notJJRepo {
-		m.statusMessage = "Initializing repository..."
-		return m, m.runJJInit()
+	// Handle error state first - error modal blocks most mouse interactions
+	if m.err != nil {
+		// For "not a jj repo", allow the init button
+		if m.notJJRepo && userClicked(ZoneActionJJInit) {
+			m.statusMessage = "Initializing repository..."
+			return m, m.runJJInit()
+		}
+		// For regular errors, only allow copy/dismiss/retry/quit
+		if userClicked(ZoneActionCopyError) {
+			return m.handleCopyError()
+		}
+		if userClicked(ZoneActionDismissError) {
+			return m.handleDismissError()
+		}
+		if userClicked(ZoneActionRetry) {
+			m.err = nil
+			m.errorCopied = false
+			m.viewMode = ViewCommitGraph
+			return m, m.refreshRepository()
+		}
+		if userClicked(ZoneActionQuit) {
+			return m, tea.Quit
+		}
+		// Block all other mouse clicks during error state
+		return m, nil
 	}
 
 	// GitHub login copy code button

@@ -278,6 +278,7 @@ func (m *Model) handleCopyError() (tea.Model, tea.Cmd) {
 func (m *Model) handleDismissError() (tea.Model, tea.Cmd) {
 	// Dismiss/clear the error and restart auto-refresh
 	m.err = nil
+	m.errorCopied = false
 	m.statusMessage = "Ready"
 	return m, m.tickCmd()
 }

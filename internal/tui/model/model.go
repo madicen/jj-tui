@@ -51,6 +51,7 @@ type Model struct {
 	loadingTransitions   bool
 	notJJRepo            bool   // true if error is "not a jj repository"
 	currentPath          string // path where we're running (for jj init)
+	errorCopied          bool   // true if error was just copied to clipboard
 
 	// Changed files for selected commit
 	changedFiles         []jj.ChangedFile
@@ -961,6 +962,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Different message depending on context
 			if m.viewMode == ViewGitHubLogin {
 				m.statusMessage = "Code copied to clipboard! Paste it in your browser."
+			} else if m.err != nil {
+				// In error modal, set flag to show "Copied!" in the modal
+				m.errorCopied = true
+				m.statusMessage = "Error copied to clipboard!"
 			} else {
 				m.statusMessage = "Copied to clipboard!"
 			}
