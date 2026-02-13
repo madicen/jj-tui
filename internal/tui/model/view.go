@@ -47,12 +47,6 @@ func (m *Model) View() string {
 		errorModal := m.renderError()
 
 		// Center the modal both horizontally and vertically
-		modalHeight := strings.Count(errorModal, "\n") + 1
-		topPadding := (m.height - modalHeight) / 2
-		if topPadding < 0 {
-			topPadding = 0
-		}
-
 		centeredModal := lipgloss.NewStyle().
 			Width(m.width).
 			Height(m.height).

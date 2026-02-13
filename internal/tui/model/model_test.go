@@ -1048,7 +1048,7 @@ func TestJJInitFeature(t *testing.T) {
 		view := m.View()
 
 		// Check that the init screen elements are present
-		if !containsString(view, "Not a Jujutsu Repository") {
+		if !containsString(view, "Welcome to jj-tui") {
 			t.Error("Expected init screen title in view")
 		}
 		if !containsString(view, "Initialize Repository") {
@@ -1151,12 +1151,12 @@ func TestJJInitFeature(t *testing.T) {
 
 		view := m.View()
 
-		// Should show error screen, not graph
+		// Should show welcome screen, not graph
 		if containsString(view, "Changed Files") {
 			t.Error("Should not show graph content when there's an error")
 		}
-		if !containsString(view, "Not a Jujutsu Repository") {
-			t.Error("Should show error screen when there's an error")
+		if !containsString(view, "Welcome to jj-tui") {
+			t.Error("Should show welcome screen when not a jj repo")
 		}
 	})
 }
