@@ -453,6 +453,8 @@ func (m *Model) handleCreateBookmarkKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 	if m.selectedBookmarkIdx == -1 {
 		var cmd tea.Cmd
 		m.bookmarkNameInput, cmd = m.bookmarkNameInput.Update(msg)
+		// Check if the entered name already exists
+		m.updateBookmarkNameExists()
 		return m, cmd
 	}
 

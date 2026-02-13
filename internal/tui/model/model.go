@@ -139,6 +139,7 @@ type Model struct {
 	bookmarkTicketDisplayKey  string            // Short display key (e.g., "$12u" for Codecks) for commit messages
 	jiraBookmarkTitles        map[string]string // Maps bookmark names to formatted PR titles ("KEY - Title")
 	ticketBookmarkDisplayKeys map[string]string // Maps bookmark names to ticket short IDs for commit messages
+	bookmarkNameExists        bool              // True if entered name matches an existing bookmark
 
 	// GitHub Device Flow state
 	githubDeviceCode      string // Device code for polling
@@ -534,11 +535,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMessage = fmt.Sprintf("Failed to load branches: %v", msg.err)
 		} else {
 			m.branchList = msg.branches
-			if m.err == nil {
+			if m.err == nil && m.viewMode != ViewCreateBookmark {
 				m.statusMessage = fmt.Sprintf("Loaded %d branches", len(msg.branches))
 			}
 			if len(msg.branches) > 0 && m.selectedBranch < 0 {
 				m.selectedBranch = 0
+			}
+			// Re-check bookmark name duplicate if we're in bookmark creation view
+			if m.viewMode == ViewCreateBookmark {
+				m.updateBookmarkNameExists()
 			}
 		}
 		return m, nil

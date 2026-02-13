@@ -864,6 +864,7 @@ func (m *Model) renderCreateBookmark() string {
 		SelectedBookmark:  m.selectedBookmarkIdx,
 		FromJira:          m.bookmarkFromJira,
 		JiraTicketKey:     m.bookmarkJiraTicketKey,
+		NameExists:        m.bookmarkNameExists,
 	})
 }
 

@@ -341,6 +341,8 @@ func (m *Model) handleCreateBookmark() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.startCreateBookmark()
+		// Load branches in the background to ensure duplicate checking has full data
+		return m, m.loadBranches()
 	}
 	return m, nil
 }

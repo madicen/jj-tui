@@ -627,6 +627,9 @@ func (m *Model) startBookmarkFromTicket(ticket tickets.Ticket) {
 	m.existingBookmarks = nil                      // Don't show existing bookmarks for ticket flow
 	m.selectedBookmarkIdx = -1
 
+	// Check if the pre-filled name already exists
+	m.updateBookmarkNameExists()
+
 	m.viewMode = ViewCreateBookmark
 	m.statusMessage = fmt.Sprintf("Create bookmark for %s (will create new branch from main)", ticket.Key)
 }
