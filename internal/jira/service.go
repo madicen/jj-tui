@@ -97,6 +97,41 @@ func (s *Service) checkPermissions() error {
 	return nil
 }
 
+// buildJQL constructs the JQL query with optional project and custom filters
+func (s *Service) buildJQL() string {
+	var conditions []string
+
+	// Base condition: assigned to current user
+	conditions = append(conditions, fmt.Sprintf("assignee = \"%s\"", s.username))
+
+	// Optional: filter by project(s)
+	if project := os.Getenv("JIRA_PROJECT"); project != "" {
+		// Support comma-separated projects (e.g., "PROJ,TEAM")
+		projects := strings.Split(project, ",")
+		for i, p := range projects {
+			projects[i] = strings.TrimSpace(p)
+		}
+		if len(projects) == 1 {
+			conditions = append(conditions, fmt.Sprintf("project = \"%s\"", projects[0]))
+		} else {
+			// Multiple projects: project IN ("PROJ", "TEAM")
+			quotedProjects := make([]string, len(projects))
+			for i, p := range projects {
+				quotedProjects[i] = fmt.Sprintf("\"%s\"", p)
+			}
+			conditions = append(conditions, fmt.Sprintf("project IN (%s)", strings.Join(quotedProjects, ", ")))
+		}
+	}
+
+	// Optional: custom JQL filter
+	if customJQL := os.Getenv("JIRA_JQL"); customJQL != "" {
+		conditions = append(conditions, customJQL)
+	}
+
+	// Combine all conditions with AND, then add ORDER BY
+	jql := strings.Join(conditions, " AND ") + " ORDER BY updated DESC"
+	return jql
+}
 
 // searchResponse represents the response from Jira search API v3
 type searchResponse struct {
@@ -143,8 +178,8 @@ func (s *Service) doRequest(ctx context.Context, method, endpoint string, body i
 
 // GetAssignedTickets fetches tickets assigned to the current user using API v3
 func (s *Service) GetAssignedTickets(ctx context.Context) ([]tickets.Ticket, error) {
-	// JQL to find issues assigned to the current user
-	jql := fmt.Sprintf("assignee = \"%s\" ORDER BY updated DESC", s.username)
+	// Build JQL query with optional filters
+	jql := s.buildJQL()
 
 	// Use the new /rest/api/3/search/jql endpoint
 	// Must explicitly request fields - the v3 API returns minimal data by default

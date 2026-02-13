@@ -39,6 +39,8 @@ type Config struct {
 	JiraURL              string `json:"jira_url,omitempty"`
 	JiraUser             string `json:"jira_user,omitempty"`
 	JiraToken            string `json:"jira_token,omitempty"`
+	JiraProject          string `json:"jira_project,omitempty"`           // Optional: filter by project key(s), comma-separated (e.g., "PROJ" or "PROJ,TEAM")
+	JiraJQL              string `json:"jira_jql,omitempty"`               // Optional: custom JQL to append to query (e.g., "sprint in openSprints()")
 	JiraExcludedStatuses string `json:"jira_excluded_statuses,omitempty"` // Comma-separated statuses to hide
 
 	// Codecks settings
@@ -142,6 +144,12 @@ func mergeConfig(dest, source *Config) {
 	}
 	if source.JiraToken != "" {
 		dest.JiraToken = source.JiraToken
+	}
+	if source.JiraProject != "" {
+		dest.JiraProject = source.JiraProject
+	}
+	if source.JiraJQL != "" {
+		dest.JiraJQL = source.JiraJQL
 	}
 	if source.JiraExcludedStatuses != "" {
 		dest.JiraExcludedStatuses = source.JiraExcludedStatuses
@@ -298,6 +306,12 @@ func (c *Config) ApplyToEnvironment() {
 	if c.JiraToken != "" && os.Getenv("JIRA_TOKEN") == "" {
 		os.Setenv("JIRA_TOKEN", c.JiraToken)
 	}
+	if c.JiraProject != "" && os.Getenv("JIRA_PROJECT") == "" {
+		os.Setenv("JIRA_PROJECT", c.JiraProject)
+	}
+	if c.JiraJQL != "" && os.Getenv("JIRA_JQL") == "" {
+		os.Setenv("JIRA_JQL", c.JiraJQL)
+	}
 	if c.CodecksSubdomain != "" && os.Getenv("CODECKS_SUBDOMAIN") == "" {
 		os.Setenv("CODECKS_SUBDOMAIN", c.CodecksSubdomain)
 	}
@@ -322,6 +336,12 @@ func (c *Config) UpdateFromEnvironment() {
 	}
 	if token := os.Getenv("JIRA_TOKEN"); token != "" {
 		c.JiraToken = token
+	}
+	if project := os.Getenv("JIRA_PROJECT"); project != "" {
+		c.JiraProject = project
+	}
+	if jql := os.Getenv("JIRA_JQL"); jql != "" {
+		c.JiraJQL = jql
 	}
 	if subdomain := os.Getenv("CODECKS_SUBDOMAIN"); subdomain != "" {
 		c.CodecksSubdomain = subdomain
