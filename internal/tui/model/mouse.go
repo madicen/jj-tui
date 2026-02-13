@@ -43,6 +43,37 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 		return m, nil
 	}
 
+	// Handle warning modal clicks
+	if m.showWarningModal {
+		if userClicked(ZoneWarningGoToCommit) {
+			// Go to the selected commit and start editing its description
+			if len(m.warningCommits) > 0 && m.warningSelectedIdx < len(m.warningCommits) {
+				selectedCommit := m.warningCommits[m.warningSelectedIdx]
+				// Find this commit in the graph and select it
+				for i, c := range m.repository.Graph.Commits {
+					if c.ChangeID == selectedCommit.ChangeID {
+						m.selectedCommit = i
+						m.showWarningModal = false
+						m.warningCommits = nil
+						// Start editing description
+						return m.handleDescribeCommit()
+					}
+				}
+			}
+			m.showWarningModal = false
+			m.warningCommits = nil
+			return m, nil
+		}
+		if userClicked(ZoneWarningDismiss) {
+			m.showWarningModal = false
+			m.warningCommits = nil
+			m.statusMessage = "Cancelled"
+			return m, nil
+		}
+		// Block all other mouse clicks during warning modal
+		return m, nil
+	}
+
 	// GitHub login copy code button
 	if userClicked(ZoneGitHubLoginCopyCode) && m.githubUserCode != "" {
 		m.statusMessage = "Copying code to clipboard..."

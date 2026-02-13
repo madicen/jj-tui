@@ -53,6 +53,13 @@ type Model struct {
 	currentPath          string // path where we're running (for jj init)
 	errorCopied          bool   // true if error was just copied to clipboard
 
+	// Warning modal state (for empty commit descriptions, etc.)
+	showWarningModal     bool              // true if warning modal is displayed
+	warningTitle         string            // title for warning modal
+	warningMessage       string            // message for warning modal
+	warningCommits       []models.Commit   // commits with issues (for display)
+	warningSelectedIdx   int               // selected commit index in warning modal
+
 	// Changed files for selected commit
 	changedFiles         []jj.ChangedFile
 	changedFilesCommitID string // Which commit the files are for

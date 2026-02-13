@@ -57,6 +57,10 @@ const (
 	// Init button zone (shown when not in a jj repo)
 	ZoneActionJJInit = "zone:action:jj_init"
 
+	// Warning modal zones
+	ZoneWarningGoToCommit = "zone:warning:goto_commit"
+	ZoneWarningDismiss    = "zone:warning:dismiss"
+
 	// Graph view pane zones (for click-to-focus)
 	ZoneGraphPane = "zone:graph:pane"
 	ZoneFilesPane = "zone:files:pane"
