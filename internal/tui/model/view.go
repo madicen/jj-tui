@@ -252,6 +252,11 @@ func (m *Model) renderer() *view.Renderer {
 func (m *Model) renderHeader() string {
 	title := TitleStyle.Render("jj-tui")
 
+	// Hide tabs when we're in "not a jj repo" state - tabs aren't functional without a repo
+	if m.notJJRepo {
+		return HeaderStyle.Width(m.width).Render(title)
+	}
+
 	// Create tabs wrapped in zones (with keyboard shortcuts)
 	tabs := []string{
 		m.zoneManager.Mark(ZoneTabGraph, m.renderTab("Graph (g)", m.viewMode == ViewCommitGraph)),
