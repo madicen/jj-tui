@@ -113,7 +113,7 @@ func (m *Model) handleNavigateToGraphTab() (tea.Model, tea.Cmd) {
 func (m *Model) handleNavigateToPRTab() (tea.Model, tea.Cmd) {
 	m.viewMode = ViewPullRequests
 	// Load PRs when switching to PR view
-	if m.githubService != nil {
+	if m.isGitHubAvailable() {
 		m.statusMessage = "Loading PRs..."
 		return m, m.loadPRs()
 	}
@@ -312,7 +312,7 @@ func (m *Model) handleSelectCommit(index int) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleCreatePR() (tea.Model, tea.Cmd) {
-	if m.githubService == nil {
+	if !m.isGitHubAvailable() {
 		m.statusMessage = "GitHub not connected. Configure in Settings (,)"
 		return m, nil
 	}
@@ -369,6 +369,10 @@ func (m *Model) handleOpenPRInBrowser() (tea.Model, tea.Cmd) {
 	if m.repository != nil && m.selectedPR >= 0 && m.selectedPR < len(m.repository.PRs) {
 		pr := m.repository.PRs[m.selectedPR]
 		if pr.URL != "" {
+			if m.demoMode {
+				m.statusMessage = fmt.Sprintf("PR #%d: %s (demo mode - browser disabled)", pr.Number, pr.URL)
+				return m, nil
+			}
 			m.statusMessage = fmt.Sprintf("Opening PR #%d...", pr.Number)
 			return m, openURL(pr.URL)
 		}
@@ -387,7 +391,7 @@ func (m *Model) handleOpenTicketInBrowser() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleMergePR() (tea.Model, tea.Cmd) {
-	if m.viewMode == ViewPullRequests && m.githubService != nil && m.repository != nil && m.selectedPR >= 0 && m.selectedPR < len(m.repository.PRs) {
+	if m.viewMode == ViewPullRequests && m.isGitHubAvailable() && m.repository != nil && m.selectedPR >= 0 && m.selectedPR < len(m.repository.PRs) {
 		pr := m.repository.PRs[m.selectedPR]
 		if pr.State != "open" {
 			m.statusMessage = "Can only merge open PRs"
@@ -400,7 +404,7 @@ func (m *Model) handleMergePR() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleClosePR() (tea.Model, tea.Cmd) {
-	if m.viewMode == ViewPullRequests && m.githubService != nil && m.repository != nil && m.selectedPR >= 0 && m.selectedPR < len(m.repository.PRs) {
+	if m.viewMode == ViewPullRequests && m.isGitHubAvailable() && m.repository != nil && m.selectedPR >= 0 && m.selectedPR < len(m.repository.PRs) {
 		pr := m.repository.PRs[m.selectedPR]
 		if pr.State != "open" {
 			m.statusMessage = "Can only close open PRs"
@@ -558,7 +562,7 @@ func (m *Model) handlePRCancel() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handlePRSubmit() (tea.Model, tea.Cmd) {
-	if m.viewMode == ViewCreatePR && m.githubService != nil && m.jjService != nil {
+	if m.viewMode == ViewCreatePR && m.isGitHubAvailable() && m.jjService != nil {
 		return m, m.submitPR()
 	}
 	return m, nil

@@ -296,8 +296,14 @@ func (m *Model) loadRepositorySilent() tea.Cmd {
 
 // loadPRs loads pull requests from GitHub
 func (m *Model) loadPRs() tea.Cmd {
-	// In demo mode, return mock PRs
+	// In demo mode, return mock PRs (only if not already loaded)
 	if m.demoMode {
+		// If we already have PRs (including any user-created ones), keep them
+		if m.repository != nil && len(m.repository.PRs) > 0 {
+			return func() tea.Msg {
+				return prsLoadedMsg{prs: nil} // nil signals to keep existing PRs
+			}
+		}
 		return func() tea.Msg {
 			return prsLoadedMsg{prs: mock.DemoPullRequests()}
 		}
@@ -356,6 +362,12 @@ func (m *Model) loadPRs() tea.Cmd {
 
 // mergePR merges the selected pull request
 func (m *Model) mergePR(prNumber int) tea.Cmd {
+	if m.demoMode {
+		// In demo mode, return fake success
+		return func() tea.Msg {
+			return prMergedMsg{prNumber: prNumber, err: nil}
+		}
+	}
 	if m.githubService == nil {
 		return nil
 	}
@@ -370,6 +382,12 @@ func (m *Model) mergePR(prNumber int) tea.Cmd {
 
 // closePR closes the selected pull request without merging
 func (m *Model) closePR(prNumber int) tea.Cmd {
+	if m.demoMode {
+		// In demo mode, return fake success
+		return func() tea.Msg {
+			return prClosedMsg{prNumber: prNumber, err: nil}
+		}
+	}
 	if m.githubService == nil {
 		return nil
 	}
@@ -392,8 +410,9 @@ func (m *Model) loadTickets() tea.Cmd {
 		}
 	}
 
-	// Capture service reference for the closure
+	// Capture service reference and demo mode for the closure
 	svc := m.ticketService
+	demoMode := m.demoMode
 
 	return func() tea.Msg {
 		ticketList, err := svc.GetAssignedTickets(context.Background())
@@ -401,9 +420,9 @@ func (m *Model) loadTickets() tea.Cmd {
 			return errorMsg{Err: fmt.Errorf("failed to load tickets: %w", err)}
 		}
 
-		// Apply status filters from config
+		// Apply status filters from config (skip in demo mode to show all statuses)
 		cfg, _ := config.Load()
-		if cfg != nil {
+		if cfg != nil && !demoMode {
 			// Build excluded statuses set based on provider
 			excludedStatuses := make(map[string]bool)
 			var excludedStr string

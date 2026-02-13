@@ -423,7 +423,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Load PRs on startup if GitHub is connected or in demo mode
 		// Also start PR auto-refresh timer
-		if m.githubService != nil || m.demoMode {
+		if m.isGitHubAvailable() {
 			cmds = append(cmds, m.loadPRs())
 			if prTickCmd := m.prTickCmd(); prTickCmd != nil {
 				cmds = append(cmds, prTickCmd)
@@ -441,6 +441,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case prsLoadedMsg:
+		// nil prs signals to keep existing PRs (used in demo mode)
+		if msg.prs == nil {
+			if m.repository != nil && m.err == nil {
+				m.statusMessage = fmt.Sprintf("PRs: %d", len(m.repository.PRs))
+			}
+			return m, nil
+		}
 		if m.repository != nil {
 			m.repository.PRs = msg.prs
 			// Only update status if there's no existing error
@@ -650,6 +657,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case prCreatedMsg:
 		m.viewMode = ViewCommitGraph
 		m.statusMessage = fmt.Sprintf("PR #%d created: %s", msg.pr.Number, msg.pr.Title)
+
+		if m.demoMode {
+			// In demo mode, add the PR to the list directly without opening browser
+			if m.repository != nil {
+				m.repository.PRs = append([]models.GitHubPR{*msg.pr}, m.repository.PRs...)
+			}
+			return m, nil
+		}
+
 		// Open the PR in browser and refresh PR list
 		return m, tea.Batch(openURL(msg.pr.URL), m.loadPRs())
 
@@ -812,8 +828,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.err != nil {
 			return m, nil
 		}
-		// Auto-refresh: reload repository data silently (but not while editing, creating PR, or creating bookmark)
-		if !m.loading && m.jjService != nil && m.viewMode != ViewEditDescription && m.viewMode != ViewCreatePR && m.viewMode != ViewCreateBookmark {
+		// Auto-refresh: reload repository data silently (but not while editing, creating PR, creating bookmark, or selecting rebase destination)
+		if !m.loading && m.jjService != nil && m.viewMode != ViewEditDescription && m.viewMode != ViewCreatePR && m.viewMode != ViewCreateBookmark && m.selectionMode != SelectionRebaseDestination {
 			return m, tea.Batch(m.loadRepositorySilent(), m.tickCmd())
 		}
 		return m, m.tickCmd()

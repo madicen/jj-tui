@@ -307,6 +307,10 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.viewMode == ViewPullRequests && m.repository != nil && m.selectedPR >= 0 && m.selectedPR < len(m.repository.PRs) {
 			pr := m.repository.PRs[m.selectedPR]
 			if pr.URL != "" {
+				if m.demoMode {
+					m.statusMessage = fmt.Sprintf("PR #%d: %s (demo mode - browser disabled)", pr.Number, pr.URL)
+					return m, nil
+				}
 				m.statusMessage = fmt.Sprintf("Opening PR #%d...", pr.Number)
 				return m, openURL(pr.URL)
 			}

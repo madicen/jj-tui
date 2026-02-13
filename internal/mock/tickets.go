@@ -103,9 +103,24 @@ func (s *TicketService) GetAvailableTransitions(ctx context.Context, ticketKey s
 	return []tickets.Transition{}, nil
 }
 
-// TransitionTicket is a no-op for the mock
+// TransitionTicket updates the ticket status in the mock
 func (s *TicketService) TransitionTicket(ctx context.Context, ticketKey string, transitionID string) error {
-	// In demo mode, just pretend it worked
+	// Find and update the ticket status
+	for i, t := range s.tickets {
+		if t.Key == ticketKey || t.DisplayKey == ticketKey {
+			switch transitionID {
+			case "in_progress":
+				s.tickets[i].Status = "In Progress"
+			case "done":
+				s.tickets[i].Status = "Done"
+			case "todo":
+				s.tickets[i].Status = "To Do"
+			case "reopen":
+				s.tickets[i].Status = "To Do"
+			}
+			break
+		}
+	}
 	return nil
 }
 

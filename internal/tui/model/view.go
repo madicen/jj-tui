@@ -501,7 +501,7 @@ func (m *Model) renderPullRequests() string {
 	result := m.renderer().PullRequests(view.PRData{
 		Repository:    m.repository,
 		SelectedPR:    m.selectedPR,
-		GithubService: m.githubService != nil || m.demoMode,
+		GithubService: m.isGitHubAvailable(),
 		Width:         m.width,
 	})
 	return result.FullContent
@@ -513,7 +513,7 @@ func (m *Model) renderPullRequestsSplit() (string, string) {
 	result := m.renderer().PullRequests(view.PRData{
 		Repository:    m.repository,
 		SelectedPR:    m.selectedPR,
-		GithubService: m.githubService != nil || m.demoMode,
+		GithubService: m.isGitHubAvailable(),
 		Width:         m.width,
 	})
 	// If there's no scrollable list (error states), return full content as the "header"
@@ -610,12 +610,12 @@ func (m *Model) renderSettings() string {
 	codecksConfigured := len(m.settingsInputs) > 6 &&
 		strings.TrimSpace(m.settingsInputs[5].Value()) != "" &&
 		strings.TrimSpace(m.settingsInputs[6].Value()) != ""
-	githubIssuesConfigured := m.githubService != nil
+	githubIssuesConfigured := m.isGitHubAvailable()
 
 	return m.renderer().Settings(view.SettingsData{
 		Inputs:                 inputs,
 		FocusedField:           m.settingsFocusedField,
-		GithubService:          m.githubService != nil,
+		GithubService:          m.isGitHubAvailable(),
 		JiraService:            m.ticketService != nil,
 		HasLocalConfig:         hasLocalConfig,
 		ConfigSource:           configSource,
@@ -671,7 +671,7 @@ func (m *Model) renderCreatePR() string {
 	return m.renderer().CreatePR(view.CreatePRData{
 		Repository:     m.repository,
 		SelectedCommit: m.prCommitIndex,
-		GithubService:  m.githubService != nil || m.demoMode,
+		GithubService:  m.isGitHubAvailable(),
 		TitleInput:     m.prTitleInput.View(),
 		BodyInput:      m.prBodyInput.View(),
 		HeadBranch:     m.prHeadBranch,

@@ -12,6 +12,12 @@ import (
 // Auto-refresh interval
 const autoRefreshInterval = 2 * time.Second
 
+// isGitHubAvailable returns true if GitHub functionality is available
+// (either through a real service connection or demo mode)
+func (m *Model) isGitHubAvailable() bool {
+	return m.githubService != nil || m.demoMode
+}
+
 // openURL opens a URL in the default browser
 func openURL(url string) tea.Cmd {
 	return func() tea.Msg {
@@ -45,7 +51,7 @@ func (m *Model) refreshRepository() tea.Cmd {
 	m.loading = true
 	var cmds []tea.Cmd
 	cmds = append(cmds, m.loadRepository())
-	if m.githubService != nil {
+	if m.isGitHubAvailable() {
 		cmds = append(cmds, m.loadPRs())
 	}
 	if m.ticketService != nil {

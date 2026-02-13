@@ -4,5 +4,9 @@ jj-tui
 # Config
 .jj-tui.json
 
-# Generated demo repo (created by make demo-repo)
+# Generated demo repo and fake origin (created by make demo-repo)
 fixtures/demo-repo/
+fixtures/fake-origin.git/
+
+# VSCode Settings
+.vscode/
