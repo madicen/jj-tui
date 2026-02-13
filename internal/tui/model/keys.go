@@ -9,21 +9,28 @@ import (
 
 // handleKeyMsg handles keyboard input
 func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Handle error state first - always allow quit and retry
+	// Handle error state first - error acts as a modal, blocking all other input
 	if m.err != nil {
 		switch msg.String() {
 		case "ctrl+q", "ctrl+c":
 			return m, tea.Quit
 		case "ctrl+r":
 			m.err = nil
+			m.errorCopied = false
 			m.viewMode = ViewCommitGraph
 			return m, m.refreshRepository()
 		case "esc":
 			// Clear error and go back to graph, restart auto-refresh
 			m.err = nil
+			m.errorCopied = false
 			m.viewMode = ViewCommitGraph
 			m.statusMessage = "Error dismissed"
 			return m, m.tickCmd()
+		case "c":
+			// Copy error to clipboard (but not for "not a jj repo" welcome screen)
+			if !m.notJJRepo && m.err != nil {
+				return m, actions.CopyToClipboard(m.err.Error())
+			}
 		case "i":
 			// Initialize jj repo if not already one
 			if m.notJJRepo {
@@ -31,7 +38,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, m.runJJInit()
 			}
 		}
-		// Ignore other keys when in error state
+		// Ignore all other keys when in error state - error is modal
 		return m, nil
 	}
 

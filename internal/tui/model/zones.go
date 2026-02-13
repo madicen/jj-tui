@@ -21,6 +21,7 @@ const (
 	ZoneActionNewCommit    = "zone:action:newcommit"
 	ZoneActionCopyError    = "zone:action:copyerror"
 	ZoneActionDismissError = "zone:action:dismisserror"
+	ZoneActionRetry        = "zone:action:retry"
 	ZoneActionUndo         = "zone:action:undo"
 	ZoneActionRedo         = "zone:action:redo"
 
