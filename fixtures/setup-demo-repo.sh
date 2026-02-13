@@ -6,12 +6,21 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEMO_REPO="$SCRIPT_DIR/demo-repo"
+FAKE_ORIGIN="$SCRIPT_DIR/fake-origin.git"
 
-# Clean up any existing demo repo
+# Clean up any existing demo repo and fake origin
 if [ -d "$DEMO_REPO" ]; then
     echo "Removing existing demo repo..."
     rm -rf "$DEMO_REPO"
 fi
+if [ -d "$FAKE_ORIGIN" ]; then
+    echo "Removing existing fake origin..."
+    rm -rf "$FAKE_ORIGIN"
+fi
+
+# Create a bare repository to serve as "origin"
+echo "Creating fake origin repository..."
+git init --bare "$FAKE_ORIGIN"
 
 echo "Creating demo repository at $DEMO_REPO"
 mkdir -p "$DEMO_REPO"
@@ -20,6 +29,9 @@ cd "$DEMO_REPO"
 # Initialize git and jj
 git init --initial-branch=main
 jj git init --colocate
+
+# Add the fake origin as a remote
+git remote add origin "$FAKE_ORIGIN"
 
 # Configure jj for demo
 jj config set --repo user.name "Demo User"
@@ -150,8 +162,15 @@ echo "## Features" >> README.md
 echo "- Dark mode" >> README.md
 echo "- User settings" >> README.md
 
-# Note: main@origin would normally exist after pushing to a remote.
-# The TUI handles repos without main@origin by falling back to main.
+# Push main and some branches to origin to create remote tracking branches
+echo ""
+echo "Pushing to fake origin to create remote tracking branches..."
+jj git push --bookmark main --remote origin
+jj git push --bookmark feature/dark-mode --remote origin
+jj git push --bookmark fix/pagination --remote origin
+
+# Fetch to ensure jj knows about the remote branches
+jj git fetch --remote origin
 
 echo ""
 echo "Demo repository created successfully!"
@@ -160,6 +179,6 @@ echo ""
 echo "Repository state:"
 jj log --no-pager -r 'all()' --template 'builtin_log_compact'
 echo ""
-echo "Bookmarks:"
-jj bookmark list --no-pager
+echo "Bookmarks (including remote tracking):"
+jj bookmark list --no-pager --all
 

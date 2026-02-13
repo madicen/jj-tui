@@ -51,7 +51,6 @@ Sleep 1s
 Up
 Sleep 1s
 
-
 # === SCENE 3: Describe the commit ===
 # Press 'd' to describe
 Type "d"
@@ -60,13 +59,22 @@ Sleep 1s
 Backspace 7
 Type "Extract utility functions to separate file"
 Sleep 500ms
-Ctrl+s
+Ctrl+S
 Sleep 1.5s
 
 # === SCENE 4: Rebase on main ===
 Type "r"
 Sleep 1s
-Down 5
+Down
+Sleep 1s
+Down
+Sleep 1s
+Down
+Sleep 1s
+Down
+Sleep 1s
+Down
+Sleep 1s
 Enter
 Sleep 1.5s
 
@@ -85,6 +93,15 @@ Sleep 1.5s
 Enter
 Sleep 2s
 Enter
+Sleep 2s
+
+# === SCENE 6: Create a PR ===
+Type "c"
+Sleep 1s
+Tab
+Type "Created new utility function for this"
+Ctrl+S
+Sleep 2s
 
 # === SCENE 6: Go to PRs tab ===
 Type "p"
@@ -104,20 +121,11 @@ Sleep 1.5s
 # Change ticket status
 Type "c"
 Sleep 1s
-
-# Select "Done" transition
-Down
-Sleep 500ms
-Enter
-Sleep 1.5s
+Type "D"
+Sleep 2s
 
 # === SCENE 10: Check Branches view ===
 Type "b"
-Sleep 2s
-Type "F"
-
-# === SCENE 11: Return to Graph ===
-Type "g"
 Sleep 2s
 
 # === END: Clean exit ===

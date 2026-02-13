@@ -303,6 +303,36 @@ func (m *Model) submitPR() tea.Cmd {
 		return nil
 	}
 
+	// In demo mode, return a fake PR created message
+	if m.demoMode {
+		m.statusMessage = "Creating PR (demo)..."
+		body := strings.TrimSpace(m.prBodyInput.Value())
+		headBranch := m.prHeadBranch
+		baseBranch := m.prBaseBranch
+
+		// Get commit IDs if available
+		var commitIDs []string
+		if m.repository != nil && m.prCommitIndex >= 0 && m.prCommitIndex < len(m.repository.Graph.Commits) {
+			commit := m.repository.Graph.Commits[m.prCommitIndex]
+			commitIDs = []string{commit.ID}
+		}
+
+		return func() tea.Msg {
+			return actions.PRCreatedMsg{PR: &models.GitHubPR{
+				Number:       999,
+				Title:        title,
+				Body:         body,
+				State:        "open",
+				HeadBranch:   headBranch,
+				BaseBranch:   baseBranch,
+				URL:          "https://github.com/example/repo/pull/999",
+				CommitIDs:    commitIDs,
+				CheckStatus:  models.CheckStatusPending,
+				ReviewStatus: models.ReviewStatusNone,
+			}}
+		}
+	}
+
 	m.statusMessage = fmt.Sprintf("%s %s and creating PR...", If(m.prNeedsMoveBookmark, "Moving bookmark", "Pushing"), m.prHeadBranch)
 
 	var commitChangeID string
