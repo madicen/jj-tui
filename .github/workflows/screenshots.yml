@@ -90,15 +90,42 @@ jobs:
       # Commit screenshots back to repo
       - name: Commit updated screenshots
         run: |
-          # Checkout main branch for committing (releases run on tags)
-          git checkout main || git checkout -b main origin/main
-          # Pull any changes that happened during the run
-          git pull --rebase origin main || true
+          # Check if any screenshots were actually generated/changed
+          if git diff --quiet screenshots/ && git diff --cached --quiet screenshots/; then
+            echo "No changes to screenshots"
+            exit 0
+          fi
+          
+          # Stash the generated screenshots before switching branches
+          git stash push -m "screenshots" -- screenshots/
+          
+          # Switch to main branch (releases run on tags)
+          git fetch origin main
+          git checkout main
+          git reset --hard origin/main
+          
+          # Restore the screenshots
+          git stash pop
+          
+          # Stage and commit
           git add screenshots/
           if git diff --staged --quiet; then
-            echo "No changes to screenshots"
-          else
-            git commit -m "chore: update screenshots [skip ci]"
-            git push origin main
+            echo "No changes to commit after restoring screenshots"
+            exit 0
           fi
+          
+          git commit -m "chore: update screenshots [skip ci]"
+          
+          # Push with retry logic in case of concurrent updates
+          for i in 1 2 3; do
+            if git push origin main; then
+              echo "Successfully pushed screenshots"
+              exit 0
+            fi
+            echo "Push failed, attempt $i of 3. Pulling and retrying..."
+            git pull --rebase origin main
+          done
+          
+          echo "Failed to push after 3 attempts"
+          exit 1
 
