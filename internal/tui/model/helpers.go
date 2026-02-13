@@ -3,10 +3,12 @@ package model
 import (
 	"os/exec"
 	"runtime"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
+	"github.com/madicen/jj-tui/internal/models"
 )
 
 // Auto-refresh interval
@@ -71,4 +73,61 @@ func (m *Model) createIsZoneClickedFunc(clickedZone *zone.ZoneInfo) func(string)
 	return func(clickedZoneID string) bool {
 		return m.zoneManager.Get(clickedZoneID) == clickedZone
 	}
+}
+
+// findCommitsWithEmptyDescriptions finds all commits from the selected commit
+// back to main that have empty descriptions (excluding immutable/root commits)
+func (m *Model) findCommitsWithEmptyDescriptions() []models.Commit {
+	if m.repository == nil || !m.isSelectedCommitValid() {
+		return nil
+	}
+
+	commits := m.repository.Graph.Commits
+	var emptyDescCommits []models.Commit
+
+	// Walk from selected commit back through parents until we hit an immutable commit
+	visited := make(map[string]bool)
+	queue := []int{m.selectedCommit}
+
+	// Build index for parent lookup
+	idToIndex := make(map[string]int)
+	for i, c := range commits {
+		idToIndex[c.ID] = i
+		idToIndex[c.ChangeID] = i
+	}
+
+	for len(queue) > 0 {
+		idx := queue[0]
+		queue = queue[1:]
+
+		if idx < 0 || idx >= len(commits) {
+			continue
+		}
+
+		commit := commits[idx]
+		if visited[commit.ID] {
+			continue
+		}
+		visited[commit.ID] = true
+
+		// Stop at immutable commits (like main)
+		if commit.Immutable {
+			continue
+		}
+
+		// Check if description is empty (just whitespace counts as empty)
+		desc := strings.TrimSpace(commit.Description)
+		if desc == "" || desc == "(no description)" {
+			emptyDescCommits = append(emptyDescCommits, commit)
+		}
+
+		// Add parents to queue
+		for _, parentID := range commit.Parents {
+			if parentIdx, ok := idToIndex[parentID]; ok && !visited[commits[parentIdx].ID] {
+				queue = append(queue, parentIdx)
+			}
+		}
+	}
+
+	return emptyDescCommits
 }

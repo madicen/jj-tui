@@ -42,6 +42,49 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Handle warning modal (e.g., empty commit descriptions)
+	if m.showWarningModal {
+		switch msg.String() {
+		case "esc":
+			m.showWarningModal = false
+			m.warningCommits = nil
+			m.statusMessage = "Cancelled"
+			return m, nil
+		case "enter":
+			// Go to the selected commit and start editing its description
+			if len(m.warningCommits) > 0 && m.warningSelectedIdx < len(m.warningCommits) {
+				selectedCommit := m.warningCommits[m.warningSelectedIdx]
+				// Find this commit in the graph and select it
+				for i, c := range m.repository.Graph.Commits {
+					if c.ChangeID == selectedCommit.ChangeID {
+						m.selectedCommit = i
+						m.showWarningModal = false
+						m.warningCommits = nil
+						// Start editing description
+						return m.handleDescribeCommit()
+					}
+				}
+			}
+			m.showWarningModal = false
+			m.warningCommits = nil
+			return m, nil
+		case "up", "k":
+			if m.warningSelectedIdx > 0 {
+				m.warningSelectedIdx--
+			}
+			return m, nil
+		case "down", "j":
+			if m.warningSelectedIdx < len(m.warningCommits)-1 {
+				m.warningSelectedIdx++
+			}
+			return m, nil
+		case "ctrl+q", "ctrl+c":
+			return m, tea.Quit
+		}
+		// Ignore all other keys when warning modal is shown
+		return m, nil
+	}
+
 	// Special handling for edit description view
 	if m.viewMode == ViewEditDescription {
 		return m.handleDescriptionEditKeyMsg(msg)

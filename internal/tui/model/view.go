@@ -57,6 +57,21 @@ func (m *Model) View() string {
 		return m.zoneManager.Scan(centeredModal)
 	}
 
+	// Handle warning modal (e.g., empty commit descriptions)
+	if m.showWarningModal {
+		warningModal := m.renderWarningModal()
+
+		// Center the modal both horizontally and vertically
+		centeredModal := lipgloss.NewStyle().
+			Width(m.width).
+			Height(m.height).
+			Align(lipgloss.Center).
+			AlignVertical(lipgloss.Center).
+			Render(warningModal)
+
+		return m.zoneManager.Scan(centeredModal)
+	}
+
 	// Build the view with zone markers
 	header := m.renderHeader()
 	statusBar := m.renderStatusBar()
@@ -429,6 +444,100 @@ func (m *Model) renderError() string {
 	modalBox := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("#FF5555")).
+		Padding(1, 2).
+		Width(modalWidth).
+		Render(content.String())
+
+	return modalBox
+}
+
+// renderWarningModal renders the warning modal (e.g., for empty commit descriptions)
+func (m *Model) renderWarningModal() string {
+	modalWidth := m.width - 8
+	if modalWidth < 50 {
+		modalWidth = 50
+	}
+	if modalWidth > 80 {
+		modalWidth = 80
+	}
+
+	// Styles - amber/yellow theme for warnings
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#E3B341")).
+		MarginBottom(1)
+
+	messageStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#C9D1D9")).
+		Width(modalWidth - 4)
+
+	mutedStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#8B949E"))
+
+	commitStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#58A6FF"))
+
+	selectedCommitStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#FFFFFF")).
+		Background(lipgloss.Color("#30363d")).
+		Bold(true)
+
+	buttonStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#FFFFFF")).
+		Background(lipgloss.Color("#30363d")).
+		Padding(0, 1).
+		Bold(true)
+
+	// Build modal content
+	var content strings.Builder
+	content.WriteString(titleStyle.Render("⚠ " + m.warningTitle))
+	content.WriteString("\n\n")
+	content.WriteString(messageStyle.Render(m.warningMessage))
+	content.WriteString("\n\n")
+
+	// List commits with empty descriptions
+	if len(m.warningCommits) > 0 {
+		content.WriteString(mutedStyle.Render("Commits without descriptions:"))
+		content.WriteString("\n")
+		for i, commit := range m.warningCommits {
+			changeID := commit.ChangeID
+			if len(changeID) > 8 {
+				changeID = changeID[:8]
+			}
+			summary := commit.Summary
+			if summary == "" {
+				summary = "(no description)"
+			}
+			if len(summary) > 40 {
+				summary = summary[:37] + "..."
+			}
+
+			line := fmt.Sprintf("  %s  %s", changeID, summary)
+			if i == m.warningSelectedIdx {
+				content.WriteString(selectedCommitStyle.Render(line))
+			} else {
+				content.WriteString(commitStyle.Render(line))
+			}
+			content.WriteString("\n")
+		}
+	}
+
+	content.WriteString("\n")
+	content.WriteString(mutedStyle.Render("─────────────────────────────────────"))
+	content.WriteString("\n\n")
+
+	// Clickable button row
+	goToBtn := m.zoneManager.Mark(ZoneWarningGoToCommit, buttonStyle.Background(lipgloss.Color("#238636")).Render("Go to Commit (Enter)"))
+	dismissBtn := m.zoneManager.Mark(ZoneWarningDismiss, buttonStyle.Render("Cancel (Esc)"))
+
+	content.WriteString(goToBtn + "  " + dismissBtn)
+	content.WriteString("\n\n")
+	content.WriteString(mutedStyle.Render("Use ↑/↓ to select a commit, Enter to edit its description"))
+
+	// Create the modal box with amber border
+	modalBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#E3B341")).
 		Padding(1, 2).
 		Width(modalWidth).
 		Render(content.String())

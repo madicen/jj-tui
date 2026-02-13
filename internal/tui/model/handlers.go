@@ -318,6 +318,16 @@ func (m *Model) handleCreatePR() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if m.isSelectedCommitValid() && m.jjService != nil {
+		// Check for commits with empty descriptions
+		emptyDescCommits := m.findCommitsWithEmptyDescriptions()
+		if len(emptyDescCommits) > 0 {
+			m.showWarningModal = true
+			m.warningTitle = "Commits Need Descriptions"
+			m.warningMessage = "GitHub requires commit descriptions. Please add descriptions before creating a PR."
+			m.warningCommits = emptyDescCommits
+			m.warningSelectedIdx = 0
+			return m, nil
+		}
 		m.startCreatePR()
 	}
 	return m, nil
