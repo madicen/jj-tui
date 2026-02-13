@@ -39,21 +39,38 @@ Down
 Sleep 1.5s
 
 # === SCENE 2: Create a new commit from current changes ===
-# Press 'n' to create new commit
-Type "n"
-Sleep 1.5s
+# Press 'e' to create new commit
+Type "e"
+Sleep 1s
+Tab
+Sleep 1s
+Type "]"
+Sleep 1s
+Tab
+Sleep 1s
+Up
+Sleep 1s
+
 
 # === SCENE 3: Describe the commit ===
 # Press 'd' to describe
 Type "d"
 Sleep 1s
 # Type a commit message
+Backspace 7
 Type "Extract utility functions to separate file"
 Sleep 500ms
+Ctrl+s
+Sleep 1.5s
+
+# === SCENE 4: Rebase on main ===
+Type "r"
+Sleep 1s
+Down 5
 Enter
 Sleep 1.5s
 
-# === SCENE 4: Find a ticket to work on ===
+# === SCENE 5: Find a ticket to work on ===
 # Navigate to Tickets tab
 Type "t"
 Sleep 2s
@@ -65,13 +82,9 @@ Down
 Sleep 500ms
 Down
 Sleep 1.5s
-
-# === SCENE 5: Check ticket details ===
-# Select a ticket (first one is already selected)
-Up
-Sleep 500ms
-Up
-Sleep 1.5s
+Enter
+Sleep 2s
+Enter
 
 # === SCENE 6: Go to PRs tab ===
 Type "p"
@@ -82,11 +95,6 @@ Sleep 2s
 Down
 Sleep 500ms
 Down
-Sleep 1.5s
-
-# === SCENE 8: Open PR in browser (simulated) ===
-# Press 'o' to open in browser
-Type "o"
 Sleep 1.5s
 
 # === SCENE 9: Go back to Tickets to update status ===
@@ -106,13 +114,10 @@ Sleep 1.5s
 # === SCENE 10: Check Branches view ===
 Type "b"
 Sleep 2s
+Type "F"
 
 # === SCENE 11: Return to Graph ===
 Type "g"
-Sleep 2s
-
-# === SCENE 12: Quick look at Help ===
-Type "h"
 Sleep 2s
 
 # === END: Clean exit ===

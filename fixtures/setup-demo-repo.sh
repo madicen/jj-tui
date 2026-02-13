@@ -150,12 +150,8 @@ echo "## Features" >> README.md
 echo "- Dark mode" >> README.md
 echo "- User settings" >> README.md
 
-# Create a conflicted state for demo (optional - can be enabled)
-# This creates a branch that diverges from another
-
-# Make main immutable by creating a fake remote tracking
-# (In real usage, this would be from pushing to origin)
-jj bookmark create main@origin -r main --allow-backwards 2>/dev/null || true
+# Note: main@origin would normally exist after pushing to a remote.
+# The TUI handles repos without main@origin by falling back to main.
 
 echo ""
 echo "Demo repository created successfully!"

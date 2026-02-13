@@ -216,10 +216,17 @@ func (s *Service) CreateNewBranch(ctx context.Context, branchName string) error 
 // to the first commit after main (A). Otherwise, a new empty commit is created and the
 // bookmark is placed on it. This is the standard jj workflow.
 func (s *Service) CreateBranchFromMain(ctx context.Context, bookmarkName string) error {
+	// Determine the main branch reference (prefer main@origin, fall back to main)
+	mainRef := "main@origin"
+	if _, err := s.runJJOutput(ctx, "log", "-r", mainRef, "--no-graph", "-T", "change_id", "--limit", "1"); err != nil {
+		// main@origin doesn't exist (demo repo or no remote), fall back to main
+		mainRef = "main"
+	}
+
 	// Find the first mutable commit after main in our ancestry
 	// This handles: main -> A -> B -> @ by finding A
-	// Revset: ancestors of @ that are mutable AND whose parent is main@origin
-	rootCommitID, err := s.runJJOutput(ctx, "log", "-r", "ancestors(@) & mutable() & children(main@origin)", "--no-graph", "-T", "change_id", "--limit", "1")
+	// Revset: ancestors of @ that are mutable AND whose parent is main
+	rootCommitID, err := s.runJJOutput(ctx, "log", "-r", fmt.Sprintf("ancestors(@) & mutable() & children(%s)", mainRef), "--no-graph", "-T", "change_id", "--limit", "1")
 	if err == nil && strings.TrimSpace(rootCommitID) != "" {
 		rootCommitID = strings.TrimSpace(rootCommitID)
 
@@ -238,8 +245,8 @@ func (s *Service) CreateBranchFromMain(ctx context.Context, bookmarkName string)
 
 	// No existing non-empty work based on main. Create a new empty commit and place the bookmark on it.
 	// This is the standard jj workflow since bookmarks must be on mutable commits.
-	if err := s.runJJ(ctx, "new", "main@origin"); err != nil {
-		return fmt.Errorf("failed to create new commit from main: %w", err)
+	if err := s.runJJ(ctx, "new", mainRef); err != nil {
+		return fmt.Errorf("failed to create new commit from %s: %w", mainRef, err)
 	}
 
 	// Create the bookmark on this new mutable commit
