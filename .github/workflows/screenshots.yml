@@ -4,16 +4,8 @@ on:
   # Run on release to update screenshots
   release:
     types: [published]
-  # Allow manual trigger
+  # Allow manual trigger for testing
   workflow_dispatch:
-  # Optionally run on pushes to main that change relevant files
-  push:
-    branches: [main]
-    paths:
-      - 'internal/tui/**'
-      - 'internal/mock/**'
-      - 'vhs/**'
-      - 'fixtures/**'
 
 permissions:
   contents: write
@@ -95,10 +87,11 @@ jobs:
           path: screenshots/
           retention-days: 7
 
-      # Commit screenshots back to repo (only on main branch or release)
+      # Commit screenshots back to repo
       - name: Commit updated screenshots
-        if: github.ref == 'refs/heads/main' || github.event_name == 'release'
         run: |
+          # Checkout main branch for committing (releases run on tags)
+          git checkout main || git checkout -b main origin/main
           # Pull any changes that happened during the run
           git pull --rebase origin main || true
           git add screenshots/
@@ -106,6 +99,6 @@ jobs:
             echo "No changes to screenshots"
           else
             git commit -m "chore: update screenshots [skip ci]"
-            git push
+            git push origin main
           fi
 
