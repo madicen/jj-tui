@@ -65,3 +65,10 @@ jobs:
         run: |
           echo "✅ Release ${{ env.VERSION }} created successfully!"
           echo "📍 Release page: https://github.com/${{ github.repository }}/releases/tag/${{ env.VERSION }}"
+
+  # Update screenshots after release
+  screenshots:
+    needs: release
+    uses: ./.github/workflows/screenshots.yml
+    permissions:
+      contents: write

@@ -1,9 +1,8 @@
 name: Generate Screenshots
 
 on:
-  # Run on release to update screenshots
-  release:
-    types: [published]
+  # Called by release workflows after publishing
+  workflow_call:
   # Allow manual trigger for testing
   workflow_dispatch:
 
