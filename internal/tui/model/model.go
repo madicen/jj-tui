@@ -384,7 +384,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.notJJRepo = msg.NotJJRepo
 		m.currentPath = msg.CurrentPath
 		m.loading = false
-		m.statusMessage = fmt.Sprintf("Error: %v", msg.Err)
+		// Use friendly message for welcome screen, error message for real errors
+		if msg.NotJJRepo {
+			m.statusMessage = "Press 'i' to initialize a repository"
+		} else {
+			m.statusMessage = fmt.Sprintf("Error: %v", msg.Err)
+		}
 		// Don't continue auto-refresh on error - let user dismiss or manually refresh
 		return m, nil
 
