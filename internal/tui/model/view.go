@@ -325,16 +325,17 @@ func (m *Model) renderSplitContent() (string, string) {
 // renderError renders an error message
 // renderError renders an error message with text wrapping
 func (m *Model) renderError() string {
-	errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555"))
-
-	// Special handling for "not a jj repo" error - show init button
+	// Special handling for "not a jj repo" - show a welcome/setup screen instead of an error
 	if m.notJJRepo {
+		mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#8B949E"))
+		pathStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#58A6FF"))
+
 		var lines []string
-		lines = append(lines, view.TitleStyle.Render("Not a Jujutsu Repository"))
+		lines = append(lines, view.TitleStyle.Render("Welcome to jj-tui"))
 		lines = append(lines, "")
-		lines = append(lines, errorStyle.Render(fmt.Sprintf("Directory: %s", m.currentPath)))
+		lines = append(lines, fmt.Sprintf("Directory: %s", pathStyle.Render(m.currentPath)))
 		lines = append(lines, "")
-		lines = append(lines, "This directory is not initialized as a Jujutsu repository.")
+		lines = append(lines, "This directory is not yet a Jujutsu repository.")
 		lines = append(lines, "")
 		lines = append(lines, lipgloss.NewStyle().Bold(true).Render("Would you like to initialize it?"))
 		lines = append(lines, "")
@@ -343,10 +344,10 @@ func (m *Model) renderError() string {
 		initButton := m.zoneManager.Mark(ZoneActionJJInit, view.ButtonStyle.Background(lipgloss.Color("#238636")).Render("Initialize Repository (i)"))
 		lines = append(lines, initButton)
 		lines = append(lines, "")
-		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#8B949E")).Render("This will run: jj git init"))
-		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#8B949E")).Render("and try to track main@origin if available"))
+		lines = append(lines, mutedStyle.Render("This will run: jj git init"))
+		lines = append(lines, mutedStyle.Render("and try to track main@origin if available"))
 		lines = append(lines, "")
-		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#8B949E")).Render("Press Ctrl+q to quit"))
+		lines = append(lines, mutedStyle.Render("Press Ctrl+q to quit"))
 
 		return strings.Join(lines, "\n")
 	}
@@ -746,8 +747,8 @@ func (m *Model) renderStatusBar() string {
 	// Build shortcuts list
 	var shortcuts []string
 
-	// Add error action buttons first (if there's an error)
-	hasError := m.err != nil || strings.Contains(strings.ToLower(m.statusMessage), "error") || strings.Contains(strings.ToLower(m.statusMessage), "failed")
+	// Add error action buttons first (if there's an error, but not for "not a jj repo" which shows a welcome screen)
+	hasError := (m.err != nil && !m.notJJRepo) || strings.Contains(strings.ToLower(m.statusMessage), "error") || strings.Contains(strings.ToLower(m.statusMessage), "failed")
 	if hasError {
 		copyBtn := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#FF6B6B")).
