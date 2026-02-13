@@ -921,20 +921,6 @@ func (m *Model) renderStatusBar() string {
 	// Build shortcuts list
 	var shortcuts []string
 
-	// Add error action buttons first (if there's an error, but not for "not a jj repo" which shows a welcome screen)
-	hasError := (m.err != nil && !m.notJJRepo) || strings.Contains(strings.ToLower(m.statusMessage), "error") || strings.Contains(strings.ToLower(m.statusMessage), "failed")
-	if hasError {
-		copyBtn := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FF6B6B")).
-			Bold(true).
-			Render("[Copy]")
-		dismissBtn := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#888888")).
-			Bold(true).
-			Render("[X]")
-		shortcuts = append(shortcuts, m.zoneManager.Mark(ZoneActionCopyError, copyBtn), " ", m.zoneManager.Mark(ZoneActionDismissError, dismissBtn), " │ ")
-	}
-
 	// Add keyboard shortcuts with ^ notation and | separators
 	// Start with undo/redo if in Graph view, then quit and refresh
 	if m.viewMode == ViewCommitGraph && m.jjService != nil {

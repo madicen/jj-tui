@@ -110,12 +110,6 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 	if userClicked(ZoneActionNewCommit) {
 		return m.handleNewCommit()
 	}
-	if userClicked(ZoneActionCopyError) {
-		return m.handleCopyError()
-	}
-	if userClicked(ZoneActionDismissError) {
-		return m.handleDismissError()
-	}
 	if userClicked(ZoneActionUndo) {
 		return m.handleUndo()
 	}
