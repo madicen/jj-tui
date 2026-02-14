@@ -10,3 +10,6 @@ fixtures/fake-origin.git/
 
 # VSCode Settings
 .vscode/
+
+# jj
+.jj/
