@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/madicen/jj-tui/internal/jj"
+	"github.com/madicen/jj-tui/internal/integrations/jj"
 )
 
 // LoadDescription fetches the complete description for a commit
@@ -31,4 +31,3 @@ func SaveDescription(svc *jj.Service, commitID, description string) tea.Cmd {
 		return DescriptionSavedMsg{CommitID: commitID}
 	}
 }
-

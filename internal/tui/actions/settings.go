@@ -4,10 +4,10 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/madicen/jj-tui/internal/codecks"
 	"github.com/madicen/jj-tui/internal/config"
-	"github.com/madicen/jj-tui/internal/github"
-	"github.com/madicen/jj-tui/internal/jira"
+	"github.com/madicen/jj-tui/internal/integrations/codecks"
+	"github.com/madicen/jj-tui/internal/integrations/github"
+	"github.com/madicen/jj-tui/internal/integrations/jira"
 	"github.com/madicen/jj-tui/internal/tickets"
 )
 

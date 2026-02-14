@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/madicen/jj-tui/internal/github"
-	"github.com/madicen/jj-tui/internal/jj"
+	"github.com/madicen/jj-tui/internal/integrations/github"
+	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/models"
 )
 

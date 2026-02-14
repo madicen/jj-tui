@@ -8,8 +8,8 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal/config"
-	"github.com/madicen/jj-tui/internal/github"
-	"github.com/madicen/jj-tui/internal/jj"
+	"github.com/madicen/jj-tui/internal/integrations/github"
+	"github.com/madicen/jj-tui/internal/integrations/jj"
 )
 
 // New creates a new Model
@@ -32,11 +32,11 @@ func New(ctx context.Context) *Model {
 	showClosed := true
 	onlyMine := false
 	prLimit := 100
-	prRefreshInterval := 120   // Default: 2 minutes
-	autoInProgress := true     // Default: enabled
-	branchLimit := 50          // Default: 50 branches
-	sanitizeBookmarks := true  // Default: enabled
-	ticketProvider := ""       // Default: none selected (will use legacy auto-detect on save)
+	prRefreshInterval := 120  // Default: 2 minutes
+	autoInProgress := true    // Default: enabled
+	branchLimit := 50         // Default: 50 branches
+	sanitizeBookmarks := true // Default: enabled
+	ticketProvider := ""      // Default: none selected (will use legacy auto-detect on save)
 	if cfg != nil {
 		showMerged = cfg.ShowMergedPRs()
 		showClosed = cfg.ShowClosedPRs()

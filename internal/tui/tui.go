@@ -5,8 +5,8 @@ package tui
 import (
 	"context"
 
-	"github.com/madicen/jj-tui/internal/github"
-	"github.com/madicen/jj-tui/internal/jj"
+	"github.com/madicen/jj-tui/internal/integrations/github"
+	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tui/model"
 )
 

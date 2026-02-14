@@ -1,7 +1,7 @@
 package model
 
 import (
-	"github.com/madicen/jj-tui/internal/github"
+	"github.com/madicen/jj-tui/internal/integrations/github"
 	"github.com/madicen/jj-tui/internal/models"
 	"github.com/madicen/jj-tui/internal/tickets"
 )

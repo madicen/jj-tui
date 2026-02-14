@@ -16,21 +16,9 @@ import (
 	"github.com/madicen/jj-tui/internal/models"
 )
 
-// CommandHistoryEntry represents a single jj command that was executed
-type CommandHistoryEntry struct {
-	Command   string    // Full command string (e.g., "jj log -r @")
-	Timestamp time.Time // When the command was executed
-	Duration  time.Duration
-	Success   bool   // Whether the command succeeded
-	Error     string // Error message if failed (truncated)
-}
-
 // Service handles jujutsu command execution
 type Service struct {
-	RepoPath       string
-	commandHistory []CommandHistoryEntry
-	historyMu      sync.RWMutex
-	maxHistory     int // Maximum number of commands to keep
+	RepoPath string
 }
 
 // SanitizeBookmarkName converts a string into a valid bookmark name
@@ -85,10 +73,7 @@ func NewService(repoPath string) (*Service, error) {
 		return nil, fmt.Errorf("not a jujutsu repository: %s\nHint: Run 'jj git init' or 'jj init --git' to initialize a repository", repoPath)
 	}
 
-	service := &Service{
-		RepoPath:   repoPath,
-		maxHistory: 100, // Keep last 100 commands
-	}
+	service := &Service{RepoPath: repoPath}
 
 	// Test that we can actually run jj commands
 	ctx := context.Background()
@@ -97,32 +82,6 @@ func NewService(repoPath string) (*Service, error) {
 	}
 
 	return service, nil
-}
-
-// GetCommandHistory returns a copy of the command history (most recent first)
-func (s *Service) GetCommandHistory() []CommandHistoryEntry {
-	s.historyMu.RLock()
-	defer s.historyMu.RUnlock()
-
-	// Return a copy in reverse order (most recent first)
-	result := make([]CommandHistoryEntry, len(s.commandHistory))
-	for i, entry := range s.commandHistory {
-		result[len(s.commandHistory)-1-i] = entry
-	}
-	return result
-}
-
-// addToHistory adds a command entry to the history
-func (s *Service) addToHistory(entry CommandHistoryEntry) {
-	s.historyMu.Lock()
-	defer s.historyMu.Unlock()
-
-	s.commandHistory = append(s.commandHistory, entry)
-
-	// Trim history if it exceeds the limit
-	if len(s.commandHistory) > s.maxHistory {
-		s.commandHistory = s.commandHistory[len(s.commandHistory)-s.maxHistory:]
-	}
 }
 
 // GetRepository retrieves the current repository state
@@ -156,14 +115,12 @@ func (s *Service) GetRepository(ctx context.Context) (*models.Repository, error)
 
 // CreateNewCommit creates a new commit with the given description
 func (s *Service) CreateNewCommit(ctx context.Context, description string) error {
-	args := []string{"commit", "-m", description}
-	return s.runJJ(ctx, args...)
+	return s.runJJ(ctx, "commit", "-m", description)
 }
 
 // DescribeCommit sets a new description for a commit (non-interactive)
 func (s *Service) DescribeCommit(ctx context.Context, commitID string, message string) error {
-	args := []string{"describe", commitID, "-m", message}
-	_, err := s.runJJOutput(ctx, args...)
+	_, err := s.runJJOutput(ctx, "describe", commitID, "-m", message)
 	return err
 }
 
@@ -214,7 +171,7 @@ func (s *Service) GetChangedFiles(ctx context.Context, commitID string) ([]Chang
 	}
 
 	var files []ChangedFile
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
@@ -242,14 +199,12 @@ func (s *Service) IsCommitMutable(ctx context.Context, commitID string) bool {
 
 // CheckoutCommit checks out a specific commit (uses jj edit)
 func (s *Service) CheckoutCommit(ctx context.Context, commitID string) error {
-	args := []string{"edit", commitID}
-	return s.runJJ(ctx, args...)
+	return s.runJJ(ctx, "edit", commitID)
 }
 
 // CreateNewBranch creates a new branch at the current commit
 func (s *Service) CreateNewBranch(ctx context.Context, branchName string) error {
-	args := []string{"branch", "create", branchName}
-	return s.runJJ(ctx, args...)
+	return s.runJJ(ctx, "branch", "create", branchName)
 }
 
 // CreateBranchFromMain creates a bookmark for a ticket, handling existing work intelligently.
@@ -301,36 +256,31 @@ func (s *Service) CreateBranchFromMain(ctx context.Context, bookmarkName string)
 // CreateBookmarkOnCommit creates a bookmark on a specific commit
 func (s *Service) CreateBookmarkOnCommit(ctx context.Context, bookmarkName, commitID string) error {
 	// jj bookmark create <name> -r <revision>
-	args := []string{"bookmark", "create", bookmarkName, "-r", commitID}
-	return s.runJJ(ctx, args...)
+	return s.runJJ(ctx, "bookmark", "create", bookmarkName, "-r", commitID)
 }
 
 // MoveBookmark moves an existing bookmark to a different commit
 func (s *Service) MoveBookmark(ctx context.Context, bookmarkName, commitID string) error {
 	// jj bookmark set <name> -r <revision>
-	args := []string{"bookmark", "set", bookmarkName, "-r", commitID}
-	return s.runJJ(ctx, args...)
+	return s.runJJ(ctx, "bookmark", "set", bookmarkName, "-r", commitID)
 }
 
 // DeleteBookmark deletes a bookmark
 func (s *Service) DeleteBookmark(ctx context.Context, bookmarkName string) error {
-	args := []string{"bookmark", "delete", bookmarkName}
-	return s.runJJ(ctx, args...)
+	return s.runJJ(ctx, "bookmark", "delete", bookmarkName)
 }
 
 // ResolveBookmarkConflictKeepLocal resolves a diverged bookmark by force-pushing local to remote
 func (s *Service) ResolveBookmarkConflictKeepLocal(ctx context.Context, bookmarkName string) error {
 	// Force push the local bookmark to overwrite remote
-	args := []string{"git", "push", "--bookmark", bookmarkName, "--force"}
-	return s.runJJ(ctx, args...)
+	return s.runJJ(ctx, "git", "push", "--bookmark", bookmarkName, "--force")
 }
 
 // ResolveBookmarkConflictResetToRemote resolves a diverged bookmark by resetting local to remote
 func (s *Service) ResolveBookmarkConflictResetToRemote(ctx context.Context, bookmarkName string) error {
 	// Set the local bookmark to match the remote
 	// This uses the @origin suffix to reference the remote version
-	args := []string{"bookmark", "set", bookmarkName, "-r", bookmarkName + "@origin"}
-	return s.runJJ(ctx, args...)
+	return s.runJJ(ctx, "bookmark", "set", bookmarkName, "-r", bookmarkName+"@origin")
 }
 
 // GetBookmarkConflictInfo retrieves information about a conflicted bookmark
@@ -450,8 +400,7 @@ func (s *Service) SquashCommit(ctx context.Context, commitID string) error {
 	}
 
 	// Squash the commit into its parent with explicit message to avoid interactive editor
-	args := []string{"squash", "-r", commitID, "-m", combinedDesc}
-	return s.runJJ(ctx, args...)
+	return s.runJJ(ctx, "squash", "-r", commitID, "-m", combinedDesc)
 }
 
 // NewCommit creates a new commit. If parentCommitID is provided, creates a child of that commit.
@@ -460,25 +409,22 @@ func (s *Service) SquashCommit(ctx context.Context, commitID string) error {
 // branch creation, use CreateBranchFromMain instead. NewCommit is useful for creating commits
 // at specific parent points in the graph.
 func (s *Service) NewCommit(ctx context.Context, parentCommitID string) error {
-	args := []string{"new"}
 	if parentCommitID != "" {
-		args = append(args, parentCommitID)
+		return s.runJJ(ctx, "new", parentCommitID)
 	}
-	return s.runJJ(ctx, args...)
+	return s.runJJ(ctx, "new")
 }
 
 // AbandonCommit abandons a commit, removing it from the repository
 func (s *Service) AbandonCommit(ctx context.Context, commitID string) error {
-	args := []string{"abandon", commitID}
-	return s.runJJ(ctx, args...)
+	return s.runJJ(ctx, "abandon", commitID)
 }
 
 // RebaseCommit rebases a commit and all its descendants onto a destination commit
 func (s *Service) RebaseCommit(ctx context.Context, sourceCommitID, destCommitID string) error {
 	// jj rebase -s <source> -d <destination>
 	// Using -s (source) instead of -r (revision) so descendants follow along
-	args := []string{"rebase", "-s", sourceCommitID, "-d", destCommitID}
-	return s.runJJ(ctx, args...)
+	return s.runJJ(ctx, "rebase", "-s", sourceCommitID, "-d", destCommitID)
 }
 
 // SplitFileToParent moves a single file from a commit to a new parent commit.
@@ -526,8 +472,7 @@ func (s *Service) RevertFile(ctx context.Context, commitID, filePath string) err
 	// jj restore --to <commit> --from parents(<commit>) -- <file>
 	// Using parents() function instead of ~ suffix to avoid revset parsing issues
 	parentRev := fmt.Sprintf("parents(%s)", commitID)
-	args := []string{"restore", "--to", commitID, "--from", parentRev, "--", filePath}
-	return s.runJJ(ctx, args...)
+	return s.runJJ(ctx, "restore", "--to", commitID, "--from", parentRev, "--", filePath)
 }
 
 // GetGitRemoteURL returns the URL of the git remote (origin)
@@ -624,8 +569,7 @@ func (s *Service) PushToGit(ctx context.Context, branch string) (string, error) 
 
 	// --allow-new permits creating new remote bookmarks
 	// Use runJJOutput to capture any output/errors
-	args := []string{"git", "push", "--bookmark", branch, "--allow-new"}
-	pushOut, err := s.runJJOutput(ctx, args...)
+	pushOut, err := s.runJJOutput(ctx, "git", "push", "--bookmark", branch, "--allow-new")
 	if err != nil {
 		return pushOut, fmt.Errorf("push failed: %w", err)
 	}
@@ -648,8 +592,7 @@ func (s *Service) PushToGit(ctx context.Context, branch string) (string, error) 
 // FetchFromGit fetches updates from the remote git repository
 func (s *Service) FetchFromGit(ctx context.Context) (string, error) {
 	// Use jj git fetch to update remote bookmarks
-	args := []string{"git", "fetch"}
-	out, err := s.runJJOutput(ctx, args...)
+	out, err := s.runJJOutput(ctx, "git", "fetch")
 	if err != nil {
 		return out, fmt.Errorf("fetch failed: %w", err)
 	}
@@ -952,35 +895,17 @@ func (s *Service) getCommitGraphSimple(ctx context.Context) (*models.CommitGraph
 
 // runJJ executes a jj command and returns a clean error if it fails
 func (s *Service) runJJ(ctx context.Context, args ...string) error {
-	cmdStr := "jj " + strings.Join(args, " ")
-	startTime := time.Now()
-
 	cmd := exec.CommandContext(ctx, "jj", args...)
 	cmd.Dir = s.RepoPath
 	out, err := cmd.CombinedOutput()
-	duration := time.Since(startTime)
-
-	// Log the command to history
-	entry := CommandHistoryEntry{
-		Command:   cmdStr,
-		Timestamp: startTime,
-		Duration:  duration,
-		Success:   err == nil,
-	}
 	if err != nil {
 		// Extract just the main error message
 		errMsg := extractErrorMessage(string(out))
 		if errMsg != "" {
-			entry.Error = errMsg
-			s.addToHistory(entry)
 			return fmt.Errorf("%s", errMsg)
 		}
-		entry.Error = err.Error()
-		s.addToHistory(entry)
 		return fmt.Errorf("command failed: %w", err)
 	}
-
-	s.addToHistory(entry)
 	return nil
 }
 
@@ -1006,9 +931,6 @@ func extractErrorMessage(output string) string {
 // runJJOutput executes a jj command and returns its stdout only
 // stderr is captured separately to avoid jj hints/warnings mixing into parsed output
 func (s *Service) runJJOutput(ctx context.Context, args ...string) (string, error) {
-	cmdStr := "jj " + strings.Join(args, " ")
-	startTime := time.Now()
-
 	cmd := exec.CommandContext(ctx, "jj", args...)
 	cmd.Dir = s.RepoPath
 
@@ -1018,32 +940,16 @@ func (s *Service) runJJOutput(ctx context.Context, args ...string) (string, erro
 	cmd.Stderr = &stderr
 
 	err := cmd.Run()
-	duration := time.Since(startTime)
-
-	// Log the command to history
-	entry := CommandHistoryEntry{
-		Command:   cmdStr,
-		Timestamp: startTime,
-		Duration:  duration,
-		Success:   err == nil,
-	}
-
 	if err != nil {
 		// Include stderr in error message for debugging
 		errOutput := stderr.String()
 		if errOutput == "" {
 			errOutput = stdout.String()
 		}
-		entry.Error = extractErrorMessage(errOutput)
-		if entry.Error == "" {
-			entry.Error = err.Error()
-		}
-		s.addToHistory(entry)
 		return "", fmt.Errorf("jj command '%s' failed: %w\nOutput: %s",
 			fmt.Sprintf("jj %s", strings.Join(args, " ")), err, errOutput)
 	}
 
-	s.addToHistory(entry)
 	// Return only stdout - hints/warnings go to stderr
 	return stdout.String(), nil
 }
@@ -1345,40 +1251,34 @@ func (s *Service) GetBranchStats(ctx context.Context, branchName string, remoteN
 // TrackBranch starts tracking a remote branch
 func (s *Service) TrackBranch(ctx context.Context, branchName, remote string) error {
 	remoteBranch := fmt.Sprintf("%s@%s", branchName, remote)
-	args := []string{"bookmark", "track", remoteBranch}
-	return s.runJJ(ctx, args...)
+	return s.runJJ(ctx, "bookmark", "track", remoteBranch)
 }
 
 // UntrackBranch stops tracking a remote branch
 func (s *Service) UntrackBranch(ctx context.Context, branchName, remote string) error {
 	remoteBranch := fmt.Sprintf("%s@%s", branchName, remote)
-	args := []string{"bookmark", "untrack", remoteBranch}
-	return s.runJJ(ctx, args...)
+	return s.runJJ(ctx, "bookmark", "untrack", remoteBranch)
 }
 
 // RestoreLocalBranch restores a deleted local branch from its tracked remote
 func (s *Service) RestoreLocalBranch(ctx context.Context, branchName, commitID string) error {
 	// Use jj bookmark set to create/restore the local bookmark at the remote's revision
-	args := []string{"bookmark", "set", branchName, "-r", commitID}
-	return s.runJJ(ctx, args...)
+	return s.runJJ(ctx, "bookmark", "set", branchName, "-r", commitID)
 }
 
 // PushBranch pushes a local branch to remote
 func (s *Service) PushBranch(ctx context.Context, branchName string) error {
-	args := []string{"git", "push", "--allow-new", "--bookmark", branchName}
-	return s.runJJ(ctx, args...)
+	return s.runJJ(ctx, "git", "push", "--allow-new", "--bookmark", branchName)
 }
 
 // FetchFromRemote fetches updates from a remote
 func (s *Service) FetchFromRemote(ctx context.Context, remote string) error {
-	args := []string{"git", "fetch", "--remote", remote}
-	return s.runJJ(ctx, args...)
+	return s.runJJ(ctx, "git", "fetch", "--remote", remote)
 }
 
 // FetchAllRemotes fetches from all configured remotes
 func (s *Service) FetchAllRemotes(ctx context.Context) error {
-	args := []string{"git", "fetch", "--all-remotes"}
-	return s.runJJ(ctx, args...)
+	return s.runJJ(ctx, "git", "fetch", "--all-remotes")
 }
 
 // isJJRepo checks if a directory is a jj repository

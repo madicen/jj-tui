@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/madicen/jj-tui/internal/jj"
+	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/models"
 	"github.com/madicen/jj-tui/internal/tui/actions"
 )

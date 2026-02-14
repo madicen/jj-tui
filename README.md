@@ -383,15 +383,16 @@ The `ticket_provider` field can be one of:
 jj-tui/
 ├── main.go                 # Application entry point
 ├── internal/
-│   ├── jj/                 # Jujutsu command integration
-│   │   └── service.go
-│   ├── github/             # GitHub API integration
-│   │   ├── service.go      # GitHub PR service
-│   │   └── issues_service.go # GitHub Issues ticket provider
-│   ├── jira/               # Jira API integration
-│   │   └── service.go
-│   ├── codecks/            # Codecks API integration
-│   │   └── service.go
+│   ├── integrations/       # External integrations
+│   │   ├── jj/             # Jujutsu command integration
+│   │   │   └── service.go
+│   │   ├── github/         # GitHub API integration
+│   │   │   ├── service.go      # GitHub PR service
+│   │   │   └── issues_service.go # GitHub Issues ticket provider
+│   │   ├── jira/           # Jira API integration
+│   │   │   └── service.go
+│   │   └── codecks/        # Codecks API integration
+│   │       └── service.go
 │   ├── tickets/            # Generic ticket service interface
 │   │   └── interface.go
 │   ├── mock/               # Mock services for demo mode

@@ -6,7 +6,7 @@ import (
 	"sort"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/madicen/jj-tui/internal/jj"
+	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/models"
 )
 
@@ -130,4 +130,3 @@ func FindBookmarkForCommit(repo *models.Repository, commitIdx int) string {
 	}
 	return ""
 }
-

@@ -13,8 +13,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal/config"
-	"github.com/madicen/jj-tui/internal/github"
-	"github.com/madicen/jj-tui/internal/jj"
+	"github.com/madicen/jj-tui/internal/integrations/github"
+	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/models"
 	"github.com/madicen/jj-tui/internal/tickets"
 	"github.com/madicen/jj-tui/internal/tui/actions"
@@ -54,11 +54,11 @@ type Model struct {
 	errorCopied          bool   // true if error was just copied to clipboard
 
 	// Warning modal state (for empty commit descriptions, etc.)
-	showWarningModal     bool              // true if warning modal is displayed
-	warningTitle         string            // title for warning modal
-	warningMessage       string            // message for warning modal
-	warningCommits       []models.Commit   // commits with issues (for display)
-	warningSelectedIdx   int               // selected commit index in warning modal
+	showWarningModal   bool            // true if warning modal is displayed
+	warningTitle       string          // title for warning modal
+	warningMessage     string          // message for warning modal
+	warningCommits     []models.Commit // commits with issues (for display)
+	warningSelectedIdx int             // selected commit index in warning modal
 
 	// Changed files for selected commit
 	changedFiles         []jj.ChangedFile
@@ -114,10 +114,10 @@ type Model struct {
 	conflictSelectedOption int    // 0=Keep Local, 1=Reset to Remote
 
 	// Divergent commit resolution state
-	divergentChangeID       string   // The change ID that's divergent
-	divergentCommitIDs      []string // All commit hashes sharing this change ID
+	divergentChangeID        string   // The change ID that's divergent
+	divergentCommitIDs       []string // All commit hashes sharing this change ID
 	divergentCommitSummaries []string // Summary of each divergent commit
-	divergentSelectedIdx    int      // Which commit to keep (0-indexed)
+	divergentSelectedIdx     int      // Which commit to keep (0-indexed)
 
 	// Help view state
 	helpTab             int // 0=Shortcuts, 1=Commands

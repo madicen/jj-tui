@@ -7,7 +7,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/madicen/jj-tui/internal/config"
-	"github.com/madicen/jj-tui/internal/jj"
+	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tui/view"
 	"github.com/madicen/jj-tui/internal/version"
 	"github.com/mattn/go-runewidth"

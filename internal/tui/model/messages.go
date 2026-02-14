@@ -3,8 +3,8 @@ package model
 import (
 	"time"
 
-	"github.com/madicen/jj-tui/internal/github"
-	"github.com/madicen/jj-tui/internal/jj"
+	"github.com/madicen/jj-tui/internal/integrations/github"
+	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/models"
 	"github.com/madicen/jj-tui/internal/tickets"
 )
@@ -30,7 +30,7 @@ type servicesInitializedMsg struct {
 	jjService     *jj.Service
 	githubService *github.Service
 	ticketService tickets.Service
-	ticketError   error  // Error from ticket service initialization (for debugging)
+	ticketError   error // Error from ticket service initialization (for debugging)
 	repository    *models.Repository
 	githubInfo    string // Diagnostic info about GitHub connection (token source, repo)
 	demoMode      bool   // True if running in demo mode with mock services

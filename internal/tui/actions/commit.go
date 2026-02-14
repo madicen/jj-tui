@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/madicen/jj-tui/internal/jj"
+	"github.com/madicen/jj-tui/internal/integrations/jj"
 )
 
 // NewCommit creates a new commit as a child of the given parent
@@ -119,4 +119,3 @@ func RevertFile(svc *jj.Service, commitID, filePath string) tea.Cmd {
 		return FileRevertedMsg{Repository: repo, FilePath: filePath}
 	}
 }
-
