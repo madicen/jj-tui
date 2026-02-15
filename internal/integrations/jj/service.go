@@ -16,9 +16,21 @@ import (
 	"github.com/madicen/jj-tui/internal/models"
 )
 
+// CommandHistoryEntry represents a single jj command that was executed
+type CommandHistoryEntry struct {
+	Command   string    // Full command string (e.g., "jj log -r @")
+	Timestamp time.Time // When the command was executed
+	Duration  time.Duration
+	Success   bool   // Whether the command succeeded
+	Error     string // Error message if failed (truncated)
+}
+
 // Service handles jujutsu command execution
 type Service struct {
-	RepoPath string
+	RepoPath       string
+	commandHistory []CommandHistoryEntry
+	historyMu      sync.RWMutex
+	maxHistory     int // Maximum number of commands to keep
 }
 
 // SanitizeBookmarkName converts a string into a valid bookmark name
@@ -73,7 +85,10 @@ func NewService(repoPath string) (*Service, error) {
 		return nil, fmt.Errorf("not a jujutsu repository: %s\nHint: Run 'jj git init' or 'jj init --git' to initialize a repository", repoPath)
 	}
 
-	service := &Service{RepoPath: repoPath}
+	service := &Service{
+		RepoPath:   repoPath,
+		maxHistory: 100, // Keep last 100 commands
+	}
 
 	// Test that we can actually run jj commands
 	ctx := context.Background()
@@ -82,6 +97,32 @@ func NewService(repoPath string) (*Service, error) {
 	}
 
 	return service, nil
+}
+
+// GetCommandHistory returns a copy of the command history (most recent first)
+func (s *Service) GetCommandHistory() []CommandHistoryEntry {
+	s.historyMu.RLock()
+	defer s.historyMu.RUnlock()
+
+	// Return a copy in reverse order (most recent first)
+	result := make([]CommandHistoryEntry, len(s.commandHistory))
+	for i, entry := range s.commandHistory {
+		result[len(s.commandHistory)-1-i] = entry
+	}
+	return result
+}
+
+// addToHistory adds a command entry to the history
+func (s *Service) addToHistory(entry CommandHistoryEntry) {
+	s.historyMu.Lock()
+	defer s.historyMu.Unlock()
+
+	s.commandHistory = append(s.commandHistory, entry)
+
+	// Trim history if it exceeds the limit
+	if len(s.commandHistory) > s.maxHistory {
+		s.commandHistory = s.commandHistory[len(s.commandHistory)-s.maxHistory:]
+	}
 }
 
 // GetRepository retrieves the current repository state
@@ -171,7 +212,7 @@ func (s *Service) GetChangedFiles(ctx context.Context, commitID string) ([]Chang
 	}
 
 	var files []ChangedFile
-	for line := range strings.SplitSeq(out, "\n") {
+	for _, line := range strings.Split(out, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
@@ -895,17 +936,35 @@ func (s *Service) getCommitGraphSimple(ctx context.Context) (*models.CommitGraph
 
 // runJJ executes a jj command and returns a clean error if it fails
 func (s *Service) runJJ(ctx context.Context, args ...string) error {
+	cmdStr := "jj " + strings.Join(args, " ")
+	startTime := time.Now()
+
 	cmd := exec.CommandContext(ctx, "jj", args...)
 	cmd.Dir = s.RepoPath
 	out, err := cmd.CombinedOutput()
+	duration := time.Since(startTime)
+
+	// Log the command to history
+	entry := CommandHistoryEntry{
+		Command:   cmdStr,
+		Timestamp: startTime,
+		Duration:  duration,
+		Success:   err == nil,
+	}
 	if err != nil {
 		// Extract just the main error message
 		errMsg := extractErrorMessage(string(out))
 		if errMsg != "" {
+			entry.Error = errMsg
+			s.addToHistory(entry)
 			return fmt.Errorf("%s", errMsg)
 		}
+		entry.Error = err.Error()
+		s.addToHistory(entry)
 		return fmt.Errorf("command failed: %w", err)
 	}
+
+	s.addToHistory(entry)
 	return nil
 }
 
@@ -931,6 +990,9 @@ func extractErrorMessage(output string) string {
 // runJJOutput executes a jj command and returns its stdout only
 // stderr is captured separately to avoid jj hints/warnings mixing into parsed output
 func (s *Service) runJJOutput(ctx context.Context, args ...string) (string, error) {
+	cmdStr := "jj " + strings.Join(args, " ")
+	startTime := time.Now()
+
 	cmd := exec.CommandContext(ctx, "jj", args...)
 	cmd.Dir = s.RepoPath
 
@@ -940,16 +1002,32 @@ func (s *Service) runJJOutput(ctx context.Context, args ...string) (string, erro
 	cmd.Stderr = &stderr
 
 	err := cmd.Run()
+	duration := time.Since(startTime)
+
+	// Log the command to history
+	entry := CommandHistoryEntry{
+		Command:   cmdStr,
+		Timestamp: startTime,
+		Duration:  duration,
+		Success:   err == nil,
+	}
+
 	if err != nil {
 		// Include stderr in error message for debugging
 		errOutput := stderr.String()
 		if errOutput == "" {
 			errOutput = stdout.String()
 		}
+		entry.Error = extractErrorMessage(errOutput)
+		if entry.Error == "" {
+			entry.Error = err.Error()
+		}
+		s.addToHistory(entry)
 		return "", fmt.Errorf("jj command '%s' failed: %w\nOutput: %s",
 			fmt.Sprintf("jj %s", strings.Join(args, " ")), err, errOutput)
 	}
 
+	s.addToHistory(entry)
 	// Return only stdout - hints/warnings go to stderr
 	return stdout.String(), nil
 }
