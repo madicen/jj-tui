@@ -1,8 +1,8 @@
 package model
 
 import (
+	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/integrations/github"
-	"github.com/madicen/jj-tui/internal/models"
 	"github.com/madicen/jj-tui/internal/tickets"
 )
 
@@ -25,7 +25,7 @@ func (m *Model) GetStatusMessage() string {
 }
 
 // GetRepository returns the repository
-func (m *Model) GetRepository() *models.Repository {
+func (m *Model) GetRepository() *internal.Repository {
 	return m.repository
 }
 

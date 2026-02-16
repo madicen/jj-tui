@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/madicen/jj-tui/internal/models"
+	"github.com/madicen/jj-tui/internal"
 )
 
 // PullRequests renders the PR list view with split header/list for scrolling
@@ -54,11 +54,11 @@ func (r *Renderer) PullRequests(data PRData) PRResult {
 
 		// CI status
 		switch pr.CheckStatus {
-		case models.CheckStatusSuccess:
+		case internal.CheckStatusSuccess:
 			checkPart = lipgloss.NewStyle().Foreground(lipgloss.Color("#2ea44f")).Render("✓ Checks passed")
-		case models.CheckStatusFailure:
+		case internal.CheckStatusFailure:
 			checkPart = lipgloss.NewStyle().Foreground(lipgloss.Color("#cb2431")).Render("✗ Checks failed")
-		case models.CheckStatusPending:
+		case internal.CheckStatusPending:
 			checkPart = lipgloss.NewStyle().Foreground(lipgloss.Color("#dbab09")).Render("○ Checks pending")
 		default:
 			checkPart = lipgloss.NewStyle().Foreground(lipgloss.Color("#6a737d")).Render("· No checks")
@@ -66,11 +66,11 @@ func (r *Renderer) PullRequests(data PRData) PRResult {
 
 		// Review status (using text symbols for consistent terminal rendering)
 		switch pr.ReviewStatus {
-		case models.ReviewStatusApproved:
+		case internal.ReviewStatusApproved:
 			reviewPart = lipgloss.NewStyle().Foreground(lipgloss.Color("#2ea44f")).Render("✓ Approved")
-		case models.ReviewStatusChangesRequested:
+		case internal.ReviewStatusChangesRequested:
 			reviewPart = lipgloss.NewStyle().Foreground(lipgloss.Color("#cb2431")).Render("✗ Changes requested")
-		case models.ReviewStatusPending:
+		case internal.ReviewStatusPending:
 			reviewPart = lipgloss.NewStyle().Foreground(lipgloss.Color("#dbab09")).Render("○ Review pending")
 		default:
 			reviewPart = lipgloss.NewStyle().Foreground(lipgloss.Color("#6a737d")).Render("· No reviews")
@@ -153,11 +153,11 @@ func (r *Renderer) PullRequests(data PRData) PRResult {
 		// CI Check status indicator
 		var checkIndicator string
 		switch pr.CheckStatus {
-		case models.CheckStatusSuccess:
+		case internal.CheckStatusSuccess:
 			checkIndicator = lipgloss.NewStyle().Foreground(lipgloss.Color("#2ea44f")).Render("✓")
-		case models.CheckStatusFailure:
+		case internal.CheckStatusFailure:
 			checkIndicator = lipgloss.NewStyle().Foreground(lipgloss.Color("#cb2431")).Render("✗")
-		case models.CheckStatusPending:
+		case internal.CheckStatusPending:
 			checkIndicator = lipgloss.NewStyle().Foreground(lipgloss.Color("#dbab09")).Render("○")
 		default:
 			checkIndicator = lipgloss.NewStyle().Foreground(lipgloss.Color("#6a737d")).Render("·")
@@ -166,11 +166,11 @@ func (r *Renderer) PullRequests(data PRData) PRResult {
 		// Review status indicator
 		var reviewIndicator string
 		switch pr.ReviewStatus {
-		case models.ReviewStatusApproved:
+		case internal.ReviewStatusApproved:
 			reviewIndicator = lipgloss.NewStyle().Foreground(lipgloss.Color("#2ea44f")).Render("👍")
-		case models.ReviewStatusChangesRequested:
+		case internal.ReviewStatusChangesRequested:
 			reviewIndicator = lipgloss.NewStyle().Foreground(lipgloss.Color("#cb2431")).Render("📝")
-		case models.ReviewStatusPending:
+		case internal.ReviewStatusPending:
 			reviewIndicator = lipgloss.NewStyle().Foreground(lipgloss.Color("#dbab09")).Render("⏳")
 		default:
 			reviewIndicator = lipgloss.NewStyle().Foreground(lipgloss.Color("#6a737d")).Render("·")

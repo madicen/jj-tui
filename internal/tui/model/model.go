@@ -12,10 +12,10 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
+	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/integrations/github"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
-	"github.com/madicen/jj-tui/internal/models"
 	"github.com/madicen/jj-tui/internal/tickets"
 	"github.com/madicen/jj-tui/internal/tui/actions"
 )
@@ -29,7 +29,7 @@ type Model struct {
 	jjService     *jj.Service
 	githubService *github.Service
 	ticketService tickets.Service // Generic ticket service (Jira, Codecks, etc.)
-	repository    *models.Repository
+	repository    *internal.Repository
 	demoMode      bool // When true, uses mock services for screenshots/testing
 
 	// UI state
@@ -54,11 +54,11 @@ type Model struct {
 	errorCopied          bool   // true if error was just copied to clipboard
 
 	// Warning modal state (for empty commit descriptions, etc.)
-	showWarningModal   bool            // true if warning modal is displayed
-	warningTitle       string          // title for warning modal
-	warningMessage     string          // message for warning modal
-	warningCommits     []models.Commit // commits with issues (for display)
-	warningSelectedIdx int             // selected commit index in warning modal
+	showWarningModal   bool              // true if warning modal is displayed
+	warningTitle       string            // title for warning modal
+	warningMessage     string            // message for warning modal
+	warningCommits     []internal.Commit // commits with issues (for display)
+	warningSelectedIdx int               // selected commit index in warning modal
 
 	// Changed files for selected commit
 	changedFiles         []jj.ChangedFile
@@ -79,7 +79,7 @@ type Model struct {
 	ticketList []tickets.Ticket
 
 	// Branch state
-	branchList     []models.Branch
+	branchList     []internal.Branch
 	selectedBranch int
 
 	// Description editing
@@ -157,7 +157,7 @@ type Model struct {
 type doPollMsg struct{}
 
 // SetRepository sets the repository data
-func (m *Model) SetRepository(repo *models.Repository) {
+func (m *Model) SetRepository(repo *internal.Repository) {
 	m.repository = repo
 }
 
@@ -265,7 +265,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case repositoryLoadedMsg:
 		// Preserve PRs from previous repository
-		var oldPRs []models.GitHubPR
+		var oldPRs []internal.GitHubPR
 		if m.repository != nil {
 			oldPRs = m.repository.PRs
 		}
@@ -318,7 +318,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case editCompletedMsg:
 		// Preserve PRs from previous repository
-		var oldPRs []models.GitHubPR
+		var oldPRs []internal.GitHubPR
 		if m.repository != nil {
 			oldPRs = m.repository.PRs
 		}
@@ -350,7 +350,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Background refresh - update data without changing status
 		if msg.repository != nil {
 			oldCount := 0
-			var oldPRs []models.GitHubPR
+			var oldPRs []internal.GitHubPR
 			if m.repository != nil {
 				oldCount = len(m.repository.Graph.Commits)
 				oldPRs = m.repository.PRs // Preserve PRs from previous load
@@ -683,7 +683,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.demoMode {
 			// In demo mode, add the PR to the list directly without opening browser
 			if m.repository != nil {
-				m.repository.PRs = append([]models.GitHubPR{*msg.pr}, m.repository.PRs...)
+				m.repository.PRs = append([]internal.GitHubPR{*msg.pr}, m.repository.PRs...)
 			}
 			return m, nil
 		}

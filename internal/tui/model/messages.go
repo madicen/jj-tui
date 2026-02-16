@@ -3,9 +3,9 @@ package model
 import (
 	"time"
 
+	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/integrations/github"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
-	"github.com/madicen/jj-tui/internal/models"
 	"github.com/madicen/jj-tui/internal/tickets"
 )
 
@@ -17,12 +17,12 @@ type prTickMsg time.Time
 
 // repositoryLoadedMsg is sent when repository data is loaded
 type repositoryLoadedMsg struct {
-	repository *models.Repository
+	repository *internal.Repository
 }
 
 // editCompletedMsg is sent when an edit operation completes
 type editCompletedMsg struct {
-	repository *models.Repository
+	repository *internal.Repository
 }
 
 // servicesInitializedMsg is sent when all services are initialized
@@ -31,14 +31,14 @@ type servicesInitializedMsg struct {
 	githubService *github.Service
 	ticketService tickets.Service
 	ticketError   error // Error from ticket service initialization (for debugging)
-	repository    *models.Repository
+	repository    *internal.Repository
 	githubInfo    string // Diagnostic info about GitHub connection (token source, repo)
 	demoMode      bool   // True if running in demo mode with mock services
 }
 
 // prsLoadedMsg is sent when PRs are loaded from GitHub
 type prsLoadedMsg struct {
-	prs []models.GitHubPR
+	prs []internal.GitHubPR
 }
 
 // ticketsLoadedMsg is sent when tickets are loaded
@@ -112,7 +112,7 @@ type descriptionSavedMsg struct {
 
 // prCreatedMsg is sent when a PR is successfully created
 type prCreatedMsg struct {
-	pr *models.GitHubPR
+	pr *internal.GitHubPR
 }
 
 // prMergedMsg is sent when a PR is successfully merged
@@ -186,7 +186,7 @@ type changedFilesLoadedMsg struct {
 
 // silentRepositoryLoadedMsg is for background refreshes that don't update the status
 type silentRepositoryLoadedMsg struct {
-	repository *models.Repository
+	repository *internal.Repository
 }
 
 // descriptionLoadedMsg contains the full description fetched from jj
@@ -209,20 +209,20 @@ type undoCompletedMsg struct {
 
 // fileMoveCompletedMsg is sent when a file is moved to a new commit
 type fileMoveCompletedMsg struct {
-	repository *models.Repository
+	repository *internal.Repository
 	filePath   string
 	direction  string // "up" or "down"
 }
 
 // fileRevertedMsg is sent when a file's changes are reverted
 type fileRevertedMsg struct {
-	repository *models.Repository
+	repository *internal.Repository
 	filePath   string
 }
 
 // branchesLoadedMsg is sent when branches are loaded
 type branchesLoadedMsg struct {
-	branches []models.Branch
+	branches []internal.Branch
 	err      error
 }
 

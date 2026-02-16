@@ -5,12 +5,12 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/madicen/jj-tui/internal/models"
+	"github.com/madicen/jj-tui/internal"
 )
 
 // BranchData contains data needed for branches rendering
 type BranchData struct {
-	Branches       []models.Branch
+	Branches       []internal.Branch
 	SelectedBranch int
 	Width          int
 }
@@ -156,7 +156,7 @@ func (r *Renderer) Branches(data BranchData) BranchResult {
 }
 
 // findBranchIndex finds the index of a branch in the full list
-func findBranchIndex(branches []models.Branch, target models.Branch) int {
+func findBranchIndex(branches []internal.Branch, target internal.Branch) int {
 	for i, b := range branches {
 		if b.Name == target.Name && b.Remote == target.Remote {
 			return i
@@ -167,7 +167,7 @@ func findBranchIndex(branches []models.Branch, target models.Branch) int {
 
 // renderBranchGraph renders a visual tree showing all branches relative to trunk
 // Order: trunk line (key), local branches (ahead first), separator, remote branches (ahead first)
-func (r *Renderer) renderBranchGraph(branches []models.Branch, selectedIdx int) string {
+func (r *Renderer) renderBranchGraph(branches []internal.Branch, selectedIdx int) string {
 	if len(branches) == 0 {
 		return ""
 	}
@@ -184,7 +184,7 @@ func (r *Renderer) renderBranchGraph(branches []models.Branch, selectedIdx int) 
 	selectedStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF79C6"))
 
 	// Helper to build status string
-	buildStatus := func(branch models.Branch) string {
+	buildStatus := func(branch internal.Branch) string {
 		var statusParts []string
 		if branch.Ahead > 0 {
 			statusParts = append(statusParts, aheadStyle.Render(fmt.Sprintf("+%d", branch.Ahead)))
@@ -199,7 +199,7 @@ func (r *Renderer) renderBranchGraph(branches []models.Branch, selectedIdx int) 
 	}
 
 	// Separate branches into local and remote
-	var localBranches, remoteBranches []models.Branch
+	var localBranches, remoteBranches []internal.Branch
 	for _, b := range branches {
 		if b.IsLocal {
 			localBranches = append(localBranches, b)
@@ -272,7 +272,7 @@ func (r *Renderer) renderBranchGraph(branches []models.Branch, selectedIdx int) 
 }
 
 // renderGraphBranch renders a single branch in the graph
-func (r *Renderer) renderGraphBranch(branch models.Branch, idx int, isSelected, isLast bool, nodeStyle, selectedStyle, trunkStyle lipgloss.Style, status string) string {
+func (r *Renderer) renderGraphBranch(branch internal.Branch, idx int, isSelected, isLast bool, nodeStyle, selectedStyle, trunkStyle lipgloss.Style, status string) string {
 	// Determine connector
 	connector := "├"
 	if isLast {

@@ -7,9 +7,9 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/integrations/github"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
-	"github.com/madicen/jj-tui/internal/models"
 )
 
 // PRCreateParams contains parameters for PR creation
@@ -40,10 +40,10 @@ func CreatePR(jjSvc *jj.Service, ghSvc *github.Service, params PRCreateParams) t
 
 		time.Sleep(3 * time.Second)
 
-		var pr *models.GitHubPR
+		var pr *internal.GitHubPR
 		var lastErr error
 		for range 5 {
-			pr, lastErr = ghSvc.CreatePullRequest(ctx, &models.CreatePRRequest{
+			pr, lastErr = ghSvc.CreatePullRequest(ctx, &internal.CreatePRRequest{
 				Title:      params.Title,
 				Body:       params.Body,
 				HeadBranch: params.HeadBranch,
@@ -85,7 +85,7 @@ func PushToPR(svc *jj.Service, branch, commitID string, moveBookmark bool) tea.C
 }
 
 // FindPRBranchForCommit finds the PR branch for a commit
-func FindPRBranchForCommit(repo *models.Repository, commitIndex int) string {
+func FindPRBranchForCommit(repo *internal.Repository, commitIndex int) string {
 	if repo == nil || commitIndex < 0 || commitIndex >= len(repo.Graph.Commits) {
 		return ""
 	}

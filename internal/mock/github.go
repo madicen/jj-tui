@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/google/go-github/v66/github"
-	"github.com/madicen/jj-tui/internal/models"
+	"github.com/madicen/jj-tui/internal"
 )
 
 // GitHubService is a mock GitHub service that returns demo PR data
@@ -176,8 +176,8 @@ func demoPullRequests() []*github.PullRequest {
 			User: &github.User{
 				Login: github.String("demo-user"),
 			},
-			Additions:   github.Int(342),
-			Deletions:   github.Int(28),
+			Additions:      github.Int(342),
+			Deletions:      github.Int(28),
 			MergeableState: github.String("clean"),
 		},
 		{
@@ -197,8 +197,8 @@ func demoPullRequests() []*github.PullRequest {
 			User: &github.User{
 				Login: github.String("demo-user"),
 			},
-			Additions:   github.Int(15),
-			Deletions:   github.Int(8),
+			Additions:      github.Int(15),
+			Deletions:      github.Int(8),
 			MergeableState: github.String("blocked"),
 		},
 		{
@@ -218,8 +218,8 @@ func demoPullRequests() []*github.PullRequest {
 			User: &github.User{
 				Login: github.String("demo-user"),
 			},
-			Additions:   github.Int(523),
-			Deletions:   github.Int(12),
+			Additions:      github.Int(523),
+			Deletions:      github.Int(12),
 			MergeableState: github.String("unstable"),
 		},
 		{
@@ -240,8 +240,8 @@ func demoPullRequests() []*github.PullRequest {
 			User: &github.User{
 				Login: github.String("demo-user"),
 			},
-			Additions:   github.Int(187),
-			Deletions:   github.Int(4),
+			Additions: github.Int(187),
+			Deletions: github.Int(4),
 		},
 		{
 			Number:    github.Int(121),
@@ -258,30 +258,30 @@ func demoPullRequests() []*github.PullRequest {
 			Base: &github.PullRequestBranch{
 				Ref: github.String("main"),
 			},
-		User: &github.User{
-			Login: github.String("other-dev"),
-		},
-			Additions:   github.Int(89),
-			Deletions:   github.Int(234),
+			User: &github.User{
+				Login: github.String("other-dev"),
+			},
+			Additions: github.Int(89),
+			Deletions: github.Int(234),
 		},
 	}
 }
 
 // DemoPullRequests returns demo PRs in the models.GitHubPR format
 // This is used by the TUI's loadPRs function in demo mode
-func DemoPullRequests() []models.GitHubPR {
-	return []models.GitHubPR{
+func DemoPullRequests() []internal.GitHubPR {
+	return []internal.GitHubPR{
 		{
-			Number:      142,
-			Title:       "Add dark mode support to dashboard",
-			Body:        "Implements dark mode theme with system preference detection.\n\nCloses PROJ-142",
-			URL:         "https://github.com/demo-org/awesome-project/pull/142",
-			State:       "open",
-			BaseBranch:  "main",
-			HeadBranch:  "feature/dark-mode",
-			CommitIDs:   []string{"abc123", "def456"},
-			CheckStatus: models.CheckStatusSuccess,
-			ReviewStatus: models.ReviewStatusApproved,
+			Number:       142,
+			Title:        "Add dark mode support to dashboard",
+			Body:         "Implements dark mode theme with system preference detection.\n\nCloses PROJ-142",
+			URL:          "https://github.com/demo-org/awesome-project/pull/142",
+			State:        "open",
+			BaseBranch:   "main",
+			HeadBranch:   "feature/dark-mode",
+			CommitIDs:    []string{"abc123", "def456"},
+			CheckStatus:  internal.CheckStatusSuccess,
+			ReviewStatus: internal.ReviewStatusApproved,
 		},
 		{
 			Number:       139,
@@ -292,8 +292,8 @@ func DemoPullRequests() []models.GitHubPR {
 			BaseBranch:   "main",
 			HeadBranch:   "fix/pagination",
 			CommitIDs:    []string{"ghi789"},
-			CheckStatus:  models.CheckStatusSuccess,
-			ReviewStatus: models.ReviewStatusChangesRequested,
+			CheckStatus:  internal.CheckStatusSuccess,
+			ReviewStatus: internal.ReviewStatusChangesRequested,
 		},
 		{
 			Number:       135,
@@ -304,8 +304,8 @@ func DemoPullRequests() []models.GitHubPR {
 			BaseBranch:   "main",
 			HeadBranch:   "feature/settings",
 			CommitIDs:    []string{"jkl012"},
-			CheckStatus:  models.CheckStatusPending,
-			ReviewStatus: models.ReviewStatusPending,
+			CheckStatus:  internal.CheckStatusPending,
+			ReviewStatus: internal.ReviewStatusPending,
 		},
 		{
 			Number:       128,
@@ -316,8 +316,8 @@ func DemoPullRequests() []models.GitHubPR {
 			BaseBranch:   "main",
 			HeadBranch:   "feature/csv-export",
 			CommitIDs:    []string{"mno345"},
-			CheckStatus:  models.CheckStatusSuccess,
-			ReviewStatus: models.ReviewStatusApproved,
+			CheckStatus:  internal.CheckStatusSuccess,
+			ReviewStatus: internal.ReviewStatusApproved,
 		},
 		{
 			Number:       121,
@@ -328,9 +328,8 @@ func DemoPullRequests() []models.GitHubPR {
 			BaseBranch:   "main",
 			HeadBranch:   "fix/auth-bug",
 			CommitIDs:    []string{"pqr678"},
-			CheckStatus:  models.CheckStatusFailure,
-			ReviewStatus: models.ReviewStatusNone,
+			CheckStatus:  internal.CheckStatusFailure,
+			ReviewStatus: internal.ReviewStatusNone,
 		},
 	}
 }
-

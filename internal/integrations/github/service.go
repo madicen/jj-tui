@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/google/go-github/v66/github"
-	"github.com/madicen/jj-tui/internal/models"
+	"github.com/madicen/jj-tui/internal"
 	"github.com/shurcooL/githubv4"
 	"golang.org/x/oauth2"
 )
@@ -85,7 +85,7 @@ type Service struct {
 }
 
 // CreatePullRequest creates a new pull request
-func (s *Service) CreatePullRequest(ctx context.Context, req *models.CreatePRRequest) (*models.GitHubPR, error) {
+func (s *Service) CreatePullRequest(ctx context.Context, req *internal.CreatePRRequest) (*internal.GitHubPR, error) {
 	// For same-repo PRs, head can be just the branch name
 	// But some GitHub configurations require owner:branch format
 	headRef := req.HeadBranch
@@ -113,7 +113,7 @@ func (s *Service) CreatePullRequest(ctx context.Context, req *models.CreatePRReq
 		}
 	}
 
-	return &models.GitHubPR{
+	return &internal.GitHubPR{
 		Number:     pr.GetNumber(),
 		Title:      pr.GetTitle(),
 		URL:        pr.GetHTMLURL(),
@@ -125,7 +125,7 @@ func (s *Service) CreatePullRequest(ctx context.Context, req *models.CreatePRReq
 }
 
 // UpdatePullRequest updates an existing pull request
-func (s *Service) UpdatePullRequest(ctx context.Context, prNumber int, req *models.UpdatePRRequest) (*models.GitHubPR, error) {
+func (s *Service) UpdatePullRequest(ctx context.Context, prNumber int, req *internal.UpdatePRRequest) (*internal.GitHubPR, error) {
 	updatePR := &github.PullRequest{}
 
 	if req.Title != "" {
@@ -140,7 +140,7 @@ func (s *Service) UpdatePullRequest(ctx context.Context, prNumber int, req *mode
 		return nil, fmt.Errorf("failed to update pull request: %w", err)
 	}
 
-	return &models.GitHubPR{
+	return &internal.GitHubPR{
 		Number:     pr.GetNumber(),
 		Title:      pr.GetTitle(),
 		URL:        pr.GetHTMLURL(),
@@ -211,7 +211,7 @@ func (s *Service) GetAuthenticatedUsername(ctx context.Context) (string, error) 
 }
 
 // GetPullRequests retrieves pull requests for the repository with optional filtering
-func (s *Service) GetPullRequests(ctx context.Context) ([]models.GitHubPR, error) {
+func (s *Service) GetPullRequests(ctx context.Context) ([]internal.GitHubPR, error) {
 	return s.GetPullRequestsWithOptions(ctx, PRFilterOptions{
 		Limit:      100,
 		ShowMerged: true,
@@ -234,7 +234,7 @@ func prQueryStates(filterOpts PRFilterOptions) []githubv4.PullRequestState {
 // GetPullRequestsWithOptions retrieves pull requests with the specified filter options
 // Uses GraphQL to fetch PRs with check status and reviews in a single API call
 // Falls back to REST API if GraphQL fails due to permission issues
-func (s *Service) GetPullRequestsWithOptions(ctx context.Context, filterOpts PRFilterOptions) ([]models.GitHubPR, error) {
+func (s *Service) GetPullRequestsWithOptions(ctx context.Context, filterOpts PRFilterOptions) ([]internal.GitHubPR, error) {
 	// Try GraphQL first (includes check status and reviews)
 	prs, err := s.getPullRequestsGraphQL(ctx, filterOpts)
 	if err != nil {
@@ -253,7 +253,7 @@ func (s *Service) GetPullRequestsWithOptions(ctx context.Context, filterOpts PRF
 }
 
 // getPullRequestsGraphQL fetches PRs using GraphQL (includes check status and reviews)
-func (s *Service) getPullRequestsGraphQL(ctx context.Context, filterOpts PRFilterOptions) ([]models.GitHubPR, error) {
+func (s *Service) getPullRequestsGraphQL(ctx context.Context, filterOpts PRFilterOptions) ([]internal.GitHubPR, error) {
 	// Get authenticated username if filtering by user
 	var username string
 	if filterOpts.OnlyMine {
@@ -323,7 +323,7 @@ func (s *Service) getPullRequestsGraphQL(ctx context.Context, filterOpts PRFilte
 		"states": states,
 	}
 
-	var allPRs []models.GitHubPR
+	var allPRs []internal.GitHubPR
 	for {
 		err := s.graphqlClient.Query(ctx, &query, variables)
 		if err != nil {
@@ -343,23 +343,23 @@ func (s *Service) getPullRequestsGraphQL(ctx context.Context, filterOpts PRFilte
 			}
 
 			// Parse check status from statusCheckRollup
-			checkStatus := models.CheckStatusNone
+			checkStatus := internal.CheckStatusNone
 			if len(pr.Commits.Nodes) > 0 {
 				rollupState := pr.Commits.Nodes[0].Commit.StatusCheckRollup.State
 				switch rollupState {
 				case "SUCCESS":
-					checkStatus = models.CheckStatusSuccess
+					checkStatus = internal.CheckStatusSuccess
 				case "FAILURE", "ERROR":
-					checkStatus = models.CheckStatusFailure
+					checkStatus = internal.CheckStatusFailure
 				case "PENDING", "EXPECTED":
-					checkStatus = models.CheckStatusPending
+					checkStatus = internal.CheckStatusPending
 				}
 			}
 
 			// Parse review status
 			reviewStatus := parseReviewStatus(pr.Reviews.Nodes)
 
-			allPRs = append(allPRs, models.GitHubPR{
+			allPRs = append(allPRs, internal.GitHubPR{
 				Number:       pr.Number,
 				Title:        pr.Title,
 				Body:         pr.Body,
@@ -394,7 +394,7 @@ func (s *Service) getPullRequestsGraphQL(ctx context.Context, filterOpts PRFilte
 
 // getPullRequestsREST fetches PRs using REST API (fallback when GraphQL permissions are insufficient)
 // This provides basic PR info but no check status or review status
-func (s *Service) getPullRequestsREST(ctx context.Context, filterOpts PRFilterOptions) ([]models.GitHubPR, error) {
+func (s *Service) getPullRequestsREST(ctx context.Context, filterOpts PRFilterOptions) ([]internal.GitHubPR, error) {
 	// Get authenticated username if filtering by user
 	var username string
 	if filterOpts.OnlyMine {
@@ -405,7 +405,7 @@ func (s *Service) getPullRequestsREST(ctx context.Context, filterOpts PRFilterOp
 		}
 	}
 
-	var allPRs []models.GitHubPR
+	var allPRs []internal.GitHubPR
 	opts := &github.PullRequestListOptions{
 		State:     "all", // We'll filter below
 		Sort:      "created",
@@ -439,7 +439,7 @@ func (s *Service) getPullRequestsREST(ctx context.Context, filterOpts PRFilterOp
 				continue
 			}
 
-			allPRs = append(allPRs, models.GitHubPR{
+			allPRs = append(allPRs, internal.GitHubPR{
 				Number:       pr.GetNumber(),
 				Title:        pr.GetTitle(),
 				Body:         pr.GetBody(),
@@ -447,8 +447,8 @@ func (s *Service) getPullRequestsREST(ctx context.Context, filterOpts PRFilterOp
 				State:        state,
 				BaseBranch:   pr.GetBase().GetRef(),
 				HeadBranch:   pr.GetHead().GetRef(),
-				CheckStatus:  models.CheckStatusNone,  // Not available with REST fallback
-				ReviewStatus: models.ReviewStatusNone, // Not available with REST fallback
+				CheckStatus:  internal.CheckStatusNone,  // Not available with REST fallback
+				ReviewStatus: internal.ReviewStatusNone, // Not available with REST fallback
 			})
 
 			// Check limit
@@ -478,9 +478,9 @@ func parseReviewStatus(reviews []struct {
 	Author struct {
 		Login string
 	}
-}) models.ReviewStatus {
+}) internal.ReviewStatus {
 	if len(reviews) == 0 {
-		return models.ReviewStatusNone
+		return internal.ReviewStatusNone
 	}
 
 	// Get the latest review state from each reviewer
@@ -495,7 +495,7 @@ func parseReviewStatus(reviews []struct {
 	}
 
 	if len(latestReviews) == 0 {
-		return models.ReviewStatusPending
+		return internal.ReviewStatusPending
 	}
 
 	// Check for any changes requested or approvals
@@ -512,16 +512,16 @@ func parseReviewStatus(reviews []struct {
 
 	// Changes requested takes priority over approval
 	if hasChangesRequested {
-		return models.ReviewStatusChangesRequested
+		return internal.ReviewStatusChangesRequested
 	}
 	if hasApproval {
-		return models.ReviewStatusApproved
+		return internal.ReviewStatusApproved
 	}
-	return models.ReviewStatusPending
+	return internal.ReviewStatusPending
 }
 
 // GetPullRequest retrieves a specific pull request
-func (s *Service) GetPullRequest(ctx context.Context, prNumber int) (*models.GitHubPR, error) {
+func (s *Service) GetPullRequest(ctx context.Context, prNumber int) (*internal.GitHubPR, error) {
 	pr, _, err := s.client.PullRequests.Get(ctx, s.owner, s.repo, prNumber)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get pull request: %w", err)
@@ -533,7 +533,7 @@ func (s *Service) GetPullRequest(ctx context.Context, prNumber int) (*models.Git
 		return nil, fmt.Errorf("failed to get PR commits: %w", err)
 	}
 
-	return &models.GitHubPR{
+	return &internal.GitHubPR{
 		Number:     pr.GetNumber(),
 		Title:      pr.GetTitle(),
 		URL:        pr.GetHTMLURL(),

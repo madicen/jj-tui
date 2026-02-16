@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/integrations/github"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
-	"github.com/madicen/jj-tui/internal/models"
 )
 
 // Helper to create a test model with sample data (bypasses jj service)
@@ -19,16 +19,16 @@ func newTestModel() *Model {
 	m.width = 100
 	m.height = 80     // Tall enough to show all content including help view
 	m.loading = false // Skip loading state for tests
-	m.SetRepository(&models.Repository{
+	m.SetRepository(&internal.Repository{
 		Path: "/test/repo",
-		Graph: models.CommitGraph{
-			Commits: []models.Commit{
+		Graph: internal.CommitGraph{
+			Commits: []internal.Commit{
 				{ID: "abc123456789", ShortID: "abc1", ChangeID: "abc1", Summary: "First commit"},
 				{ID: "def456789012", ShortID: "def4", ChangeID: "def4", Summary: "Second commit"},
 				{ID: "ghi789012345", ShortID: "ghi7", ChangeID: "ghi7", Summary: "Third commit", IsWorking: true},
 			},
 		},
-		PRs: []models.GitHubPR{
+		PRs: []internal.GitHubPR{
 			{Number: 1, Title: "Test PR", State: "open"},
 		},
 	})
@@ -269,7 +269,7 @@ func TestWorkingCopyNodeAppearsInGraph(t *testing.T) {
 	m.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
 
 	// Set up repository with a working copy commit
-	workingCopyCommit := models.Commit{
+	workingCopyCommit := internal.Commit{
 		ID:        "wc123456789",
 		ShortID:   "wc12",
 		ChangeID:  "wc12",
@@ -277,18 +277,18 @@ func TestWorkingCopyNodeAppearsInGraph(t *testing.T) {
 		IsWorking: true, // This is the working copy
 	}
 
-	parentCommit := models.Commit{
+	parentCommit := internal.Commit{
 		ID:       "parent123456",
 		ShortID:  "par1",
 		ChangeID: "par1",
 		Summary:  "Parent commit",
 	}
 
-	m.SetRepository(&models.Repository{
+	m.SetRepository(&internal.Repository{
 		Path:        "/test/repo",
 		WorkingCopy: workingCopyCommit,
-		Graph: models.CommitGraph{
-			Commits: []models.Commit{workingCopyCommit, parentCommit},
+		Graph: internal.CommitGraph{
+			Commits: []internal.Commit{workingCopyCommit, parentCommit},
 		},
 	})
 	defer m.Close()
@@ -322,7 +322,7 @@ func TestNewCommitAppearsAfterRefresh(t *testing.T) {
 	m.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
 
 	// Initial state: one commit
-	initialCommit := models.Commit{
+	initialCommit := internal.Commit{
 		ID:        "initial123",
 		ShortID:   "init",
 		ChangeID:  "init",
@@ -330,10 +330,10 @@ func TestNewCommitAppearsAfterRefresh(t *testing.T) {
 		IsWorking: true,
 	}
 
-	m.SetRepository(&models.Repository{
+	m.SetRepository(&internal.Repository{
 		Path: "/test/repo",
-		Graph: models.CommitGraph{
-			Commits: []models.Commit{initialCommit},
+		Graph: internal.CommitGraph{
+			Commits: []internal.Commit{initialCommit},
 		},
 	})
 	defer m.Close()
@@ -348,7 +348,7 @@ func TestNewCommitAppearsAfterRefresh(t *testing.T) {
 	}
 
 	// Simulate adding a new commit (as if jj new was run externally)
-	newWorkingCopy := models.Commit{
+	newWorkingCopy := internal.Commit{
 		ID:        "newcommit123",
 		ShortID:   "newc",
 		ChangeID:  "newc",
@@ -360,11 +360,11 @@ func TestNewCommitAppearsAfterRefresh(t *testing.T) {
 	initialCommit.IsWorking = false
 
 	// Simulate receiving repositoryLoadedMsg with updated repository
-	updatedRepo := &models.Repository{
+	updatedRepo := &internal.Repository{
 		Path:        "/test/repo",
 		WorkingCopy: newWorkingCopy,
-		Graph: models.CommitGraph{
-			Commits: []models.Commit{newWorkingCopy, initialCommit},
+		Graph: internal.CommitGraph{
+			Commits: []internal.Commit{newWorkingCopy, initialCommit},
 		},
 	}
 
@@ -399,10 +399,10 @@ func TestSilentRefreshUpdatesCommits(t *testing.T) {
 	m.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
 
 	// Start with 2 commits
-	m.SetRepository(&models.Repository{
+	m.SetRepository(&internal.Repository{
 		Path: "/test/repo",
-		Graph: models.CommitGraph{
-			Commits: []models.Commit{
+		Graph: internal.CommitGraph{
+			Commits: []internal.Commit{
 				{ID: "a", ShortID: "aaa", Summary: "First", IsWorking: true},
 				{ID: "b", ShortID: "bbb", Summary: "Second"},
 			},
@@ -414,10 +414,10 @@ func TestSilentRefreshUpdatesCommits(t *testing.T) {
 
 	// Simulate silent refresh with 3 commits (one new)
 	silentMsg := silentRepositoryLoadedMsg{
-		repository: &models.Repository{
+		repository: &internal.Repository{
 			Path: "/test/repo",
-			Graph: models.CommitGraph{
-				Commits: []models.Commit{
+			Graph: internal.CommitGraph{
+				Commits: []internal.Commit{
 					{ID: "c", ShortID: "ccc", Summary: "New commit", IsWorking: true},
 					{ID: "a", ShortID: "aaa", Summary: "First"},
 					{ID: "b", ShortID: "bbb", Summary: "Second"},
@@ -563,10 +563,10 @@ func TestRepositoryLoadedMsg(t *testing.T) {
 	m.loading = true
 	m.repository = nil
 
-	repo := &models.Repository{
+	repo := &internal.Repository{
 		Path: "/new/repo",
-		Graph: models.CommitGraph{
-			Commits: []models.Commit{
+		Graph: internal.CommitGraph{
+			Commits: []internal.Commit{
 				{ID: "new123", ShortID: "new1", Summary: "New commit"},
 			},
 		},
@@ -901,9 +901,9 @@ func TestMouseScrollingOnViews(t *testing.T) {
 		// Re-initialize viewport with new height
 		m.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
 		// Add many PRs so there's content to scroll
-		var prs []models.GitHubPR
+		var prs []internal.GitHubPR
 		for i := 0; i < 50; i++ {
-			prs = append(prs, models.GitHubPR{
+			prs = append(prs, internal.GitHubPR{
 				Number: i + 1,
 				Title:  fmt.Sprintf("Test PR %d", i+1),
 				State:  "open",
