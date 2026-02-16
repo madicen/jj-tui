@@ -9,6 +9,7 @@ import (
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/tabs/graph"
 	"github.com/madicen/jj-tui/internal/tui/view"
 	"github.com/madicen/jj-tui/internal/version"
 	"github.com/mattn/go-runewidth"
@@ -20,11 +21,15 @@ func (m *Model) View() string {
 		return "Loading..."
 	}
 
+	// Sync error state to error modal so it can render (e.g. when set by errorMsg or tests)
+	if m.err != nil {
+		m.errorModal.SetError(m.err, m.notJJRepo, m.currentPath)
+	}
 	// Handle error modal model
 	if errorContent := m.errorModal.View(); errorContent != "" {
 		if m.errorModal.IsJJRepoError() {
-			// "Not a jj repo" shown with normal UI
-			return m.renderWithHeader(errorContent)
+			// "Not a jj repo" uses main model's welcome screen (has zone marks for init button)
+			return m.renderWithHeader(m.renderError())
 		}
 		// Regular error: show as centered modal
 		return m.centerModal(errorContent)
@@ -53,6 +58,10 @@ func (m *Model) View() string {
 	var content string
 	switch m.viewMode {
 	case ViewCommitGraph:
+		// Keep graph tab in sync with main selection and rebase state (e.g. when set by tests or handlers)
+		m.graphTabModel.SelectCommit(m.selectedCommit)
+		m.graphTabModel.SetSelectionMode(graph.SelectionMode(m.selectionMode))
+		m.graphTabModel.SetRebaseSourceCommit(m.rebaseSourceCommit)
 		content = m.graphTabModel.View()
 		if content == "" {
 			// Fallback to main rendering for now
@@ -169,7 +178,20 @@ func (m *Model) renderSettingsContent() string {
 }
 
 func (m *Model) renderHelpContent() string {
-	return "Help view - rendering delegated to helpTabModel"
+	data := view.HelpData{
+		ActiveTab:       view.HelpTab(m.helpTabModel.GetHelpTab()),
+		SelectedCommand: m.helpTabModel.GetSelectedCommand(),
+	}
+	for _, entry := range m.getFilteredCommandHistory() {
+		data.CommandHistory = append(data.CommandHistory, view.CommandHistoryEntry{
+			Command:   entry.Command,
+			Timestamp: entry.Timestamp.Format("15:04:05"),
+			Duration:  formatDuration(entry.Duration),
+			Success:   entry.Success,
+			Error:     entry.Error,
+		})
+	}
+	return m.renderer().Help(data)
 }
 
 // renderer returns a view renderer with the zone manager

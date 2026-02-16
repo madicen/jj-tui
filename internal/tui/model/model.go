@@ -184,9 +184,16 @@ type Model struct {
 // doPollMsg is a message used to trigger a GitHub token poll.
 type doPollMsg struct{}
 
-// SetRepository sets the repository data
+// SetRepository sets the repository data and syncs to tab models (e.g. for tests)
 func (m *Model) SetRepository(repo *internal.Repository) {
 	m.repository = repo
+	m.graphTabModel.UpdateRepository(repo)
+	m.prsTabModel.UpdateRepository(repo)
+	m.prsTabModel.SetGithubService(m.isGitHubAvailable())
+	m.branchesTabModel.UpdateRepository(repo)
+	m.ticketsTabModel.UpdateRepository(repo)
+	m.settingsTabModel.UpdateRepository(repo)
+	m.helpTabModel.UpdateRepository(repo)
 }
 
 // Init implements tea.Model
@@ -252,30 +259,44 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.settingsInputs[i].Width = inputWidth - 10
 		}
 
+		// Propagate dimensions to tab models so they can render
+		cmds := PropagateUpdate(msg, &m.graphTabModel, &m.prsTabModel, &m.branchesTabModel, &m.ticketsTabModel, &m.settingsTabModel, &m.helpTabModel)
+		if len(cmds) > 0 {
+			return m, tea.Batch(cmds...)
+		}
 		return m, nil
 
 	case tea.KeyMsg:
 		// Delegate to tab models for their specific views
 		switch m.viewMode {
 		case ViewCommitGraph:
+			m.graphTabModel.SelectCommit(m.selectedCommit)
+			m.graphTabModel.SetSelectionMode(graphtab.SelectionMode(m.selectionMode))
+			m.graphTabModel.SetRebaseSourceCommit(m.rebaseSourceCommit)
 			cmds := PropagateUpdate(msg, &m.graphTabModel)
+			m.selectedCommit = m.graphTabModel.GetSelectedCommit()
+			m.selectionMode = SelectionMode(m.graphTabModel.GetSelectionMode())
+			m.rebaseSourceCommit = m.graphTabModel.GetRebaseSourceCommit()
 			if len(cmds) > 0 && cmds[0] != nil {
 				return m, cmds[0]
 			}
 			// Fall through to handleKeyMsg for graph-specific commands
 		case ViewPullRequests:
 			cmds := PropagateUpdate(msg, &m.prsTabModel)
+			m.selectedPR = m.prsTabModel.GetSelectedPR()
 			if len(cmds) > 0 && cmds[0] != nil {
 				return m, cmds[0]
 			}
 			// Fall through to handleKeyMsg for non-delegated keys
 		case ViewBranches:
 			cmds := PropagateUpdate(msg, &m.branchesTabModel)
+			m.selectedBranch = m.branchesTabModel.GetSelectedBranch()
 			if len(cmds) > 0 && cmds[0] != nil {
 				return m, cmds[0]
 			}
 		case ViewTickets:
 			cmds := PropagateUpdate(msg, &m.ticketsTabModel)
+			m.selectedTicket = m.ticketsTabModel.GetSelectedTicket()
 			if len(cmds) > 0 && cmds[0] != nil {
 				return m, cmds[0]
 			}
@@ -286,6 +307,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case ViewHelp:
 			cmds := PropagateUpdate(msg, &m.helpTabModel)
+			m.helpTab = m.helpTabModel.GetHelpTab()
+			m.helpSelectedCommand = m.helpTabModel.GetSelectedCommand()
 			if len(cmds) > 0 && cmds[0] != nil {
 				return m, cmds[0]
 			}
@@ -343,6 +366,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Sync repository to tab models
 		m.graphTabModel.UpdateRepository(m.repository)
 		m.prsTabModel.UpdateRepository(m.repository)
+		m.prsTabModel.SetGithubService(m.isGitHubAvailable())
 		m.branchesTabModel.UpdateRepository(m.repository)
 		m.ticketsTabModel.UpdateRepository(m.repository)
 		m.settingsTabModel.UpdateRepository(m.repository)
@@ -425,6 +449,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.repository = msg.repository
 			m.repository.PRs = oldPRs // Restore PRs
+			// Sync repository to tab models so they render updated data
+			m.graphTabModel.UpdateRepository(m.repository)
+			m.prsTabModel.UpdateRepository(m.repository)
+			m.prsTabModel.SetGithubService(m.isGitHubAvailable())
+			m.branchesTabModel.UpdateRepository(m.repository)
+			m.ticketsTabModel.UpdateRepository(m.repository)
+			m.settingsTabModel.UpdateRepository(m.repository)
+			m.helpTabModel.UpdateRepository(m.repository)
 			// Don't clear m.err here - let errors persist until dismissed
 			// Only update status if commit count changed AND there's no existing error
 			newCount := len(msg.repository.Graph.Commits)
@@ -569,30 +601,38 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ticketsLoadedMsg:
 		m.ticketList = msg.tickets
+		m.ticketsTabModel.UpdateTickets(msg.tickets)
+		providerName := ""
+		if m.ticketService != nil {
+			providerName = m.ticketService.GetProviderName()
+		}
+		m.ticketsTabModel.SetTicketServiceInfo(providerName, m.ticketService != nil)
+		m.selectedTicket = m.ticketsTabModel.GetSelectedTicket()
 		// Only update status if there's no existing error
 		if m.err == nil {
-			providerName := "tickets"
+			pName := "tickets"
 			if m.ticketService != nil {
-				providerName = m.ticketService.GetProviderName() + " tickets"
+				pName = providerName + " tickets"
 			}
-			m.statusMessage = fmt.Sprintf("Loaded %d %s", len(msg.tickets), providerName)
-		}
-		if len(msg.tickets) > 0 && m.selectedTicket < 0 {
-			m.selectedTicket = 0
+			m.statusMessage = fmt.Sprintf("Loaded %d %s", len(msg.tickets), pName)
 		}
 		// Load transitions for the selected ticket
 		m.availableTransitions = nil
+		m.ticketsTabModel.SetAvailableTransitions(nil)
 		m.loadingTransitions = true
 		return m, m.loadTransitions()
 
 	case transitionsLoadedMsg:
 		m.loadingTransitions = false
 		m.availableTransitions = msg.transitions
+		m.ticketsTabModel.SetAvailableTransitions(msg.transitions)
 		return m, nil
 
 	case transitionCompletedMsg:
 		m.transitionInProgress = false
 		m.statusChangeMode = false // Collapse status buttons after transition
+		m.ticketsTabModel.SetTransitionInProgress(false)
+		m.ticketsTabModel.SetStatusChangeMode(false)
 		if msg.err != nil {
 			m.statusMessage = fmt.Sprintf("Failed to transition %s: %v", msg.ticketKey, msg.err)
 			m.err = msg.err
@@ -607,11 +647,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMessage = fmt.Sprintf("Failed to load branches: %v", msg.err)
 		} else {
 			m.branchList = msg.branches
+			m.branchesTabModel.UpdateBranches(msg.branches)
+			m.selectedBranch = m.branchesTabModel.GetSelectedBranch()
 			if m.err == nil && m.viewMode != ViewCreateBookmark {
 				m.statusMessage = fmt.Sprintf("Loaded %d branches", len(msg.branches))
-			}
-			if len(msg.branches) > 0 && m.selectedBranch < 0 {
-				m.selectedBranch = 0
 			}
 			// Re-check bookmark name duplicate if we're in bookmark creation view
 			if m.viewMode == ViewCreateBookmark {

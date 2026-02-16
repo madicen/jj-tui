@@ -34,6 +34,14 @@ func newTestModel() *Model {
 	})
 	m.statusMessage = "Ready"
 
+	// Sync repository and selection to tab models (bypasses repositoryLoadedMsg in tests)
+	m.graphTabModel.UpdateRepository(m.repository)
+	m.graphTabModel.SelectCommit(m.selectedCommit)
+	m.prsTabModel.UpdateRepository(m.repository)
+	m.prsTabModel.SetGithubService(m.isGitHubAvailable())
+	m.branchesTabModel.UpdateRepository(m.repository)
+	m.ticketsTabModel.SetTicketServiceInfo("", false)
+
 	// Initialize viewport by processing a window size message
 	m.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
 
@@ -291,6 +299,9 @@ func TestWorkingCopyNodeAppearsInGraph(t *testing.T) {
 			Commits: []internal.Commit{workingCopyCommit, parentCommit},
 		},
 	})
+	m.graphTabModel.UpdateRepository(m.repository)
+	m.graphTabModel.SelectCommit(m.selectedCommit)
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 80})
 	defer m.Close()
 
 	view := m.View()
@@ -509,6 +520,7 @@ func TestPRViewContent(t *testing.T) {
 		// Simulate having a GitHub service by setting a non-nil pointer
 		// (we don't actually need the real service for view testing)
 		m.githubService = &github.Service{}
+		m.prsTabModel.SetGithubService(true)
 		m.viewMode = ViewPullRequests
 
 		view := m.View()

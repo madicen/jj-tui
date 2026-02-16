@@ -353,6 +353,7 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 			if userClicked(zoneID) {
 				if m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
 					m.transitionInProgress = true
+					m.ticketsTabModel.SetTransitionInProgress(true)
 					ticket := m.ticketList[m.selectedTicket]
 					m.statusMessage = fmt.Sprintf("Setting %s to %s...", ticket.DisplayKey, t.Name)
 					return m, m.transitionTicket(t.ID)

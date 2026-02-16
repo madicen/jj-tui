@@ -205,6 +205,10 @@ func PropagateUpdate(msg tea.Msg, updatables ...any) (results []tea.Cmd) {
 		}
 		// Set the first result as the new value of updatable
 		updatedValue := callResults[0]
+		// Update returns (tea.Model, tea.Cmd); extract concrete value from interface for Set
+		if updatedValue.Kind() == reflect.Interface && !updatedValue.IsNil() {
+			updatedValue = updatedValue.Elem()
+		}
 		cmd, ok := callResults[1].Interface().(tea.Cmd)
 		if !ok {
 			panic("second return value from Update must be tea.Cmd")

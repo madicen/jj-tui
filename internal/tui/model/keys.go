@@ -183,6 +183,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Cancel status change mode in Tickets view
 		if m.viewMode == ViewTickets && m.statusChangeMode {
 			m.statusChangeMode = false
+			m.ticketsTabModel.SetStatusChangeMode(false)
 			m.statusMessage = "Ready"
 			return m, nil
 		}

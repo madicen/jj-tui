@@ -2,23 +2,30 @@ package prs
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
+	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal"
+	"github.com/madicen/jj-tui/internal/tui/view"
 )
 
 // Model represents the state of the PRs tab
 type Model struct {
+	zoneManager   *zone.Manager
 	repository    *internal.Repository
 	selectedPR    int // Index of selected PR in the PRs list
+	width         int
+	height        int
 	loading       bool
 	err           error
 	statusMessage string
+	githubService bool // whether GitHub is connected (for rendering)
 }
 
-// NewModel creates a new PRs tab model
-func NewModel() Model {
+// NewModel creates a new PRs tab model. zoneManager may be nil (e.g. in tests).
+func NewModel(zoneManager *zone.Manager) Model {
 	return Model{
-		selectedPR: -1,
-		loading:    false,
+		zoneManager: zoneManager,
+		selectedPR:  -1,
+		loading:     false,
 	}
 }
 
@@ -30,21 +37,37 @@ func (m Model) Init() tea.Cmd {
 // Update handles messages for the PRs tab
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		return m, nil
 	case tea.KeyMsg:
 		return m.handleKeyMsg(msg)
 	}
 	return m, nil
 }
 
-// View renders the PRs tab
+// View renders the PRs tab using the view package
 func (m Model) View() string {
+	if m.width == 0 || m.height == 0 {
+		return "Loading..."
+	}
 	if m.repository == nil {
 		return "Loading pull requests..."
 	}
-	if len(m.repository.PRs) == 0 {
-		return "No pull requests found"
-	}
-	return ""
+	r := view.New(m.zoneManager)
+	result := r.PullRequests(view.PRData{
+		Repository:    m.repository,
+		SelectedPR:    m.selectedPR,
+		GithubService: m.githubService,
+		Width:         m.width,
+	})
+	return result.FullContent
+}
+
+// SetGithubService sets whether GitHub is connected (used by main model when rendering)
+func (m *Model) SetGithubService(connected bool) {
+	m.githubService = connected
 }
 
 // handleKeyMsg handles keyboard input specific to the PRs tab

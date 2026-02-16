@@ -65,7 +65,8 @@ type GraphData struct {
 
 func NewGraphModel(zoneManager *zone.Manager) GraphModel {
 	return GraphModel{
-		zoneManager: zoneManager,
+		zoneManager:  zoneManager,
+		graphFocused: true, // default to graph pane focused so j/k navigate commits
 	}
 }
 

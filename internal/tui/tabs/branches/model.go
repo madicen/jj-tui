@@ -2,22 +2,28 @@ package branches
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
+	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal"
+	"github.com/madicen/jj-tui/internal/tui/view"
 )
 
 // Model represents the state of the Branches tab
 type Model struct {
+	zoneManager    *zone.Manager
 	repository     *internal.Repository
 	branchList     []internal.Branch
-	selectedBranch int
+	selectedBranch  int
+	width          int
+	height         int
 	loading        bool
 	err            error
 	statusMessage  string
 }
 
-// NewModel creates a new Branches tab model
-func NewModel() Model {
+// NewModel creates a new Branches tab model. zoneManager may be nil (e.g. in tests).
+func NewModel(zoneManager *zone.Manager) Model {
 	return Model{
+		zoneManager:   zoneManager,
 		selectedBranch: -1,
 		loading:        false,
 	}
@@ -31,18 +37,28 @@ func (m Model) Init() tea.Cmd {
 // Update handles messages for the Branches tab
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		return m, nil
 	case tea.KeyMsg:
 		return m.handleKeyMsg(msg)
 	}
 	return m, nil
 }
 
-// View renders the Branches tab
+// View renders the Branches tab using the view package
 func (m Model) View() string {
-	if len(m.branchList) == 0 {
-		return "No branches found"
+	if m.width == 0 || m.height == 0 {
+		return "Loading..."
 	}
-	return ""
+	r := view.New(m.zoneManager)
+	result := r.Branches(view.BranchData{
+		Branches:       m.branchList,
+		SelectedBranch: m.selectedBranch,
+		Width:          m.width,
+	})
+	return result.FullContent
 }
 
 // handleKeyMsg handles keyboard input specific to the Branches tab

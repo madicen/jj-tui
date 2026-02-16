@@ -446,6 +446,7 @@ func (m *Model) handleClosePR() (tea.Model, tea.Cmd) {
 func (m *Model) handleToggleStatusChangeMode() (tea.Model, tea.Cmd) {
 	if m.viewMode == ViewTickets && m.ticketService != nil && !m.transitionInProgress {
 		m.statusChangeMode = !m.statusChangeMode
+		m.ticketsTabModel.SetStatusChangeMode(m.statusChangeMode)
 		if m.statusChangeMode {
 			m.statusMessage = "Select a status to apply (i/D/B/N or Esc to cancel)"
 		} else {
@@ -477,6 +478,7 @@ func (m *Model) handleTransitionToInProgress() (tea.Model, tea.Cmd) {
 			(strings.Contains(lowerName, "start") && !strings.Contains(lowerName, "not start") && !strings.Contains(lowerName, "not_start"))
 		if isInProgress {
 			m.transitionInProgress = true
+			m.ticketsTabModel.SetTransitionInProgress(true)
 			ticket := m.ticketList[m.selectedTicket]
 			m.statusMessage = fmt.Sprintf("Setting %s to %s...", ticket.DisplayKey, t.Name)
 			return m, m.transitionTicket(t.ID)
@@ -498,6 +500,7 @@ func (m *Model) handleTransitionToDone() (tea.Model, tea.Cmd) {
 		lowerName := strings.ToLower(t.Name)
 		if strings.Contains(lowerName, "done") || strings.Contains(lowerName, "complete") || strings.Contains(lowerName, "resolve") {
 			m.transitionInProgress = true
+			m.ticketsTabModel.SetTransitionInProgress(true)
 			ticket := m.ticketList[m.selectedTicket]
 			m.statusMessage = fmt.Sprintf("Setting %s to %s...", ticket.DisplayKey, t.Name)
 			return m, m.transitionTicket(t.ID)
@@ -519,6 +522,7 @@ func (m *Model) handleTransitionToBlocked() (tea.Model, tea.Cmd) {
 		lowerName := strings.ToLower(t.Name)
 		if strings.Contains(lowerName, "block") {
 			m.transitionInProgress = true
+			m.ticketsTabModel.SetTransitionInProgress(true)
 			ticket := m.ticketList[m.selectedTicket]
 			m.statusMessage = fmt.Sprintf("Setting %s to %s...", ticket.DisplayKey, t.Name)
 			return m, m.transitionTicket(t.ID)
@@ -540,6 +544,7 @@ func (m *Model) handleTransitionToNotStarted() (tea.Model, tea.Cmd) {
 		lowerName := strings.ToLower(t.Name)
 		if strings.Contains(lowerName, "not") && strings.Contains(lowerName, "start") {
 			m.transitionInProgress = true
+			m.ticketsTabModel.SetTransitionInProgress(true)
 			ticket := m.ticketList[m.selectedTicket]
 			m.statusMessage = fmt.Sprintf("Setting %s to %s...", ticket.DisplayKey, t.Name)
 			return m, m.transitionTicket(t.ID)

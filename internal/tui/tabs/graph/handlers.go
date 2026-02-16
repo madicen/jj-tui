@@ -61,6 +61,14 @@ func (m GraphModel) handleKeyMsg(msg tea.KeyMsg) (GraphModel, tea.Cmd) {
 			return m, cmd
 		}
 
+	// Rebase mode: cancel with esc/q so parent sync gets reset state
+	case "esc", "q":
+		if m.selectionMode == SelectionRebaseDestination {
+			m.selectionMode = SelectionNormal
+			m.rebaseSourceCommit = -1
+		}
+		return m, nil
+
 	// Rebase mode navigation
 	case "r":
 		if m.repository != nil && m.selectedCommit >= 0 && m.selectedCommit < len(m.repository.Graph.Commits) {
@@ -149,6 +157,26 @@ func (m *GraphModel) SelectCommit(idx int) {
 	if m.repository != nil && idx >= 0 && idx < len(m.repository.Graph.Commits) {
 		m.selectedCommit = idx
 	}
+}
+
+// SetSelectionMode sets the selection mode (e.g. rebase destination)
+func (m *GraphModel) SetSelectionMode(mode SelectionMode) {
+	m.selectionMode = mode
+}
+
+// SetRebaseSourceCommit sets the commit index being rebased
+func (m *GraphModel) SetRebaseSourceCommit(idx int) {
+	m.rebaseSourceCommit = idx
+}
+
+// GetSelectionMode returns the current selection mode
+func (m *GraphModel) GetSelectionMode() SelectionMode {
+	return m.selectionMode
+}
+
+// GetRebaseSourceCommit returns the commit index being rebased
+func (m *GraphModel) GetRebaseSourceCommit() int {
+	return m.rebaseSourceCommit
 }
 
 // GetSelectedCommit returns the index of the selected commit

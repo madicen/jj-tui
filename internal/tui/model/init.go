@@ -113,9 +113,9 @@ func New(ctx context.Context) *Model {
 		ticketBookmarkDisplayKeys: make(map[string]string),
 		// Initialize tab models
 		graphTabModel:    graphTabModel,
-		prsTabModel:      prstab.NewModel(),
-		branchesTabModel: branchestab.NewModel(),
-		ticketsTabModel:  ticketstab.NewModel(),
+		prsTabModel:      prstab.NewModel(zm),
+		branchesTabModel: branchestab.NewModel(zm),
+		ticketsTabModel:  ticketstab.NewModel(zm),
 		settingsTabModel: settingstab.NewModel(),
 		helpTabModel:     helptab.NewModel(),
 

@@ -2,12 +2,15 @@ package tickets
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
+	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/tickets"
+	"github.com/madicen/jj-tui/internal/tui/view"
 )
 
 // Model represents the state of the Tickets tab
 type Model struct {
+	zoneManager          *zone.Manager
 	ticketList           []tickets.Ticket
 	selectedTicket       int
 	availableTransitions []tickets.Transition
@@ -17,11 +20,16 @@ type Model struct {
 	loading              bool
 	err                  error
 	statusMessage        string
+	width                int
+	height               int
+	providerName         string // e.g. "Jira", "Codecks"
+	jiraService          bool   // whether a ticket service is connected
 }
 
-// NewModel creates a new Tickets tab model
-func NewModel() Model {
+// NewModel creates a new Tickets tab model. zoneManager may be nil (e.g. in tests).
+func NewModel(zoneManager *zone.Manager) Model {
 	return Model{
+		zoneManager:   zoneManager,
 		selectedTicket: -1,
 		loading:        false,
 	}
@@ -35,18 +43,70 @@ func (m Model) Init() tea.Cmd {
 // Update handles messages for the Tickets tab
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		return m, nil
 	case tea.KeyMsg:
 		return m.handleKeyMsg(msg)
 	}
 	return m, nil
 }
 
-// View renders the Tickets tab
+// View renders the Tickets tab using the view package
 func (m Model) View() string {
-	if len(m.ticketList) == 0 {
-		return "No tickets found"
+	if m.width == 0 || m.height == 0 {
+		return "Loading..."
 	}
-	return ""
+	ticketViews := make([]view.JiraTicket, len(m.ticketList))
+	for i, t := range m.ticketList {
+		ticketViews[i] = view.JiraTicket{
+			Key:         t.Key,
+			DisplayKey:  t.DisplayKey,
+			Summary:     t.Summary,
+			Status:      t.Status,
+			Type:        t.Type,
+			Priority:    t.Priority,
+			Description: t.Description,
+		}
+	}
+	transitionViews := make([]view.TicketTransition, 0, len(m.availableTransitions))
+	for _, t := range m.availableTransitions {
+		transitionViews = append(transitionViews, view.TicketTransition{ID: t.ID, Name: t.Name})
+	}
+	r := view.New(m.zoneManager)
+	result := r.Jira(view.JiraData{
+		Tickets:              ticketViews,
+		SelectedTicket:       m.selectedTicket,
+		JiraService:          m.jiraService,
+		ProviderName:         m.providerName,
+		AvailableTransitions: transitionViews,
+		TransitionInProgress: m.transitionInProgress,
+		StatusChangeMode:     m.statusChangeMode,
+		Width:                m.width,
+	})
+	return result.FullContent
+}
+
+// SetTicketServiceInfo sets provider name and whether a ticket service is connected (used by main model)
+func (m *Model) SetTicketServiceInfo(providerName string, connected bool) {
+	m.providerName = providerName
+	m.jiraService = connected
+}
+
+// SetAvailableTransitions sets the available status transitions (called by main model when loaded)
+func (m *Model) SetAvailableTransitions(t []tickets.Transition) {
+	m.availableTransitions = t
+}
+
+// SetTransitionInProgress sets whether a transition is in progress (called by main model)
+func (m *Model) SetTransitionInProgress(inProgress bool) {
+	m.transitionInProgress = inProgress
+}
+
+// SetStatusChangeMode sets whether status change buttons are expanded (called by main model)
+func (m *Model) SetStatusChangeMode(mode bool) {
+	m.statusChangeMode = mode
 }
 
 // handleKeyMsg handles keyboard input specific to the Tickets tab
@@ -112,9 +172,4 @@ func (m *Model) GetAvailableTransitions() []tickets.Transition {
 // IsStatusChangeMode returns whether we're in status change mode
 func (m *Model) IsStatusChangeMode() bool {
 	return m.statusChangeMode
-}
-
-// SetStatusChangeMode sets the status change mode
-func (m *Model) SetStatusChangeMode(mode bool) {
-	m.statusChangeMode = mode
 }
