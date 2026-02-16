@@ -10,9 +10,9 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/integrations/github"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
-	"github.com/madicen/jj-tui/internal/models"
 	"github.com/madicen/jj-tui/internal/testutil"
 	"github.com/madicen/jj-tui/internal/tui"
 )
@@ -91,16 +91,16 @@ func newTestModel() *tui.Model {
 	m := tui.New(ctx)
 	m.SetDimensions(100, 80)
 	m.SetLoading(false)
-	m.SetRepository(&models.Repository{
+	m.SetRepository(&internal.Repository{
 		Path: "/test/repo",
-		Graph: models.CommitGraph{
-			Commits: []models.Commit{
+		Graph: internal.CommitGraph{
+			Commits: []internal.Commit{
 				{ID: "abc123456789", ShortID: "abc1", ChangeID: "abc1", Summary: "First commit"},
 				{ID: "def456789012", ShortID: "def4", ChangeID: "def4", Summary: "Second commit"},
 				{ID: "ghi789012345", ShortID: "ghi7", ChangeID: "ghi7", Summary: "Third commit", IsWorking: true},
 			},
 		},
-		PRs: []models.GitHubPR{
+		PRs: []internal.GitHubPR{
 			{Number: 1, Title: "Test PR", State: "open"},
 		},
 	})
@@ -258,7 +258,7 @@ func TestPRWorkflow(t *testing.T) {
 	// without actually creating GitHub PRs
 
 	t.Run("CreatePRRequest", func(t *testing.T) {
-		req := &models.CreatePRRequest{
+		req := &internal.CreatePRRequest{
 			Title:      "Test PR",
 			Body:       "This is a test PR",
 			BaseBranch: "main",
@@ -277,7 +277,7 @@ func TestPRWorkflow(t *testing.T) {
 	})
 
 	t.Run("UpdatePRRequest", func(t *testing.T) {
-		req := &models.UpdatePRRequest{
+		req := &internal.UpdatePRRequest{
 			Title:     "Updated PR Title",
 			CommitIDs: []string{"commit1", "commit2", "commit3"},
 		}
@@ -294,16 +294,16 @@ func TestPRWorkflow(t *testing.T) {
 
 // TestRepositoryState tests repository state management
 func TestRepositoryState(t *testing.T) {
-	repo := &models.Repository{
+	repo := &internal.Repository{
 		Path: "/test/path",
-		WorkingCopy: models.Commit{
+		WorkingCopy: internal.Commit{
 			ID:        "working",
 			ShortID:   "work",
 			Summary:   "Working copy",
 			IsWorking: true,
 		},
-		Graph: models.CommitGraph{
-			Commits: []models.Commit{
+		Graph: internal.CommitGraph{
+			Commits: []internal.Commit{
 				{
 					ID:      "commit1",
 					ShortID: "com1",
@@ -321,7 +321,7 @@ func TestRepositoryState(t *testing.T) {
 				"commit1": {"commit2"},
 			},
 		},
-		PRs: []models.GitHubPR{},
+		PRs: []internal.GitHubPR{},
 	}
 
 	if repo.Path != "/test/path" {
@@ -386,7 +386,7 @@ func TestJourney_PRStateColors(t *testing.T) {
 	defer m.Close()
 
 	// Set up repository with PRs of different states
-	m.GetRepository().PRs = []models.GitHubPR{
+	m.GetRepository().PRs = []internal.GitHubPR{
 		{Number: 1, Title: "Open PR", State: "open"},
 		{Number: 2, Title: "Merged PR", State: "merged"},
 		{Number: 3, Title: "Closed PR", State: "closed"},
@@ -455,7 +455,7 @@ func TestJourney_PRNavigation(t *testing.T) {
 	m := newTestModel()
 	defer m.Close()
 
-	m.GetRepository().PRs = []models.GitHubPR{
+	m.GetRepository().PRs = []internal.GitHubPR{
 		{Number: 1, Title: "PR 1", State: "open"},
 		{Number: 2, Title: "PR 2", State: "open"},
 		{Number: 3, Title: "PR 3", State: "merged"},

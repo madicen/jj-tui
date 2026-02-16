@@ -1,4 +1,4 @@
-package models
+package internal
 
 import (
 	"time"
@@ -22,14 +22,14 @@ type Commit struct {
 	IsWorking          bool      `json:"is_working"`
 	Conflicts          bool      `json:"conflicts"`
 	Immutable          bool      `json:"immutable"`
-	Divergent          bool      `json:"divergent"` // True if this change ID has multiple versions
+	Divergent          bool      `json:"divergent"`    // True if this change ID has multiple versions
 	GraphPrefix        string    `json:"graph_prefix"` // ASCII art graph prefix from jj (e.g., "│ ○  ")
 	GraphLines         []string  `json:"graph_lines"`  // Connector lines after this commit (e.g., ["│", "├─╯"])
 }
 
 // CommitGraph represents the visual structure of commits
 type CommitGraph struct {
-	Commits     []Commit           `json:"commits"`
+	Commits     []Commit            `json:"commits"`
 	Connections map[string][]string `json:"connections"` // commit_id -> connected_commit_ids
 }
 

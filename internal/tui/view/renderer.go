@@ -3,7 +3,7 @@ package view
 
 import (
 	zone "github.com/lrstanley/bubblezone"
-	"github.com/madicen/jj-tui/internal/models"
+	"github.com/madicen/jj-tui/internal"
 )
 
 // Renderer provides rendering capabilities with zone support
@@ -37,7 +37,7 @@ type ChangedFile struct {
 
 // GraphData contains data needed for commit graph rendering
 type GraphData struct {
-	Repository         *models.Repository
+	Repository         *internal.Repository
 	SelectedCommit     int
 	InRebaseMode       bool            // True when selecting rebase destination
 	RebaseSourceCommit int             // Index of commit being rebased
@@ -59,7 +59,7 @@ type GraphResult struct {
 
 // PRData contains data needed for PR rendering
 type PRData struct {
-	Repository    *models.Repository
+	Repository    *internal.Repository
 	SelectedPR    int
 	GithubService bool // whether GitHub is connected
 	Width         int  // viewport width for separator lines
@@ -162,14 +162,14 @@ type InputView struct {
 
 // DescriptionData contains data needed for description editing
 type DescriptionData struct {
-	Repository      *models.Repository
+	Repository      *internal.Repository
 	EditingCommitID string
 	InputView       string
 }
 
 // CreatePRData contains data needed for create PR view
 type CreatePRData struct {
-	Repository     *models.Repository
+	Repository     *internal.Repository
 	SelectedCommit int
 	GithubService  bool
 	TitleInput     string
@@ -181,7 +181,7 @@ type CreatePRData struct {
 
 // BookmarkData contains data needed for bookmark creation view
 type BookmarkData struct {
-	Repository        *models.Repository
+	Repository        *internal.Repository
 	CommitIndex       int // -1 means creating new branch from main
 	NameInput         string
 	ExistingBookmarks []string // List of existing bookmarks that can be moved

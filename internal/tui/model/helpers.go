@@ -8,8 +8,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
+	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
-	"github.com/madicen/jj-tui/internal/models"
 )
 
 // Auto-refresh interval
@@ -78,13 +78,13 @@ func (m *Model) createIsZoneClickedFunc(clickedZone *zone.ZoneInfo) func(string)
 
 // findCommitsWithEmptyDescriptions finds all commits from the selected commit
 // back to main that have empty descriptions (excluding immutable/root commits)
-func (m *Model) findCommitsWithEmptyDescriptions() []models.Commit {
+func (m *Model) findCommitsWithEmptyDescriptions() []internal.Commit {
 	if m.repository == nil || !m.isSelectedCommitValid() {
 		return nil
 	}
 
 	commits := m.repository.Graph.Commits
-	var emptyDescCommits []models.Commit
+	var emptyDescCommits []internal.Commit
 
 	// Walk from selected commit back through parents until we hit an immutable commit
 	visited := make(map[string]bool)

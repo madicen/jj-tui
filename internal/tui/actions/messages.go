@@ -1,18 +1,18 @@
 // Package actions provides action functions for the TUI.
 package actions
 
-import "github.com/madicen/jj-tui/internal/models"
+import "github.com/madicen/jj-tui/internal"
 
 // Message types returned by action functions
 
 // RepositoryLoadedMsg indicates the repository was loaded
 type RepositoryLoadedMsg struct {
-	Repository *models.Repository
+	Repository *internal.Repository
 }
 
 // EditCompletedMsg indicates checkout/edit completed
 type EditCompletedMsg struct {
-	Repository *models.Repository
+	Repository *internal.Repository
 }
 
 // ErrorMsg indicates an error occurred
@@ -33,7 +33,7 @@ type DescriptionSavedMsg struct {
 
 // PRCreatedMsg indicates a PR was created
 type PRCreatedMsg struct {
-	PR *models.GitHubPR
+	PR *internal.GitHubPR
 }
 
 // BranchPushedMsg indicates a branch was pushed
@@ -63,14 +63,13 @@ type ClipboardCopiedMsg struct {
 
 // FileMoveCompletedMsg indicates a file was moved to a new commit
 type FileMoveCompletedMsg struct {
-	Repository *models.Repository
+	Repository *internal.Repository
 	FilePath   string
 	Direction  string // "up" or "down"
 }
 
 // FileRevertedMsg indicates a file's changes were reverted
 type FileRevertedMsg struct {
-	Repository *models.Repository
+	Repository *internal.Repository
 	FilePath   string
 }
-

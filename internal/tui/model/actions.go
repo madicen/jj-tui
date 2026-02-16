@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
-	"github.com/madicen/jj-tui/internal/models"
 	"github.com/madicen/jj-tui/internal/tui/actions"
 )
 
@@ -117,7 +117,7 @@ func (m *Model) performRebase(destCommitIndex int) tea.Cmd {
 
 // Description actions
 
-func (m *Model) startEditingDescription(commit models.Commit) (tea.Model, tea.Cmd) {
+func (m *Model) startEditingDescription(commit internal.Commit) (tea.Model, tea.Cmd) {
 	m.viewMode = ViewEditDescription
 	m.editingCommitID = commit.ChangeID
 	m.descriptionInput.SetWidth(m.width - 10)
@@ -319,7 +319,7 @@ func (m *Model) submitPR() tea.Cmd {
 		}
 
 		return func() tea.Msg {
-			return actions.PRCreatedMsg{PR: &models.GitHubPR{
+			return actions.PRCreatedMsg{PR: &internal.GitHubPR{
 				Number:       999,
 				Title:        title,
 				Body:         body,
@@ -328,8 +328,8 @@ func (m *Model) submitPR() tea.Cmd {
 				BaseBranch:   baseBranch,
 				URL:          "https://github.com/example/repo/pull/999",
 				CommitIDs:    commitIDs,
-				CheckStatus:  models.CheckStatusPending,
-				ReviewStatus: models.ReviewStatusNone,
+				CheckStatus:  internal.CheckStatusPending,
+				ReviewStatus: internal.ReviewStatusNone,
 			}}
 		}
 	}

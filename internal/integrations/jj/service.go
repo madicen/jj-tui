@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/madicen/jj-tui/internal/models"
+	"github.com/madicen/jj-tui/internal"
 )
 
 // CommandHistoryEntry represents a single jj command that was executed
@@ -126,7 +126,7 @@ func (s *Service) addToHistory(entry CommandHistoryEntry) {
 }
 
 // GetRepository retrieves the current repository state
-func (s *Service) GetRepository(ctx context.Context) (*models.Repository, error) {
+func (s *Service) GetRepository(ctx context.Context) (*internal.Repository, error) {
 	// Before loading the graph, do a quick cleanup of any orphaned empty commits
 	// This handles the case where jj auto-created them after a merge
 	_ = s.abandonOrphanedEmptyCommits(ctx)
@@ -138,7 +138,7 @@ func (s *Service) GetRepository(ctx context.Context) (*models.Repository, error)
 	}
 
 	// Find working copy from graph
-	var workingCopy models.Commit
+	var workingCopy internal.Commit
 	for _, c := range graph.Commits {
 		if c.IsWorking {
 			workingCopy = c
@@ -146,11 +146,11 @@ func (s *Service) GetRepository(ctx context.Context) (*models.Repository, error)
 		}
 	}
 
-	return &models.Repository{
+	return &internal.Repository{
 		Path:        s.RepoPath,
 		WorkingCopy: workingCopy,
 		Graph:       *graph,
-		PRs:         []models.GitHubPR{}, // TODO: populate from GitHub
+		PRs:         []internal.GitHubPR{}, // TODO: populate from GitHub
 	}, nil
 }
 
@@ -695,7 +695,7 @@ func (s *Service) abandonOrphanedEmptyCommits(ctx context.Context) error {
 }
 
 // getCommitGraph retrieves the commit graph with real jj data
-func (s *Service) getCommitGraph(ctx context.Context) (*models.CommitGraph, error) {
+func (s *Service) getCommitGraph(ctx context.Context) (*internal.CommitGraph, error) {
 	// Use a custom template with a unique marker to separate graph prefix from data
 	// The marker "<<<COMMIT>>>" lets us identify where the graph ends and data begins
 	// Format after marker: change_id|commit_id|author|date|description|parents|bookmarks|is_working|has_conflict|immutable|divergent
@@ -728,7 +728,7 @@ func (s *Service) getCommitGraph(ctx context.Context) (*models.CommitGraph, erro
 		}
 	}
 
-	commits := []models.Commit{}
+	commits := []internal.Commit{}
 	connections := make(map[string][]string)
 	var pendingGraphLines []string // Graph lines between commits
 
@@ -829,7 +829,7 @@ func (s *Service) getCommitGraph(ctx context.Context) (*models.CommitGraph, erro
 			date, _ = time.Parse(time.RFC3339, dateStr)
 		}
 
-		commit := models.Commit{
+		commit := internal.Commit{
 			ID:                 commitID,
 			ShortID:            commitID,
 			ChangeID:           changeID,
@@ -861,24 +861,24 @@ func (s *Service) getCommitGraph(ctx context.Context) (*models.CommitGraph, erro
 		commits[len(commits)-1].GraphLines = pendingGraphLines
 	}
 
-	return &models.CommitGraph{
+	return &internal.CommitGraph{
 		Commits:     commits,
 		Connections: connections,
 	}, nil
 }
 
 // getCommitGraphSimple is a fallback that uses simpler parsing
-func (s *Service) getCommitGraphSimple(ctx context.Context) (*models.CommitGraph, error) {
+func (s *Service) getCommitGraphSimple(ctx context.Context) (*internal.CommitGraph, error) {
 	out, err := s.runJJOutput(ctx, "log", "-r", "mutable() | bookmarks()", "--no-graph")
 	if err != nil {
 		return nil, err
 	}
 
-	commits := []models.Commit{}
+	commits := []internal.Commit{}
 
 	// Parse the default jj log output
 	lines := strings.Split(out, "\n")
-	var currentCommit *models.Commit
+	var currentCommit *internal.Commit
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -903,7 +903,7 @@ func (s *Service) getCommitGraphSimple(ctx context.Context) (*models.CommitGraph
 			// Try to parse: change_id commit_id author date summary
 			parts := strings.Fields(line)
 			if len(parts) >= 2 {
-				currentCommit = &models.Commit{
+				currentCommit = &internal.Commit{
 					ChangeID:  parts[0],
 					ShortID:   parts[0],
 					ID:        parts[0],
@@ -928,7 +928,7 @@ func (s *Service) getCommitGraphSimple(ctx context.Context) (*models.CommitGraph
 		commits = append(commits, *currentCommit)
 	}
 
-	return &models.CommitGraph{
+	return &internal.CommitGraph{
 		Commits:     commits,
 		Connections: make(map[string][]string),
 	}, nil
@@ -1034,14 +1034,14 @@ func (s *Service) runJJOutput(ctx context.Context, args ...string) (string, erro
 
 // ListBranches returns all local and remote branches
 // statsLimit controls how many branches get ahead/behind stats calculated (0 = all)
-func (s *Service) ListBranches(ctx context.Context, statsLimit int) ([]models.Branch, error) {
+func (s *Service) ListBranches(ctx context.Context, statsLimit int) ([]internal.Branch, error) {
 	// Get all bookmarks including remote ones
 	out, err := s.runJJOutput(ctx, "bookmark", "list", "--all-remotes")
 	if err != nil {
 		return nil, fmt.Errorf("failed to list bookmarks: %w", err)
 	}
 
-	var branches []models.Branch
+	var branches []internal.Branch
 	lines := strings.Split(out, "\n")
 
 	var currentBranch string
@@ -1076,7 +1076,7 @@ func (s *Service) ListBranches(ctx context.Context, statsLimit int) ([]models.Br
 					commitInfo := strings.TrimSpace(line[colonIdx+1:])
 					changeID, shortID := parseCommitInfo(commitInfo)
 
-					branches = append(branches, models.Branch{
+					branches = append(branches, internal.Branch{
 						Name:      branchName,
 						Remote:    remote,
 						CommitID:  changeID,
@@ -1107,7 +1107,7 @@ func (s *Service) ListBranches(ctx context.Context, statsLimit int) ([]models.Br
 				commitInfo := strings.TrimSpace(line[colonIdx+1:])
 				changeID, shortID := parseCommitInfo(commitInfo)
 
-				branches = append(branches, models.Branch{
+				branches = append(branches, internal.Branch{
 					Name:        currentBranch,
 					CommitID:    changeID,
 					ShortID:     shortID,
@@ -1147,7 +1147,7 @@ func (s *Service) ListBranches(ctx context.Context, statsLimit int) ([]models.Br
 			if currentBranch != "" {
 				// A branch is tracked if it appears under a branch line (even if deleted)
 				// Untracked branches appear on a single line as "branch@origin:"
-				branches = append(branches, models.Branch{
+				branches = append(branches, internal.Branch{
 					Name:         currentBranch,
 					LocalDeleted: isDeleted, // Track if local copy was deleted
 					Remote:       remote,
@@ -1165,7 +1165,7 @@ func (s *Service) ListBranches(ctx context.Context, statsLimit int) ([]models.Br
 	if statsLimit > 0 {
 		// Build a set of local branch names to keep their remote counterparts
 		localBranchNames := make(map[string]bool)
-		var localBranches, remoteBranches, remoteCounterparts []models.Branch
+		var localBranches, remoteBranches, remoteCounterparts []internal.Branch
 
 		for _, b := range branches {
 			if b.IsLocal {

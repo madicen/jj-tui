@@ -12,13 +12,13 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/integrations/codecks"
 	"github.com/madicen/jj-tui/internal/integrations/github"
 	"github.com/madicen/jj-tui/internal/integrations/jira"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/mock"
-	"github.com/madicen/jj-tui/internal/models"
 	"github.com/madicen/jj-tui/internal/tickets"
 )
 
@@ -312,7 +312,7 @@ func (m *Model) loadPRs() tea.Cmd {
 	if m.githubService == nil {
 		return func() tea.Msg {
 			// Return a status message to show GitHub isn't connected
-			return prsLoadedMsg{prs: []models.GitHubPR{}}
+			return prsLoadedMsg{prs: []internal.GitHubPR{}}
 		}
 	}
 

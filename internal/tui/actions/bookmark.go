@@ -6,8 +6,8 @@ import (
 	"sort"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
-	"github.com/madicen/jj-tui/internal/models"
 )
 
 // ValidateBookmarkName returns error message if invalid, empty if valid
@@ -24,7 +24,7 @@ func ValidateBookmarkName(name string) string {
 }
 
 // GetExistingBookmarks returns sorted bookmarks excluding those on commitIdx
-func GetExistingBookmarks(repo *models.Repository, commitIdx int) []string {
+func GetExistingBookmarks(repo *internal.Repository, commitIdx int) []string {
 	if repo == nil || commitIdx < 0 || commitIdx >= len(repo.Graph.Commits) {
 		return nil
 	}
@@ -94,7 +94,7 @@ func DeleteBookmark(svc *jj.Service, bookmarkName string) tea.Cmd {
 }
 
 // FindBookmarkForCommit finds a bookmark from ancestors using BFS
-func FindBookmarkForCommit(repo *models.Repository, commitIdx int) string {
+func FindBookmarkForCommit(repo *internal.Repository, commitIdx int) string {
 	if repo == nil || commitIdx < 0 || commitIdx >= len(repo.Graph.Commits) {
 		return ""
 	}

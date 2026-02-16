@@ -4,21 +4,21 @@ package testutil
 import (
 	"context"
 
-	"github.com/madicen/jj-tui/internal/models"
+	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/tickets"
 )
 
 // MockGitHubService mocks GitHub API interactions
 type MockGitHubService struct {
-	PRs          []models.GitHubPR
-	CreatePRFunc func(ctx context.Context, req *models.CreatePRRequest) (*models.GitHubPR, error)
-	GetPRsFunc   func(ctx context.Context) ([]models.GitHubPR, error)
+	PRs          []internal.GitHubPR
+	CreatePRFunc func(ctx context.Context, req *internal.CreatePRRequest) (*internal.GitHubPR, error)
+	GetPRsFunc   func(ctx context.Context) ([]internal.GitHubPR, error)
 	Owner        string
 	Repo         string
 }
 
 // GetPullRequests returns mock PRs
-func (m *MockGitHubService) GetPullRequests(ctx context.Context) ([]models.GitHubPR, error) {
+func (m *MockGitHubService) GetPullRequests(ctx context.Context) ([]internal.GitHubPR, error) {
 	if m.GetPRsFunc != nil {
 		return m.GetPRsFunc(ctx)
 	}
@@ -26,11 +26,11 @@ func (m *MockGitHubService) GetPullRequests(ctx context.Context) ([]models.GitHu
 }
 
 // CreatePullRequest creates a mock PR
-func (m *MockGitHubService) CreatePullRequest(ctx context.Context, req *models.CreatePRRequest) (*models.GitHubPR, error) {
+func (m *MockGitHubService) CreatePullRequest(ctx context.Context, req *internal.CreatePRRequest) (*internal.GitHubPR, error) {
 	if m.CreatePRFunc != nil {
 		return m.CreatePRFunc(ctx, req)
 	}
-	pr := &models.GitHubPR{
+	pr := &internal.GitHubPR{
 		Number:     len(m.PRs) + 1,
 		Title:      req.Title,
 		URL:        "https://github.com/" + m.Owner + "/" + m.Repo + "/pull/" + string(rune(len(m.PRs)+1)),
@@ -47,7 +47,7 @@ func NewMockGitHubService() *MockGitHubService {
 	return &MockGitHubService{
 		Owner: "testowner",
 		Repo:  "testrepo",
-		PRs: []models.GitHubPR{
+		PRs: []internal.GitHubPR{
 			{Number: 1, Title: "Feature: Add login", State: "open", BaseBranch: "main", HeadBranch: "feature/login", URL: "https://github.com/testowner/testrepo/pull/1"},
 			{Number: 2, Title: "Fix: Bug in parser", State: "merged", BaseBranch: "main", HeadBranch: "fix/parser", URL: "https://github.com/testowner/testrepo/pull/2"},
 			{Number: 3, Title: "Chore: Update deps", State: "closed", BaseBranch: "main", HeadBranch: "chore/deps", URL: "https://github.com/testowner/testrepo/pull/3"},
@@ -57,9 +57,9 @@ func NewMockGitHubService() *MockGitHubService {
 
 // MockTicketService mocks ticket provider interactions (Jira/Codecks)
 type MockTicketService struct {
-	Tickets      []tickets.Ticket
-	ProviderName string
-	BaseURL      string
+	Tickets        []tickets.Ticket
+	ProviderName   string
+	BaseURL        string
 	GetTicketsFunc func(ctx context.Context) ([]tickets.Ticket, error)
 }
 
@@ -134,28 +134,28 @@ func NewMockCodecksService() *MockTicketService {
 
 // MockJJService mocks jj command execution
 type MockJJService struct {
-	RepoPath    string
-	Commits     []models.Commit
-	Bookmarks   []string
-	RemoteURL   string
-	
+	RepoPath  string
+	Commits   []internal.Commit
+	Bookmarks []string
+	RemoteURL string
+
 	// Function overrides for custom behavior
-	NewCommitFunc     func(parentID string) error
-	DescribeFunc      func(changeID, description string) error
-	SquashFunc        func(sourceID, destID string) error
-	RebaseFunc        func(sourceID, destID string) error
-	AbandonFunc       func(changeID string) error
+	NewCommitFunc      func(parentID string) error
+	DescribeFunc       func(changeID, description string) error
+	SquashFunc         func(sourceID, destID string) error
+	RebaseFunc         func(sourceID, destID string) error
+	AbandonFunc        func(changeID string) error
 	CreateBookmarkFunc func(name, commitID string) error
 }
 
 // GetRepository returns a mock repository
-func (m *MockJJService) GetRepository(ctx context.Context) (*models.Repository, error) {
+func (m *MockJJService) GetRepository(ctx context.Context) (*internal.Repository, error) {
 	if len(m.Commits) == 0 {
 		m.Commits = DefaultMockCommits()
 	}
-	return &models.Repository{
+	return &internal.Repository{
 		Path: m.RepoPath,
-		Graph: models.CommitGraph{
+		Graph: internal.CommitGraph{
 			Commits: m.Commits,
 		},
 	}, nil
@@ -224,8 +224,8 @@ func (m *MockJJService) GetGitRemoteURL(ctx context.Context) (string, error) {
 }
 
 // DefaultMockCommits returns a set of default mock commits for testing
-func DefaultMockCommits() []models.Commit {
-	return []models.Commit{
+func DefaultMockCommits() []internal.Commit {
+	return []internal.Commit{
 		{
 			ID:          "abc123456789",
 			ShortID:     "abc1",
@@ -271,4 +271,3 @@ func NewMockJJService() *MockJJService {
 		RemoteURL: "https://github.com/testowner/testrepo.git",
 	}
 }
-
