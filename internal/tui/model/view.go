@@ -392,13 +392,7 @@ func (m *Model) renderError() string {
 	}
 
 	// Render error as a modal dialog box
-	modalWidth := m.width - 8
-	if modalWidth < 50 {
-		modalWidth = 50
-	}
-	if modalWidth > 80 {
-		modalWidth = 80
-	}
+	modalWidth := min(max(m.width-8, 50), 80)
 
 	// Styles
 	titleStyle := lipgloss.NewStyle().
@@ -460,13 +454,7 @@ func (m *Model) renderError() string {
 
 // renderWarningModal renders the warning modal (e.g., for empty commit descriptions)
 func (m *Model) renderWarningModal() string {
-	modalWidth := m.width - 8
-	if modalWidth < 50 {
-		modalWidth = 50
-	}
-	if modalWidth > 80 {
-		modalWidth = 80
-	}
+	modalWidth := min(max(m.width-8, 50), 80)
 
 	// Styles - amber/yellow theme for warnings
 	titleStyle := lipgloss.NewStyle().

@@ -181,10 +181,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Header is 1 line, status bar is 1 line
 		headerHeight := 1
 		statusHeight := 1
-		contentHeight := m.height - headerHeight - statusHeight
-		if contentHeight < 1 {
-			contentHeight = 1
-		}
+		contentHeight := max(m.height-headerHeight-statusHeight, 1)
 
 		if !m.viewportReady {
 			m.viewport = viewport.New(m.width, contentHeight)
