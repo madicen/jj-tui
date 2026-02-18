@@ -171,3 +171,11 @@ func ZoneBranch(index int) string {
 func ZoneDivergentCommit(index int) string {
 	return fmt.Sprintf("zone:divergent:commit:%d", index)
 }
+
+// Help view zones
+const (
+	ZoneHelpTabShortcuts = "zone:help:tab:shortcuts"
+	ZoneHelpTabCommands  = "zone:help:tab:commands"
+	ZoneHelpCommand      = "zone:help:command:"      // Prefix for command history entries
+	ZoneHelpCommandCopy  = "zone:help:command:copy:" // Prefix for copy buttons
+)

@@ -195,8 +195,24 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.graphFocused = !m.graphFocused
 			m.statusMessage = m.handleGraphFoucsMessage()
 		}
+		// Switch between help tabs
+		if m.viewMode == ViewHelp {
+			m.helpTab = (m.helpTab + 1) % 2 // 2 tabs
+			m.helpSelectedCommand = 0       // Reset selection when switching tabs
+		}
 	case "j", "down":
 		switch m.viewMode {
+		case ViewHelp:
+			// Navigate command history (only on Commands tab)
+			if m.helpTab == 1 { // Commands tab
+				if m.jjService != nil {
+					history := m.getFilteredCommandHistory()
+					maxCmd := min(len(history), 50) - 1
+					if m.helpSelectedCommand < maxCmd {
+						m.helpSelectedCommand++
+					}
+				}
+			}
 		case ViewPullRequests:
 			if m.repository != nil {
 				m.selectedPR = min(m.selectedPR+1, len(m.repository.PRs)-1)
@@ -237,6 +253,11 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "k", "up":
 		switch m.viewMode {
+		case ViewHelp:
+			// Navigate command history (only on Commands tab)
+			if m.helpTab == 1 && m.helpSelectedCommand > 0 {
+				m.helpSelectedCommand--
+			}
 		case ViewPullRequests:
 			if m.selectedPR > 0 {
 				m.selectedPR--
@@ -316,6 +337,16 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Open ticket URL in browser (Tickets view only)
 		if m.viewMode == ViewTickets {
 			return m.handleOpenTicketInBrowser()
+		}
+	case "y":
+		// Copy selected command to clipboard (Help view, Commands tab only)
+		if m.viewMode == ViewHelp && m.helpTab == 1 && m.jjService != nil {
+			history := m.getFilteredCommandHistory()
+			if m.helpSelectedCommand >= 0 && m.helpSelectedCommand < len(history) {
+				cmd := history[m.helpSelectedCommand].Command
+				m.statusMessage = "Copied: " + cmd
+				return m, actions.CopyToClipboard(cmd)
+			}
 		}
 	case "M":
 		// Merge PR (PR view only, open PRs only)

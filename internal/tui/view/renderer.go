@@ -208,3 +208,27 @@ type DivergentCommitData struct {
 	Summaries   []string // Summary of each divergent commit
 	SelectedIdx int      // Which commit to keep (0-indexed)
 }
+
+// CommandHistoryEntry represents a jj command that was executed
+type CommandHistoryEntry struct {
+	Command   string // Full command string (e.g., "jj log -r @")
+	Timestamp string // Formatted timestamp
+	Duration  string // How long the command took
+	Success   bool   // Whether the command succeeded
+	Error     string // Error message if failed
+}
+
+// HelpTab represents the active sub-tab in the help view
+type HelpTab int
+
+const (
+	HelpTabShortcuts HelpTab = iota
+	HelpTabCommands
+)
+
+// HelpData contains data needed for help view rendering
+type HelpData struct {
+	ActiveTab       HelpTab               // Which sub-tab is active
+	CommandHistory  []CommandHistoryEntry // Recent jj commands
+	SelectedCommand int                   // Index of selected command (-1 = none)
+}

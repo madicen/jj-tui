@@ -119,6 +119,10 @@ type Model struct {
 	divergentCommitSummaries []string // Summary of each divergent commit
 	divergentSelectedIdx    int      // Which commit to keep (0-indexed)
 
+	// Help view state
+	helpTab             int // 0=Shortcuts, 1=Commands
+	helpSelectedCommand int // Index of selected command in history (-1 = none)
+
 	// PR creation state
 	prTitleInput        textinput.Model
 	prBodyInput         textarea.Model
