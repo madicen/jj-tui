@@ -100,6 +100,11 @@ const (
 	ZoneSettingsTabBranches  = "zone:settings:tab:branches"
 	ZoneSettingsTabAdvanced  = "zone:settings:tab:advanced"
 
+	// Help sub-tab zones
+	ZoneHelpTabShortcuts = "zone:help:tab:shortcuts"
+	ZoneHelpTabCommands  = "zone:help:tab:commands"
+	ZoneHelpCommandCopy  = "zone:help:command:copy:" // Prefix for copy buttons
+
 	// Ticket provider selection zones
 	ZoneSettingsTicketProviderNone         = "zone:settings:ticket_provider:none"
 	ZoneSettingsTicketProviderJira         = "zone:settings:ticket_provider:jira"

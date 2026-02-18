@@ -3,9 +3,11 @@ package model
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/madicen/jj-tui/internal/config"
+	"github.com/madicen/jj-tui/internal/jj"
 	"github.com/madicen/jj-tui/internal/tui/view"
 	"github.com/madicen/jj-tui/internal/version"
 	"github.com/mattn/go-runewidth"
@@ -818,7 +820,73 @@ func (m *Model) renderSettings() string {
 
 // renderHelp renders the help view using the view package
 func (m *Model) renderHelp() string {
-	return m.renderer().Help()
+	data := view.HelpData{
+		ActiveTab:       view.HelpTab(m.helpTab),
+		SelectedCommand: m.helpSelectedCommand,
+	}
+
+	// Get command history from jj service (filtered to exclude auto-refresh commands)
+	if m.jjService != nil {
+		history := m.jjService.GetCommandHistory()
+		for _, entry := range history {
+			// Filter out auto-refresh commands that spam the list
+			if isAutoRefreshCommand(entry.Command) {
+				continue
+			}
+			data.CommandHistory = append(data.CommandHistory, view.CommandHistoryEntry{
+				Command:   entry.Command,
+				Timestamp: entry.Timestamp.Format("15:04:05"),
+				Duration:  formatDuration(entry.Duration),
+				Success:   entry.Success,
+				Error:     entry.Error,
+			})
+		}
+	}
+
+	return m.renderer().Help(data)
+}
+
+// isAutoRefreshCommand returns true if the command is part of auto-refresh
+// These are filtered from the command history to reduce noise
+func isAutoRefreshCommand(cmd string) bool {
+	// These commands are run automatically during refresh/tick cycles
+	autoRefreshPatterns := []string{
+		"jj log -r mutable()", // Main graph refresh (GetRepository)
+		"jj log -r empty()",   // Orphan cleanup check
+	}
+
+	for _, pattern := range autoRefreshPatterns {
+		if strings.HasPrefix(cmd, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
+// getFilteredCommandHistory returns command history with auto-refresh commands filtered out
+func (m *Model) getFilteredCommandHistory() []jj.CommandHistoryEntry {
+	if m.jjService == nil {
+		return nil
+	}
+
+	var filtered []jj.CommandHistoryEntry
+	for _, entry := range m.jjService.GetCommandHistory() {
+		if !isAutoRefreshCommand(entry.Command) {
+			filtered = append(filtered, entry)
+		}
+	}
+	return filtered
+}
+
+// formatDuration formats a duration for display
+func formatDuration(d time.Duration) string {
+	if d < time.Millisecond {
+		return "<1ms"
+	}
+	if d < time.Second {
+		return fmt.Sprintf("%dms", d.Milliseconds())
+	}
+	return fmt.Sprintf("%.1fs", d.Seconds())
 }
 
 // renderBranches renders the branches view using the view package

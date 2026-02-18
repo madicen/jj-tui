@@ -640,6 +640,32 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 		}
 	}
 
+	// Help view tab clicks
+	if m.viewMode == ViewHelp {
+		if userClicked(ZoneHelpTabShortcuts) {
+			m.helpTab = 0
+			m.helpSelectedCommand = 0
+			return m, nil
+		}
+		if userClicked(ZoneHelpTabCommands) {
+			m.helpTab = 1
+			m.helpSelectedCommand = 0
+			return m, nil
+		}
+
+		// Command copy buttons (only on Commands tab)
+		if m.helpTab == 1 {
+			history := m.getFilteredCommandHistory()
+			for i := 0; i < len(history) && i < 50; i++ {
+				if userClicked(fmt.Sprintf("%s%d", ZoneHelpCommandCopy, i)) {
+					cmd := history[i].Command
+					m.statusMessage = "Copied: " + cmd
+					return m, actions.CopyToClipboard(cmd)
+				}
+			}
+		}
+	}
+
 	return m, nil
 }
 

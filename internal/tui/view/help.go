@@ -3,13 +3,66 @@ package view
 import (
 	"fmt"
 	"strings"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
-// Help renders the help view
-func (r *Renderer) Help() string {
+// Tab styles for help view
+var (
+	helpTabStyle = lipgloss.NewStyle().
+			Padding(0, 2).
+			Foreground(lipgloss.Color("#888888"))
+
+	helpTabActiveStyle = lipgloss.NewStyle().
+				Padding(0, 2).
+				Foreground(ColorPrimary).
+				Bold(true).
+				Underline(true)
+)
+
+// Help renders the help view with sub-tabs
+func (r *Renderer) Help(data HelpData) string {
 	var lines []string
 
 	lines = append(lines, "")
+
+	// Render sub-tabs
+	tabs := r.renderHelpTabs(data.ActiveTab)
+	lines = append(lines, tabs)
+	lines = append(lines, "")
+
+	// Render content based on active tab
+	switch data.ActiveTab {
+	case HelpTabShortcuts:
+		lines = append(lines, r.renderHelpShortcuts()...)
+	case HelpTabCommands:
+		lines = append(lines, r.renderHelpCommands(data)...)
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// renderHelpTabs renders the tab bar for help view
+func (r *Renderer) renderHelpTabs(activeTab HelpTab) string {
+	shortcutsStyle := helpTabStyle
+	commandsStyle := helpTabStyle
+
+	switch activeTab {
+	case HelpTabShortcuts:
+		shortcutsStyle = helpTabActiveStyle
+	case HelpTabCommands:
+		commandsStyle = helpTabActiveStyle
+	}
+
+	shortcutsTab := r.Mark(ZoneHelpTabShortcuts, shortcutsStyle.Render("Shortcuts"))
+	commandsTab := r.Mark(ZoneHelpTabCommands, commandsStyle.Render("History"))
+
+	return lipgloss.JoinHorizontal(lipgloss.Left, shortcutsTab, " │ ", commandsTab)
+}
+
+// renderHelpShortcuts renders the keyboard shortcuts content
+func (r *Renderer) renderHelpShortcuts() []string {
+	var lines []string
 
 	lines = append(lines, TitleStyle.Render("Commit Graph Shortcuts"))
 	lines = append(lines, "")
@@ -132,5 +185,88 @@ func (r *Renderer) Help() string {
 	lines = append(lines, "  Click graph/files panes to switch focus")
 	lines = append(lines, "  Click footer shortcuts (undo, redo, refresh, etc.)")
 
-	return strings.Join(lines, "\n")
+	return lines
+}
+
+// renderHelpCommands renders the command history content
+func (r *Renderer) renderHelpCommands(data HelpData) []string {
+	var lines []string
+
+	lines = append(lines, TitleStyle.Render("Command History"))
+	lines = append(lines, "")
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("  Commands executed by jj-tui (excluding auto-refresh)"))
+	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("  Click [copy] or press y to copy command to clipboard"))
+	lines = append(lines, "")
+
+	if len(data.CommandHistory) == 0 {
+		lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Italic(true).Render("  No commands executed yet"))
+		return lines
+	}
+
+	// Style for command entries
+	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B")) // Green
+	failStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555"))    // Red
+	timeStyle := lipgloss.NewStyle().Foreground(ColorMuted).Width(8)
+	durationStyle := lipgloss.NewStyle().Foreground(ColorMuted).Width(5)
+	cmdStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#8BE9FD"))                // Cyan for command
+	copyBtnStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFB86C")).Bold(true) // Orange for copy button
+
+	// Show up to 50 most recent commands (filtered list should be smaller)
+	maxCommands := min(len(data.CommandHistory), 50)
+
+	for i := range maxCommands {
+		entry := data.CommandHistory[i]
+
+		// Build the line
+		var statusIcon string
+		var entryStyle lipgloss.Style
+		if entry.Success {
+			statusIcon = successStyle.Render("✓")
+			entryStyle = lipgloss.NewStyle()
+		} else {
+			statusIcon = failStyle.Render("✗")
+			entryStyle = failStyle
+		}
+
+		// Highlight selected command
+		prefix := "  "
+		if i == data.SelectedCommand {
+			prefix = "> "
+			entryStyle = entryStyle.Bold(true).Background(lipgloss.Color("#44475A"))
+		}
+
+		// Copy button
+		copyBtn := r.Mark(fmt.Sprintf("%s%d", ZoneHelpCommandCopy, i), copyBtnStyle.Render("[copy]"))
+
+		// Format: [time] [duration] [status] command [copy]
+		line := fmt.Sprintf("%s%s %s %s %s %s",
+			prefix,
+			timeStyle.Render(entry.Timestamp),
+			durationStyle.Render(entry.Duration),
+			statusIcon,
+			cmdStyle.Render(entry.Command),
+			copyBtn,
+		)
+
+		if i == data.SelectedCommand {
+			// Wrap the whole line with the highlight style
+			line = entryStyle.Render(line)
+		}
+
+		lines = append(lines, r.Mark(fmt.Sprintf("%s%d", ZoneHelpCommand, i), line))
+
+		// Show error on next line if command failed and is selected
+		if !entry.Success && entry.Error != "" && i == data.SelectedCommand {
+			errorLine := fmt.Sprintf("    %s", failStyle.Render("Error: "+entry.Error))
+			lines = append(lines, errorLine)
+		}
+	}
+
+	if len(data.CommandHistory) > maxCommands {
+		lines = append(lines, "")
+		lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render(
+			fmt.Sprintf("  ... and %d more commands", len(data.CommandHistory)-maxCommands)))
+	}
+
+	return lines
 }

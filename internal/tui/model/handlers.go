@@ -146,6 +146,8 @@ func (m *Model) handleNavigateToSettingsTab() (tea.Model, tea.Cmd) {
 
 func (m *Model) handleNavigateToHelpTab() (tea.Model, tea.Cmd) {
 	m.viewMode = ViewHelp
+	m.helpTab = 0             // Start on Shortcuts tab
+	m.helpSelectedCommand = 0 // Start with first command selected
 	m.statusMessage = "Loaded Help"
 	return m, nil
 }
