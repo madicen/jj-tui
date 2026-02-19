@@ -1,9 +1,9 @@
 package graph
 
 import (
+	"sort"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -11,6 +11,7 @@ import (
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/mattn/go-runewidth"
 )
 
@@ -39,10 +40,6 @@ type GraphModel struct {
 	// Rebase mode state
 	selectionMode      SelectionMode
 	rebaseSourceCommit int // Index of commit being rebased
-
-	// Description editing (when view is ViewEditDescription)
-	descriptionInput textarea.Model
-	editingCommitID  string // Change ID of commit being edited
 }
 
 // SelectionMode indicates what the user is selecting commits for
@@ -96,10 +93,13 @@ func (m GraphModel) Init() tea.Cmd {
 // Update uses a pointer receiver so scroll state is modified in place on the main model's graphTabModel.
 func (m *GraphModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case ChangedFilesLoadedMsg:
+		m.SetChangedFiles(msg.Files, msg.CommitID)
+		return m, nil
+
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		// Lazy-init viewports so mouse wheel scrolling works (need real viewport, not zero value)
 		if m.viewport.Width == 0 {
 			h := max(1, m.height/2)
 			m.viewport = viewport.New(max(1, m.width), h)
@@ -110,15 +110,16 @@ func (m *GraphModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		updated, cmd := m.handleKeyMsg(msg)
+		updated, req, directCmd := m.handleKeyMsg(msg)
 		*m = updated
-		return m, cmd
+		if req != nil {
+			return m, req.Cmd()
+		}
+		return m, directCmd
 
 	case tea.MouseMsg:
-		// Mouse wheel: use IsWheel() so we accept any encoding the terminal sends (not just X11 4/5)
 		if tea.MouseEvent(msg).IsWheel() {
 			delta := 3
-			// WheelUp/WheelLeft = scroll up, WheelDown/WheelRight = scroll down
 			isUp := msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelLeft
 			if m.graphFocused {
 				if isUp {
@@ -137,12 +138,54 @@ func (m *GraphModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case zone.MsgZoneInBounds:
-		updated, cmd := m.handleZoneClick(msg)
+		updated, req, directCmd := m.handleZoneClick(msg)
 		*m = updated
-		return m, cmd
+		if req != nil {
+			return m, req.Cmd()
+		}
+		return m, directCmd
 	}
 
 	return m, nil
+}
+
+// UpdateWithApp processes msg with app state so requests are applied internally (status, follow-ups, cmd).
+// Main calls this when in graph view so the graph mutates app and returns the cmd instead of sending Request.
+func (m *GraphModel) UpdateWithApp(msg tea.Msg, app *state.AppState) (GraphModel, tea.Cmd) {
+	if app == nil {
+		updated, cmd := m.Update(msg)
+		if g, ok := updated.(*GraphModel); ok {
+			return *g, cmd
+		}
+		return *m, nil
+	}
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		updated, req, directCmd := m.handleKeyMsg(msg)
+		*m = updated
+		if req != nil {
+			ctx := BuildRequestContextFromApp(app, m)
+			res := HandleRequest(*req, ctx)
+			return *m, ApplyResult(res, m, ctx, app)
+		}
+		return *m, directCmd
+
+	case zone.MsgZoneInBounds:
+		updated, req, directCmd := m.handleZoneClick(msg)
+		*m = updated
+		if req != nil {
+			ctx := BuildRequestContextFromApp(app, m)
+			res := HandleRequest(*req, ctx)
+			return *m, ApplyResult(res, m, ctx, app)
+		}
+		return *m, directCmd
+	}
+	// Other message types (WindowSize, ChangedFilesLoadedMsg): no app needed, use Update
+	updated, cmd := m.Update(msg)
+	if g, ok := updated.(*GraphModel); ok {
+		return *g, cmd
+	}
+	return *m, cmd
 }
 
 // paneZoneContent pads each line to the given width so the zone spans the full pane width and
@@ -191,8 +234,8 @@ func (m *GraphModel) View() string {
 	// So graphHeight + filesHeight = m.height - actionsHeight - 2 (the two separator lines)
 	availableHeight := max(m.height-actionsHeight-2, 6)
 
-	// Split height: 60% for graph, 40% for files
-	graphHeight := (availableHeight * 60) / 100
+	// Split height: 50% for graph, 50% for files (changed files list uses full available space)
+	graphHeight := (availableHeight * 50) / 100
 	filesHeight := availableHeight - graphHeight
 	graphHeight = max(graphHeight, 3)
 	filesHeight = max(filesHeight, 3)
@@ -238,6 +281,15 @@ func (m *GraphModel) View() string {
 	if gStart < gEnd {
 		visibleGraph = strings.Join(graphLines[gStart:gEnd], "\n")
 	}
+	// Pad to full graphVisible height so the graph pane always uses its full 50% of vertical space
+	visibleGraphLines := strings.Split(visibleGraph, "\n")
+	for len(visibleGraphLines) < graphVisible {
+		visibleGraphLines = append(visibleGraphLines, "")
+	}
+	if len(visibleGraphLines) > graphVisible {
+		visibleGraphLines = visibleGraphLines[:graphVisible]
+	}
+	visibleGraph = strings.Join(visibleGraphLines, "\n")
 	graphPane := m.zoneManager.Mark(mouse.ZoneGraphPane, paneZoneContent(visibleGraph, m.width))
 
 	// Set up files pane - slice content manually to preserve ZoneChangedFile(i) markup
@@ -280,6 +332,15 @@ func (m *GraphModel) View() string {
 	if fStart < fEnd {
 		visibleFiles = strings.Join(filesLines[fStart:fEnd], "\n")
 	}
+	// Pad to full filesHeight so the files pane always uses its full 50% of vertical space
+	visibleFilesLines := strings.Split(visibleFiles, "\n")
+	for len(visibleFilesLines) < filesHeight {
+		visibleFilesLines = append(visibleFilesLines, "")
+	}
+	if len(visibleFilesLines) > filesHeight {
+		visibleFilesLines = visibleFilesLines[:filesHeight]
+	}
+	visibleFiles = strings.Join(visibleFilesLines, "\n")
 	filesPane := m.zoneManager.Mark(mouse.ZoneFilesPane, paneZoneContent(visibleFiles, m.width))
 
 	// Simple separator line
@@ -418,4 +479,192 @@ func (m *GraphModel) buildGraphData() GraphData {
 		GraphFocused:       m.graphFocused,
 		SelectedFile:       m.selectedFile,
 	}
+}
+
+// UpdateRepository updates the graph model with new repository data.
+func (m *GraphModel) UpdateRepository(repo *internal.Repository) {
+	if repo == nil {
+		return
+	}
+	oldCommitID := m.changedFilesCommitID
+	m.repository = repo
+	commits := repo.Graph.Commits
+	if oldCommitID != "" && len(commits) > 0 {
+		found := false
+		for i, c := range commits {
+			if c.ChangeID == oldCommitID {
+				m.selectedCommit = i
+				found = true
+				break
+			}
+		}
+		if !found {
+			m.selectedCommit = 0
+			m.changedFilesCommitID = ""
+			m.changedFiles = nil
+		}
+	}
+	if m.selectedCommit >= len(commits) {
+		m.selectedCommit = max(0, len(commits)-1)
+	}
+}
+
+// SetDimensions sets the width and height and lazy-inits viewports if needed.
+func (m *GraphModel) SetDimensions(width, height int) {
+	m.width = width
+	m.height = height
+	if m.viewport.Width == 0 && width > 0 && height > 0 {
+		h := max(1, height/2)
+		m.viewport = viewport.New(max(1, width), h)
+		m.viewport.MouseWheelEnabled = true
+		m.filesViewport = viewport.New(max(1, width), h)
+		m.filesViewport.MouseWheelEnabled = true
+	}
+}
+
+// SetChangedFiles updates the changed files for the selected commit.
+// Files are sorted in tree-display order (depth-first: dirs then files at each level, each sorted)
+// so that selection index order matches the tree display order, preventing scroll/selection from jumping.
+func (m *GraphModel) SetChangedFiles(files []jj.ChangedFile, commitID string) {
+	accept := (commitID == m.changedFilesCommitID) ||
+		(m.repository != nil && m.selectedCommit >= 0 && m.selectedCommit < len(m.repository.Graph.Commits) &&
+			commitID == m.repository.Graph.Commits[m.selectedCommit].ChangeID)
+	if !accept {
+		return
+	}
+	if m.changedFilesCommitID != commitID {
+		m.changedFilesCommitID = commitID
+	}
+	// Sort in same order as tree: at each path level, dirs before files, then alphabetically within each
+	sorted := make([]jj.ChangedFile, len(files))
+	copy(sorted, files)
+	sort.Slice(sorted, func(i, j int) bool { return changedFileTreeOrderLess(sorted[i].Path, sorted[j].Path) })
+	m.changedFiles = sorted
+	m.selectedFile = 0
+	m.scrollToSelectedFile = true
+}
+
+// changedFileTreeOrderLess compares two file paths in the order the file tree displays them:
+// depth-first, with directories before files at each level, and alphabetical within dirs and within files.
+func changedFileTreeOrderLess(a, b string) bool {
+	pa := strings.Split(a, "/")
+	pb := strings.Split(b, "/")
+	for i := 0; i < len(pa) && i < len(pb); i++ {
+		if i == len(pa)-1 && i == len(pb)-1 {
+			return pa[i] < pb[i]
+		}
+		if i == len(pa)-1 {
+			return false // a is file at this level, b has more (dir) → b's subtree first
+		}
+		if i == len(pb)-1 {
+			return true // b is file at this level, a has more (dir) → a's subtree first
+		}
+		if pa[i] != pb[i] {
+			return pa[i] < pb[i]
+		}
+	}
+	return len(pa) < len(pb)
+}
+
+// SelectCommit selects a commit by index.
+func (m *GraphModel) SelectCommit(idx int) {
+	if m.repository != nil && idx >= 0 && idx < len(m.repository.Graph.Commits) {
+		m.selectedCommit = idx
+		m.changedFilesCommitID = m.repository.Graph.Commits[idx].ChangeID
+	}
+}
+
+// SetSelectionMode sets the selection mode.
+func (m *GraphModel) SetSelectionMode(mode SelectionMode) {
+	m.selectionMode = mode
+}
+
+// SetRebaseSourceCommit sets the commit index being rebased.
+func (m *GraphModel) SetRebaseSourceCommit(idx int) {
+	m.rebaseSourceCommit = idx
+}
+
+// GetSelectionMode returns the current selection mode.
+func (m *GraphModel) GetSelectionMode() SelectionMode {
+	return m.selectionMode
+}
+
+// GetRebaseSourceCommit returns the commit index being rebased.
+func (m *GraphModel) GetRebaseSourceCommit() int {
+	return m.rebaseSourceCommit
+}
+
+// GetSelectedCommit returns the index of the selected commit.
+func (m *GraphModel) GetSelectedCommit() int {
+	return m.selectedCommit
+}
+
+// GetSelectedFile returns the index of the selected file.
+func (m *GraphModel) GetSelectedFile() int {
+	return m.selectedFile
+}
+
+// SetSelectedFile sets the selected file index.
+func (m *GraphModel) SetSelectedFile(idx int) {
+	if idx >= -1 && idx < len(m.changedFiles) {
+		m.selectedFile = idx
+		m.scrollToSelectedFile = true
+	}
+}
+
+// IsGraphFocused returns whether the graph pane has focus.
+func (m *GraphModel) IsGraphFocused() bool {
+	return m.graphFocused
+}
+
+// SetGraphFocused sets whether the graph pane has focus.
+func (m *GraphModel) SetGraphFocused(focused bool) {
+	m.graphFocused = focused
+}
+
+// GetChangedFiles returns the changed files for the selected commit.
+func (m *GraphModel) GetChangedFiles() []jj.ChangedFile {
+	return m.changedFiles
+}
+
+// GetChangedFilesCommitID returns the ChangeID for which changed files are loaded.
+func (m *GraphModel) GetChangedFilesCommitID() string {
+	return m.changedFilesCommitID
+}
+
+// SetViewport sets the graph viewport.
+func (m *GraphModel) SetViewport(vp viewport.Model) {
+	m.viewport = vp
+}
+
+// SetFilesViewport sets the files viewport.
+func (m *GraphModel) SetFilesViewport(vp viewport.Model) {
+	m.filesViewport = vp
+}
+
+// GetViewport returns the graph viewport.
+func (m *GraphModel) GetViewport() viewport.Model {
+	return m.viewport
+}
+
+// GetFilesViewport returns the files viewport.
+func (m *GraphModel) GetFilesViewport() viewport.Model {
+	return m.filesViewport
+}
+
+// StartRebaseMode starts rebase mode.
+func (m *GraphModel) StartRebaseMode(sourceCommitIdx int) {
+	m.selectionMode = SelectionRebaseDestination
+	m.rebaseSourceCommit = sourceCommitIdx
+}
+
+// CancelRebaseMode cancels rebase mode.
+func (m *GraphModel) CancelRebaseMode() {
+	m.selectionMode = SelectionNormal
+	m.rebaseSourceCommit = -1
+}
+
+// IsInRebaseMode returns whether the graph is in rebase mode.
+func (m *GraphModel) IsInRebaseMode() bool {
+	return m.selectionMode == SelectionRebaseDestination
 }

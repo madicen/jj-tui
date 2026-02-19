@@ -1,9 +1,14 @@
 package help
 
 import (
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal"
+	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/tabs/help/commandhistory"
+	"github.com/madicen/jj-tui/internal/tui/tabs/help/shortcuts"
 )
 
 // CommandInfo represents information about a command (legacy)
@@ -13,34 +18,24 @@ type CommandInfo struct {
 	Usage string
 }
 
-// CommandHistoryEntry is one entry for the command history list (from jj service)
-type CommandHistoryEntry struct {
-	Command   string
-	Timestamp string
-	Duration  string
-	Success   bool
-	Error     string
-}
-
-// Model represents the state of the Help tab
+// Model represents the state of the Help tab. It routes to Shortcuts or Command History sub-tab.
 type Model struct {
-	zoneManager           *zone.Manager
-	helpTab               int   // 0=Shortcuts, 1=Commands
-	helpSelectedCommand   int
-	commandHistory        []CommandInfo          // legacy
-	commandHistoryEntries []CommandHistoryEntry  // for rendering (set by main model)
-	width                 int
-	height                int
-	shortcutsYOffset      int   // scroll offset for Shortcuts sub-tab
-	historyYOffset        int   // scroll offset for History sub-tab
+	zoneManager *zone.Manager
+	activeTab   int // 0=Shortcuts, 1=Commands
+	width       int
+	height      int
+
+	shortcuts shortcuts.Model
+	commands  commandhistory.Model
 }
 
 // NewModel creates a new Help tab model. zoneManager may be nil.
 func NewModel(zoneManager *zone.Manager) Model {
 	return Model{
 		zoneManager: zoneManager,
-		helpTab:     0,
-		helpSelectedCommand: -1,
+		activeTab:   0,
+		shortcuts:   shortcuts.NewModel(zoneManager),
+		commands:    commandhistory.NewModel(zoneManager),
 	}
 }
 
@@ -49,125 +44,162 @@ func (m Model) Init() tea.Cmd {
 	return nil
 }
 
-// Update handles messages for the Help tab
+// Update routes messages to the active sub-tab (Shortcuts or Command History).
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.shortcuts.SetDimensions(msg.Width, msg.Height)
+		m.commands.SetDimensions(msg.Width, msg.Height)
 		return m, nil
+
 	case tea.KeyMsg:
-		return m.handleKeyMsg(msg)
-	case tea.MouseMsg:
-		if tea.MouseEvent(msg).IsWheel() {
-			delta := 3
-			isUp := msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelLeft
-			if m.helpTab == 0 {
-				if isUp {
-					m.shortcutsYOffset -= delta
-				} else {
-					m.shortcutsYOffset += delta
-				}
-				if m.shortcutsYOffset < 0 {
-					m.shortcutsYOffset = 0
-				}
-			} else {
-				if isUp {
-					m.historyYOffset -= delta
-				} else {
-					m.historyYOffset += delta
-				}
-				if m.historyYOffset < 0 {
-					m.historyYOffset = 0
-				}
-			}
+		if msg.String() == "tab" {
+			m.activeTab = (m.activeTab + 1) % 2
+			m.commands.SetSelectedCommand(0)
 			return m, nil
 		}
-	}
-	return m, nil
-}
+		if m.activeTab == 0 {
+			updated, cmd := m.shortcuts.Update(msg)
+			m.shortcuts = updated
+			return m, cmd
+		}
+		updated, cmd := m.commands.Update(msg)
+		m.commands = updated
+		return m, cmd
 
-// View renders the Help tab
-func (m Model) View() string {
-	return m.renderHelp()
-}
-
-// handleKeyMsg handles keyboard input specific to the Help tab
-func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
-	switch msg.String() {
-	case "tab":
-		m.helpTab = (m.helpTab + 1) % 2
-		m.helpSelectedCommand = 0
-		return m, nil
-	case "j", "down":
-		if m.helpTab == 1 {
-			maxCmd := len(m.commandHistoryEntries) - 1
-			if maxCmd >= 0 && m.helpSelectedCommand < maxCmd {
-				m.helpSelectedCommand++
+	case zone.MsgZoneInBounds:
+		if m.zoneManager != nil {
+			zoneID := m.resolveClickedZone(msg)
+			if zoneID != "" {
+				if zoneID == mouse.ZoneHelpTabShortcuts {
+					m.activeTab = 0
+					m.commands.SetSelectedCommand(0)
+					return m, nil
+				}
+				if zoneID == mouse.ZoneHelpTabCommands {
+					m.activeTab = 1
+					m.commands.SetSelectedCommand(0)
+					return m, nil
+				}
+				// Forward to commands (copy buttons)
+				if m.activeTab == 1 {
+					updated, cmd := m.commands.Update(msg)
+					m.commands = updated
+					return m, cmd
+				}
 			}
 		}
 		return m, nil
-	case "k", "up":
-		if m.helpTab == 1 && m.helpSelectedCommand > 0 {
-			m.helpSelectedCommand--
-		}
-		return m, nil
-	case "y":
-		if m.helpTab == 1 && len(m.commandHistoryEntries) > 0 && m.helpSelectedCommand >= 0 && m.helpSelectedCommand < len(m.commandHistoryEntries) {
-			return m, Request{CopyCommand: m.commandHistoryEntries[m.helpSelectedCommand].Command}.Cmd()
+
+	case tea.MouseMsg:
+		if tea.MouseEvent(msg).IsWheel() {
+			if m.activeTab == 0 {
+				updated, cmd := m.shortcuts.Update(msg)
+				m.shortcuts = updated
+				return m, cmd
+			}
+			updated, cmd := m.commands.Update(msg)
+			m.commands = updated
+			return m, cmd
 		}
 		return m, nil
 	}
 	return m, nil
+}
+
+// View renders the Help tab: tab bar + active sub-tab content with scroll.
+func (m Model) View() string {
+	tabBar := m.renderTabBar()
+	visibleHeight := max(1, m.height-3)
+
+	var lines []string
+	var start int
+	if m.activeTab == 0 {
+		lines = m.shortcuts.Lines()
+		start = m.shortcuts.YOffset()
+	} else {
+		lines = m.commands.Lines()
+		start = m.commands.YOffset()
+	}
+	totalLines := len(lines)
+	if start > totalLines-visibleHeight {
+		start = max(0, totalLines-visibleHeight)
+	}
+	if start < 0 {
+		start = 0
+	}
+	end := min(start+visibleHeight, totalLines)
+	content := ""
+	if end > start {
+		content = strings.Join(lines[start:end], "\n")
+	}
+	return tabBar + "\n\n" + content
+}
+
+// ZoneIDs returns the zone IDs this tab uses when rendering (same IDs passed to Mark). Used to resolve clicks.
+func (m Model) ZoneIDs() []string {
+	ids := []string{mouse.ZoneHelpTabShortcuts, mouse.ZoneHelpTabCommands}
+	ids = append(ids, m.commands.ZoneIDs()...)
+	return ids
+}
+
+func (m Model) resolveClickedZone(msg zone.MsgZoneInBounds) string {
+	if msg.Zone == nil {
+		return ""
+	}
+	for _, id := range m.ZoneIDs() {
+		z := m.zoneManager.Get(id)
+		if z != nil && z.InBounds(msg.Event) {
+			return id
+		}
+	}
+	return ""
 }
 
 // Accessors
 
 // GetHelpTab returns the currently selected help tab
 func (m *Model) GetHelpTab() int {
-	return m.helpTab
+	return m.activeTab
 }
 
 // SetHelpTab sets the help tab
 func (m *Model) SetHelpTab(tab int) {
-	m.helpTab = tab % 2
+	m.activeTab = tab % 2
 }
 
 // SetDimensions sets the content area size (used for scroll window height).
 func (m *Model) SetDimensions(width, height int) {
 	m.width = width
 	m.height = height
+	m.shortcuts.SetDimensions(width, height)
+	m.commands.SetDimensions(width, height)
 }
 
 // GetSelectedCommand returns the index of the selected command
 func (m *Model) GetSelectedCommand() int {
-	return m.helpSelectedCommand
+	return m.commands.GetSelectedCommand()
 }
 
 // SetSelectedCommand sets the selected command index
 func (m *Model) SetSelectedCommand(idx int) {
-	if idx >= -1 && idx < len(m.commandHistoryEntries) {
-		m.helpSelectedCommand = idx
-	}
+	m.commands.SetSelectedCommand(idx)
 }
 
 // SetCommandHistoryEntries sets the command history for the Commands sub-tab (called by main model)
-func (m *Model) SetCommandHistoryEntries(entries []CommandHistoryEntry) {
-	m.commandHistoryEntries = entries
+func (m *Model) SetCommandHistoryEntries(entries []commandhistory.Entry) {
+	m.commands.SetEntries(entries)
 }
 
-// GetCommandHistory returns the command history
+// GetCommandHistory returns the command history (legacy)
 func (m *Model) GetCommandHistory() []CommandInfo {
-	return m.commandHistory
+	return nil
 }
 
-// UpdateCommandHistory updates the command history
-func (m *Model) UpdateCommandHistory(history []CommandInfo) {
-	m.commandHistory = history
-}
+// UpdateCommandHistory updates the command history (legacy)
+func (m *Model) UpdateCommandHistory(history []CommandInfo) {}
 
 // UpdateRepository updates the repository
-func (m *Model) UpdateRepository(repo *internal.Repository) {
-	// Repository state is not directly used in help
-	// This is a no-op for help but required for interface consistency
-}
+func (m *Model) UpdateRepository(repo *internal.Repository) {}

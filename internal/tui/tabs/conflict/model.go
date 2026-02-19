@@ -47,6 +47,13 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		return m.handleKeyMsg(msg)
+	case zone.MsgZoneInBounds:
+		if m.zoneManager != nil {
+			if zoneID := m.resolveClickedZone(msg); zoneID != "" {
+				return m.handleZoneClick(zoneID)
+			}
+		}
+		return m, nil
 	}
 	return m, nil
 }
@@ -145,15 +152,14 @@ func truncateSummary(summary string, maxLen int) string {
 	return summary[:maxLen-3] + "..."
 }
 
-// handleKeyMsg handles keyboard input
+// handleKeyMsg handles keyboard input; returns PerformCancelCmd or PerformResolveCmd for main to handle.
 func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.shown = false
-		return m, nil
+		return m, PerformCancelCmd()
 	case "enter":
-		// Signal to resolve - handled outside
-		return m, nil
+		return m, PerformResolveCmd(m.bookmarkName, m.GetSelectedOption())
 	case "j", "down":
 		if m.selectedOption < 1 {
 			m.selectedOption++
@@ -164,6 +170,48 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.selectedOption--
 		}
 		return m, nil
+	case "l", "L":
+		m.selectedOption = 0
+		return m, nil
+	case "r", "R":
+		m.selectedOption = 1
+		return m, nil
+	}
+	return m, nil
+}
+
+// ZoneIDs returns the zone IDs this modal uses when rendering. Used to resolve clicks.
+func (m Model) ZoneIDs() []string {
+	return []string{mouse.ZoneConflictKeepLocal, mouse.ZoneConflictResetRemote, mouse.ZoneConflictConfirm, mouse.ZoneConflictCancel}
+}
+
+func (m Model) resolveClickedZone(msg zone.MsgZoneInBounds) string {
+	if msg.Zone == nil {
+		return ""
+	}
+	for _, id := range m.ZoneIDs() {
+		z := m.zoneManager.Get(id)
+		if z != nil && z.InBounds(msg.Event) {
+			return id
+		}
+	}
+	return ""
+}
+
+// handleZoneClick handles a zone click by zone ID (called from Update after resolve). Returns (updated model, cmd).
+func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
+	switch zoneID {
+	case mouse.ZoneConflictKeepLocal:
+		m.selectedOption = 0
+		return m, nil
+	case mouse.ZoneConflictResetRemote:
+		m.selectedOption = 1
+		return m, nil
+	case mouse.ZoneConflictConfirm:
+		return m, PerformResolveCmd(m.bookmarkName, m.GetSelectedOption())
+	case mouse.ZoneConflictCancel:
+		m.shown = false
+		return m, PerformCancelCmd()
 	}
 	return m, nil
 }

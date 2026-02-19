@@ -117,6 +117,19 @@ func updateModel(m *tui.Model, msg tea.Msg) *tui.Model {
 	return newModel.(*tui.Model)
 }
 
+// updateModelWithCmd runs Update(msg), then if a Cmd is returned runs it once and
+// Updates with the resulting message. Use when the message triggers a request/response
+// (e.g. Esc in error modal returns RequestDismissCmd(); main only clears error when it receives RequestDismissMsg).
+func updateModelWithCmd(m *tui.Model, msg tea.Msg) *tui.Model {
+	newModel, cmd := m.Update(msg)
+	m = newModel.(*tui.Model)
+	if cmd != nil {
+		next, _ := m.Update(cmd())
+		m = next.(*tui.Model)
+	}
+	return m
+}
+
 // containsString checks if s contains substr
 func containsString(s, substr string) bool {
 	return strings.Contains(s, substr)
@@ -513,8 +526,8 @@ func TestJourney_ErrorHandling(t *testing.T) {
 		t.Error("View should show error message")
 	}
 
-	// Press Esc to dismiss
-	m = updateModel(m, tea.KeyMsg{Type: tea.KeyEsc})
+	// Press Esc to dismiss (modal returns RequestDismissCmd; we must run it so main receives RequestDismissMsg and clears error)
+	m = updateModelWithCmd(m, tea.KeyMsg{Type: tea.KeyEsc})
 
 	if m.GetError() != nil {
 		t.Error("Error should be cleared after Esc")
@@ -559,7 +572,7 @@ func TestJourney_SettingsView(t *testing.T) {
 	}
 
 	// Test cancel with Esc
-	m = updateModel(m, tea.KeyMsg{Type: tea.KeyEsc})
+	m = updateModelWithCmd(m, tea.KeyMsg{Type: tea.KeyEsc})
 	if m.GetViewMode() != tui.ViewCommitGraph {
 		t.Error("Esc should return to commit graph")
 	}

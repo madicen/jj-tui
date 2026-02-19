@@ -8,22 +8,23 @@ import (
 	"github.com/madicen/jj-tui/internal/integrations/github"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tui/model"
+	"github.com/madicen/jj-tui/internal/tui/state"
 )
 
 // Model is the main TUI model - re-exported from model package
 type Model = model.Model
 
-// ViewMode constants - re-exported from model package
+// ViewMode constants - re-exported from state package
 const (
-	ViewCommitGraph     = model.ViewCommitGraph
-	ViewPullRequests    = model.ViewPullRequests
-	ViewJira            = model.ViewTickets
-	ViewSettings        = model.ViewSettings
-	ViewHelp            = model.ViewHelp
-	ViewEditDescription = model.ViewEditDescription
-	ViewCreatePR        = model.ViewCreatePR
-	ViewCreateBookmark  = model.ViewCreateBookmark
-	ViewGitHubLogin     = model.ViewGitHubLogin
+	ViewCommitGraph     = state.ViewCommitGraph
+	ViewPullRequests    = state.ViewPullRequests
+	ViewJira            = state.ViewTickets // alias for Tickets tab
+	ViewSettings        = state.ViewSettings
+	ViewHelp            = state.ViewHelp
+	ViewEditDescription = state.ViewEditDescription
+	ViewCreatePR        = state.ViewCreatePR
+	ViewCreateBookmark  = state.ViewCreateBookmark
+	ViewGitHubLogin     = state.ViewGitHubLogin
 )
 
 // SelectionMode constants - re-exported from model package

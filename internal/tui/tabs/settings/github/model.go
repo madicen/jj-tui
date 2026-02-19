@@ -1,9 +1,12 @@
 package github
 
 import (
-"github.com/charmbracelet/bubbles/textinput"
-tea "github.com/charmbracelet/bubbletea"
-"github.com/madicen/jj-tui/internal"
+	"os"
+
+	"github.com/charmbracelet/bubbles/textinput"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/madicen/jj-tui/internal"
+	"github.com/madicen/jj-tui/internal/config"
 )
 
 // Model represents the GitHub settings sub-tab
@@ -19,23 +22,41 @@ focusedField      int
 
 // NewModel creates a new GitHub settings model
 func NewModel() Model {
-tokenInput := textinput.New()
-tokenInput.Placeholder = "GitHub Personal Access Token"
-tokenInput.CharLimit = 256
-tokenInput.Width = 50
-tokenInput.EchoMode = textinput.EchoPassword
-tokenInput.EchoCharacter = '•'
-tokenInput.Focus()
+	tokenInput := textinput.New()
+	tokenInput.Placeholder = "GitHub Personal Access Token"
+	tokenInput.CharLimit = 256
+	tokenInput.Width = 50
+	tokenInput.EchoMode = textinput.EchoPassword
+	tokenInput.EchoCharacter = '•'
+	tokenInput.Focus()
 
-return Model{
-tokenInput:        tokenInput,
-showMerged:        true,
-showClosed:        true,
-onlyMine:          false,
-prLimit:           100,
-prRefreshInterval: 120,
-focusedField:      0,
+	return Model{
+		tokenInput:        tokenInput,
+		showMerged:        true,
+		showClosed:        true,
+		onlyMine:          false,
+		prLimit:           100,
+		prRefreshInterval: 120,
+		focusedField:      0,
+	}
 }
+
+// NewModelFromConfig creates a model initialized from config and env.
+func NewModelFromConfig(cfg *config.Config) Model {
+	m := NewModel()
+	token := os.Getenv("GITHUB_TOKEN")
+	if token == "" && cfg != nil && cfg.GitHubToken != "" {
+		token = cfg.GitHubToken
+	}
+	m.tokenInput.SetValue(token)
+	if cfg != nil {
+		m.showMerged = cfg.ShowMergedPRs()
+		m.showClosed = cfg.ShowClosedPRs()
+		m.onlyMine = cfg.OnlyMyPRs()
+		m.prLimit = cfg.PRLimit()
+		m.prRefreshInterval = cfg.PRRefreshInterval()
+	}
+	return m
 }
 
 // Init initializes the model
@@ -152,12 +173,40 @@ m.prLimit = limit
 
 // GetRefreshInterval returns the refresh interval
 func (m *Model) GetRefreshInterval() int {
-return m.prRefreshInterval
+	return m.prRefreshInterval
 }
 
 // SetRefreshInterval sets the refresh interval
 func (m *Model) SetRefreshInterval(interval int) {
-m.prRefreshInterval = interval
+	m.prRefreshInterval = interval
+}
+
+// GetInputViews returns the view strings for inputs (token only).
+func (m *Model) GetInputViews() []string {
+	return []string{m.tokenInput.View()}
+}
+
+// GetFocusedField returns the focused input index (0 for token).
+func (m *Model) GetFocusedField() int {
+	return m.focusedField
+}
+
+// SetFocusedField sets the focused input index (0 = token).
+func (m *Model) SetFocusedField(i int) {
+	if i < 0 {
+		i = 0
+	}
+	m.focusedField = i
+	if m.focusedField == 0 {
+		m.tokenInput.Focus()
+	} else {
+		m.tokenInput.Blur()
+	}
+}
+
+// SetInputWidth sets the token input width.
+func (m *Model) SetInputWidth(w int) {
+	m.tokenInput.Width = w
 }
 
 // UpdateRepository updates the repository

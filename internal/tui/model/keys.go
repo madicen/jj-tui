@@ -2,139 +2,68 @@ package model
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/madicen/jj-tui/internal/tui/actions"
+	"github.com/madicen/jj-tui/internal/tui/state"
 )
 
-// handleKeyMsg handles keyboard input
+// handleKeyMsg handles keyboard input. Overlay models (init repo, error, warning) get keys first
+// and return request cmds; main's Update handles those messages. Then view-specific modals
+// get keys, then global shortcuts.
 func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Handle error state first - error acts as a modal, blocking all other input
-	if m.err != nil {
-		switch msg.String() {
-		case "ctrl+q", "ctrl+c":
-			return m, tea.Quit
-		case "ctrl+r":
-			m.err = nil
-			m.errorCopied = false
-			m.viewMode = ViewCommitGraph
-			return m, m.refreshRepository()
-		case "esc":
-			// Clear error and go back to graph, restart auto-refresh
-			m.err = nil
-			m.errorCopied = false
-			m.viewMode = ViewCommitGraph
-			m.statusMessage = "Error dismissed"
-			return m, m.tickCmd()
-		case "c":
-			// Copy error to clipboard (but not for "not a jj repo" welcome screen)
-			if !m.notJJRepo && m.err != nil {
-				return m, actions.CopyToClipboard(m.err.Error())
-			}
-		case "i":
-			// Initialize jj repo if not already one
-			if m.notJJRepo {
-				m.statusMessage = "Initializing repository..."
-				return m, m.runJJInit()
-			}
-		}
-		// Ignore all other keys when in error state - error is modal
-		return m, nil
+	// Overlay: init-repo screen (not a jj repo). Returns request cmds for main to handle.
+	if m.initRepoModel.Path() != "" {
+		updated, cmd := m.initRepoModel.Update(msg)
+		m.initRepoModel = updated
+		return m, cmd
 	}
 
-	// Handle warning modal (e.g., empty commit descriptions)
-	if m.showWarningModal {
-		switch msg.String() {
-		case "esc":
-			m.showWarningModal = false
-			m.warningCommits = nil
-			m.statusMessage = "Cancelled"
-			return m, nil
-		case "enter":
-			// Go to the selected commit and start editing its description
-			if len(m.warningCommits) > 0 && m.warningSelectedIdx < len(m.warningCommits) {
-				selectedCommit := m.warningCommits[m.warningSelectedIdx]
-				// Find this commit in the graph and select it
-				for i, c := range m.repository.Graph.Commits {
-					if c.ChangeID == selectedCommit.ChangeID {
-						m.graphTabModel.SelectCommit(i)
-						m.showWarningModal = false
-						m.warningCommits = nil
-						// Start editing description
-						return m.handleDescribeCommit()
-					}
-				}
-			}
-			m.showWarningModal = false
-			m.warningCommits = nil
-			return m, nil
-		case "up", "k":
-			if m.warningSelectedIdx > 0 {
-				m.warningSelectedIdx--
-			}
-			return m, nil
-		case "down", "j":
-			if m.warningSelectedIdx < len(m.warningCommits)-1 {
-				m.warningSelectedIdx++
-			}
-			return m, nil
-		case "ctrl+q", "ctrl+c":
-			return m, tea.Quit
-		}
-		// Ignore all other keys when warning modal is shown
-		return m, nil
+	// Overlay: error modal. Returns request cmds (RequestDismissMsg, RequestRefreshMsg, RequestCopyMsg) for main to handle.
+	if m.errorModal.GetError() != nil {
+		updated, cmd := m.errorModal.Update(msg)
+		m.errorModal = updated
+		return m, cmd
 	}
 
-	// Special handling for edit description view
-	if m.viewMode == ViewEditDescription {
-		return m.handleDescriptionEditKeyMsg(msg)
+	// Overlay: warning modal. Returns PerformCancelCmd, EditCommitRequestedCmd, or tea.Quit for main to handle.
+	if m.warningModal.IsShown() {
+		updated, cmd := m.warningModal.Update(msg)
+		m.warningModal = updated
+		return m, cmd
 	}
 
-	// Special handling for settings view
-	if m.viewMode == ViewSettings {
-		return m.handleSettingsKeyMsg(msg)
+	// View-specific modals: forward to the active view's submodel.
+	switch m.appState.ViewMode {
+	case state.ViewEditDescription:
+		updated, cmd := m.desceditModal.Update(msg)
+		m.desceditModal = updated
+		return m, cmd
+	case state.ViewSettings:
+		updated, cmd := m.settingsTabModel.Update(msg)
+		m.settingsTabModel = updated
+		return m, cmd
+	case state.ViewCreatePR:
+		updated, cmd := m.prFormModal.Update(msg)
+		m.prFormModal = updated
+		return m, cmd
+	case state.ViewCreateBookmark:
+		updated, cmd := m.bookmarkModal.Update(msg)
+		m.bookmarkModal = updated
+		m.bookmarkModal.UpdateNameExistsFromInput(m.appState.Config != nil && m.appState.Config.ShouldSanitizeBookmarkNames())
+		return m, cmd
+	case state.ViewBookmarkConflict:
+		updated, cmd := m.conflictModal.Update(msg)
+		m.conflictModal = updated
+		return m, cmd
+	case state.ViewDivergentCommit:
+		updated, cmd := m.divergentModal.Update(msg)
+		m.divergentModal = updated
+		return m, cmd
+	case state.ViewGitHubLogin:
+		updated, cmd := m.githubLoginModel.Update(msg)
+		m.githubLoginModel = updated
+		return m, cmd
 	}
 
-	// Special handling for PR creation view
-	if m.viewMode == ViewCreatePR {
-		return m.handleCreatePRKeyMsg(msg)
-	}
-
-	// Special handling for bookmark creation view
-	if m.viewMode == ViewCreateBookmark {
-		return m.handleCreateBookmarkKeyMsg(msg)
-	}
-
-	// Special handling for bookmark conflict resolution view
-	if m.viewMode == ViewBookmarkConflict {
-		return m.handleBookmarkConflictKeyMsg(msg)
-	}
-
-	// Special handling for divergent commit resolution view
-	if m.viewMode == ViewDivergentCommit {
-		return m.handleDivergentCommitKeyMsg(msg)
-	}
-
-	// Special handling for GitHub login view
-	if m.viewMode == ViewGitHubLogin {
-		switch msg.String() {
-		case "esc":
-			m.settingsTabModel.SetGitHubLoginPolling(false)
-			m.settingsTabModel.SetGitHubDeviceCode("")
-			m.settingsTabModel.SetGitHubUserCode("")
-			m.viewMode = ViewSettings
-			m.statusMessage = "GitHub login cancelled"
-			return m, nil
-		case "c":
-			if code := m.settingsTabModel.GetGitHubUserCode(); code != "" {
-				m.statusMessage = "Copying code to clipboard..."
-				return m, actions.CopyToClipboard(code)
-			}
-			return m, nil
-		}
-		return m, nil
-	}
-
-	// Scroll keys are handled by the active tab (graph, PR, tickets, branches) via PropagateUpdate
-
+	// Global shortcuts (and Esc/Tab when not in a modal).
 	switch msg.String() {
 	case "ctrl+q", "ctrl+c":
 		return m, tea.Quit
@@ -157,274 +86,18 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+y":
 		return m.handleRedo()
 	case "esc":
-		// Cancel status change mode in Tickets view
-		if m.viewMode == ViewTickets && m.ticketsTabModel.IsStatusChangeMode() {
+		if m.appState.ViewMode == state.ViewTickets && m.ticketsTabModel.IsStatusChangeMode() {
 			m.ticketsTabModel.SetStatusChangeMode(false)
-			m.statusMessage = "Ready"
+			m.appState.StatusMessage = "Ready"
 			return m, nil
 		}
-		if m.viewMode != ViewCommitGraph {
-			m.viewMode = ViewCommitGraph
+		if m.appState.ViewMode != state.ViewCommitGraph {
+			m.appState.ViewMode = state.ViewCommitGraph
 		}
 	case "tab":
-		if m.viewMode != ViewCommitGraph {
-			m.viewMode = ViewCommitGraph
+		if m.appState.ViewMode != state.ViewCommitGraph {
+			m.appState.ViewMode = state.ViewCommitGraph
 		}
 	}
 	return m, nil
-}
-
-// handleCreateBookmarkKeyMsg handles keyboard input in bookmark creation mode
-func (m *Model) handleCreateBookmarkKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Handle universal keys first
-	switch msg.String() {
-	case "esc":
-		return m.handleBookmarkCancel()
-	case "enter", "ctrl+s":
-		return m.handleBookmarkSubmit()
-	case "tab":
-		existing := m.bookmarkModal.GetExistingBookmarks()
-		sel := m.bookmarkModal.GetSelectedBookmarkIdx()
-		if sel == -1 && len(existing) > 0 {
-			m.bookmarkModal.SetSelectedBookmarkIdx(0)
-			m.bookmarkModal.GetNameInput().Blur()
-		} else {
-			m.bookmarkModal.SetSelectedBookmarkIdx(-1)
-			m.bookmarkModal.GetNameInput().Focus()
-		}
-		return m, nil
-	}
-
-	if m.bookmarkModal.GetSelectedBookmarkIdx() == -1 {
-		var cmd tea.Cmd
-		ni := m.bookmarkModal.GetNameInput()
-		*ni, cmd = ni.Update(msg)
-		m.updateBookmarkNameExists()
-		return m, cmd
-	}
-
-	switch msg.String() {
-	case "j", "down":
-		existing := m.bookmarkModal.GetExistingBookmarks()
-		if len(existing) > 0 {
-			sel := m.bookmarkModal.GetSelectedBookmarkIdx()
-			if sel < len(existing)-1 {
-				m.bookmarkModal.SetSelectedBookmarkIdx(sel + 1)
-			}
-		}
-		return m, nil
-	case "k", "up":
-		sel := m.bookmarkModal.GetSelectedBookmarkIdx()
-		if sel > -1 {
-			m.bookmarkModal.SetSelectedBookmarkIdx(sel - 1)
-			if sel == 0 {
-				m.bookmarkModal.GetNameInput().Focus()
-			}
-		}
-		return m, nil
-	}
-
-	return m, nil
-}
-
-// handleBookmarkConflictKeyMsg handles keyboard input in bookmark conflict resolution mode
-func (m *Model) handleBookmarkConflictKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "esc":
-		// Cancel and return to branches view
-		m.viewMode = ViewBranches
-		m.statusMessage = "Conflict resolution cancelled"
-		return m, nil
-	case "enter":
-		m.statusMessage = "Resolving bookmark conflict..."
-		return m, m.resolveBookmarkConflict(m.conflictModal.GetBookmarkName(), m.conflictModal.GetSelectedOption())
-	case "j", "down":
-		if m.conflictModal.GetSelectedOption() != "reset_remote" {
-			m.conflictModal.SetSelectedOption(1)
-		}
-		return m, nil
-	case "k", "up":
-		if m.conflictModal.GetSelectedOption() != "keep_local" {
-			m.conflictModal.SetSelectedOption(0)
-		}
-		return m, nil
-	case "l", "L":
-		m.conflictModal.SetSelectedOption(0)
-		return m, nil
-	case "r", "R":
-		m.conflictModal.SetSelectedOption(1)
-		return m, nil
-	}
-	return m, nil
-}
-
-// handleDivergentCommitKeyMsg handles keyboard input in divergent commit resolution mode
-func (m *Model) handleDivergentCommitKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "esc":
-		// Cancel and return to graph view
-		m.viewMode = ViewCommitGraph
-		m.statusMessage = "Divergent commit resolution cancelled"
-		return m, nil
-	case "enter":
-		keepCommitID := m.divergentModal.GetSelectedCommitID()
-		if keepCommitID != "" {
-			m.statusMessage = "Resolving divergent commit..."
-			return m, m.resolveDivergentCommit(m.divergentModal.GetChangeID(), keepCommitID)
-		}
-		return m, nil
-	case "j", "down":
-		cur := m.divergentModal.GetSelectedIdx()
-		n := m.divergentModal.GetCommitCount()
-		if n > 0 && cur < n-1 {
-			m.divergentModal.SetSelectedIdx(cur + 1)
-		}
-		return m, nil
-	case "k", "up":
-		cur := m.divergentModal.GetSelectedIdx()
-		if cur > 0 {
-			m.divergentModal.SetSelectedIdx(cur - 1)
-		}
-		return m, nil
-	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
-		idx := int(msg.String()[0] - '1')
-		if idx >= 0 && idx < m.divergentModal.GetCommitCount() {
-			m.divergentModal.SetSelectedIdx(idx)
-		}
-		return m, nil
-	}
-	return m, nil
-}
-
-// handleCreatePRKeyMsg delegates to the PR form modal
-func (m *Model) handleCreatePRKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "esc":
-		return m.handlePRCancel()
-	case "ctrl+s":
-		return m.handlePRSubmit()
-	}
-	var cmd tea.Cmd
-	m.prFormModal, cmd = m.prFormModal.Update(msg)
-	return m, cmd
-}
-
-// handleDescriptionEditKeyMsg handles keys while editing description
-func (m *Model) handleDescriptionEditKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "esc":
-		return m.handleDescriptionCancel()
-	case "ctrl+s":
-		return m.handleDescriptionSave()
-	}
-
-	var cmd tea.Cmd
-	descInput := m.graphTabModel.GetDescriptionInput()
-	updated, cmd := descInput.Update(msg)
-	m.graphTabModel.SetDescriptionInput(updated)
-	return m, cmd
-}
-
-// handleSettingsKeyMsg handles keys while in settings view
-func (m *Model) handleSettingsKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Handle cleanup confirmation dialog
-	if m.settingsTabModel.GetConfirmingCleanup() != "" {
-		switch msg.String() {
-		case "y", "Y":
-			return m, m.confirmCleanup()
-		case "n", "N", "esc":
-			m.cancelCleanup()
-			return m, nil
-		}
-		return m, nil
-	}
-
-	switch msg.String() {
-	case "esc":
-		return m.handleSettingsCancel()
-	case "ctrl+j":
-		tab := m.settingsTabModel.GetSettingsTab()
-		tab--
-		if tab < 0 {
-			tab = 5
-		}
-		m.settingsTabModel.SetSettingsTab(tab)
-		return m, nil
-	case "ctrl+k":
-		m.settingsTabModel.SetSettingsTab((m.settingsTabModel.GetSettingsTab() + 1) % 6)
-		return m, nil
-	case "ctrl+s", "enter":
-		if m.settingsTabModel.GetSettingsTab() == 5 {
-			return m, nil
-		}
-		inputs := m.settingsTabModel.GetSettingsInputs()
-		focused := m.settingsTabModel.GetFocusedField()
-		if msg.String() == "enter" && focused < len(inputs)-1 {
-			m.settingsTabModel.SetFocusedField(focused + 1)
-			for i := range inputs {
-				if i == focused+1 {
-					inputs[i].Focus()
-				} else {
-					inputs[i].Blur()
-				}
-			}
-			return m, nil
-		}
-		return m, m.saveSettings()
-	case "tab", "down":
-		if m.settingsTabModel.GetSettingsTab() == 4 || m.settingsTabModel.GetSettingsTab() == 5 {
-			return m, nil
-		}
-		inputs := m.settingsTabModel.GetSettingsInputs()
-		n := len(inputs)
-		if n == 0 {
-			return m, nil
-		}
-		focused := m.settingsTabModel.GetFocusedField()
-		next := (focused + 1) % n
-		m.settingsTabModel.SetFocusedField(next)
-		for i := range inputs {
-			if i == next {
-				inputs[i].Focus()
-			} else {
-				inputs[i].Blur()
-			}
-		}
-		return m, nil
-	case "shift+tab", "up":
-		if m.settingsTabModel.GetSettingsTab() == 4 || m.settingsTabModel.GetSettingsTab() == 5 {
-			return m, nil
-		}
-		inputs := m.settingsTabModel.GetSettingsInputs()
-		n := len(inputs)
-		if n == 0 {
-			return m, nil
-		}
-		focused := m.settingsTabModel.GetFocusedField()
-		next := focused - 1
-		if next < 0 {
-			next = n - 1
-		}
-		m.settingsTabModel.SetFocusedField(next)
-		for i := range inputs {
-			if i == next {
-				inputs[i].Focus()
-			} else {
-				inputs[i].Blur()
-			}
-		}
-		return m, nil
-	}
-
-	if m.settingsTabModel.GetSettingsTab() == 4 || m.settingsTabModel.GetSettingsTab() == 5 {
-		return m, nil
-	}
-	inputs := m.settingsTabModel.GetSettingsInputs()
-	focused := m.settingsTabModel.GetFocusedField()
-	if focused < 0 || focused >= len(inputs) {
-		return m, nil
-	}
-	var cmd tea.Cmd
-	inputs[focused], cmd = inputs[focused].Update(msg)
-	return m, cmd
 }

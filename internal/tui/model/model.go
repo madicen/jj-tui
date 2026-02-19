@@ -4,24 +4,27 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/config"
-	"github.com/madicen/jj-tui/internal/integrations/github"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
-	"github.com/madicen/jj-tui/internal/tickets"
-	"github.com/madicen/jj-tui/internal/tui/actions"
+	"github.com/madicen/jj-tui/internal/tui/data"
+	"github.com/madicen/jj-tui/internal/tui/state"
+	"github.com/madicen/jj-tui/internal/tui/util"
 	bookmarktab "github.com/madicen/jj-tui/internal/tui/tabs/bookmark"
 	branchestab "github.com/madicen/jj-tui/internal/tui/tabs/branches"
 	conflicttab "github.com/madicen/jj-tui/internal/tui/tabs/conflict"
+	descedittab "github.com/madicen/jj-tui/internal/tui/tabs/descedit"
 	divergenttab "github.com/madicen/jj-tui/internal/tui/tabs/divergent"
 	errortab "github.com/madicen/jj-tui/internal/tui/tabs/error"
+	githublogintab "github.com/madicen/jj-tui/internal/tui/tabs/githublogin"
 	graphtab "github.com/madicen/jj-tui/internal/tui/tabs/graph"
 	helptab "github.com/madicen/jj-tui/internal/tui/tabs/help"
+	"github.com/madicen/jj-tui/internal/tui/tabs/help/commandhistory"
+	initrepotab "github.com/madicen/jj-tui/internal/tui/tabs/initrepo"
 	prformtab "github.com/madicen/jj-tui/internal/tui/tabs/prform"
 	prstab "github.com/madicen/jj-tui/internal/tui/tabs/prs"
 	settingstab "github.com/madicen/jj-tui/internal/tui/tabs/settings"
@@ -33,39 +36,14 @@ import (
 // All clickable elements are wrapped with zone.Mark() in the View.
 // Mouse events are handled via zone.MsgZoneInBounds messages.
 type Model struct {
-	ctx           context.Context
-	zoneManager   *zone.Manager
-	jjService     *jj.Service
-	githubService *github.Service
-	ticketService tickets.Service // Generic ticket service (Jira, Codecks, etc.)
-	repository    *internal.Repository
-	demoMode      bool // When true, uses mock services for screenshots/testing
+	ctx         context.Context
+	zoneManager *zone.Manager
+	appState    state.AppState // Shared state and services; submodels receive &appState
 
-	// UI state
-	viewMode ViewMode
-	width    int
-	height   int
+	// Dimensions (main only)
+	width  int
+	height int
 	// Selection state lives in tab models: graph (commit/file), prs, tickets, branches
-	statusMessage string
-	err           error
-	loading       bool
-	githubInfo    string // Diagnostic info about GitHub connection
-
-	notJJRepo   bool   // true if error is "not a jj repository"
-	currentPath          string // path where we're running (for jj init)
-	errorCopied          bool   // true if error was just copied to clipboard
-
-	// Warning modal state (for empty commit descriptions, etc.)
-	showWarningModal   bool              // true if warning modal is displayed
-	warningTitle       string            // title for warning modal
-	warningMessage     string            // message for warning modal
-	warningCommits     []internal.Commit // commits with issues (for display)
-	warningSelectedIdx int               // selected commit index in warning modal
-
-	graphFocused bool // True if graph viewport has focus, false if files viewport (graph tab only)
-
-	// Branch state (selection in branches tab)
-	branchList []internal.Branch
 
 	// Tab-specific models (own all tab/modal state; main model does not duplicate)
 	graphTabModel    graphtab.GraphModel
@@ -76,12 +54,15 @@ type Model struct {
 	helpTabModel     helptab.Model
 
 	// Modal models (dialogs and modals)
-	errorModal     errortab.Model
-	warningModal   warningtab.Model
-	conflictModal  conflicttab.Model
-	divergentModal divergenttab.Model
-	bookmarkModal  bookmarktab.Model
-	prFormModal    prformtab.Model
+	initRepoModel    initrepotab.Model
+	errorModal       errortab.Model
+	warningModal     warningtab.Model
+	conflictModal    conflicttab.Model
+	divergentModal   divergenttab.Model
+	bookmarkModal    bookmarktab.Model
+	prFormModal      prformtab.Model
+	desceditModal    descedittab.Model
+	githubLoginModel githublogintab.Model
 }
 
 // doPollMsg is a message used to trigger a GitHub token poll.
@@ -93,9 +74,301 @@ func (m *Model) estimatedContentHeight() int {
 	return max(m.height-4, 1)
 }
 
+// buildSettingsViewOpts builds ViewOpts for the settings tab (used when entering settings or on resize).
+func (m *Model) buildSettingsViewOpts() settingstab.ViewOpts {
+	ticketName := ""
+	if m.appState.TicketService != nil {
+		ticketName = m.appState.TicketService.GetProviderName()
+	}
+	return settingstab.ViewOpts{
+		GitHubAvailable:   m.isGitHubAvailable(),
+		TicketServiceName: ticketName,
+		Config:            m.appState.Config,
+		ContentHeight:     m.estimatedContentHeight(),
+	}
+}
+
+// Auto-refresh interval for the repository view.
+const autoRefreshInterval = 2 * time.Second
+
+// tickCmd returns a command that sends a tick after the refresh interval.
+func (m *Model) tickCmd() tea.Cmd {
+	return tea.Tick(autoRefreshInterval, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
+}
+
+// isGitHubAvailable returns true if GitHub functionality is available (real service or demo mode).
+func (m *Model) isGitHubAvailable() bool {
+	return m.appState.GitHubService != nil || m.appState.DemoMode
+}
+
+// isSelectedCommitValid returns true if selected commit index points to a valid commit.
+func (m *Model) isSelectedCommitValid() bool {
+	return m.appState.Repository != nil &&
+		m.GetSelectedCommit() >= 0 &&
+		m.GetSelectedCommit() < len(m.appState.Repository.Graph.Commits)
+}
+
+// applyRepositoryLoaded applies a loaded repository from data or actions package (shared logic).
+func (m *Model) applyRepositoryLoaded(repo *internal.Repository) (*Model, tea.Cmd) {
+	var oldPRs []internal.GitHubPR
+	if m.appState.Repository != nil {
+		oldPRs = m.appState.Repository.PRs
+	}
+	m.appState.Repository = repo
+	m.appState.Repository.PRs = oldPRs
+	m.appState.Loading = false
+	if m.appState.JJService == nil {
+		jjSvc, _ := jj.NewService("")
+		m.appState.JJService = jjSvc
+	}
+	m.appState.StatusMessage = fmt.Sprintf("Loaded %d commits", len(repo.Graph.Commits))
+	m.graphTabModel.UpdateRepository(m.appState.Repository)
+	m.prsTabModel.UpdateRepository(m.appState.Repository)
+	m.prsTabModel.SetGithubService(m.isGitHubAvailable())
+	m.branchesTabModel.UpdateRepository(m.appState.Repository)
+	m.ticketsTabModel.UpdateRepository(m.appState.Repository)
+	m.settingsTabModel.UpdateRepository(m.appState.Repository)
+	m.helpTabModel.UpdateRepository(m.appState.Repository)
+	var cmds []tea.Cmd
+	cmds = append(cmds, m.tickCmd())
+	if m.appState.GitHubService != nil {
+		existing := 0
+		if m.appState.Repository != nil {
+			existing = len(m.appState.Repository.PRs)
+		}
+		cmds = append(cmds, prstab.LoadPRsCmd(m.appState.GitHubService, m.appState.GithubInfo, m.appState.DemoMode, existing))
+	}
+	commits := repo.Graph.Commits
+	if len(commits) > 0 {
+		idx := m.graphTabModel.GetSelectedCommit()
+		if idx < 0 {
+			idx = 0
+		}
+		m.graphTabModel.SelectCommit(idx)
+		cmds = append(cmds, graphtab.LoadChangedFilesCmd(m.appState.JJService, commits[idx].ChangeID))
+	}
+	return m, tea.Batch(cmds...)
+}
+
+// refreshRepository starts a refresh of the repository data.
+func (m *Model) refreshRepository() tea.Cmd {
+	m.appState.StatusMessage = "Refreshing..."
+	m.appState.Loading = true
+	var cmds []tea.Cmd
+	if m.appState.JJService == nil {
+		cmds = append(cmds, data.InitializeServices(m.appState.DemoMode))
+	} else {
+		cmds = append(cmds, data.LoadRepository(m.appState.JJService))
+	}
+	if m.isGitHubAvailable() {
+		existing := 0
+		if m.appState.Repository != nil {
+			existing = len(m.appState.Repository.PRs)
+		}
+		cmds = append(cmds, prstab.LoadPRsCmd(m.appState.GitHubService, m.appState.GithubInfo, m.appState.DemoMode, existing))
+	}
+	svc := m.appState.TicketService
+	if svc != nil && !util.IsNilInterface(svc) {
+		cmds = append(cmds, ticketstab.LoadTicketsCmd(svc, m.appState.DemoMode))
+	}
+	return tea.Batch(cmds...)
+}
+
+// createIsZoneClickedFuncWithEvent returns a function that checks if the given zone ID contains the mouse event.
+func (m *Model) createIsZoneClickedFuncWithEvent(event tea.MouseMsg) func(string) bool {
+	return func(zoneID string) bool {
+		z := m.zoneManager.Get(zoneID)
+		return z != nil && z.InBounds(event)
+	}
+}
+
+// --- Handlers: main routes to tabs; tabs own context (BuildRequestContextFrom) and execution (ExecuteRequest / EnterTab). ---
+
+// processGraphRequest runs a graph request via the graph tab; ApplyResult mutates app and returns cmd.
+func (m *Model) processGraphRequest(r graphtab.Request) (tea.Model, tea.Cmd) {
+	ctx := graphtab.BuildRequestContextFrom(m)
+	res := graphtab.HandleRequest(r, ctx)
+	return m, graphtab.ApplyResult(res, &m.graphTabModel, ctx, &m.appState)
+}
+
+func (m *Model) handleGraphRequest(r graphtab.Request) (tea.Model, tea.Cmd) {
+	return m.processGraphRequest(r)
+}
+
+func (m *Model) handleHelpRequest(r commandhistory.Request) (tea.Model, tea.Cmd) {
+	statusMsg, cmd := commandhistory.ExecuteRequest(r)
+	if statusMsg != "" {
+		m.appState.StatusMessage = statusMsg
+	}
+	return m, cmd
+}
+
+func (m *Model) handleSettingsRequest(r settingstab.Request) (tea.Model, tea.Cmd) {
+	statusMsg, cmd := settingstab.ExecuteRequest(r)
+	if statusMsg != "" {
+		m.appState.StatusMessage = statusMsg
+	}
+	return m, cmd
+}
+
+func (m *Model) handleNavigateToGraphTab() (tea.Model, tea.Cmd) {
+	m.appState.ViewMode = state.ViewCommitGraph
+	m.appState.StatusMessage = "Loading commit graph"
+	return m, m.refreshRepository()
+}
+
+func (m *Model) handleNavigateToPRTab() (tea.Model, tea.Cmd) {
+	m.appState.ViewMode = state.ViewPullRequests
+	status, cmd := prstab.EnterTab(m)
+	m.appState.StatusMessage = status
+	return m, cmd
+}
+
+func (m *Model) handleNavigateToTicketsTab() (tea.Model, tea.Cmd) {
+	m.appState.ViewMode = state.ViewTickets
+	status, cmd := ticketstab.EnterTab(m)
+	m.appState.StatusMessage = status
+	return m, cmd
+}
+
+func (m *Model) handleNavigateToSettingsTab() (tea.Model, tea.Cmd) {
+	m.appState.ViewMode = state.ViewSettings
+	m.settingsTabModel.SetViewOpts(m.buildSettingsViewOpts())
+	m.settingsTabModel.EnterTab()
+	return m, nil
+}
+
+func (m *Model) handleNavigateToHelpTab() (tea.Model, tea.Cmd) {
+	m.appState.ViewMode = state.ViewHelp
+	m.helpTabModel.SetCommandHistoryEntries(helptab.BuildCommandHistoryEntries(m.appState.JJService))
+	m.helpTabModel.SetHelpTab(0)
+	m.helpTabModel.SetSelectedCommand(0)
+	m.appState.StatusMessage = "Loaded Help"
+	return m, nil
+}
+
+func (m *Model) handleNavigateToBranchesTab() (tea.Model, tea.Cmd) {
+	m.appState.ViewMode = state.ViewBranches
+	status, cmd := branchestab.EnterTab(m)
+	m.appState.StatusMessage = status
+	return m, cmd
+}
+
+func (m *Model) handleUndo() (tea.Model, tea.Cmd) {
+	if m.appState.JJService != nil {
+		m.appState.StatusMessage = "Undoing..."
+		return m, graphtab.UndoCmd(m.appState.JJService)
+	}
+	return m, nil
+}
+
+func (m *Model) handleRedo() (tea.Model, tea.Cmd) {
+	if m.appState.JJService != nil {
+		m.appState.StatusMessage = "Redoing..."
+		return m, graphtab.RedoCmd(m.appState.JJService)
+	}
+	return m, nil
+}
+
+func (m *Model) handleSelectCommit(index int) (tea.Model, tea.Cmd) {
+	return m.processGraphRequest(graphtab.Request{SelectCommit: &index})
+}
+
+// startEditingDescription switches to description edit view and starts loading the description.
+func (m *Model) startEditingDescription(commit internal.Commit) (tea.Model, tea.Cmd) {
+	m.appState.ViewMode = state.ViewEditDescription
+	m.desceditModal, m.appState.StatusMessage = descedittab.StartEditing(m.desceditModal, commit, m.width-10, m.height-12)
+	return m, descedittab.LoadDescriptionCmd(m.appState.JJService, commit.ChangeID)
+}
+
+// startCreateBookmark opens the bookmark creation dialog for the selected commit.
+func (m *Model) startCreateBookmark() {
+	if !m.isSelectedCommitValid() {
+		m.appState.StatusMessage = "No commit selected"
+		return
+	}
+	idx := m.GetSelectedCommit()
+	m.appState.ViewMode = state.ViewCreateBookmark
+	m.appState.StatusMessage = bookmarktab.OpenCreateBookmark(&m.bookmarkModal, m.appState.Repository, idx, m.branchesTabModel.BuildBookmarkNameConflictSources(), m.appState.Config != nil && m.appState.Config.ShouldSanitizeBookmarkNames(), m.width-10)
+}
+
+// submitBookmark runs the bookmark create/move command.
+func (m *Model) submitBookmark() tea.Cmd {
+	cmd, status := bookmarktab.SubmitBookmark(&m.bookmarkModal, m.appState.Repository, m.appState.Config, m.appState.JJService)
+	m.appState.StatusMessage = status
+	return cmd
+}
+
+// startCreatePR opens the PR creation dialog for the selected commit's bookmark.
+func (m *Model) startCreatePR() {
+	if !m.isSelectedCommitValid() {
+		m.appState.StatusMessage = "No commit selected"
+		return
+	}
+	idx := m.GetSelectedCommit()
+	res := prformtab.OpenCreatePR(&m.prFormModal, m.appState.Repository, idx, m.bookmarkModal.GetJiraBookmarkTitles(), m.width-10, m.height)
+	if !res.Ok {
+		m.appState.StatusMessage = res.StatusMessage
+		return
+	}
+	m.appState.ViewMode = state.ViewCreatePR
+	m.appState.StatusMessage = res.StatusMessage
+}
+
+// submitPR runs the PR creation command.
+func (m *Model) submitPR() tea.Cmd {
+	res := prformtab.SubmitPR(&m.prFormModal, m.appState.Repository, m.appState.JJService, m.appState.GitHubService, m.appState.DemoMode)
+	m.appState.StatusMessage = res.StatusMessage
+	return res.Cmd
+}
+
+// saveSettings builds params from settings tab and runs global save.
+func (m *Model) saveSettings() tea.Cmd {
+	ghOwner, ghRepo := "", ""
+	if m.appState.GitHubService != nil {
+		ghOwner = m.appState.GitHubService.GetOwner()
+		ghRepo = m.appState.GitHubService.GetRepo()
+	}
+	return settingstab.SaveSettings(&m.settingsTabModel, ghOwner, ghRepo)
+}
+
+// saveSettingsLocal builds params and runs local save.
+func (m *Model) saveSettingsLocal() tea.Cmd {
+	ghOwner, ghRepo := "", ""
+	if m.appState.GitHubService != nil {
+		ghOwner = m.appState.GitHubService.GetOwner()
+		ghRepo = m.appState.GitHubService.GetRepo()
+	}
+	return settingstab.SaveSettingsLocal(&m.settingsTabModel, ghOwner, ghRepo)
+}
+
+// confirmCleanup runs the cleanup command for the current confirming type.
+func (m *Model) confirmCleanup() tea.Cmd {
+	return settingstab.ConfirmCleanup(&m.settingsTabModel, m.appState.JJService, m.appState.Repository)
+}
+
+// handleClipboardCopiedMsg sets status (or error modal copied flag) from copy result; kept in main (generic).
+func (m *Model) handleClipboardCopiedMsg(msg util.ClipboardCopiedMsg) (tea.Model, tea.Cmd) {
+	if msg.Success {
+		if m.appState.ViewMode == state.ViewGitHubLogin {
+			m.appState.StatusMessage = "Code copied to clipboard! Paste it in your browser."
+		} else if m.errorModal.GetError() != nil {
+			m.errorModal.SetCopied(true)
+			m.appState.StatusMessage = "Error copied to clipboard!"
+		} else {
+			m.appState.StatusMessage = "Copied to clipboard!"
+		}
+	} else {
+		m.appState.StatusMessage = fmt.Sprintf("Failed to copy: %v", msg.Err)
+	}
+	return m, nil
+}
+
 // SetRepository sets the repository data and syncs to tab models (e.g. for tests)
 func (m *Model) SetRepository(repo *internal.Repository) {
-	m.repository = repo
+	m.appState.Repository = repo
 	m.graphTabModel.UpdateRepository(repo)
 	m.prsTabModel.UpdateRepository(repo)
 	m.prsTabModel.SetGithubService(m.isGitHubAvailable())
@@ -107,19 +380,28 @@ func (m *Model) SetRepository(repo *internal.Repository) {
 
 // Init implements tea.Model
 func (m *Model) Init() tea.Cmd {
-	// Initialize jj service, load repository, and start auto-refresh timer
 	return tea.Batch(
-		m.initializeServices(),
+		data.InitializeServices(m.appState.DemoMode),
 		m.tickCmd(),
 	)
 }
 
-// Update implements tea.Model
+// Update implements tea.Model.
+// Flow: globals (SetStatus, WindowSize) → tab request messages (graphtab.Request, etc.) →
+// modal request messages (descedit/bookmark/prform/warning) → async result messages
+// (data.RepositoryLoadedMsg, graphtab.ChangedFilesLoadedMsg, etc.) → zone/key routing (keys.go, mouse.go).
+// Submodels own their state (error, warning, graph, branches, etc.); main forwards and applies results.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case SetStatusMsg:
+		m.appState.StatusMessage = msg.Status
+		return m, nil
+
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+
+		m.errorModal.SetWidth(m.width)
 
 		// Resize text areas to fit new window width
 		inputWidth := min(
@@ -131,56 +413,75 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			80,
 		)
 
-		m.graphTabModel.GetDescriptionInput().SetWidth(inputWidth)
+		m.desceditModal.SetDimensions(inputWidth, max(m.height-12, 3))
 		m.prFormModal.GetBodyInput().SetWidth(inputWidth)
 		m.prFormModal.GetTitleInput().Width = inputWidth
 		m.bookmarkModal.GetNameInput().Width = inputWidth
 
 		m.settingsTabModel.SetInputWidths(inputWidth - 10)
 
+		if m.appState.ViewMode == state.ViewSettings {
+			m.settingsTabModel.SetViewOpts(m.buildSettingsViewOpts())
+		}
+
 		// Propagate dimensions to tab models so they can render
-		cmds := PropagateUpdate(msg, &m.graphTabModel, &m.prsTabModel, &m.branchesTabModel, &m.ticketsTabModel, &m.settingsTabModel, &m.helpTabModel)
+		cmds := util.PropagateUpdate(msg, &m.graphTabModel, &m.prsTabModel, &m.branchesTabModel, &m.ticketsTabModel, &m.settingsTabModel, &m.helpTabModel)
+		// Set content-area height on tabs so graph/files split fills the content area (not full window)
+		contentHeight := m.estimatedContentHeight()
+		m.graphTabModel.SetDimensions(m.width, contentHeight)
+		m.prsTabModel.SetDimensions(m.width, contentHeight)
+		m.branchesTabModel.SetDimensions(m.width, contentHeight)
+		m.ticketsTabModel.SetDimensions(m.width, contentHeight)
+		m.settingsTabModel.SetDimensions(m.width, contentHeight)
+		m.helpTabModel.SetDimensions(m.width, contentHeight)
 		if len(cmds) > 0 {
 			return m, tea.Batch(cmds...)
 		}
 		return m, nil
 
 	case tea.KeyMsg:
-		// Esc in Settings: handle in main model so a single Update() returns to graph (tab would return Request cmd that needs a second Update).
-		if m.viewMode == ViewSettings && msg.String() == "esc" {
-			return m.handleSettingsCancel()
+		// When an overlay or blocking modal is showing, route keys to handleKeyMsg (init, error, warning) or view modals.
+		if m.initRepoModel.Path() != "" || m.errorModal.GetError() != nil || m.warningModal.IsShown() {
+			return m.handleKeyMsg(msg)
+		}
+		// Esc in Settings: send effect so next Update applies viewMode + status (same as tab sending PerformCancelMsg).
+		if m.appState.ViewMode == state.ViewSettings && msg.String() == "esc" {
+			return m, settingstab.PerformCancelCmd()
 		}
 		// Delegate to tab models for their specific views (tabs own selection state)
-		switch m.viewMode {
-		case ViewCommitGraph:
-			cmds := PropagateUpdate(msg, &m.graphTabModel)
-			// Graph tab returns requests (LoadChangedFiles, Checkout, etc.) as cmds; run them
-			if len(cmds) > 0 && cmds[0] != nil {
-				return m, tea.Batch(cmds...)
+		switch m.appState.ViewMode {
+		case state.ViewCommitGraph:
+			updated, cmd := m.graphTabModel.UpdateWithApp(msg, &m.appState)
+			m.graphTabModel = updated
+			if cmd != nil {
+				return m, cmd
 			}
-		case ViewPullRequests:
-			cmds := PropagateUpdate(msg, &m.prsTabModel)
-			if len(cmds) > 0 && cmds[0] != nil {
-				return m, cmds[0]
+		case state.ViewPullRequests:
+			updated, cmd := m.prsTabModel.UpdateWithApp(msg, &m.appState)
+			m.prsTabModel = updated
+			if cmd != nil {
+				return m, cmd
 			}
 			// Fall through to handleKeyMsg for non-delegated keys
-		case ViewBranches:
-			cmds := PropagateUpdate(msg, &m.branchesTabModel)
+		case state.ViewBranches:
+			updated, cmd := m.branchesTabModel.UpdateWithApp(msg, &m.appState)
+			m.branchesTabModel = updated
+			if cmd != nil {
+				return m, cmd
+			}
+		case state.ViewTickets:
+			updated, cmd := m.ticketsTabModel.UpdateWithApp(msg, &m.appState)
+			m.ticketsTabModel = updated
+			if cmd != nil {
+				return m, cmd
+			}
+		case state.ViewSettings:
+			cmds := util.PropagateUpdate(msg, &m.settingsTabModel)
 			if len(cmds) > 0 && cmds[0] != nil {
 				return m, cmds[0]
 			}
-		case ViewTickets:
-			cmds := PropagateUpdate(msg, &m.ticketsTabModel)
-			if len(cmds) > 0 && cmds[0] != nil {
-				return m, cmds[0]
-			}
-		case ViewSettings:
-			cmds := PropagateUpdate(msg, &m.settingsTabModel)
-			if len(cmds) > 0 && cmds[0] != nil {
-				return m, cmds[0]
-			}
-		case ViewHelp:
-			cmds := PropagateUpdate(msg, &m.helpTabModel)
+		case state.ViewHelp:
+			cmds := util.PropagateUpdate(msg, &m.helpTabModel)
 			if len(cmds) > 0 && cmds[0] != nil {
 				return m, cmds[0]
 			}
@@ -193,7 +494,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.MouseMsg:
 		// Modal views: run zone check on release first so form clicks aren't consumed by the delegate switch.
-		if (m.viewMode == ViewCreatePR || m.viewMode == ViewEditDescription || m.viewMode == ViewCreateBookmark) &&
+		if (m.appState.ViewMode == state.ViewCreatePR || m.appState.ViewMode == state.ViewEditDescription || m.appState.ViewMode == state.ViewCreateBookmark) &&
 			msg.Action == tea.MouseActionRelease {
 			return m.zoneManager.AnyInBoundsAndUpdate(m, msg)
 		}
@@ -201,40 +502,43 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		isWheel := tea.MouseEvent(msg).IsWheel() || msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown
 		if isWheel {
 			contentHeight := m.estimatedContentHeight()
-			switch m.viewMode {
-			case ViewCommitGraph:
+			switch m.appState.ViewMode {
+			case state.ViewCommitGraph:
 				m.graphTabModel.SetDimensions(m.width, contentHeight)
-				cmds := PropagateUpdate(msg, &m.graphTabModel)
-				if len(cmds) > 0 && cmds[0] != nil {
-					return m, cmds[0]
+				updated, cmd := m.graphTabModel.UpdateWithApp(msg, &m.appState)
+				m.graphTabModel = updated
+				if cmd != nil {
+					return m, cmd
 				}
-			case ViewPullRequests:
+			case state.ViewPullRequests:
 				m.prsTabModel.SetDimensions(m.width, contentHeight)
-				cmds := PropagateUpdate(msg, &m.prsTabModel)
-				if len(cmds) > 0 && cmds[0] != nil {
-					return m, cmds[0]
+				updated, cmd := m.prsTabModel.UpdateWithApp(msg, &m.appState)
+				m.prsTabModel = updated
+				if cmd != nil {
+					return m, cmd
 				}
-			case ViewBranches:
+			case state.ViewBranches:
 				m.branchesTabModel.SetDimensions(m.width, contentHeight)
-				cmds := PropagateUpdate(msg, &m.branchesTabModel)
+				cmds := util.PropagateUpdate(msg, &m.branchesTabModel)
 				if len(cmds) > 0 && cmds[0] != nil {
 					return m, cmds[0]
 				}
-			case ViewTickets:
+			case state.ViewTickets:
 				m.ticketsTabModel.SetDimensions(m.width, contentHeight)
-				cmds := PropagateUpdate(msg, &m.ticketsTabModel)
-				if len(cmds) > 0 && cmds[0] != nil {
-					return m, cmds[0]
+				updated, cmd := m.ticketsTabModel.UpdateWithApp(msg, &m.appState)
+				m.ticketsTabModel = updated
+				if cmd != nil {
+					return m, cmd
 				}
-			case ViewSettings:
+			case state.ViewSettings:
 				m.settingsTabModel.SetDimensions(m.width, contentHeight)
-				cmds := PropagateUpdate(msg, &m.settingsTabModel)
+				cmds := util.PropagateUpdate(msg, &m.settingsTabModel)
 				if len(cmds) > 0 && cmds[0] != nil {
 					return m, cmds[0]
 				}
-			case ViewHelp:
+			case state.ViewHelp:
 				m.helpTabModel.SetDimensions(m.width, contentHeight)
-				cmds := PropagateUpdate(msg, &m.helpTabModel)
+				cmds := util.PropagateUpdate(msg, &m.helpTabModel)
 				if len(cmds) > 0 && cmds[0] != nil {
 					return m, cmds[0]
 				}
@@ -244,37 +548,40 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Delegate other mouse to active tab (same as KeyMsg) for any other scroll/click handling
 		// Set dimensions for list tabs so wheel/scroll works even when isWheel wasn't true (e.g. terminal encoding)
 		contentHeight := m.estimatedContentHeight()
-		switch m.viewMode {
-		case ViewCommitGraph:
-			cmds := PropagateUpdate(msg, &m.graphTabModel)
-			if len(cmds) > 0 && cmds[0] != nil {
-				return m, cmds[0]
+		switch m.appState.ViewMode {
+		case state.ViewCommitGraph:
+			updated, cmd := m.graphTabModel.UpdateWithApp(msg, &m.appState)
+			m.graphTabModel = updated
+			if cmd != nil {
+				return m, cmd
 			}
-		case ViewPullRequests:
+		case state.ViewPullRequests:
 			m.prsTabModel.SetDimensions(m.width, contentHeight)
-			cmds := PropagateUpdate(msg, &m.prsTabModel)
-			if len(cmds) > 0 && cmds[0] != nil {
-				return m, cmds[0]
+			updated, cmd := m.prsTabModel.UpdateWithApp(msg, &m.appState)
+			m.prsTabModel = updated
+			if cmd != nil {
+				return m, cmd
 			}
-		case ViewBranches:
+		case state.ViewBranches:
 			m.branchesTabModel.SetDimensions(m.width, contentHeight)
-			cmds := PropagateUpdate(msg, &m.branchesTabModel)
-			if len(cmds) > 0 && cmds[0] != nil {
-				return m, cmds[0]
+			updated, cmd := m.branchesTabModel.UpdateWithApp(msg, &m.appState)
+			m.branchesTabModel = updated
+			if cmd != nil {
+				return m, cmd
 			}
-		case ViewTickets:
+		case state.ViewTickets:
 			m.ticketsTabModel.SetDimensions(m.width, contentHeight)
-			cmds := PropagateUpdate(msg, &m.ticketsTabModel)
+			cmds := util.PropagateUpdate(msg, &m.ticketsTabModel)
 			if len(cmds) > 0 && cmds[0] != nil {
 				return m, cmds[0]
 			}
-		case ViewSettings:
-			cmds := PropagateUpdate(msg, &m.settingsTabModel)
+		case state.ViewSettings:
+			cmds := util.PropagateUpdate(msg, &m.settingsTabModel)
 			if len(cmds) > 0 && cmds[0] != nil {
 				return m, cmds[0]
 			}
-		case ViewHelp:
-			cmds := PropagateUpdate(msg, &m.helpTabModel)
+		case state.ViewHelp:
+			cmds := util.PropagateUpdate(msg, &m.helpTabModel)
 			if len(cmds) > 0 && cmds[0] != nil {
 				return m, cmds[0]
 			}
@@ -286,768 +593,558 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case zone.MsgZoneInBounds:
 		// Delegate to tab when in that view so it can return requests
-		if m.viewMode == ViewCommitGraph {
-			cmds := PropagateUpdate(msg, &m.graphTabModel)
-			if len(cmds) > 0 && cmds[0] != nil {
-				return m, tea.Batch(cmds...)
+		if m.appState.ViewMode == state.ViewCommitGraph {
+			updated, cmd := m.graphTabModel.UpdateWithApp(msg, &m.appState)
+			m.graphTabModel = updated
+			if cmd != nil {
+				return m, tea.Batch(cmd)
 			}
 		}
-		if m.viewMode == ViewPullRequests {
-			cmds := PropagateUpdate(msg, &m.prsTabModel)
-			if len(cmds) > 0 && cmds[0] != nil {
-				return m, cmds[0]
+		if m.appState.ViewMode == state.ViewPullRequests {
+			updated, cmd := m.prsTabModel.UpdateWithApp(msg, &m.appState)
+			m.prsTabModel = updated
+			if cmd != nil {
+				return m, cmd
 			}
 		}
-		if m.viewMode == ViewBranches {
-			cmds := PropagateUpdate(msg, &m.branchesTabModel)
-			if len(cmds) > 0 && cmds[0] != nil {
-				return m, cmds[0]
+		if m.appState.ViewMode == state.ViewBranches {
+			updated, cmd := m.branchesTabModel.UpdateWithApp(msg, &m.appState)
+			m.branchesTabModel = updated
+			if cmd != nil {
+				return m, cmd
 			}
 		}
-		if m.viewMode == ViewTickets {
-			cmds := PropagateUpdate(msg, &m.ticketsTabModel)
-			if len(cmds) > 0 && cmds[0] != nil {
-				return m, cmds[0]
+		if m.appState.ViewMode == state.ViewTickets {
+			updated, cmd := m.ticketsTabModel.UpdateWithApp(msg, &m.appState)
+			m.ticketsTabModel = updated
+			if cmd != nil {
+				return m, cmd
 			}
 		}
 		return m.handleZoneClick(msg)
 
-	case graphtab.Request:
-		return m.handleGraphRequest(msg)
+	case graphtab.SetStatusEffect:
+		m.appState.StatusMessage = msg.Status
+		return m, nil
+	case graphtab.StartEditDescriptionEffect:
+		return m.startEditingDescription(msg.Commit)
+	case graphtab.CreateBookmarkEffect:
+		m.startCreateBookmark()
+		return m, branchestab.LoadBranchesCmd(m.appState.JJService, m.settingsTabModel.GetSettingsBranchLimit())
+	case graphtab.ShowEmptyDescWarningEffect:
+		m.warningModal.Show(msg.Title, msg.Message, msg.Commits)
+		return m, nil
+	case graphtab.StartCreatePREffect:
+		m.startCreatePR()
+		return m, nil
+	case graphtab.UpdatePREffect:
+		if msg.PrBranch != "" && msg.CommitID != "" {
+			if msg.NeedsMoveBookmark {
+				m.appState.StatusMessage = fmt.Sprintf("Moving %s and pushing...", msg.PrBranch)
+			} else {
+				m.appState.StatusMessage = fmt.Sprintf("Pushing %s...", msg.PrBranch)
+			}
+			return m, prstab.PushToPRCmd(m.appState.JJService, msg.PrBranch, msg.CommitID, msg.NeedsMoveBookmark)
+		}
+		return m, nil
+	case graphtab.LoadChangedFilesEffect:
+		return m, msg.Cmd
+	case graphtab.LoadDivergentEffect:
+		m.appState.StatusMessage = msg.Status
+		return m, msg.Cmd
 
-	case prstab.Request:
-		return m.handlePRsRequest(msg)
+	case prstab.OpenPRURLEffect:
+		return m, util.OpenURL(msg.URL)
 
-	case branchestab.Request:
-		return m.handleBranchesRequest(msg)
-
-	case helptab.Request:
+	case commandhistory.Request:
 		return m.handleHelpRequest(msg)
 
 	case settingstab.Request:
 		return m.handleSettingsRequest(msg)
+	case settingstab.SaveSettingsEffect:
+		return m, m.saveSettings()
+	case settingstab.SaveSettingsLocalEffect:
+		return m, m.saveSettingsLocal()
+	case settingstab.PerformCancelMsg:
+		m.appState.ViewMode = state.ViewCommitGraph
+		m.appState.StatusMessage = "Settings cancelled"
+		return m, nil
 
-	case ticketstab.Request:
-		return m.handleTicketsRequest(msg)
+	case ticketstab.OpenURLEffect:
+		return m, util.OpenURL(msg.URL)
+	case ticketstab.ToggleModeEffect:
+		mode := !m.ticketsTabModel.IsStatusChangeMode()
+		m.ticketsTabModel.SetStatusChangeMode(mode)
+		m.appState.StatusMessage = msg.Status
+		return m, nil
 
-	case repositoryLoadedMsg:
-		// Preserve PRs from previous repository
-		var oldPRs []internal.GitHubPR
-		if m.repository != nil {
-			oldPRs = m.repository.PRs
+	case descedittab.SaveRequestedMsg, descedittab.CancelRequestedMsg:
+		updated, cmd := m.desceditModal.Update(msg)
+		m.desceditModal = updated
+		return m, cmd
+
+	case descedittab.PerformSaveMsg:
+		return m, graphtab.SaveDescriptionCmd(m.appState.JJService, msg.CommitID, msg.Description)
+
+	case descedittab.PerformCancelMsg:
+		m.appState.ViewMode = state.ViewCommitGraph
+		m.appState.StatusMessage = "Description edit cancelled"
+		return m, nil
+
+	case bookmarktab.CancelRequestedMsg, bookmarktab.SubmitRequestedMsg:
+		updated, cmd := m.bookmarkModal.Update(msg)
+		m.bookmarkModal = updated
+		m.bookmarkModal.UpdateNameExistsFromInput(m.appState.Config != nil && m.appState.Config.ShouldSanitizeBookmarkNames())
+		return m, cmd
+
+	case bookmarktab.PerformCancelMsg:
+		m.appState.ViewMode = state.ViewCommitGraph
+		m.appState.StatusMessage = "Bookmark creation cancelled"
+		return m, nil
+
+	case bookmarktab.PerformSubmitMsg:
+		if m.appState.JJService != nil {
+			return m, m.submitBookmark()
 		}
-		m.repository = msg.repository
-		m.repository.PRs = oldPRs // Restore PRs temporarily
-		m.loading = false
-		// Don't clear m.err here - let errors persist until dismissed
-		if m.jjService == nil {
-			// First load - set the service
-			jjSvc, _ := jj.NewService("")
-			m.jjService = jjSvc
+		return m, nil
+
+	case prformtab.CancelRequestedMsg, prformtab.SubmitRequestedMsg:
+		updated, cmd := m.prFormModal.Update(msg)
+		m.prFormModal = updated
+		return m, cmd
+
+	case prformtab.PerformCancelMsg:
+		m.appState.ViewMode = state.ViewCommitGraph
+		m.prFormModal.Hide()
+		m.appState.StatusMessage = "PR creation cancelled"
+		return m, nil
+
+	case prformtab.PerformSubmitMsg:
+		if m.isGitHubAvailable() && m.appState.JJService != nil {
+			return m, m.submitPR()
 		}
-		m.statusMessage = fmt.Sprintf("Loaded %d commits", len(msg.repository.Graph.Commits))
+		return m, nil
 
-		// Sync repository to tab models (graph tab preserves selection by ChangeID in UpdateRepository)
-		m.graphTabModel.UpdateRepository(m.repository)
-		m.prsTabModel.UpdateRepository(m.repository)
-		m.prsTabModel.SetGithubService(m.isGitHubAvailable())
-		m.branchesTabModel.UpdateRepository(m.repository)
-		m.ticketsTabModel.UpdateRepository(m.repository)
-		m.settingsTabModel.UpdateRepository(m.repository)
-		m.helpTabModel.UpdateRepository(m.repository)
+	case conflicttab.PerformCancelMsg:
+		m.appState.ViewMode = state.ViewBranches
+		m.appState.StatusMessage = "Conflict resolution cancelled"
+		return m, nil
+	case conflicttab.PerformResolveMsg:
+		m.appState.StatusMessage = "Resolving bookmark conflict..."
+		return m, conflicttab.ResolveBookmarkConflictCmd(m.appState.JJService, msg.BookmarkName, msg.Resolution)
 
-		// Build commands to run
-		var cmds []tea.Cmd
-		cmds = append(cmds, m.tickCmd())
+	case divergenttab.PerformCancelMsg:
+		m.appState.ViewMode = state.ViewCommitGraph
+		m.appState.StatusMessage = "Divergent commit resolution cancelled"
+		return m, nil
+	case divergenttab.PerformResolveMsg:
+		m.appState.StatusMessage = "Resolving divergent commit..."
+		return m, divergenttab.ResolveDivergentCommitCmd(m.appState.JJService, msg.ChangeID, msg.KeepCommitID)
 
-		if m.githubService != nil {
-			cmds = append(cmds, m.loadPRs())
+	case settingstab.RequestConfirmCleanupMsg:
+		return m, m.confirmCleanup()
+	case settingstab.RequestCancelCleanupMsg:
+		m.appState.StatusMessage = settingstab.CancelCleanupStatus
+		return m, nil
+	case settingstab.RequestSetStatusMsg:
+		m.appState.StatusMessage = msg.Status
+		return m, nil
+
+	case githublogintab.PerformCancelMsg:
+		m.githubLoginModel.ClearFlow()
+		m.appState.ViewMode = state.ViewSettings
+		m.appState.StatusMessage = "GitHub login cancelled"
+		return m, nil
+
+	case errortab.RequestDismissMsg:
+		m.errorModal.ClearError()
+		m.appState.ViewMode = state.ViewCommitGraph
+		m.appState.StatusMessage = "Error dismissed"
+		return m, m.tickCmd()
+	case errortab.RequestRefreshMsg:
+		m.errorModal.ClearError()
+		m.appState.ViewMode = state.ViewCommitGraph
+		return m, m.refreshRepository()
+	case errortab.RequestCopyMsg:
+		if m.errorModal.GetError() != nil {
+			m.errorModal.SetCopied(true)
+			return m, util.CopyToClipboard(m.errorModal.GetError().Error())
 		}
+		return m, nil
+	case initrepotab.RequestDismissMsg:
+		m.initRepoModel.SetPath("")
+		m.appState.ViewMode = state.ViewCommitGraph
+		m.appState.StatusMessage = "Dismissed"
+		return m, m.tickCmd()
+	case initrepotab.RequestInitMsg:
+		m.appState.StatusMessage = "Initializing repository..."
+		return m, data.RunJJInit()
 
-		// Load changed files for the selected commit (initial or re-resolved by UpdateRepository).
-		// Always call SelectCommit so changedFilesCommitID is set; otherwise when the async load
-		// completes, SetChangedFiles will reject the result (commitID != changedFilesCommitID).
-		commits := msg.repository.Graph.Commits
-		if len(commits) > 0 {
-			idx := m.graphTabModel.GetSelectedCommit()
-			if idx < 0 {
-				idx = 0
+	case warningtab.PerformCancelMsg:
+		m.appState.StatusMessage = "Cancelled"
+		return m, nil
+
+	case warningtab.EditCommitRequestedMsg:
+		updated, cmd := m.warningModal.Update(msg)
+		m.warningModal = updated
+		return m, cmd
+
+	case warningtab.PerformEditCommitMsg:
+		if m.appState.Repository != nil {
+			for i, c := range m.appState.Repository.Graph.Commits {
+				if c.ChangeID == msg.Commit.ChangeID {
+					m.graphTabModel.SelectCommit(i)
+					return m.processGraphRequest(graphtab.Request{StartEditDescription: true})
+				}
 			}
-			m.graphTabModel.SelectCommit(idx)
-			cmds = append(cmds, m.loadChangedFiles(commits[idx].ChangeID))
 		}
-		return m, tea.Batch(cmds...)
+		return m, nil
 
-	case editCompletedMsg:
+	case graphtab.EditCompletedMsg:
 		// Preserve PRs from previous repository
 		var oldPRs []internal.GitHubPR
-		if m.repository != nil {
-			oldPRs = m.repository.PRs
+		if m.appState.Repository != nil {
+			oldPRs = m.appState.Repository.PRs
 		}
-		m.repository = msg.repository
-		m.repository.PRs = oldPRs // Restore PRs temporarily
-		m.loading = false
-		// Don't clear m.err here - let errors persist until dismissed
+		m.appState.Repository = msg.Repository
+		m.appState.Repository.PRs = oldPRs // Restore PRs temporarily
+		m.appState.Loading = false
+		// Don't clear error modal here - let errors persist until dismissed
 		// Find and select the working copy commit (graph tab owns selection)
-		for i, commit := range msg.repository.Graph.Commits {
+		for i, commit := range msg.Repository.Graph.Commits {
 			if commit.IsWorking {
 				m.graphTabModel.SelectCommit(i)
 				break
 			}
 		}
-		m.statusMessage = "Now editing working copy"
+		m.appState.StatusMessage = "Now editing working copy"
 
 		// Build commands to run
 		var cmds []tea.Cmd
 		cmds = append(cmds, m.tickCmd())
 
 		// Also refresh PRs when GitHub is connected (needed for Update PR button)
-		if m.githubService != nil {
-			cmds = append(cmds, m.loadPRs())
+		if m.appState.GitHubService != nil {
+			existingPRs := 0
+			if m.appState.Repository != nil {
+				existingPRs = len(m.appState.Repository.PRs)
+			}
+			cmds = append(cmds, prstab.LoadPRsCmd(m.appState.GitHubService, m.appState.GithubInfo, m.appState.DemoMode, existingPRs))
 		}
 
 		return m, tea.Batch(cmds...)
-
-	case silentRepositoryLoadedMsg:
-		// Background refresh - update data without changing status
-		if msg.repository != nil {
-			oldCount := 0
-			var oldPRs []internal.GitHubPR
-			if m.repository != nil {
-				oldCount = len(m.repository.Graph.Commits)
-				oldPRs = m.repository.PRs // Preserve PRs from previous load
-			}
-			m.repository = msg.repository
-			m.repository.PRs = oldPRs // Restore PRs
-			// Sync repository to tab models (graph tab preserves selection in UpdateRepository)
-			m.graphTabModel.UpdateRepository(m.repository)
-			m.prsTabModel.UpdateRepository(m.repository)
-			m.prsTabModel.SetGithubService(m.isGitHubAvailable())
-			m.branchesTabModel.UpdateRepository(m.repository)
-			m.ticketsTabModel.UpdateRepository(m.repository)
-			m.settingsTabModel.UpdateRepository(m.repository)
-			m.helpTabModel.UpdateRepository(m.repository)
-			// Don't clear m.err here - let errors persist until dismissed
-			// Only update status if commit count changed AND there's no existing error
-			newCount := len(msg.repository.Graph.Commits)
-			if newCount != oldCount && m.err == nil {
-				m.statusMessage = fmt.Sprintf("Updated: %d commits", newCount)
-			}
-
-		}
-		return m, nil
 
 	case errorMsg:
-		m.err = msg.Err
-		m.notJJRepo = msg.NotJJRepo
-		m.currentPath = msg.CurrentPath
-		m.loading = false
-		// Use friendly message for welcome screen, error message for real errors
-		if msg.NotJJRepo {
-			m.statusMessage = "Press 'i' to initialize a repository"
-		} else {
-			m.statusMessage = fmt.Sprintf("Error: %v", msg.Err)
-		}
-		// Don't continue auto-refresh on error - let user dismiss or manually refresh
-		return m, nil
-
-	case jjInitSuccessMsg:
-		m.notJJRepo = false
-		// Don't clear m.err here - let errors persist until user dismisses them
-		m.statusMessage = "Repository initialized! Loading..."
-		return m, m.initializeServices()
-
-	case servicesInitializedMsg:
-		m.jjService = msg.jjService
-		m.githubService = msg.githubService
-		m.ticketService = msg.ticketService
-		m.repository = msg.repository
-		m.githubInfo = msg.githubInfo // Store diagnostic info
-		m.demoMode = msg.demoMode     // Set demo mode from message
-		m.loading = false
-		// Don't clear m.err here - let errors persist until user dismisses them
-		m.statusMessage = fmt.Sprintf("Loaded %d commits", len(msg.repository.Graph.Commits))
-		if m.demoMode {
-			m.statusMessage += " (demo mode)"
-		} else if m.githubService != nil {
-			m.statusMessage += " (GitHub connected)"
-		} else if msg.githubInfo != "" {
-			// Show brief info when GitHub isn't connected
-			m.statusMessage += fmt.Sprintf(" (GitHub: %s)", msg.githubInfo)
-		}
-		if m.ticketService != nil {
-			m.statusMessage += fmt.Sprintf(" (%s connected)", m.ticketService.GetProviderName())
-		} else if msg.ticketError != nil {
-			m.statusMessage += fmt.Sprintf(" (Tickets error: %v)", msg.ticketError)
-		}
-
-		// Build commands to run after initialization
-		var cmds []tea.Cmd
-		cmds = append(cmds, m.tickCmd())
-
-		// Load PRs on startup if GitHub is connected or in demo mode
-		// Also start PR auto-refresh timer
-		if m.isGitHubAvailable() {
-			cmds = append(cmds, m.loadPRs())
-			if prTickCmd := m.prTickCmd(); prTickCmd != nil {
-				cmds = append(cmds, prTickCmd)
+		cmd, info := errortab.HandleError(errortab.ErrorInput{NotJJRepo: msg.NotJJRepo, CurrentPath: msg.CurrentPath, Err: msg.Err}, &m.appState)
+		if info != nil {
+			if info.NotJJRepo {
+				m.initRepoModel.SetPath(info.CurrentPath)
+			} else {
+				m.errorModal.SetError(info.Err, false, "")
 			}
 		}
-
-		// Auto-select first commit if none selected and load its changed files
-		if m.graphTabModel.GetSelectedCommit() < 0 && len(msg.repository.Graph.Commits) > 0 {
-			m.graphTabModel.SelectCommit(0)
-			commit := msg.repository.Graph.Commits[0]
-			cmds = append(cmds, m.loadChangedFiles(commit.ChangeID))
-		}
-
-		return m, tea.Batch(cmds...)
-
-	case prsLoadedMsg:
-		// nil prs signals to keep existing PRs (used in demo mode)
-		if msg.prs == nil {
-			if m.repository != nil && m.err == nil {
-				m.statusMessage = fmt.Sprintf("PRs: %d", len(m.repository.PRs))
+		return m, cmd
+	case data.InitErrorMsg:
+		cmd, info := initrepotab.HandleInitError(msg, &m.appState)
+		if info != nil {
+			if info.NotJJRepo {
+				m.initRepoModel.SetPath(info.CurrentPath)
+			} else {
+				m.errorModal.SetError(info.Err, false, "")
 			}
+		}
+		return m, cmd
+	case data.JJInitSuccessMsg:
+		m.initRepoModel.SetPath("")
+		m.errorModal.SetError(nil, false, "")
+		return m, initrepotab.HandleJJInitSuccess(msg, &m.appState)
+	case data.ServicesInitializedMsg:
+		return m.handleDataServicesInitializedMsg(msg)
+	case data.RepositoryLoadedMsg:
+		return m.handleDataRepositoryLoadedMsg(msg)
+	case graphtab.RepositoryLoadedMsg:
+		return m.handleActionsRepositoryLoadedMsg(msg)
+	case data.SilentRepositoryLoadedMsg:
+		return m.handleDataSilentRepositoryLoadedMsg(msg)
+
+	case prstab.PrsLoadedMsg:
+		updated, cmd := m.prsTabModel.UpdateWithApp(msg, &m.appState)
+		m.prsTabModel = updated
+		m.prsTabModel.UpdateRepository(m.appState.Repository)
+		return m, cmd
+	case prstab.PrMergedMsg, prstab.PrClosedMsg:
+		updated, cmd := m.prsTabModel.UpdateWithApp(msg, &m.appState)
+		m.prsTabModel = updated
+		var err error
+		switch mmsg := msg.(type) {
+		case prstab.PrMergedMsg:
+			err = mmsg.Err
+		case prstab.PrClosedMsg:
+			err = mmsg.Err
+		}
+		if err != nil {
+			m.errorModal.SetError(err, false, "")
 			return m, nil
 		}
-		if m.repository != nil {
-			m.repository.PRs = msg.prs
-			// Only update status if there's no existing error
-			if m.err == nil {
-				m.statusMessage = fmt.Sprintf("Loaded %d PRs", len(msg.prs))
-			}
-			// Sync to PR tab so it can auto-select first PR when list loads
-			m.prsTabModel.UpdateRepository(m.repository)
-		} else if m.err == nil {
-			m.statusMessage = fmt.Sprintf("Loaded %d PRs (warning: repository is nil)", len(msg.prs))
-		}
+		return m, cmd
+	case prstab.LoadErrorMsg:
+		updated, _ := m.prsTabModel.UpdateWithApp(msg, &m.appState)
+		m.prsTabModel = updated
+		m.errorModal.SetError(msg.Err, false, "")
 		return m, nil
-
-	case prMergedMsg:
-		if msg.err != nil {
-			m.statusMessage = fmt.Sprintf("Failed to merge PR #%d: %v", msg.prNumber, msg.err)
-			m.err = msg.err
-		} else {
-			m.statusMessage = fmt.Sprintf("Merged PR #%d", msg.prNumber)
-			// Reload PRs to update status
-			return m, m.loadPRs()
+	case prstab.ReauthNeededMsg:
+		updated, _ := m.prsTabModel.UpdateWithApp(msg, &m.appState)
+		m.prsTabModel = updated
+		return m.handleReauthNeededEffect(prstab.ApplyReauthNeededEffect{Reason: msg.Reason})
+	case prstab.PrTickMsg:
+		prInput := prstab.PrTickInput{
+			IsPRView:      m.appState.ViewMode == state.ViewPullRequests,
+			Loading:       m.appState.Loading,
+			HasError:      m.errorModal.GetError() != nil,
+			GitHubService: m.appState.GitHubService,
+			GithubInfo:    m.appState.GithubInfo,
+			DemoMode:      m.appState.DemoMode,
+			ExistingCount: 0,
 		}
-		return m, nil
-
-	case prClosedMsg:
-		if msg.err != nil {
-			m.statusMessage = fmt.Sprintf("Failed to close PR #%d: %v", msg.prNumber, msg.err)
-			m.err = msg.err
-		} else {
-			m.statusMessage = fmt.Sprintf("Closed PR #%d", msg.prNumber)
-			// Reload PRs to update status
-			return m, m.loadPRs()
+		if m.appState.Repository != nil {
+			prInput.ExistingCount = len(m.appState.Repository.PRs)
 		}
-		return m, nil
+		updated, cmd := m.prsTabModel.UpdateWithApp(prInput, &m.appState)
+		m.prsTabModel = updated
+		return m, cmd
 
-	case ticketsLoadedMsg:
-		m.ticketsTabModel.UpdateTickets(msg.tickets)
-		providerName := ""
-		if m.ticketService != nil {
-			providerName = m.ticketService.GetProviderName()
+	case ticketstab.TicketsLoadedMsg:
+		input := ticketstab.TicketsLoadedInput{
+			Tickets:      msg.Tickets,
+			ProviderName: "",
+			HasService:   m.appState.TicketService != nil,
 		}
-		m.ticketsTabModel.SetTicketServiceInfo(providerName, m.ticketService != nil)
-		// Only update status if there's no existing error
-		if m.err == nil {
-			pName := "tickets"
-			if m.ticketService != nil {
-				pName = providerName + " tickets"
-			}
-			m.statusMessage = fmt.Sprintf("Loaded %d %s", len(msg.tickets), pName)
+		if m.appState.TicketService != nil {
+			input.ProviderName = m.appState.TicketService.GetProviderName()
 		}
-		// Load transitions for the selected ticket (tab owns transition state)
-		m.ticketsTabModel.SetAvailableTransitions(nil)
-		m.ticketsTabModel.SetLoadingTransitions(true)
-		return m, m.loadTransitions()
-
-	case transitionsLoadedMsg:
-		m.ticketsTabModel.SetLoadingTransitions(false)
-		m.ticketsTabModel.SetAvailableTransitions(msg.transitions)
-		return m, nil
-
-	case transitionCompletedMsg:
-		m.ticketsTabModel.SetTransitionInProgress(false)
-		m.ticketsTabModel.SetStatusChangeMode(false)
-		if msg.err != nil {
-			m.statusMessage = fmt.Sprintf("Failed to transition %s: %v", msg.ticketKey, msg.err)
-			m.err = msg.err
-		} else if msg.newStatus != "" {
-			m.statusMessage = fmt.Sprintf("Ticket %s transitioned to %s", msg.ticketKey, msg.newStatus)
-			// Reload tickets to get updated status
-			return m, m.loadTickets()
-		}
-
-	case branchesLoadedMsg:
-		if msg.err != nil {
-			m.statusMessage = fmt.Sprintf("Failed to load branches: %v", msg.err)
-		} else {
-			m.branchList = msg.branches
-			m.branchesTabModel.UpdateBranches(msg.branches)
-			if m.err == nil && m.viewMode != ViewCreateBookmark {
-				m.statusMessage = fmt.Sprintf("Loaded %d branches", len(msg.branches))
-			}
-			// Re-check bookmark name duplicate if we're in bookmark creation view
-			if m.viewMode == ViewCreateBookmark {
-				m.updateBookmarkNameExists()
-			}
-		}
-		return m, nil
-
-	case branchActionMsg:
-		if msg.err != nil {
-			m.statusMessage = fmt.Sprintf("Failed to %s branch: %v", msg.action, msg.err)
-			m.err = msg.err
-		} else {
-			switch msg.action {
-			case "track":
-				m.statusMessage = fmt.Sprintf("Now tracking branch %s", msg.branch)
-			case "untrack":
-				m.statusMessage = fmt.Sprintf("Stopped tracking branch %s", msg.branch)
-			case "restore":
-				m.statusMessage = fmt.Sprintf("Restored local branch %s", msg.branch)
-			case "delete":
-				m.statusMessage = fmt.Sprintf("Deleted bookmark %s", msg.branch)
-			case "push":
-				m.statusMessage = fmt.Sprintf("Pushed branch %s to remote", msg.branch)
-			case "fetch":
-				m.statusMessage = "Fetched from all remotes"
-			}
-			// Reload branches and repository (to see new commits in graph)
-			return m, tea.Batch(m.loadBranches(), m.loadRepository())
-		}
-		return m, nil
-
-	case settingsSavedMsg:
-		m.viewMode = ViewCommitGraph
-		m.ticketService = msg.ticketService
-
-		// Handle save error
-		if msg.err != nil {
-			m.statusMessage = fmt.Sprintf("Error saving settings: %v", msg.err)
-			m.err = msg.err
+		updated, cmd := m.ticketsTabModel.UpdateWithApp(input, &m.appState)
+		m.ticketsTabModel = updated
+		return m, cmd
+	case ticketstab.TransitionsLoadedMsg:
+		updated, cmd := m.ticketsTabModel.UpdateWithApp(msg, &m.appState)
+		m.ticketsTabModel = updated
+		return m, cmd
+	case ticketstab.TransitionCompletedMsg:
+		updated, cmd := m.ticketsTabModel.UpdateWithApp(msg, &m.appState)
+		m.ticketsTabModel = updated
+		if msg.Err != nil {
+			m.errorModal.SetError(msg.Err, false, "")
 			return m, nil
 		}
+		return m, cmd
+	case ticketstab.LoadErrorMsg:
+		updated, _ := m.ticketsTabModel.UpdateWithApp(msg, &m.appState)
+		m.ticketsTabModel = updated
+		m.errorModal.SetError(msg.Err, false, "")
+		m.appState.StatusMessage = fmt.Sprintf("Error: %v", msg.Err)
+		return m, nil
 
-		var status []string
-		if msg.githubConnected {
-			status = append(status, "GitHub")
+	case branchestab.BranchesLoadedMsg:
+		input := branchestab.BranchesLoadedInput{
+			BranchesLoadedMsg:    msg,
+			InCreateBookmarkView: m.appState.ViewMode == state.ViewCreateBookmark,
+			HasError:             m.errorModal.GetError() != nil,
 		}
-		if msg.ticketProvider != "" {
-			status = append(status, msg.ticketProvider)
+		updated, cmd := m.branchesTabModel.UpdateWithApp(input, &m.appState)
+		m.branchesTabModel = updated
+		if input.InCreateBookmarkView {
+			m.bookmarkModal.SetNameConflictSources(m.branchesTabModel.BuildBookmarkNameConflictSources())
+			m.bookmarkModal.UpdateNameExistsFromInput(m.appState.Config != nil && m.appState.Config.ShouldSanitizeBookmarkNames())
 		}
-
-		saveLocation := "globally"
-		if msg.savedLocal {
-			saveLocation = "to .jj-tui.json (local)"
+		return m, cmd
+	case branchestab.BranchActionMsg:
+		updated, _ := m.branchesTabModel.UpdateWithApp(msg, &m.appState)
+		m.branchesTabModel = updated
+		if msg.Err != nil {
+			m.errorModal.SetError(msg.Err, false, "")
+			return m, nil
 		}
-
-		if len(status) > 0 {
-			m.statusMessage = fmt.Sprintf("Settings saved %s. Connected: %s", saveLocation, strings.Join(status, ", "))
-		} else {
-			m.statusMessage = fmt.Sprintf("Settings saved %s", saveLocation)
-		}
-		// Reinitialize services with new credentials
-		return m, m.initializeServices()
-
-	case githubDeviceFlowStartedMsg:
-		m.settingsTabModel.SetGitHubDeviceCode(msg.deviceCode)
-		m.settingsTabModel.SetGitHubUserCode(msg.userCode)
-		m.settingsTabModel.SetGitHubVerificationURL(msg.verificationURL)
-		m.settingsTabModel.SetGitHubLoginPolling(true)
-		m.settingsTabModel.SetGitHubPollInterval(msg.interval)
-		m.viewMode = ViewGitHubLogin
-		m.statusMessage = "Waiting for GitHub authorization..."
-		// Start polling for the token
 		return m, tea.Batch(
-			openURL(msg.verificationURL),
-			m.pollGitHubToken(), // Start first poll immediately
+			branchestab.LoadBranchesCmd(m.appState.JJService, m.settingsTabModel.GetSettingsBranchLimit()),
+			data.LoadRepository(m.appState.JJService),
 		)
 
-	case githubLoginPollMsg:
-		if m.settingsTabModel.GetGitHubLoginPolling() {
-			if msg.interval > 0 {
-				m.settingsTabModel.SetGitHubPollInterval(m.settingsTabModel.GetGitHubPollInterval() + msg.interval)
+	case settingstab.SettingsSavedMsg:
+		wasSettings := m.appState.ViewMode == state.ViewSettings
+		cmd, errInfo := settingstab.HandleSettingsSavedMsg(msg, &m.appState)
+		if errInfo != nil {
+			m.errorModal.SetError(errInfo.Err, false, "")
+			return m, nil
+		}
+		if wasSettings {
+			m.settingsTabModel.SetViewOpts(m.buildSettingsViewOpts())
+		}
+		return m, cmd
+
+	case settingstab.GitHubDeviceFlowStartedMsg:
+		m.githubLoginModel.SetDeviceFlow(msg.DeviceCode, msg.UserCode, msg.VerificationURL, msg.Interval)
+		m.appState.ViewMode = state.ViewGitHubLogin
+		m.appState.StatusMessage = "Waiting for GitHub authorization..."
+		return m, tea.Batch(
+			util.OpenURL(msg.VerificationURL),
+			settingstab.PollGitHubTokenCmd(m.githubLoginModel.GetDeviceCode()),
+		)
+
+	case settingstab.GitHubLoginPollMsg:
+		if m.githubLoginModel.GetPolling() {
+			if msg.Interval > 0 {
+				m.githubLoginModel.SetPollInterval(m.githubLoginModel.GetPollInterval() + msg.Interval)
 			}
-			return m, tea.Tick(time.Duration(m.settingsTabModel.GetGitHubPollInterval())*time.Second, func(t time.Time) tea.Msg {
+			return m, tea.Tick(time.Duration(m.githubLoginModel.GetPollInterval())*time.Second, func(t time.Time) tea.Msg {
 				return doPollMsg{}
 			})
 		}
 		return m, nil
 
 	case doPollMsg:
-		if m.settingsTabModel.GetGitHubLoginPolling() {
-			return m, m.pollGitHubToken()
+		if m.githubLoginModel.GetPolling() {
+			return m, settingstab.PollGitHubTokenCmd(m.githubLoginModel.GetDeviceCode())
 		}
 		return m, nil
 
-	case githubLoginSuccessMsg:
-		m.settingsTabModel.SetGitHubLoginPolling(false)
-		m.settingsTabModel.SetGitHubDeviceCode("")
-		m.settingsTabModel.SetGitHubUserCode("")
-		m.settingsTabModel.SetGitHubPollInterval(0)
-		m.viewMode = ViewSettings
-		m.statusMessage = "GitHub login successful!"
+	case settingstab.GitHubLoginSuccessMsg:
+		m.githubLoginModel.ClearFlow()
+		m.appState.ViewMode = state.ViewSettings
+		m.settingsTabModel.SetViewOpts(m.buildSettingsViewOpts())
+		m.appState.StatusMessage = "GitHub login successful!"
 		cfg, _ := config.Load()
-		cfg.SetGitHubToken(msg.token, config.GitHubAuthDeviceFlow)
+		cfg.SetGitHubToken(msg.Token, config.GitHubAuthDeviceFlow)
 		_ = cfg.Save()
-		_ = os.Setenv("GITHUB_TOKEN", msg.token)
-		m.settingsTabModel.SetSettingInputValue(0, msg.token)
-		return m, m.initializeServices()
+		_ = os.Setenv("GITHUB_TOKEN", msg.Token)
+		m.settingsTabModel.SetSettingInputValue(0, msg.Token)
+		return m, data.InitializeServices(m.appState.DemoMode)
 
-	case githubReauthNeededMsg:
-		// GitHub authentication expired - prompt for reauthorization
-		m.statusMessage = msg.reason
-		// Clear the old token and start a new Device Flow
-		cfg, _ := config.Load()
-		if cfg != nil {
-			cfg.ClearGitHub()
-			_ = cfg.Save()
-		}
-		// Clear env var too
-		_ = os.Unsetenv("GITHUB_TOKEN")
-		m.githubService = nil
-		// Start the Device Flow login automatically
-		return m, m.startGitHubLogin()
-
-	case prCreatedMsg:
-		m.viewMode = ViewCommitGraph
-		m.statusMessage = fmt.Sprintf("PR #%d created: %s", msg.pr.Number, msg.pr.Title)
-
-		if m.demoMode {
-			// In demo mode, add the PR to the list directly without opening browser
-			if m.repository != nil {
-				m.repository.PRs = append([]internal.GitHubPR{*msg.pr}, m.repository.PRs...)
-			}
-			return m, nil
-		}
-
-		// Open the PR in browser and refresh PR list
-		return m, tea.Batch(openURL(msg.pr.URL), m.loadPRs())
-
-	case branchPushedMsg:
-		m.statusMessage = fmt.Sprintf("Pushed %s to remote", msg.branch)
-		// Reload repository and PRs to show updated state
-		return m, tea.Batch(m.loadRepository(), m.loadPRs())
-
-	case bookmarkCreatedOnCommitMsg:
-		m.viewMode = ViewCommitGraph
-		if msg.wasMoved {
-			m.statusMessage = fmt.Sprintf("Bookmark '%s' moved", msg.bookmarkName)
-		} else {
-			m.statusMessage = fmt.Sprintf("Bookmark '%s' created", msg.bookmarkName)
-		}
-		// Trigger auto-transition to "In Progress" if enabled and created from a ticket
-		if msg.ticketKey != "" && m.ticketService != nil {
-			cfg, _ := config.Load()
-			if cfg != nil && cfg.AutoInProgressOnBranch() {
-				return m, tea.Batch(m.loadRepository(), m.transitionTicketToInProgress(msg.ticketKey))
-			}
-		}
-		return m, m.loadRepository()
-
-	case bookmarkDeletedMsg:
-		m.viewMode = ViewCommitGraph
-		m.statusMessage = fmt.Sprintf("Bookmark '%s' deleted", msg.bookmarkName)
-		// Reload repository to update the view
-		return m, tea.Batch(m.loadRepository(), m.loadPRs())
-
-	case bookmarkConflictInfoMsg:
-		if msg.err != nil {
-			m.statusMessage = fmt.Sprintf("Error loading conflict info: %v", msg.err)
-			m.viewMode = ViewBranches
-			return m, nil
-		}
-		m.conflictModal.Show(msg.bookmarkName, msg.localID, msg.remoteID, msg.localSummary, msg.remoteSummary)
-		m.viewMode = ViewBookmarkConflict
+	case settingstab.GitHubLoginErrorMsg:
+		m.githubLoginModel.ClearFlow()
+		m.appState.ViewMode = state.ViewSettings
+		m.appState.StatusMessage = fmt.Sprintf("GitHub login error: %v", msg.Err)
+		m.errorModal.SetError(msg.Err, false, "")
 		return m, nil
 
-	case bookmarkConflictResolvedMsg:
-		if msg.err != nil {
-			m.statusMessage = fmt.Sprintf("Error resolving conflict: %v", msg.err)
-		} else {
-			resolutionDesc := "kept local version"
-			if msg.resolution == "reset_remote" {
-				resolutionDesc = "reset to remote"
-			}
-			m.statusMessage = fmt.Sprintf("Bookmark '%s' conflict resolved (%s)", msg.bookmarkName, resolutionDesc)
+	case prformtab.PRCreatedMsg:
+		return m, prformtab.HandlePRCreatedMsg(prformtab.PRCreatedInput{PRCreatedMsg: msg, DemoMode: m.appState.DemoMode}, &m.appState)
+	case prstab.BranchPushedMsg:
+		return m, branchestab.HandleBranchPushedMsg(msg, &m.appState)
+	case bookmarktab.BookmarkCreatedMsg:
+		return m, bookmarktab.HandleBookmarkCreatedMsg(msg, &m.appState)
+	case bookmarktab.BookmarkDeletedMsg:
+		return m, branchestab.HandleBookmarkDeletedMsg(msg, &m.appState)
+	case branchestab.BookmarkConflictInfoMsg:
+		cmd, info := conflicttab.HandleBookmarkConflictInfoMsg(msg, &m.appState)
+		if info != nil {
+			m.conflictModal.Show(info.BookmarkName, info.LocalID, info.RemoteID, info.LocalSummary, info.RemoteSummary)
+			m.appState.ViewMode = state.ViewBookmarkConflict
 		}
-		m.viewMode = ViewBranches
-		// Reload branches to reflect the change
-		return m, tea.Batch(m.loadRepository(), m.loadBranches())
-
-	case divergentCommitInfoMsg:
-		if msg.err != nil {
-			m.statusMessage = fmt.Sprintf("Error loading divergent info: %v", msg.err)
-			m.viewMode = ViewCommitGraph
+		return m, cmd
+	case conflicttab.BookmarkConflictResolvedMsg:
+		return m, conflicttab.HandleBookmarkConflictResolvedMsg(msg, &m.appState, m.settingsTabModel.GetSettingsBranchLimit())
+	case graphtab.DivergentCommitInfoMsg:
+		cmd, info := divergenttab.HandleDivergentCommitInfoMsg(msg, &m.appState)
+		if info != nil {
+			m.divergentModal.Show(info.ChangeID, info.CommitIDs, info.Summaries)
+			m.appState.ViewMode = state.ViewDivergentCommit
+		}
+		return m, cmd
+	case divergenttab.DivergentCommitResolvedMsg:
+		return m, divergenttab.HandleDivergentCommitResolvedMsg(msg, &m.appState)
+	case graphtab.FileMoveCompletedMsg:
+		cmd := graphtab.HandleFileMoveCompletedMsg(graphtab.FileMoveInput{
+			FileMoveCompletedMsg: msg,
+			ChangedFilesCommitID: m.graphTabModel.GetChangedFilesCommitID(),
+		}, &m.appState)
+		m.graphTabModel.UpdateRepository(m.appState.Repository)
+		if m.appState.Repository != nil {
+			for i, commit := range m.appState.Repository.Graph.Commits {
+				if commit.ChangeID == m.graphTabModel.GetChangedFilesCommitID() {
+					m.graphTabModel.SelectCommit(i)
+					break
+				}
+			}
+		}
+		return m, cmd
+	case graphtab.FileRevertedMsg:
+		cmd := graphtab.HandleFileRevertedMsg(graphtab.FileRevertedInput{
+			FileRevertedMsg:      msg,
+			ChangedFilesCommitID: m.graphTabModel.GetChangedFilesCommitID(),
+		}, &m.appState)
+		m.graphTabModel.UpdateRepository(m.appState.Repository)
+		if m.appState.Repository != nil {
+			for i, commit := range m.appState.Repository.Graph.Commits {
+				if commit.ChangeID == m.graphTabModel.GetChangedFilesCommitID() {
+					m.graphTabModel.SelectCommit(i)
+					break
+				}
+			}
+		}
+		return m, cmd
+	case descedittab.DescriptionSavedMsg:
+		cmd := descedittab.HandleDescriptionSavedMsg(msg, &m.appState)
+		m.desceditModal.Hide()
+		return m, cmd
+	case descedittab.DescriptionLoadedMsg:
+		if m.appState.ViewMode != state.ViewEditDescription || m.desceditModal.GetEditingCommitID() != msg.CommitID {
 			return m, nil
 		}
-		m.divergentModal.Show(msg.changeID, msg.commitIDs, msg.summaries)
-		m.viewMode = ViewDivergentCommit
-		return m, nil
-
-	case divergentCommitResolvedMsg:
-		if msg.err != nil {
-			m.statusMessage = fmt.Sprintf("Error resolving divergent commit: %v", msg.err)
-		} else {
-			m.statusMessage = fmt.Sprintf("Divergent commit resolved (kept %s)", msg.keptCommitID)
-		}
-		m.viewMode = ViewCommitGraph
-		// Reload repository to reflect the change
-		return m, m.loadRepository()
-
-	case fileMoveCompletedMsg:
-		originalCommitID := m.graphTabModel.GetChangedFilesCommitID()
-
-		if m.repository != nil {
-			oldPRs := m.repository.PRs
-			m.repository = msg.repository
-			m.repository.PRs = oldPRs
-		} else {
-			m.repository = msg.repository
-		}
-		directionText := "new parent commit"
-		if msg.direction == "down" {
-			directionText = "new child commit"
-		}
-		m.statusMessage = fmt.Sprintf("Moved %s to %s", msg.filePath, directionText)
-
-		m.graphTabModel.UpdateRepository(m.repository)
-		for i, commit := range msg.repository.Graph.Commits {
-			if commit.ChangeID == originalCommitID {
-				m.graphTabModel.SelectCommit(i)
-				break
+		finalDesc := descedittab.SuggestDescriptionForLoad(descedittab.DescriptionLoadedInput{
+			CommitID:       msg.CommitID,
+			Description:    msg.Description,
+			Repository:     m.appState.Repository,
+			CommitIdx:      commitIdxForChangeID(m.appState.Repository, msg.CommitID),
+			TicketKeys:     m.bookmarkModal.GetTicketBookmarkDisplayKeys(),
+			FindBookmarkFn: bookmarktab.FindBookmarkForCommit,
+		})
+		if finalDesc == "" {
+			finalDesc = msg.Description
+			if finalDesc == "(no description)" {
+				finalDesc = ""
 			}
 		}
-
-		var cmds []tea.Cmd
-		cmds = append(cmds, m.loadRepository())
-		if originalCommitID != "" {
-			cmds = append(cmds, m.loadChangedFiles(originalCommitID))
-		}
-		return m, tea.Batch(cmds...)
-
-	case fileRevertedMsg:
-		originalCommitID := m.graphTabModel.GetChangedFilesCommitID()
-
-		if m.repository != nil {
-			oldPRs := m.repository.PRs
-			m.repository = msg.repository
-			m.repository.PRs = oldPRs
-		} else {
-			m.repository = msg.repository
-		}
-		m.statusMessage = fmt.Sprintf("Reverted changes to %s", msg.filePath)
-
-		m.graphTabModel.UpdateRepository(m.repository)
-		for i, commit := range msg.repository.Graph.Commits {
-			if commit.ChangeID == originalCommitID {
-				m.graphTabModel.SelectCommit(i)
-				break
-			}
-		}
-
-		var cmds []tea.Cmd
-		cmds = append(cmds, m.loadRepository())
-		if originalCommitID != "" {
-			cmds = append(cmds, m.loadChangedFiles(originalCommitID))
-		}
-		return m, tea.Batch(cmds...)
-
-	case changedFilesLoadedMsg:
-		m.graphTabModel.SetChangedFiles(msg.files, msg.commitID)
+		m.desceditModal.SetDescription(finalDesc)
+		m.appState.StatusMessage = "Editing description (Ctrl+S to save, Esc to cancel)"
 		return m, nil
+	case util.ClipboardCopiedMsg:
+		return m.handleClipboardCopiedMsg(msg)
+	case settingstab.CleanupCompletedMsg:
+		return m, settingstab.HandleCleanupCompletedMsg(msg, &m.appState)
 
+	case graphtab.ChangedFilesLoadedMsg:
+		updated, cmd := m.graphTabModel.Update(msg)
+		if g, ok := updated.(*graphtab.GraphModel); ok {
+			m.graphTabModel = *g
+		}
+		return m, cmd
 	case tickMsg:
-		// Stop auto-refresh if there's an error - let user handle it
-		if m.err != nil {
+		return m.handleTickMsg()
+	case graphtab.UndoCompletedMsg:
+		cmd, errInfo := graphtab.HandleUndoCompletedMsg(msg, &m.appState)
+		if errInfo != nil {
+			m.errorModal.SetError(errInfo.Err, false, "")
 			return m, nil
 		}
-		var cmds []tea.Cmd
-		// When on graph view, ensure changed files are loaded for the selected commit (covers initial load / late-arriving result)
-		if m.viewMode == ViewCommitGraph && m.repository != nil && m.jjService != nil {
-			commits := m.repository.Graph.Commits
-			idx := m.graphTabModel.GetSelectedCommit()
-			if idx >= 0 && idx < len(commits) {
-				wantCommitID := commits[idx].ChangeID
-				if m.graphTabModel.GetChangedFilesCommitID() != wantCommitID {
-					cmds = append(cmds, m.loadChangedFiles(wantCommitID))
-				}
-			}
-		}
-		// Auto-refresh: reload repository data silently (but not while editing, creating PR, creating bookmark, or selecting rebase destination)
-		if !m.loading && m.jjService != nil && m.viewMode != ViewEditDescription && m.viewMode != ViewCreatePR && m.viewMode != ViewCreateBookmark && !m.graphTabModel.IsInRebaseMode() {
-			cmds = append(cmds, m.loadRepositorySilent())
-		}
-		cmds = append(cmds, m.tickCmd())
-		return m, tea.Batch(cmds...)
-
-	case prTickMsg:
-		// PR auto-refresh: only refresh when GitHub is connected and viewing PR tab
-		if m.err != nil || m.githubService == nil {
-			return m, nil
-		}
-		var cmds []tea.Cmd
-		// Only actually refresh PRs if we're on the PR tab
-		if m.viewMode == ViewPullRequests && !m.loading {
-			cmds = append(cmds, m.loadPRs())
-		}
-		// Always restart the timer
-		if prTickCmd := m.prTickCmd(); prTickCmd != nil {
-			cmds = append(cmds, prTickCmd)
-		}
-		if len(cmds) > 0 {
-			return m, tea.Batch(cmds...)
-		}
-		return m, nil
-
-	case descriptionSavedMsg:
-		// Description saved successfully, go back to graph view
-		m.viewMode = ViewCommitGraph
-		m.graphTabModel.SetEditingCommitID("")
-		m.statusMessage = fmt.Sprintf("Description updated for %s", msg.commitID)
-		// Reload repository to show updated description
-		return m, m.loadRepository()
-
-	case descriptionLoadedMsg:
-		// Full description loaded, populate the textarea
-		if m.viewMode == ViewEditDescription && m.graphTabModel.GetEditingCommitID() == msg.commitID {
-			description := msg.description
-			if description == "(no description)" {
-				description = ""
-			}
-
-			// If description is empty, check if commit has a ticket-associated bookmark
-			// and prepopulate with the short ID
-			if description == "" && m.repository != nil {
-				commitIdx := -1
-				for i, commit := range m.repository.Graph.Commits {
-					if commit.ChangeID == msg.commitID {
-						commitIdx = i
-						break
-					}
-				}
-
-				if commitIdx >= 0 {
-					commit := m.repository.Graph.Commits[commitIdx]
-					ticketKeys := m.bookmarkModal.GetTicketBookmarkDisplayKeys()
-					var foundShortID string
-					for _, branch := range commit.Branches {
-						if shortID, ok := ticketKeys[branch]; ok {
-							foundShortID = shortID
-							break
-						}
-					}
-
-					if foundShortID == "" {
-						ancestorBookmark := m.findBookmarkForCommit(commitIdx)
-						if ancestorBookmark != "" {
-							if shortID, ok := ticketKeys[ancestorBookmark]; ok {
-								foundShortID = shortID
-							}
-						}
-					}
-
-					if foundShortID != "" {
-						description = foundShortID + " "
-					}
-				}
-			}
-
-			descInput := m.graphTabModel.GetDescriptionInput()
-			descInput.SetValue(description)
-			descInput.Focus()
-			m.statusMessage = "Editing description (Ctrl+S to save, Esc to cancel)"
-		}
-		return m, nil
+		return m, cmd
 
 	// Handle our custom messages
 	case TabSelectedMsg:
-		m.viewMode = msg.Tab
+		m.appState.ViewMode = msg.Tab
+		if msg.Tab == state.ViewSettings {
+			m.settingsTabModel.SetViewOpts(m.buildSettingsViewOpts())
+		}
+		if msg.Tab == state.ViewHelp {
+			m.helpTabModel.SetCommandHistoryEntries(helptab.BuildCommandHistoryEntries(m.appState.JJService))
+		}
 		return m, nil
 
 	case ActionMsg:
 		return m.handleAction(msg.Action)
 
 	// Handle messages from actions package
-	case actions.RepositoryLoadedMsg:
-		return m.Update(repositoryLoadedMsg{repository: msg.Repository})
-
-	case actions.EditCompletedMsg:
-		return m.Update(editCompletedMsg{repository: msg.Repository})
-
-	case actions.ErrorMsg:
+	case util.ErrorMsg:
 		return m.Update(errorMsg{Err: msg.Err})
-
-	case actions.DescriptionLoadedMsg:
-		return m.Update(descriptionLoadedMsg{commitID: msg.CommitID, description: msg.Description})
-
-	case actions.DescriptionSavedMsg:
-		return m.Update(descriptionSavedMsg{commitID: msg.CommitID})
-
-	case actions.PRCreatedMsg:
-		return m.Update(prCreatedMsg{pr: msg.PR})
-
-	case actions.BranchPushedMsg:
-		return m.Update(branchPushedMsg{branch: msg.Branch, pushOutput: msg.PushOutput})
-
-	case actions.BookmarkCreatedMsg:
-		return m.Update(bookmarkCreatedOnCommitMsg{bookmarkName: msg.BookmarkName, commitID: msg.CommitID, wasMoved: msg.WasMoved, ticketKey: msg.TicketKey})
-
-	case actions.BookmarkDeletedMsg:
-		return m.Update(bookmarkDeletedMsg{bookmarkName: msg.BookmarkName})
-
-	case actions.FileMoveCompletedMsg:
-		return m.Update(fileMoveCompletedMsg{repository: msg.Repository, filePath: msg.FilePath, direction: msg.Direction})
-
-	case actions.FileRevertedMsg:
-		return m.Update(fileRevertedMsg{repository: msg.Repository, filePath: msg.FilePath})
-
-	case actions.ClipboardCopiedMsg:
-		if msg.Success {
-			// Different message depending on context
-			if m.viewMode == ViewGitHubLogin {
-				m.statusMessage = "Code copied to clipboard! Paste it in your browser."
-			} else if m.err != nil {
-				// In error modal, set flag to show "Copied!" in the modal
-				m.errorCopied = true
-				m.statusMessage = "Error copied to clipboard!"
-			} else {
-				m.statusMessage = "Copied to clipboard!"
-			}
-		} else {
-			m.statusMessage = fmt.Sprintf("Failed to copy: %v", msg.Err)
-		}
-		return m, nil
-
-	case actions.SettingsSavedMsg:
-		return m.Update(settingsSavedMsg{
-			githubConnected: msg.GitHubConnected,
-			ticketService:   msg.TicketService,
-			ticketProvider:  msg.TicketProvider,
-			savedLocal:      msg.SavedLocal,
-			err:             msg.Err,
-		})
-
-	case cleanupCompletedMsg:
-		m.loading = false
-		if msg.success {
-			m.statusMessage = msg.message
-			// Reload repository after successful cleanup
-			return m, m.loadRepository()
-		}
-		m.statusMessage = fmt.Sprintf("Cleanup failed: %v", msg.err)
-		return m, nil
-
-	case undoCompletedMsg:
-		m.statusMessage = msg.message
-		// Reload repository after undo/redo
-		return m, m.refreshRepository()
 	}
 
 	return m, nil

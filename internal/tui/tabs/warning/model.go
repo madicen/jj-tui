@@ -3,16 +3,19 @@ package warning
 import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal"
+	"github.com/madicen/jj-tui/internal/tui/mouse"
 )
 
 // Model represents the warning modal (e.g., for empty commit descriptions)
 type Model struct {
-	shown         bool
-	title         string
-	message       string
-	commits     []internal.Commit // Commits with issues
-	selectedIdx int               // Selected commit index
+	shown       bool
+	title       string
+	message     string
+	commits     []internal.Commit
+	selectedIdx int
+	zoneManager *zone.Manager // set by main (zones may be in main's view)
 }
 
 // NewModel creates a new Warning model
@@ -33,10 +36,22 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	if !m.shown {
 		return m, nil
 	}
-
+	// Handle request message (main forwards EditCommitRequestedMsg to us)
+	if req, ok := msg.(EditCommitRequestedMsg); ok {
+		m.shown = false
+		m.commits = nil
+		return m, PerformEditCommitCmd(req.Commit)
+	}
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		return m.handleKeyMsg(msg)
+	case zone.MsgZoneInBounds:
+		if m.zoneManager != nil {
+			if zoneID := m.resolveClickedZone(msg); zoneID != "" {
+				return m.handleZoneClick(zoneID)
+			}
+		}
+		return m, nil
 	}
 	return m, nil
 }
@@ -69,15 +84,17 @@ func (m Model) View() string {
 	return style.Render(content)
 }
 
-// handleKeyMsg handles keyboard input
+// handleKeyMsg handles keyboard input; returns PerformCancelCmd or tea.Quit for main to handle.
 func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.shown = false
 		m.commits = nil
-		return m, nil
+		return m, PerformCancelCmd()
 	case "enter":
-		// Signal to go to selected commit - handled outside
+		if len(m.commits) > 0 && m.selectedIdx < len(m.commits) {
+			return m, EditCommitRequestedCmd(m.commits[m.selectedIdx])
+		}
 		return m, nil
 	case "j", "down":
 		if len(m.commits) > 0 && m.selectedIdx < len(m.commits)-1 {
@@ -90,9 +107,52 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		return m, nil
 	case "ctrl+q", "ctrl+c":
-		return m, nil
+		return m, tea.Quit
 	}
 	return m, nil
+}
+
+// ZoneIDs returns the zone IDs used when main renders this modal's buttons. Used to resolve clicks.
+func (m Model) ZoneIDs() []string {
+	return []string{mouse.ZoneWarningGoToCommit, mouse.ZoneWarningDismiss}
+}
+
+func (m Model) resolveClickedZone(msg zone.MsgZoneInBounds) string {
+	if msg.Zone == nil {
+		return ""
+	}
+	for _, id := range m.ZoneIDs() {
+		z := m.zoneManager.Get(id)
+		if z != nil && z.InBounds(msg.Event) {
+			return id
+		}
+	}
+	return ""
+}
+
+func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
+	switch zoneID {
+	case mouse.ZoneWarningGoToCommit:
+		if len(m.commits) > 0 && m.selectedIdx < len(m.commits) {
+			commit := m.commits[m.selectedIdx]
+			m.shown = false
+			m.commits = nil
+			return m, PerformEditCommitCmd(commit)
+		}
+		m.shown = false
+		m.commits = nil
+		return m, nil
+	case mouse.ZoneWarningDismiss:
+		m.shown = false
+		m.commits = nil
+		return m, PerformCancelCmd()
+	}
+	return m, nil
+}
+
+// SetZoneManager sets the zone manager used to resolve clicks (main's manager).
+func (m *Model) SetZoneManager(zm *zone.Manager) {
+	m.zoneManager = zm
 }
 
 // Accessors

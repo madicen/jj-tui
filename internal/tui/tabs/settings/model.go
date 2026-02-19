@@ -1,49 +1,59 @@
 package settings
 
 import (
-	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal"
+	"github.com/madicen/jj-tui/internal/config"
+	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/tabs/settings/advanced"
+	"github.com/madicen/jj-tui/internal/tui/tabs/settings/branches"
+	"github.com/madicen/jj-tui/internal/tui/tabs/settings/codecks"
+	"github.com/madicen/jj-tui/internal/tui/tabs/settings/github"
+	"github.com/madicen/jj-tui/internal/tui/tabs/settings/jira"
+	"github.com/madicen/jj-tui/internal/tui/tabs/settings/tickets"
 )
 
-// Model represents the state of the Settings tab
+// Model represents the state of the Settings tab (routing-only; state lives in sub-models).
 type Model struct {
-	settingsTab               int
-	settingsInputs            []textinput.Model
-	settingsFocusedField      int
-	settingsShowMerged        bool
-	settingsShowClosed        bool
-	settingsOnlyMine          bool
-	settingsPRLimit           int
-	settingsPRRefreshInterval int
-	settingsAutoInProgress    bool
-	settingsBranchLimit       int
-	settingsSanitizeBookmarks bool
-	settingsTicketProvider    string
-	confirmingCleanup string
+	settingsTab   int
+	zoneManager   *zone.Manager
+	panelYOffset  [6]int
+	width         int
+	height        int
+	viewOpts      *ViewOpts
 
-	// Scroll state for wheel (no click required)
-	width           int
-	height          int
-	settingsYOffset int
-
-	// GitHub Device Flow (login)
-	githubDeviceCode      string
-	githubUserCode        string
-	githubVerificationURL string
-	githubLoginPolling    bool
-	githubPollInterval    int
+	githubModel   github.Model
+	jiraModel     jira.Model
+	codecksModel  codecks.Model
+	ticketsModel  tickets.Model
+	branchesModel branches.Model
+	advancedModel advanced.Model
 }
 
-// NewModel creates a new Settings tab model
+// NewModel creates a new Settings tab model with default sub-models.
 func NewModel() Model {
 	return Model{
-		settingsTab:               0,
-		settingsFocusedField:      0,
-		settingsInputs:            make([]textinput.Model, 5),
-		settingsPRLimit:           50,
-		settingsPRRefreshInterval: 60,
-		settingsBranchLimit:       100,
+		settingsTab:   0,
+		githubModel:   github.NewModel(),
+		jiraModel:     jira.NewModel(),
+		codecksModel:  codecks.NewModel(),
+		ticketsModel:  tickets.NewModel(),
+		branchesModel: branches.NewModel(),
+		advancedModel: advanced.NewModel(),
+	}
+}
+
+// NewModelWithConfig creates a Settings tab model with all sub-models initialized from config and env.
+func NewModelWithConfig(cfg *config.Config) Model {
+	return Model{
+		settingsTab:   0,
+		githubModel:   github.NewModelFromConfig(cfg),
+		jiraModel:     jira.NewModelFromConfig(cfg),
+		codecksModel:  codecks.NewModelFromConfig(cfg),
+		ticketsModel:  tickets.NewModelFromConfig(cfg),
+		branchesModel: branches.NewModelFromConfig(cfg),
+		advancedModel: advanced.NewModelFromConfig(cfg),
 	}
 }
 
@@ -61,17 +71,25 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyMsg:
 		return m.handleKeyMsg(msg)
+	case zone.MsgZoneInBounds:
+		if m.zoneManager != nil {
+			if zoneID := m.resolveClickedZone(msg); zoneID != "" {
+				return m.routeZoneToPanel(zoneID)
+			}
+		}
+		return m, nil
 	case tea.MouseMsg:
 		if tea.MouseEvent(msg).IsWheel() {
 			delta := 3
 			isUp := msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelLeft
+			idx := m.settingsTab
 			if isUp {
-				m.settingsYOffset -= delta
+				m.panelYOffset[idx] -= delta
 			} else {
-				m.settingsYOffset += delta
+				m.panelYOffset[idx] += delta
 			}
-			if m.settingsYOffset < 0 {
-				m.settingsYOffset = 0
+			if m.panelYOffset[idx] < 0 {
+				m.panelYOffset[idx] = 0
 			}
 			return m, nil
 		}
@@ -79,50 +97,214 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, nil
 }
 
-// View renders the Settings tab
+// View renders the Settings tab using stored viewOpts (set by main when entering tab or on resize).
 func (m Model) View() string {
+	if m.viewOpts == nil {
+		return ""
+	}
+	return RenderWithState(m.zoneManager, &m, *m.viewOpts)
+}
+
+// SetViewOpts sets the options used by View() to render (called by main when entering settings or on resize).
+func (m *Model) SetViewOpts(opts ViewOpts) {
+	m.viewOpts = &opts
+}
+
+// handleKeyMsg handles all keyboard input for the Settings tab (cleanup confirm, nav, focus, save, inputs).
+func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
+	if m.advancedModel.GetConfirmingCleanup() != "" {
+		switch msg.String() {
+		case "y", "Y":
+			m.advancedModel.SetConfirmingCleanup("")
+			return m, RequestConfirmCleanupCmd()
+		case "n", "N", "esc":
+			m.advancedModel.SetConfirmingCleanup("")
+			return m, RequestCancelCleanupCmd()
+		}
+		return m, nil
+	}
+
+	switch msg.String() {
+	case "esc":
+		return m, PerformCancelCmd()
+	case "ctrl+j":
+		tab := m.settingsTab - 1
+		if tab < 0 {
+			tab = 5
+		}
+		m.settingsTab = tab % 6
+		return m, nil
+	case "ctrl+k":
+		m.settingsTab = (m.settingsTab + 1) % 6
+		return m, nil
+	case "ctrl+s", "enter":
+		if m.settingsTab == 5 {
+			return m, nil
+		}
+		if msg.String() == "enter" {
+			// Advance focus within panel if not on last field; otherwise save
+			lastField := false
+			switch m.settingsTab {
+			case 0:
+				lastField = m.githubModel.GetFocusedField() >= 0
+			case 1:
+				lastField = m.jiraModel.GetFocusedField() >= 5
+			case 2:
+				lastField = m.codecksModel.GetFocusedField() >= 3
+			case 3:
+				lastField = m.ticketsModel.GetTicketProvider() != "github_issues" || m.ticketsModel.GetFocusedField() >= 0
+			}
+			if !lastField {
+				var cmd tea.Cmd
+				m, cmd = m.forwardKeyToActiveSubmodelReturn(msg)
+				return m, cmd
+			}
+		}
+		return m, Request{SaveSettings: true}.Cmd()
+	case "ctrl+l":
+		return m, Request{SaveSettingsLocal: true}.Cmd()
+	case "tab", "down":
+		m.forwardKeyToActiveSubmodel(msg)
+		return m, nil
+	case "shift+tab", "up":
+		m.forwardKeyToActiveSubmodel(msg)
+		return m, nil
+	case "j", "k":
+		m.forwardKeyToActiveSubmodel(msg)
+		return m, nil
+	}
+
+	// Forward to active sub-model
+	return m.forwardKeyToActiveSubmodelReturn(msg)
+}
+
+// ZoneIDs returns the zone IDs this tab uses when rendering (same IDs used in settingstab.Render). Used to resolve clicks.
+func (m *Model) ZoneIDs() []string {
+	return []string{
+		mouse.ZoneSettingsTabGitHub, mouse.ZoneSettingsTabJira, mouse.ZoneSettingsTabCodecks,
+		mouse.ZoneSettingsTabTickets, mouse.ZoneSettingsTabBranches, mouse.ZoneSettingsTabAdvanced,
+		mouse.ZoneSettingsTicketProviderNone, mouse.ZoneSettingsTicketProviderJira,
+		mouse.ZoneSettingsTicketProviderCodecks, mouse.ZoneSettingsTicketProviderGitHubIssues,
+		mouse.ZoneSettingsAutoInProgress,
+		mouse.ZoneSettingsAdvancedConfirmYes, mouse.ZoneSettingsAdvancedConfirmNo,
+		mouse.ZoneSettingsAdvancedDeleteBookmarks, mouse.ZoneSettingsAdvancedAbandonOldCommits,
+		mouse.ZoneSettingsSanitizeBookmarks,
+		mouse.ZoneSettingsGitHubLogin,
+		mouse.ZoneSettingsGitHubOnlyMine, mouse.ZoneSettingsGitHubShowMerged, mouse.ZoneSettingsGitHubShowClosed,
+		mouse.ZoneSettingsGitHubPRLimitDecrease, mouse.ZoneSettingsGitHubPRLimitIncrease,
+		mouse.ZoneSettingsGitHubRefreshDecrease, mouse.ZoneSettingsGitHubRefreshIncrease, mouse.ZoneSettingsGitHubRefreshToggle,
+		mouse.ZoneSettingsBranchLimitDecrease, mouse.ZoneSettingsBranchLimitIncrease,
+		mouse.ZoneSettingsGitHubTokenClear, mouse.ZoneSettingsJiraURLClear, mouse.ZoneSettingsJiraUserClear,
+		mouse.ZoneSettingsJiraTokenClear, mouse.ZoneSettingsJiraProjectClear, mouse.ZoneSettingsJiraJQLClear,
+		mouse.ZoneSettingsJiraExcludedClear, mouse.ZoneSettingsCodecksSubdomainClear, mouse.ZoneSettingsCodecksTokenClear,
+		mouse.ZoneSettingsCodecksProjectClear, mouse.ZoneSettingsCodecksExcludedClear, mouse.ZoneSettingsGitHubIssuesExcludedClear,
+		mouse.ZoneSettingsGitHubToken, mouse.ZoneSettingsJiraURL, mouse.ZoneSettingsJiraUser,
+		mouse.ZoneSettingsJiraToken, mouse.ZoneSettingsJiraProject, mouse.ZoneSettingsJiraJQL,
+		mouse.ZoneSettingsJiraExcluded, mouse.ZoneSettingsCodecksSubdomain, mouse.ZoneSettingsCodecksToken,
+		mouse.ZoneSettingsCodecksProject, mouse.ZoneSettingsCodecksExcluded, mouse.ZoneSettingsGitHubIssuesExcluded,
+		mouse.ZoneSettingsSave, mouse.ZoneSettingsSaveLocal, mouse.ZoneSettingsCancel,
+	}
+}
+
+func (m *Model) resolveClickedZone(msg zone.MsgZoneInBounds) string {
+	if msg.Zone == nil {
+		return ""
+	}
+	for _, id := range m.ZoneIDs() {
+		z := m.zoneManager.Get(id)
+		if z != nil && z.InBounds(msg.Event) {
+			return id
+		}
+	}
 	return ""
 }
 
-// handleKeyMsg handles keyboard input specific to the Settings tab
-func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
-	switch msg.String() {
-	case "esc":
-		return m, Request{Cancel: true}.Cmd()
-	case "ctrl+s":
-		if m.settingsTab != 5 {
-			return m, Request{SaveSettings: true}.Cmd()
-		}
-		return m, nil
-	case "ctrl+l":
-		return m, Request{SaveSettingsLocal: true}.Cmd()
-	// Tab is handled by the main model for moving between inputs; ^j/^k switch sub-tabs
-	case "j", "down":
-		if m.settingsFocusedField < len(m.settingsInputs)-1 {
-			if m.settingsFocusedField < len(m.settingsInputs) {
-				m.settingsInputs[m.settingsFocusedField].Blur()
-			}
-			m.settingsFocusedField++
-			if m.settingsFocusedField < len(m.settingsInputs) {
-				m.settingsInputs[m.settingsFocusedField].Focus()
-			}
-		}
-		return m, nil
-	case "k", "up":
-		if m.settingsFocusedField > 0 {
-			m.settingsInputs[m.settingsFocusedField].Blur()
-			m.settingsFocusedField--
-			m.settingsInputs[m.settingsFocusedField].Focus()
-		}
-		return m, nil
-	}
+// SetZoneManager sets the zone manager used to resolve clicks (main's manager; zones are created in settingstab.Render).
+func (m *Model) SetZoneManager(zm *zone.Manager) {
+	m.zoneManager = zm
+}
 
-	if m.settingsFocusedField < len(m.settingsInputs) {
-		var cmd tea.Cmd
-		m.settingsInputs[m.settingsFocusedField], cmd = m.settingsInputs[m.settingsFocusedField].Update(msg)
+// Sub-model getters (return pointers so zone handlers and BuildSettingsParams can mutate)
+
+func (m *Model) GetGitHubModel() *github.Model   { return &m.githubModel }
+func (m *Model) GetJiraModel() *jira.Model       { return &m.jiraModel }
+func (m *Model) GetCodecksModel() *codecks.Model { return &m.codecksModel }
+func (m *Model) GetTicketsModel() *tickets.Model { return &m.ticketsModel }
+func (m *Model) GetBranchesModel() *branches.Model { return &m.branchesModel }
+func (m *Model) GetAdvancedModel() *advanced.Model { return &m.advancedModel }
+
+// forwardKeyToActiveSubmodel updates focus/state for tab/up/down within the active panel (mutates m in place).
+func (m *Model) forwardKeyToActiveSubmodel(msg tea.KeyMsg) {
+	switch m.settingsTab {
+	case 0:
+		gh := m.GetGitHubModel()
+		switch msg.String() {
+		case "tab", "down", "j":
+			if gh.GetFocusedField() < 4 {
+				gh.SetFocusedField(gh.GetFocusedField() + 1)
+			}
+		case "shift+tab", "up", "k":
+			if gh.GetFocusedField() > 0 {
+				gh.SetFocusedField(gh.GetFocusedField() - 1)
+			}
+		}
+	case 1:
+		jr := m.GetJiraModel()
+		switch msg.String() {
+		case "tab", "down", "j":
+			if jr.GetFocusedField() < 5 {
+				jr.SetFocusedField(jr.GetFocusedField() + 1)
+			}
+		case "shift+tab", "up", "k":
+			if jr.GetFocusedField() > 0 {
+				jr.SetFocusedField(jr.GetFocusedField() - 1)
+			}
+		}
+	case 2:
+		cc := m.GetCodecksModel()
+		switch msg.String() {
+		case "tab", "down", "j":
+			if cc.GetFocusedField() < 3 {
+				cc.SetFocusedField(cc.GetFocusedField() + 1)
+			}
+		case "shift+tab", "up", "k":
+			if cc.GetFocusedField() > 0 {
+				cc.SetFocusedField(cc.GetFocusedField() - 1)
+			}
+		}
+	case 3:
+		tk := m.GetTicketsModel()
+		if tk.GetTicketProvider() == "github_issues" {
+			switch msg.String() {
+			case "tab", "down", "j":
+				tk.SetFocusedField(0)
+			case "shift+tab", "up", "k":
+				tk.SetFocusedField(0)
+			}
+		}
+	}
+}
+
+// forwardKeyToActiveSubmodelReturn forwards the key to the active sub-model and returns updated model and cmd.
+func (m Model) forwardKeyToActiveSubmodelReturn(msg tea.KeyMsg) (Model, tea.Cmd) {
+	switch m.settingsTab {
+	case 0:
+		updated, cmd := m.githubModel.Update(msg)
+		m.githubModel = updated
+		return m, cmd
+	case 1:
+		updated, cmd := m.jiraModel.Update(msg)
+		m.jiraModel = updated
+		return m, cmd
+	case 2:
+		updated, cmd := m.codecksModel.Update(msg)
+		m.codecksModel = updated
+		return m, cmd
+	case 3:
+		updated, cmd := m.ticketsModel.Update(msg)
+		m.ticketsModel = updated
 		return m, cmd
 	}
-
 	return m, nil
 }
 
@@ -141,37 +323,82 @@ func (m *Model) SetSettingsTab(tab int) {
 	m.settingsTab = tab % 6
 }
 
-// GetFocusedField returns the currently focused input field
+// GetFocusedField returns the currently focused input field (global index 0-11 for BuildRenderData).
 func (m *Model) GetFocusedField() int {
-	return m.settingsFocusedField
-}
-
-// SetFocusedField sets the focused input field
-func (m *Model) SetFocusedField(idx int) {
-	if idx >= 0 && idx < len(m.settingsInputs) {
-		if m.settingsFocusedField < len(m.settingsInputs) {
-			m.settingsInputs[m.settingsFocusedField].Blur()
+	switch m.settingsTab {
+	case 0:
+		return m.githubModel.GetFocusedField()
+	case 1:
+		return 1 + m.jiraModel.GetFocusedField()
+	case 2:
+		return 7 + m.codecksModel.GetFocusedField()
+	case 3:
+		if m.ticketsModel.GetTicketProvider() == "github_issues" {
+			return 11
 		}
-		m.settingsFocusedField = idx
-		m.settingsInputs[idx].Focus()
+		return 0
+	}
+	return 0
+}
+
+// SetFocusedField sets the focused input field (global index); used by zone handlers to focus an input.
+func (m *Model) SetFocusedField(idx int) {
+	if idx < 1 {
+		m.githubModel.SetFocusedField(0)
+		return
+	}
+	if idx < 7 {
+		m.jiraModel.SetFocusedField(idx - 1)
+		return
+	}
+	if idx < 11 {
+		m.codecksModel.SetFocusedField(idx - 7)
+		return
+	}
+	m.ticketsModel.SetFocusedField(0)
+}
+
+// EnterTab prepares the tab when main navigates to Settings (focus first field of active panel).
+func (m *Model) EnterTab() {
+	switch m.settingsTab {
+	case 0:
+		m.githubModel.SetFocusedField(0)
+	case 1:
+		m.jiraModel.SetFocusedField(0)
+	case 2:
+		m.codecksModel.SetFocusedField(0)
+	case 3:
+		m.ticketsModel.SetFocusedField(0)
 	}
 }
 
-// GetSettingsInputs returns the settings input fields
-func (m *Model) GetSettingsInputs() []textinput.Model {
-	return m.settingsInputs
+// GetSettingsInputs returns a slice of textinput views for BuildRenderData (built from sub-models).
+func (m *Model) GetSettingsInputs() []struct{ View string } {
+	var out []struct{ View string }
+	for _, v := range m.githubModel.GetInputViews() {
+		out = append(out, struct{ View string }{v})
+	}
+	for _, v := range m.jiraModel.GetInputViews() {
+		out = append(out, struct{ View string }{v})
+	}
+	for _, v := range m.codecksModel.GetInputViews() {
+		out = append(out, struct{ View string }{v})
+	}
+	for _, v := range m.ticketsModel.GetInputViews() {
+		out = append(out, struct{ View string }{v})
+	}
+	return out
 }
 
-// SetInputs sets the settings input fields (called by main model at init)
-func (m *Model) SetInputs(inputs []textinput.Model) {
-	m.settingsInputs = inputs
-}
+// SetInputs is a no-op when using sub-models (inputs live in sub-models).
+func (m *Model) SetInputs(_ interface{}) {}
 
-// SetInputWidths sets the width of all settings inputs (called on window resize)
+// SetInputWidths sets the width of all inputs in sub-models (called on window resize).
 func (m *Model) SetInputWidths(width int) {
-	for i := range m.settingsInputs {
-		m.settingsInputs[i].Width = width
-	}
+	m.githubModel.SetInputWidth(width)
+	m.jiraModel.SetInputWidth(width)
+	m.codecksModel.SetInputWidth(width)
+	m.ticketsModel.SetInputWidth(width)
 }
 
 // SetDimensions sets the content area dimensions (used for scroll viewport).
@@ -180,56 +407,45 @@ func (m *Model) SetDimensions(width, height int) {
 	m.height = height
 }
 
-// GetSettingsYOffset returns the current scroll offset for the settings view.
+// GetSettingsYOffset returns the current scroll offset for the active settings panel.
 func (m *Model) GetSettingsYOffset() int {
-	return m.settingsYOffset
-}
-
-// SetSettingInputValue sets the value of the settings input at index (e.g. after GitHub login)
-func (m *Model) SetSettingInputValue(index int, value string) {
-	if index >= 0 && index < len(m.settingsInputs) {
-		m.settingsInputs[index].SetValue(value)
+	if m.settingsTab < 0 || m.settingsTab >= 6 {
+		return 0
 	}
+	return m.panelYOffset[m.settingsTab]
 }
 
-// UpdateRepository updates the repository
-func (m *Model) UpdateRepository(repo *internal.Repository) {
-	// Repository state is not directly used in settings
-	// This is a no-op for settings but required for interface consistency
+// SetSettingInputValue sets the value of the settings input at index (e.g. after GitHub login; index 0 = GitHub token).
+func (m *Model) SetSettingInputValue(index int, value string) {
+	if index == 0 {
+		m.githubModel.SetToken(value)
+	}
+	// Other indices map to jira/codecks/tickets - could be added if needed
 }
 
-// Getters for toggle/state (used when saving config or rendering)
-func (m *Model) GetSettingsShowMerged() bool        { return m.settingsShowMerged }
-func (m *Model) GetSettingsShowClosed() bool        { return m.settingsShowClosed }
-func (m *Model) GetSettingsOnlyMine() bool          { return m.settingsOnlyMine }
-func (m *Model) GetSettingsPRLimit() int            { return m.settingsPRLimit }
-func (m *Model) GetSettingsPRRefreshInterval() int  { return m.settingsPRRefreshInterval }
-func (m *Model) GetSettingsAutoInProgress() bool   { return m.settingsAutoInProgress }
-func (m *Model) GetSettingsBranchLimit() int        { return m.settingsBranchLimit }
-func (m *Model) GetSettingsSanitizeBookmarks() bool { return m.settingsSanitizeBookmarks }
-func (m *Model) GetSettingsTicketProvider() string  { return m.settingsTicketProvider }
-func (m *Model) GetConfirmingCleanup() string      { return m.confirmingCleanup }
+// UpdateRepository updates the repository (no-op for settings).
+func (m *Model) UpdateRepository(repo *internal.Repository) {}
 
-// Setters for init (load from config)
-func (m *Model) SetSettingsShowMerged(v bool)        { m.settingsShowMerged = v }
-func (m *Model) SetSettingsShowClosed(v bool)        { m.settingsShowClosed = v }
-func (m *Model) SetSettingsOnlyMine(v bool)          { m.settingsOnlyMine = v }
-func (m *Model) SetSettingsPRLimit(v int)            { m.settingsPRLimit = v }
-func (m *Model) SetSettingsPRRefreshInterval(v int)  { m.settingsPRRefreshInterval = v }
-func (m *Model) SetSettingsAutoInProgress(v bool)   { m.settingsAutoInProgress = v }
-func (m *Model) SetSettingsBranchLimit(v int)      { m.settingsBranchLimit = v }
-func (m *Model) SetSettingsSanitizeBookmarks(v bool) { m.settingsSanitizeBookmarks = v }
-func (m *Model) SetSettingsTicketProvider(s string)  { m.settingsTicketProvider = s }
-func (m *Model) SetConfirmingCleanup(s string)       { m.confirmingCleanup = s }
+// Getters for toggle/state (delegate to sub-models)
+func (m *Model) GetSettingsShowMerged() bool        { return m.githubModel.GetShowMerged() }
+func (m *Model) GetSettingsShowClosed() bool       { return m.githubModel.GetShowClosed() }
+func (m *Model) GetSettingsOnlyMine() bool         { return m.githubModel.GetOnlyMine() }
+func (m *Model) GetSettingsPRLimit() int           { return m.githubModel.GetPRLimit() }
+func (m *Model) GetSettingsPRRefreshInterval() int { return m.githubModel.GetRefreshInterval() }
+func (m *Model) GetSettingsAutoInProgress() bool   { return m.ticketsModel.GetAutoInProgress() }
+func (m *Model) GetSettingsBranchLimit() int       { return m.branchesModel.GetBranchLimit() }
+func (m *Model) GetSettingsSanitizeBookmarks() bool { return m.advancedModel.GetSanitizeBookmarks() }
+func (m *Model) GetSettingsTicketProvider() string { return m.ticketsModel.GetTicketProvider() }
+func (m *Model) GetConfirmingCleanup() string     { return m.advancedModel.GetConfirmingCleanup() }
 
-// GitHub Device Flow
-func (m *Model) GetGitHubDeviceCode() string      { return m.githubDeviceCode }
-func (m *Model) GetGitHubUserCode() string       { return m.githubUserCode }
-func (m *Model) GetGitHubVerificationURL() string { return m.githubVerificationURL }
-func (m *Model) GetGitHubLoginPolling() bool     { return m.githubLoginPolling }
-func (m *Model) GetGitHubPollInterval() int      { return m.githubPollInterval }
-func (m *Model) SetGitHubDeviceCode(s string)      { m.githubDeviceCode = s }
-func (m *Model) SetGitHubUserCode(s string)       { m.githubUserCode = s }
-func (m *Model) SetGitHubVerificationURL(s string) { m.githubVerificationURL = s }
-func (m *Model) SetGitHubLoginPolling(v bool)     { m.githubLoginPolling = v }
-func (m *Model) SetGitHubPollInterval(i int)      { m.githubPollInterval = i }
+// Setters for init/zone handlers (delegate to sub-models)
+func (m *Model) SetSettingsShowMerged(v bool)        { m.githubModel.SetShowMerged(v) }
+func (m *Model) SetSettingsShowClosed(v bool)       { m.githubModel.SetShowClosed(v) }
+func (m *Model) SetSettingsOnlyMine(v bool)         { m.githubModel.SetOnlyMine(v) }
+func (m *Model) SetSettingsPRLimit(v int)           { m.githubModel.SetPRLimit(v) }
+func (m *Model) SetSettingsPRRefreshInterval(v int) { m.githubModel.SetRefreshInterval(v) }
+func (m *Model) SetSettingsAutoInProgress(v bool)   { m.ticketsModel.SetAutoInProgress(v) }
+func (m *Model) SetSettingsBranchLimit(v int)      { m.branchesModel.SetBranchLimit(v) }
+func (m *Model) SetSettingsSanitizeBookmarks(v bool) { m.advancedModel.SetSanitizeBookmarks(v) }
+func (m *Model) SetSettingsTicketProvider(s string)  { m.ticketsModel.SetTicketProvider(s) }
+func (m *Model) SetConfirmingCleanup(s string)       { m.advancedModel.SetConfirmingCleanup(s) }
