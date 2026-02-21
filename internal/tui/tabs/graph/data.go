@@ -19,7 +19,7 @@ type GraphResult struct {
 }
 
 // Graph renders the commit graph view with split panes
-func (m graphModel) Graph(data GraphData) GraphResult {
+func (m GraphModel) Graph(data GraphData) GraphResult {
 	if data.Repository == nil || len(data.Repository.Graph.Commits) == 0 {
 		return GraphResult{
 			FullContent: "No commits found. Press Ctrl+r to refresh.",
@@ -318,7 +318,7 @@ type fileTreeNode struct {
 
 // renderFileTree builds a tree structure from the changed files and renders it
 // Accepts GraphData to support selection highlighting
-func (m *graphModel) renderFileTree(data GraphData) []string {
+func (m *GraphModel) renderFileTree(data GraphData) []string {
 	// Build the tree
 	root := &fileTreeNode{children: make(map[string]*fileTreeNode), fileIndex: -1}
 
@@ -356,7 +356,7 @@ func (m *graphModel) renderFileTree(data GraphData) []string {
 }
 
 // renderTreeNode recursively renders a tree node with selection support
-func (m *graphModel) renderTreeNode(node *fileTreeNode, indent string, lines *[]string, isRoot bool, data GraphData) {
+func (m *GraphModel) renderTreeNode(node *fileTreeNode, indent string, lines *[]string, isRoot bool, data GraphData) {
 	if !isRoot {
 		if node.isFile {
 			// Check if this file is selected

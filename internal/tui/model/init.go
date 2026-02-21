@@ -10,6 +10,18 @@ import (
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/integrations/github"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
+	bookmarktab "github.com/madicen/jj-tui/internal/tui/tabs/bookmark"
+	branchestab "github.com/madicen/jj-tui/internal/tui/tabs/branches"
+	conflicttab "github.com/madicen/jj-tui/internal/tui/tabs/conflict"
+	divergenttab "github.com/madicen/jj-tui/internal/tui/tabs/divergent"
+	errortab "github.com/madicen/jj-tui/internal/tui/tabs/error"
+	graphtab "github.com/madicen/jj-tui/internal/tui/tabs/graph"
+	helptab "github.com/madicen/jj-tui/internal/tui/tabs/help"
+	prformtab "github.com/madicen/jj-tui/internal/tui/tabs/prform"
+	prstab "github.com/madicen/jj-tui/internal/tui/tabs/prs"
+	settingstab "github.com/madicen/jj-tui/internal/tui/tabs/settings"
+	ticketstab "github.com/madicen/jj-tui/internal/tui/tabs/tickets"
+	warningtab "github.com/madicen/jj-tui/internal/tui/tabs/warning"
 )
 
 // New creates a new Model
@@ -68,9 +80,13 @@ func New(ctx context.Context) *Model {
 	bookmarkName.CharLimit = 100
 	bookmarkName.Width = 50
 
+	// Initialize tab models
+	zm := zone.New()
+	graphTabModel := graphtab.NewGraphModel(zm)
+
 	return &Model{
 		ctx:                       ctx,
-		zoneManager:               zone.New(),
+		zoneManager:               zm,
 		viewMode:                  ViewCommitGraph,
 		selectedCommit:            -1,
 		statusMessage:             "Initializing...",
@@ -95,6 +111,21 @@ func New(ctx context.Context) *Model {
 		selectedBookmarkIdx:       -1,
 		jiraBookmarkTitles:        make(map[string]string),
 		ticketBookmarkDisplayKeys: make(map[string]string),
+		// Initialize tab models
+		graphTabModel:    graphTabModel,
+		prsTabModel:      prstab.NewModel(),
+		branchesTabModel: branchestab.NewModel(),
+		ticketsTabModel:  ticketstab.NewModel(),
+		settingsTabModel: settingstab.NewModel(),
+		helpTabModel:     helptab.NewModel(),
+
+		// Initialize modal models
+		errorModal:     errortab.NewModel(),
+		warningModal:   warningtab.NewModel(),
+		conflictModal:  conflicttab.NewModel(),
+		divergentModal: divergenttab.NewModel(),
+		bookmarkModal:  bookmarktab.NewModel(),
+		prFormModal:    prformtab.NewModel(),
 	}
 }
 
