@@ -190,112 +190,17 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.viewMode = ViewCommitGraph
 		}
 	case "tab":
-		// Switch focus between graph and files panes in graph view
-		if m.viewMode == ViewCommitGraph {
-			m.graphFocused = !m.graphFocused
-			m.statusMessage = m.handleGraphFoucsMessage()
-		}
-		// Switch between help tabs
-		if m.viewMode == ViewHelp {
-			m.helpTab = (m.helpTab + 1) % 2 // 2 tabs
-			m.helpSelectedCommand = 0       // Reset selection when switching tabs
+		// Tab switching within delegated views is now handled by tab models
+		// This only handles tab switching for non-delegated views
+		if m.viewMode != ViewCommitGraph {
+			m.viewMode = ViewCommitGraph
 		}
 	case "j", "down":
+		// Tab-specific navigation is now handled by tab models via delegation
+		// This switch is kept only for view modes that don't have delegated models
 		switch m.viewMode {
-		case ViewHelp:
-			// Navigate command history (only on Commands tab)
-			if m.helpTab == 1 { // Commands tab
-				if m.jjService != nil {
-					history := m.getFilteredCommandHistory()
-					maxCmd := min(len(history), 50) - 1
-					if m.helpSelectedCommand < maxCmd {
-						m.helpSelectedCommand++
-					}
-				}
-			}
-		case ViewPullRequests:
-			if m.repository != nil {
-				m.selectedPR = min(m.selectedPR+1, len(m.repository.PRs)-1)
-				m.ensureGraphCommitVisible(m.selectedPR)
-			}
-		case ViewTickets:
-			if m.selectedTicket < len(m.ticketList)-1 {
-				m.selectedTicket++
-				// Scroll viewport to keep selection visible
-				m.ensureSelectionVisible(m.selectedTicket)
-				// Load transitions for newly selected ticket
-				m.availableTransitions = nil
-				m.loadingTransitions = true
-				return m, m.loadTransitions()
-			}
-		case ViewBranches:
-			if m.selectedBranch < len(m.branchList)-1 {
-				m.selectedBranch++
-				m.ensureBranchSelectionVisible(m.selectedBranch)
-			}
-		case ViewCommitGraph:
-			if !m.graphFocused {
-				// Navigate files in files pane
-				if len(m.changedFiles) > 0 && m.selectedFile < len(m.changedFiles)-1 {
-					m.selectedFile++
-					// Scroll viewport if needed to keep selection visible
-					m.ensureFileVisible(m.selectedFile)
-				}
-			} else {
-				// Navigate commits in graph pane
-				if m.repository != nil && m.selectedCommit < len(m.repository.Graph.Commits)-1 {
-					m.selectedCommit++
-					// Scroll viewport to keep selection visible
-					m.ensureGraphCommitVisible(m.selectedCommit)
-					return m.handleSelectCommit(m.selectedCommit)
-				}
-			}
-		}
-	case "k", "up":
-		switch m.viewMode {
-		case ViewHelp:
-			// Navigate command history (only on Commands tab)
-			if m.helpTab == 1 && m.helpSelectedCommand > 0 {
-				m.helpSelectedCommand--
-			}
-		case ViewPullRequests:
-			if m.selectedPR > 0 {
-				m.selectedPR--
-				// Scroll viewport to keep selection visible
-				m.ensureSelectionVisible(m.selectedPR)
-			}
-		case ViewBranches:
-			if m.selectedBranch > 0 {
-				m.selectedBranch--
-				m.ensureBranchSelectionVisible(m.selectedBranch)
-			}
-		case ViewTickets:
-			if m.selectedTicket > 0 {
-				m.selectedTicket--
-				// Scroll viewport to keep selection visible
-				m.ensureSelectionVisible(m.selectedTicket)
-				// Load transitions for newly selected ticket
-				m.availableTransitions = nil
-				m.loadingTransitions = true
-				return m, m.loadTransitions()
-			}
-		case ViewCommitGraph:
-			if !m.graphFocused {
-				// Navigate files in files pane
-				if len(m.changedFiles) > 0 && m.selectedFile > 0 {
-					m.selectedFile--
-					// Scroll viewport if needed to keep selection visible
-					m.ensureFileVisible(m.selectedFile)
-				}
-			} else {
-				// Navigate commits in graph pane
-				if m.selectedCommit > 0 && m.repository != nil {
-					m.selectedCommit--
-					// Scroll viewport to keep selection visible
-					m.ensureGraphCommitVisible(m.selectedCommit)
-					return m.handleSelectCommit(m.selectedCommit)
-				}
-			}
+		default:
+			// For non-delegated views, this will fall through to the next case
 		}
 	case "c":
 		// Toggle status change mode (Tickets view only)

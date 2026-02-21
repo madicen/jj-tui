@@ -12,7 +12,8 @@ import (
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 )
 
-type graphModel struct {
+// GraphModel represents the state of the Graph tab
+type GraphModel struct {
 	zoneManager *zone.Manager
 	repository  *internal.Repository
 
@@ -62,18 +63,18 @@ type GraphData struct {
 	SelectedFile       int             // Index of selected file in changed files list
 }
 
-func NewGraphModel(zoneManager *zone.Manager) graphModel {
-	return graphModel{
+func NewGraphModel(zoneManager *zone.Manager) GraphModel {
+	return GraphModel{
 		zoneManager: zoneManager,
 	}
 }
 
-func (m graphModel) Init() tea.Cmd {
+func (m GraphModel) Init() tea.Cmd {
 	// Just return `nil`, which means "no I/O right now, please."
 	return nil
 }
 
-func (m graphModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m GraphModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		return m.handleKeyMsg(msg)
@@ -102,7 +103,7 @@ func (m graphModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m graphModel) View() string {
+func (m GraphModel) View() string {
 	// Graph view with split panes: graph (scrollable) | actions (fixed) | files (scrollable)
 	graphResult := m.getGraphResult()
 
@@ -181,12 +182,12 @@ func (m graphModel) View() string {
 }
 
 // getGraphResult returns the GraphResult for the commit graph view
-func (m *graphModel) getGraphResult() GraphResult {
+func (m *GraphModel) getGraphResult() GraphResult {
 	return m.Graph(m.buildGraphData())
 }
 
 // buildGraphData builds the GraphData for the commit graph
-func (m *graphModel) buildGraphData() GraphData {
+func (m *GraphModel) buildGraphData() GraphData {
 	// Build a map of branches that have open PRs
 	openPRBranches := make(map[string]bool)
 	if m.repository != nil {

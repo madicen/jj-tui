@@ -2,6 +2,7 @@ package model
 
 import (
 	"os/exec"
+	"reflect"
 	"runtime"
 	"strings"
 	"time"
@@ -184,4 +185,33 @@ func (m *Model) updateBookmarkNameExists() {
 	}
 
 	m.bookmarkNameExists = m.checkBookmarkNameExists(name)
+}
+
+func PropagateUpdate(msg tea.Msg, updatables ...any) (results []tea.Cmd) {
+	for _, updatable := range updatables {
+		objValue := reflect.ValueOf(updatable)
+		if objValue.Kind() != reflect.Ptr {
+			panic("updatable must be a pointer")
+		}
+		objValue = objValue.Elem()
+		method := objValue.MethodByName("Update")
+		if !method.IsValid() {
+			panic("updatable must have an Update method")
+		}
+		// Call the "Update" method with the provided msg argument
+		callResults := method.Call([]reflect.Value{reflect.ValueOf(msg)})
+		if len(callResults) != 2 {
+			panic("Update method must return (model, tea.Cmd)")
+		}
+		// Set the first result as the new value of updatable
+		updatedValue := callResults[0]
+		cmd, ok := callResults[1].Interface().(tea.Cmd)
+		if !ok {
+			panic("second return value from Update must be tea.Cmd")
+		}
+		// Replace the original value through reflection
+		objValue.Set(updatedValue)
+		results = append(results, cmd)
+	}
+	return results
 }

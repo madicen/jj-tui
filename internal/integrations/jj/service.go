@@ -1187,10 +1187,7 @@ func (s *Service) ListBranches(ctx context.Context, statsLimit int) ([]internal.
 		}
 
 		// Calculate remaining slots for other remote branches
-		remoteLimit := statsLimit - len(localBranches) - len(remoteCounterparts)
-		if remoteLimit < 0 {
-			remoteLimit = 0
-		}
+		remoteLimit := max(statsLimit-len(localBranches)-len(remoteCounterparts), 0)
 
 		if len(remoteBranches) > remoteLimit && remoteLimit > 0 {
 			// Query timestamps for remote branches using branch ref directly

@@ -19,230 +19,156 @@ func (m *Model) View() string {
 		return "Loading..."
 	}
 
-	var v string
-
-	// Handle errors first - regular errors show as centered modal, "not a jj repo" shows welcome screen
-	if m.err != nil {
-		if m.notJJRepo {
-			// "Not a jj repo" shows a welcome screen with normal UI
-			header := m.renderHeader()
-			statusBar := m.renderStatusBar()
-			headerHeight := strings.Count(header, "\n") + 1
-			statusHeight := strings.Count(statusBar, "\n") + 1
-			fullContentHeight := max(m.height-headerHeight-statusHeight, 1)
-			m.viewport.Height = fullContentHeight
-
-			errorContent := m.renderError()
-			m.viewport.SetContent(errorContent)
-			viewportContent := m.viewport.View()
-
-			v = lipgloss.JoinVertical(
-				lipgloss.Left,
-				header,
-				viewportContent,
-				statusBar,
-			)
-			return m.zoneManager.Scan(v)
+	// Handle error modal model
+	if errorContent := m.errorModal.View(); errorContent != "" {
+		if m.errorModal.IsJJRepoError() {
+			// "Not a jj repo" shown with normal UI
+			return m.renderWithHeader(errorContent)
 		}
-
-		// Regular errors: show centered modal without header/tabs/status bar
-		errorModal := m.renderError()
-
-		// Center the modal both horizontally and vertically
-		centeredModal := lipgloss.NewStyle().
-			Width(m.width).
-			Height(m.height).
-			Align(lipgloss.Center).
-			AlignVertical(lipgloss.Center).
-			Render(errorModal)
-
-		return m.zoneManager.Scan(centeredModal)
+		// Regular error: show as centered modal
+		return m.centerModal(errorContent)
 	}
 
-	// Handle warning modal (e.g., empty commit descriptions)
-	if m.showWarningModal {
-		warningModal := m.renderWarningModal()
-
-		// Center the modal both horizontally and vertically
-		centeredModal := lipgloss.NewStyle().
-			Width(m.width).
-			Height(m.height).
-			Align(lipgloss.Center).
-			AlignVertical(lipgloss.Center).
-			Render(warningModal)
-
-		return m.zoneManager.Scan(centeredModal)
+	// Handle warning modal model
+	if warningContent := m.warningModal.View(); warningContent != "" {
+		return m.centerModal(warningContent)
 	}
 
-	// Build the view with zone markers
+	// Handle divergent commit modal
+	if divergentContent := m.divergentModal.View(); divergentContent != "" {
+		return m.centerModal(divergentContent)
+	}
+
+	// Handle conflict modal
+	if conflictContent := m.conflictModal.View(); conflictContent != "" {
+		return m.centerModal(conflictContent)
+	}
+
+	// Normal UI: render tabs/main content
 	header := m.renderHeader()
 	statusBar := m.renderStatusBar()
 
-	// For PR, Jira, and Branches views, use split rendering with fixed header
+	// Delegate to tab models for their views
+	var content string
 	switch m.viewMode {
-	case ViewPullRequests, ViewTickets, ViewBranches:
-		fixedHeader, scrollableList := m.renderSplitContent()
-
-		// Calculate full content height first (may have been reduced by graph view)
-		headerHeight := strings.Count(header, "\n") + 1
-		statusHeight := strings.Count(statusBar, "\n") + 1
-		fullContentHeight := max(m.height-headerHeight-statusHeight, 1)
-
-		if scrollableList != "" {
-			// Render the fixed header with styling
-			styledFixedHeader := ContentStyle.Width(m.width).Render(fixedHeader)
-
-			// Calculate how many lines the fixed header takes
-			fixedHeaderLines := strings.Count(styledFixedHeader, "\n") + 1
-
-			// Calculate viewport height for the split view
-			availableHeight := max(fullContentHeight-fixedHeaderLines,
-				// Minimum height
-				3)
-			m.viewport.Height = availableHeight
-
-			// Save scroll position before SetContent (which resets YOffset)
-			savedYOffset := m.viewport.YOffset
-
-			// Put only the scrollable list in the viewport
-			m.viewport.SetContent(scrollableList)
-
-			// Restore scroll position and clamp to valid range
-			m.viewport.YOffset = savedYOffset
-			maxOffset := max(m.viewport.TotalLineCount()-availableHeight, 0)
-			m.viewport.YOffset = max(min(m.viewport.YOffset, maxOffset), 0)
-
-			viewportContent := m.viewport.View()
-
-			v = lipgloss.JoinVertical(
-				lipgloss.Left,
-				header,
-				styledFixedHeader,
-				viewportContent,
-				statusBar,
-			)
-		} else {
-			// No split content (e.g., error message or empty state)
-			// Reset viewport to full height for non-split display
-			m.viewport.Height = fullContentHeight
-			m.viewport.SetContent(fixedHeader)
-			viewportContent := m.viewport.View()
-
-			v = lipgloss.JoinVertical(
-				lipgloss.Left,
-				header,
-				viewportContent,
-				statusBar,
-			)
-		}
 	case ViewCommitGraph:
-		// Graph view with split panes: graph (scrollable) | actions (fixed) | files (scrollable)
-		graphResult := m.getGraphResult()
-
-		headerHeight := strings.Count(header, "\n") + 1
-		statusHeight := strings.Count(statusBar, "\n") + 1
-		separatorLines := 2 // Two separator lines between sections
-		paddingLines := 1   // Padding after header
-
-		// Use a minimum actions height during loading to keep layout stable
-		actionsContent := graphResult.ActionsBar
-		if actionsContent == "" {
-			actionsContent = "Actions:"
+		content = m.graphTabModel.View()
+		if content == "" {
+			// Fallback to main rendering for now
+			content = m.renderGraphContent()
 		}
-		actionsHeight := strings.Count(actionsContent, "\n") + 1
-
-		// Calculate available height for the two scrollable panes
-		availableHeight := max(m.height-headerHeight-statusHeight-actionsHeight-separatorLines-paddingLines, 6)
-
-		// Split height: 60% for graph, 40% for files
-		graphHeight := (availableHeight * 60) / 100
-		filesHeight := availableHeight - graphHeight
-		graphHeight = max(graphHeight, 3)
-		filesHeight = max(filesHeight, 3)
-
-		// Set up graph viewport
-		m.viewport.Height = graphHeight
-
-		// Save scroll position before SetContent (which resets YOffset)
-		savedGraphOffset := m.viewport.YOffset
-
-		// Always set content if we have valid graph content (even during loading, to avoid stale content from other views)
-		if graphResult.GraphContent != "" {
-			m.viewport.SetContent(graphResult.GraphContent)
+	case ViewPullRequests:
+		content = m.prsTabModel.View()
+		if content == "" {
+			content = m.renderPRsContent()
 		}
-
-		// Restore scroll position and clamp to valid range
-		m.viewport.YOffset = savedGraphOffset
-		maxGraphOffset := max(m.viewport.TotalLineCount()-graphHeight, 0)
-		m.viewport.YOffset = max(min(m.viewport.YOffset, maxGraphOffset), 0)
-
-		// Set up files viewport - show placeholder if no files yet
-		m.filesViewport.Height = filesHeight
-		filesContent := graphResult.FilesContent
-		if filesContent == "" {
-			filesContent = lipgloss.NewStyle().Foreground(lipgloss.Color("#666666")).Render("  Loading changed files...")
+	case ViewBranches:
+		content = m.branchesTabModel.View()
+		if content == "" {
+			content = m.renderBranchesContent()
 		}
-
-		// Save scroll position before SetContent
-		savedFilesOffset := m.filesViewport.YOffset
-		m.filesViewport.SetContent(filesContent)
-
-		// Restore scroll position and clamp to valid range
-		m.filesViewport.YOffset = savedFilesOffset
-		maxFilesOffset := max(m.filesViewport.TotalLineCount()-filesHeight, 0)
-		m.filesViewport.YOffset = max(min(m.filesViewport.YOffset, maxFilesOffset), 0)
-
-		// Simple separator line
-		separator := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#444444")).
-			Render(strings.Repeat("─", m.width-2))
-
-		// Wrap viewports in zones for click-to-focus
-		graphPane := m.zoneManager.Mark(ZoneGraphPane, m.viewport.View())
-		filesPane := m.zoneManager.Mark(ZoneFilesPane, m.filesViewport.View())
-
-		v = lipgloss.JoinVertical(
-			lipgloss.Left,
-			header,
-			"", // Padding line after header
-			graphPane,
-			separator,
-			actionsContent,
-			separator,
-			filesPane,
-			statusBar,
-		)
+	case ViewTickets:
+		content = m.ticketsTabModel.View()
+		if content == "" {
+			content = m.renderTicketsContent()
+		}
+	case ViewSettings:
+		content = m.settingsTabModel.View()
+		if content == "" {
+			content = m.renderSettingsContent()
+		}
+	case ViewHelp:
+		content = m.helpTabModel.View()
+		if content == "" {
+			content = m.renderHelpContent()
+		}
+	case ViewEditDescription:
+		content = m.renderEditDescription()
+	case ViewCreatePR:
+		content = m.prFormModal.View()
+		if content == "" {
+			content = m.renderCreatePR()
+		}
+	case ViewCreateBookmark:
+		content = m.bookmarkModal.View()
+		if content == "" {
+			content = m.renderCreateBookmark()
+		}
+	case ViewBookmarkConflict:
+		content = m.renderBookmarkConflict()
+	case ViewDivergentCommit:
+		content = m.renderDivergentCommit()
+	case ViewGitHubLogin:
+		content = m.renderGitHubLogin()
 	default:
-		// Normal views: put all content in viewport
-		// Reset viewport height to full available space (may have been reduced by graph view)
-		headerHeight := strings.Count(header, "\n") + 1
-		statusHeight := strings.Count(statusBar, "\n") + 1
-		fullContentHeight := max(m.height-headerHeight-statusHeight, 1)
-		m.viewport.Height = fullContentHeight
-
-		// Save scroll position before SetContent (which resets YOffset)
-		savedYOffset := m.viewport.YOffset
-
-		content := m.renderContent()
-		m.viewport.SetContent(content)
-
-		// Restore scroll position and clamp to valid range
-		m.viewport.YOffset = savedYOffset
-		maxOffset := max(m.viewport.TotalLineCount()-fullContentHeight, 0)
-		m.viewport.YOffset = max(min(m.viewport.YOffset, maxOffset), 0)
-
-		viewportContent := m.viewport.View()
-
-		v = lipgloss.JoinVertical(
-			lipgloss.Left,
-			header,
-			viewportContent,
-			statusBar,
-		)
+		content = m.renderGraphContent()
 	}
 
-	// CRITICAL: Scan the view to register zone positions
+	v := lipgloss.JoinVertical(
+		lipgloss.Left,
+		header,
+		content,
+		statusBar,
+	)
+
 	return m.zoneManager.Scan(v)
+}
+
+// centerModal centers a modal on the screen
+func (m *Model) centerModal(content string) string {
+	centered := lipgloss.NewStyle().
+		Width(m.width).
+		Height(m.height).
+		Align(lipgloss.Center).
+		AlignVertical(lipgloss.Center).
+		Render(content)
+	return m.zoneManager.Scan(centered)
+}
+
+// renderWithHeader renders content with the standard header
+func (m *Model) renderWithHeader(content string) string {
+	header := m.renderHeader()
+	statusBar := m.renderStatusBar()
+
+	headerHeight := strings.Count(header, "\n") + 1
+	statusHeight := strings.Count(statusBar, "\n") + 1
+	fullContentHeight := max(m.height-headerHeight-statusHeight, 1)
+	m.viewport.Height = fullContentHeight
+	m.viewport.SetContent(content)
+
+	v := lipgloss.JoinVertical(
+		lipgloss.Left,
+		header,
+		m.viewport.View(),
+		statusBar,
+	)
+	return m.zoneManager.Scan(v)
+}
+
+// Rendering helper methods (simplified stubs that delegate to models)
+
+func (m *Model) renderGraphContent() string {
+	return "Graph view - rendering delegated to graphTabModel"
+}
+
+func (m *Model) renderPRsContent() string {
+	return "Pull Requests view - rendering delegated to prsTabModel"
+}
+
+func (m *Model) renderBranchesContent() string {
+	return "Branches view - rendering delegated to branchesTabModel"
+}
+
+func (m *Model) renderTicketsContent() string {
+	return "Tickets view - rendering delegated to ticketsTabModel"
+}
+
+func (m *Model) renderSettingsContent() string {
+	return "Settings view - rendering delegated to settingsTabModel"
+}
+
+func (m *Model) renderHelpContent() string {
+	return "Help view - rendering delegated to helpTabModel"
 }
 
 // renderer returns a view renderer with the zone manager

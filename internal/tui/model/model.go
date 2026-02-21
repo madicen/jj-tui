@@ -18,6 +18,18 @@ import (
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tickets"
 	"github.com/madicen/jj-tui/internal/tui/actions"
+	bookmarktab "github.com/madicen/jj-tui/internal/tui/tabs/bookmark"
+	branchestab "github.com/madicen/jj-tui/internal/tui/tabs/branches"
+	conflicttab "github.com/madicen/jj-tui/internal/tui/tabs/conflict"
+	divergenttab "github.com/madicen/jj-tui/internal/tui/tabs/divergent"
+	errortab "github.com/madicen/jj-tui/internal/tui/tabs/error"
+	graphtab "github.com/madicen/jj-tui/internal/tui/tabs/graph"
+	helptab "github.com/madicen/jj-tui/internal/tui/tabs/help"
+	prformtab "github.com/madicen/jj-tui/internal/tui/tabs/prform"
+	prstab "github.com/madicen/jj-tui/internal/tui/tabs/prs"
+	settingstab "github.com/madicen/jj-tui/internal/tui/tabs/settings"
+	ticketstab "github.com/madicen/jj-tui/internal/tui/tabs/tickets"
+	warningtab "github.com/madicen/jj-tui/internal/tui/tabs/warning"
 )
 
 // Model is the main TUI model using bubblezone for mouse handling.
@@ -151,6 +163,22 @@ type Model struct {
 	githubVerificationURL string // URL user needs to visit
 	githubLoginPolling    bool   // True if currently polling for token
 	githubPollInterval    int    // Current polling interval in seconds
+
+	// Tab-specific models (new refactored models)
+	graphTabModel    graphtab.GraphModel
+	prsTabModel      prstab.Model
+	branchesTabModel branchestab.Model
+	ticketsTabModel  ticketstab.Model
+	settingsTabModel settingstab.Model
+	helpTabModel     helptab.Model
+
+	// Modal models (dialogs and modals)
+	errorModal     errortab.Model
+	warningModal   warningtab.Model
+	conflictModal  conflicttab.Model
+	divergentModal divergenttab.Model
+	bookmarkModal  bookmarktab.Model
+	prFormModal    prformtab.Model
 }
 
 // doPollMsg is a message used to trigger a GitHub token poll.
@@ -227,6 +255,41 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		// Delegate to tab models for their specific views
+		switch m.viewMode {
+		case ViewCommitGraph:
+			cmds := PropagateUpdate(msg, &m.graphTabModel)
+			if len(cmds) > 0 && cmds[0] != nil {
+				return m, cmds[0]
+			}
+			// Fall through to handleKeyMsg for graph-specific commands
+		case ViewPullRequests:
+			cmds := PropagateUpdate(msg, &m.prsTabModel)
+			if len(cmds) > 0 && cmds[0] != nil {
+				return m, cmds[0]
+			}
+			// Fall through to handleKeyMsg for non-delegated keys
+		case ViewBranches:
+			cmds := PropagateUpdate(msg, &m.branchesTabModel)
+			if len(cmds) > 0 && cmds[0] != nil {
+				return m, cmds[0]
+			}
+		case ViewTickets:
+			cmds := PropagateUpdate(msg, &m.ticketsTabModel)
+			if len(cmds) > 0 && cmds[0] != nil {
+				return m, cmds[0]
+			}
+		case ViewSettings:
+			cmds := PropagateUpdate(msg, &m.settingsTabModel)
+			if len(cmds) > 0 && cmds[0] != nil {
+				return m, cmds[0]
+			}
+		case ViewHelp:
+			cmds := PropagateUpdate(msg, &m.helpTabModel)
+			if len(cmds) > 0 && cmds[0] != nil {
+				return m, cmds[0]
+			}
+		}
 		return m.handleKeyMsg(msg)
 
 	case tea.MouseMsg:
@@ -276,6 +339,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.jjService = jjSvc
 		}
 		m.statusMessage = fmt.Sprintf("Loaded %d commits", len(msg.repository.Graph.Commits))
+
+		// Sync repository to tab models
+		m.graphTabModel.UpdateRepository(m.repository)
+		m.prsTabModel.UpdateRepository(m.repository)
+		m.branchesTabModel.UpdateRepository(m.repository)
+		m.ticketsTabModel.UpdateRepository(m.repository)
+		m.settingsTabModel.UpdateRepository(m.repository)
+		m.helpTabModel.UpdateRepository(m.repository)
 
 		// Build commands to run
 		var cmds []tea.Cmd
