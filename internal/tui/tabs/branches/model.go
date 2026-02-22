@@ -4,6 +4,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal"
+	"github.com/madicen/jj-tui/internal/tui/mouse"
 )
 
 // Model represents the state of the Branches tab
@@ -12,9 +13,10 @@ type Model struct {
 	repository     *internal.Repository
 	branchList     []internal.Branch
 	selectedBranch  int
-	width          int
-	height         int
-	loading        bool
+	listYOffset     int // Scroll offset for list (details stay fixed)
+	width           int
+	height          int
+	loading         bool
 	err            error
 	statusMessage  string
 }
@@ -33,6 +35,12 @@ func (m Model) Init() tea.Cmd {
 	return nil
 }
 
+// SetDimensions sets the content area size (used for list-only scrolling)
+func (m *Model) SetDimensions(width, height int) {
+	m.width = width
+	m.height = height
+}
+
 // Update handles messages for the Branches tab
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -42,12 +50,26 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyMsg:
 		return m.handleKeyMsg(msg)
+	case tea.MouseMsg:
+		// Wheel: use IsWheel() so we accept any encoding; scroll without requiring list to be clicked first
+		if tea.MouseEvent(msg).IsWheel() {
+			isUp := msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelLeft
+			if isUp {
+				m.listYOffset -= 3
+				if m.listYOffset < 0 {
+					m.listYOffset = 0
+				}
+			} else {
+				m.listYOffset += 3
+			}
+			return m, nil
+		}
 	}
 	return m, nil
 }
 
-// View renders the Branches tab
-func (m Model) View() string {
+// View renders the Branches tab (pointer receiver so render can persist listYOffset clamp)
+func (m *Model) View() string {
 	if m.width == 0 || m.height == 0 {
 		return "Loading..."
 	}
@@ -67,6 +89,55 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.selectedBranch--
 		}
 		return m, nil
+	case "T":
+		return m, Request{TrackBranch: true}.Cmd()
+	case "U":
+		return m, Request{UntrackBranch: true}.Cmd()
+	case "L":
+		return m, Request{RestoreLocalBranch: true}.Cmd()
+	case "P":
+		return m, Request{PushBranch: true}.Cmd()
+	case "F":
+		return m, Request{FetchAll: true}.Cmd()
+	case "c":
+		return m, Request{ResolveBookmarkConflict: true}.Cmd()
+	case "x":
+		return m, Request{DeleteBranchBookmark: true}.Cmd()
+	}
+	return m, nil
+}
+
+// handleZoneClick handles zone clicks; returns a request cmd for actions.
+func (m Model) handleZoneClick(z *zone.ZoneInfo) (Model, tea.Cmd) {
+	if m.zoneManager == nil || z == nil {
+		return m, nil
+	}
+	for i := range m.branchList {
+		if m.zoneManager.Get(mouse.ZoneBranch(i)) == z {
+			m.selectedBranch = i
+			return m, nil
+		}
+	}
+	if m.zoneManager.Get(mouse.ZoneBranchTrack) == z {
+		return m, Request{TrackBranch: true}.Cmd()
+	}
+	if m.zoneManager.Get(mouse.ZoneBranchUntrack) == z {
+		return m, Request{UntrackBranch: true}.Cmd()
+	}
+	if m.zoneManager.Get(mouse.ZoneBranchRestore) == z {
+		return m, Request{RestoreLocalBranch: true}.Cmd()
+	}
+	if m.zoneManager.Get(mouse.ZoneBranchDelete) == z {
+		return m, Request{DeleteBranchBookmark: true}.Cmd()
+	}
+	if m.zoneManager.Get(mouse.ZoneBranchPush) == z {
+		return m, Request{PushBranch: true}.Cmd()
+	}
+	if m.zoneManager.Get(mouse.ZoneBranchFetch) == z {
+		return m, Request{FetchAll: true}.Cmd()
+	}
+	if m.zoneManager.Get(mouse.ZoneBranchResolveConflict) == z {
+		return m, Request{ResolveBookmarkConflict: true}.Cmd()
 	}
 	return m, nil
 }
@@ -76,6 +147,11 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 // GetSelectedBranch returns the index of the selected branch
 func (m *Model) GetSelectedBranch() int {
 	return m.selectedBranch
+}
+
+// GetListYOffset returns the list scroll offset (for tests and accessors)
+func (m *Model) GetListYOffset() int {
+	return m.listYOffset
 }
 
 // SetSelectedBranch sets the selected branch index

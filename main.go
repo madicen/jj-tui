@@ -50,11 +50,13 @@ func main() {
 	}
 	defer model.Close()
 
-	// Create the Bubble Tea program
+	// Create the Bubble Tea program.
+	// Use WithMouseAllMotion so wheel and motion work without requiring a prior click
+	// (some terminals only deliver mouse events reliably in this mode).
 	p := tea.NewProgram(
 		model,
-		tea.WithAltScreen(),       // Use alternate screen buffer
-		tea.WithMouseCellMotion(), // Enable mouse support
+		tea.WithAltScreen(),        // Use alternate screen buffer
+		tea.WithMouseAllMotion(),   // Mouse click, release, wheel, and motion without button press
 	)
 
 	// Run the program

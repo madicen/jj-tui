@@ -55,12 +55,20 @@ func (m *Model) View() string {
 	// Normal UI: header and footer are owned by the main model; inner content from tab/modal View()
 	header := m.renderHeader()
 	statusBar := m.renderStatusBar()
+	headerHeight := strings.Count(header, "\n") + 1
+	statusHeight := strings.Count(statusBar, "\n") + 1
+	contentHeight := max(m.height-headerHeight-statusHeight, 1)
+
+	// Set dimensions for all tabs before View() so they know the actual content area height for scrolling
+	m.graphTabModel.SetDimensions(m.width, contentHeight)
+	m.prsTabModel.SetDimensions(m.width, contentHeight)
+	m.branchesTabModel.SetDimensions(m.width, contentHeight)
+	m.ticketsTabModel.SetDimensions(m.width, contentHeight)
 
 	// Delegate to tab models for their views
 	var content string
 	switch m.viewMode {
 	case ViewCommitGraph:
-		// Keep graph tab in sync with rebase state (selection lives in graph tab)
 		m.graphTabModel.SetSelectionMode(graph.SelectionMode(m.selectionMode))
 		m.graphTabModel.SetRebaseSourceCommit(m.rebaseSourceCommit)
 		content = m.graphTabModel.View()
@@ -109,40 +117,6 @@ func (m *Model) View() string {
 		content = m.renderGraphContent()
 	}
 
-	// Keep header and footer always visible: show a slice of inner content (viewport stores scroll state)
-	headerHeight := strings.Count(header, "\n") + 1
-	statusHeight := strings.Count(statusBar, "\n") + 1
-	contentHeight := max(m.height-headerHeight-statusHeight, 1)
-
-	if m.viewportReady {
-		m.viewport.Width = m.width
-		m.viewport.Height = contentHeight
-		m.viewport.SetContent(content)
-		// Clamp YOffset if content shortened
-		if total := m.viewport.TotalLineCount(); total > 0 && contentHeight > 0 {
-			maxOffset := max(total-contentHeight, 0)
-			if m.viewport.YOffset > maxOffset {
-				m.viewport.YOffset = maxOffset
-			}
-		}
-		// Slice visible lines ourselves so zone markup (bubblezone) is preserved for mouse hit-testing.
-		// viewport.View() uses lipgloss with Width/Height which can alter or strip zone escape sequences.
-		contentLines := strings.Split(content, "\n")
-		yOff := m.viewport.YOffset
-		if yOff < 0 {
-			yOff = 0
-		}
-		end := min(yOff+contentHeight, len(contentLines))
-		start := min(yOff, end)
-		if start < end {
-			content = strings.Join(contentLines[start:end], "\n")
-		} else if len(contentLines) > 0 && start < len(contentLines) {
-			content = contentLines[start]
-		} else {
-			content = ""
-		}
-	}
-
 	// Pin footer to bottom: pad content to fixed height (avoid lipgloss on content to preserve zone markup)
 	contentLines := strings.Split(content, "\n")
 	for len(contentLines) < contentHeight {
@@ -182,21 +156,13 @@ func (m *Model) renderWithHeader(content string) string {
 	headerHeight := strings.Count(header, "\n") + 1
 	statusHeight := strings.Count(statusBar, "\n") + 1
 	fullContentHeight := max(m.height-headerHeight-statusHeight, 1)
-	m.viewport.Height = fullContentHeight
-	m.viewport.SetContent(content)
-
 	contentLines := strings.Split(content, "\n")
-	yOff := m.viewport.YOffset
-	if yOff < 0 {
-		yOff = 0
-	}
-	end := min(yOff+fullContentHeight, len(contentLines))
-	start := min(yOff, end)
+	end := min(fullContentHeight, len(contentLines))
 	var visible string
-	if start < end {
-		visible = strings.Join(contentLines[start:end], "\n")
-	} else if len(contentLines) > 0 && start < len(contentLines) {
-		visible = contentLines[start]
+	if end > 0 {
+		visible = strings.Join(contentLines[0:end], "\n")
+	} else if len(contentLines) > 0 {
+		visible = contentLines[0]
 	} else {
 		visible = ""
 	}
@@ -557,24 +523,25 @@ func (m *Model) renderWarningModal() string {
 
 // renderSettings renders the settings view via the settings tab package
 func (m *Model) renderSettings() string {
+	inputs := m.settingsTabModel.GetSettingsInputs()
 	data := settingstab.RenderData{
-		FocusedField:           m.settingsFocusedField,
+		FocusedField:           m.settingsTabModel.GetFocusedField(),
 		GithubService:          m.isGitHubAvailable(),
 		JiraService:            m.ticketService != nil,
-		ActiveTab:              settingstab.ActiveTab(m.settingsTab),
-		ShowMergedPRs:          m.settingsShowMerged,
-		ShowClosedPRs:          m.settingsShowClosed,
-		OnlyMyPRs:              m.settingsOnlyMine,
-		PRLimit:                m.settingsPRLimit,
-		PRRefreshInterval:      m.settingsPRRefreshInterval,
-		TicketProvider:         m.settingsTicketProvider,
-		AutoInProgressOnBranch: m.settingsAutoInProgress,
-		BranchLimit:            m.settingsBranchLimit,
-		SanitizeBookmarks:      m.settingsSanitizeBookmarks,
-		ConfirmingCleanup:      m.confirmingCleanup,
+		ActiveTab:              settingstab.ActiveTab(m.settingsTabModel.GetSettingsTab()),
+		ShowMergedPRs:          m.settingsTabModel.GetSettingsShowMerged(),
+		ShowClosedPRs:          m.settingsTabModel.GetSettingsShowClosed(),
+		OnlyMyPRs:              m.settingsTabModel.GetSettingsOnlyMine(),
+		PRLimit:                m.settingsTabModel.GetSettingsPRLimit(),
+		PRRefreshInterval:      m.settingsTabModel.GetSettingsPRRefreshInterval(),
+		TicketProvider:         m.settingsTabModel.GetSettingsTicketProvider(),
+		AutoInProgressOnBranch: m.settingsTabModel.GetSettingsAutoInProgress(),
+		BranchLimit:            m.settingsTabModel.GetSettingsBranchLimit(),
+		SanitizeBookmarks:      m.settingsTabModel.GetSettingsSanitizeBookmarks(),
+		ConfirmingCleanup:      m.settingsTabModel.GetConfirmingCleanup(),
 	}
-	data.Inputs = make([]struct{ View string }, len(m.settingsInputs))
-	for i, input := range m.settingsInputs {
+	data.Inputs = make([]struct{ View string }, len(inputs))
+	for i, input := range inputs {
 		data.Inputs[i].View = input.View()
 	}
 	data.HasLocalConfig = config.HasLocalConfig()
@@ -584,12 +551,13 @@ func (m *Model) renderSettings() string {
 	if m.ticketService != nil {
 		data.TicketProviderName = m.ticketService.GetProviderName()
 	}
-	data.JiraConfigured = strings.TrimSpace(m.settingsInputs[1].Value()) != "" &&
-		strings.TrimSpace(m.settingsInputs[2].Value()) != "" &&
-		strings.TrimSpace(m.settingsInputs[3].Value()) != ""
-	data.CodecksConfigured = len(m.settingsInputs) > 8 &&
-		strings.TrimSpace(m.settingsInputs[7].Value()) != "" &&
-		strings.TrimSpace(m.settingsInputs[8].Value()) != ""
+	data.JiraConfigured = len(inputs) > 3 &&
+		strings.TrimSpace(inputs[1].Value()) != "" &&
+		strings.TrimSpace(inputs[2].Value()) != "" &&
+		strings.TrimSpace(inputs[3].Value()) != ""
+	data.CodecksConfigured = len(inputs) > 8 &&
+		strings.TrimSpace(inputs[7].Value()) != "" &&
+		strings.TrimSpace(inputs[8].Value()) != ""
 	data.GitHubIssuesConfigured = m.isGitHubAvailable()
 
 	return settingstab.Render(m.zoneManager, data)
@@ -643,19 +611,9 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%.1fs", d.Seconds())
 }
 
-// syncBookmarkModalState copies main model bookmark state into the bookmark modal before rendering
+// syncBookmarkModalState updates the bookmark modal with current repository; modal owns its own state.
 func (m *Model) syncBookmarkModalState() {
 	m.bookmarkModal.UpdateRepository(m.repository)
-	m.bookmarkModal.SetBookmarkName(m.bookmarkNameInput.Value())
-	m.bookmarkModal.SetExistingBookmarks(m.existingBookmarks)
-	m.bookmarkModal.SetCommitIdx(m.bookmarkCommitIdx)
-	m.bookmarkModal.SetSelectedBookmarkIdx(m.selectedBookmarkIdx)
-	m.bookmarkModal.SetNameExists(m.bookmarkNameExists)
-	if m.bookmarkFromJira {
-		m.bookmarkModal.SetFromJira(m.bookmarkJiraTicketKey, m.bookmarkJiraTicketTitle, m.bookmarkTicketDisplayKey)
-	} else {
-		m.bookmarkModal.ClearJiraContext()
-	}
 }
 
 // renderCreateBookmark is fallback when bookmark modal View() returns "" (modal owns rendering now)
@@ -670,10 +628,11 @@ func (m *Model) renderEditDescription() string {
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#8BE9FD"))
 	subtitleStyle := lipgloss.NewStyle().Foreground(styles.ColorMuted)
 
+	editingID := m.graphTabModel.GetEditingCommitID()
 	var commitInfo string
 	if m.repository != nil {
 		for _, commit := range m.repository.Graph.Commits {
-			if commit.ChangeID == m.editingCommitID {
+			if commit.ChangeID == editingID {
 				changeIDShort := commit.ChangeID
 				if len(changeIDShort) > 8 {
 					changeIDShort = changeIDShort[:8]
@@ -684,7 +643,7 @@ func (m *Model) renderEditDescription() string {
 		}
 	}
 	if commitInfo == "" {
-		commitInfo = m.editingCommitID
+		commitInfo = editingID
 	}
 
 	header := titleStyle.Render("Edit Commit Description")
@@ -699,7 +658,7 @@ func (m *Model) renderEditDescription() string {
 		header,
 		commitLine,
 		"",
-		m.descriptionInput.View(),
+		m.graphTabModel.GetDescriptionInput().View(),
 		"",
 		actionButtons,
 	)
@@ -717,12 +676,7 @@ func (m *Model) renderStatusBar() string {
 	status = strings.ReplaceAll(status, "\n", " ")
 	status = strings.ReplaceAll(status, "\r", "")
 
-	// Show scroll position if content is scrollable
 	scrollIndicator := ""
-	if m.viewportReady && m.viewport.TotalLineCount() > m.viewport.Height {
-		scrollPercent := m.viewport.ScrollPercent() * 100
-		scrollIndicator = fmt.Sprintf(" [%.0f%%]", scrollPercent)
-	}
 
 	// Build shortcuts list
 	var shortcuts []string
@@ -795,10 +749,10 @@ func (m *Model) renderGitHubLogin() string {
 	lines = append(lines, "")
 	lines = append(lines, "")
 
-	if m.githubUserCode != "" {
+	if m.settingsTabModel.GetGitHubUserCode() != "" {
 		lines = append(lines, lipgloss.NewStyle().Bold(true).Render("1. Visit this URL in your browser:"))
 		lines = append(lines, "")
-		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#58A6FF")).Render("   "+m.githubVerificationURL))
+		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#58A6FF")).Render("   "+m.settingsTabModel.GetGitHubVerificationURL()))
 		lines = append(lines, "")
 		lines = append(lines, "")
 		lines = append(lines, lipgloss.NewStyle().Bold(true).Render("2. Enter this code:"))
@@ -811,7 +765,7 @@ func (m *Model) renderGitHubLogin() string {
 			Background(lipgloss.Color("#238636")).
 			Padding(1, 3).
 			MarginLeft(3)
-		lines = append(lines, codeStyle.Render(m.githubUserCode))
+		lines = append(lines, codeStyle.Render(m.settingsTabModel.GetGitHubUserCode()))
 		lines = append(lines, "")
 
 		// Add copy button
@@ -819,7 +773,7 @@ func (m *Model) renderGitHubLogin() string {
 		lines = append(lines, "   "+m.zoneManager.Mark(mouse.ZoneGitHubLoginCopyCode, copyButton))
 		lines = append(lines, "")
 
-		if m.githubLoginPolling {
+		if m.settingsTabModel.GetGitHubLoginPolling() {
 			lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#8B949E")).Italic(true).Render("   Waiting for authorization..."))
 		}
 	} else {

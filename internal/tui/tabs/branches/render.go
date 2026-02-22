@@ -120,8 +120,44 @@ func (m Model) renderBranches() string {
 	}
 
 	listContent := m.renderBranchGraph()
+	listLines := strings.Split(listContent, "\n")
 	fixedHeader := strings.Join(headerLines, "\n")
-	return fixedHeader + "\n" + listContent
+	headerLineCount := len(headerLines)
+	listHeight := m.height - headerLineCount
+	if listHeight <= 0 {
+		listHeight = 0
+	}
+	totalListLines := len(listLines)
+	maxListOffset := 0
+	if totalListLines > listHeight {
+		maxListOffset = totalListLines - listHeight
+	}
+	if m.listYOffset > maxListOffset {
+		m.listYOffset = maxListOffset
+	}
+	if m.listYOffset < 0 {
+		m.listYOffset = 0
+	}
+	start := m.listYOffset
+	end := start + listHeight
+	if end > totalListLines {
+		end = totalListLines
+	}
+	var visibleList string
+	if start < end {
+		visibleList = strings.Join(listLines[start:end], "\n")
+	} else {
+		visibleList = ""
+	}
+	out := fixedHeader + "\n" + visibleList
+	outLines := strings.Split(out, "\n")
+	for len(outLines) < m.height {
+		outLines = append(outLines, "")
+	}
+	if len(outLines) > m.height {
+		outLines = outLines[:m.height]
+	}
+	return strings.Join(outLines, "\n")
 }
 
 func (m Model) renderBranchGraph() string {

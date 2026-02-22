@@ -205,6 +205,13 @@ func (m *Model) GetBookmarkName() string {
 	return m.bookmarkName
 }
 
+// SetSelectedOption sets the selected option (0=Keep Local, 1=Reset to Remote)
+func (m *Model) SetSelectedOption(opt int) {
+	if opt >= 0 && opt <= 1 {
+		m.selectedOption = opt
+	}
+}
+
 // UpdateRepository updates the repository
 func (m *Model) UpdateRepository(repo *internal.Repository) {
 	// Conflict modal doesn't use repository directly

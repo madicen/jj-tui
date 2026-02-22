@@ -3,6 +3,7 @@ package graph
 import (
 	"strings"
 
+	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -30,9 +31,17 @@ type GraphModel struct {
 	filesViewport viewport.Model // Secondary viewport for changed files in graph view
 	graphFocused  bool           // True if graph viewport has focus, false if files viewport
 
+	// Scroll-to-selection: only adjust viewport when selection changed via keys/click (not on every frame, so mouse scroll isn't overridden)
+	scrollToSelectedCommit bool
+	scrollToSelectedFile   bool
+
 	// Rebase mode state
 	selectionMode      SelectionMode
 	rebaseSourceCommit int // Index of commit being rebased
+
+	// Description editing (when view is ViewEditDescription)
+	descriptionInput textarea.Model
+	editingCommitID  string // Change ID of commit being edited
 }
 
 // SelectionMode indicates what the user is selecting commits for
@@ -64,9 +73,17 @@ type GraphData struct {
 }
 
 func NewGraphModel(zoneManager *zone.Manager) GraphModel {
+	// Create viewports with default size and wheel enabled so mouse scroll works before first click or WindowSizeMsg.
+	const defaultW, defaultH = 80, 12
+	vp := viewport.New(defaultW, defaultH)
+	vp.MouseWheelEnabled = true
+	filesVp := viewport.New(defaultW, defaultH)
+	filesVp.MouseWheelEnabled = true
 	return GraphModel{
-		zoneManager:  zoneManager,
-		graphFocused: true, // default to graph pane focused so j/k navigate commits
+		zoneManager:     zoneManager,
+		graphFocused:    true, // default to graph pane focused so j/k navigate commits and wheel scrolls graph
+		viewport:        vp,
+		filesViewport:   filesVp,
 	}
 }
 
@@ -75,48 +92,75 @@ func (m GraphModel) Init() tea.Cmd {
 	return nil
 }
 
-func (m GraphModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+// Update uses a pointer receiver so scroll state is modified in place on the main model's graphTabModel.
+func (m *GraphModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		// Lazy-init viewports so mouse wheel scrolling works (need real viewport, not zero value)
+		if m.viewport.Width == 0 {
+			h := max(1, m.height/2)
+			m.viewport = viewport.New(max(1, m.width), h)
+			m.viewport.MouseWheelEnabled = true
+			m.filesViewport = viewport.New(max(1, m.width), h)
+			m.filesViewport.MouseWheelEnabled = true
+		}
 		return m, nil
 
 	case tea.KeyMsg:
-		return m.handleKeyMsg(msg)
+		updated, cmd := m.handleKeyMsg(msg)
+		*m = updated
+		return m, cmd
 
 	case tea.MouseMsg:
-		// Handle mouse wheel scrolling
-		if msg.Action == tea.MouseActionPress && (msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown) {
-			// For graph view, scroll the focused pane
+		// Mouse wheel: use IsWheel() so we accept any encoding the terminal sends (not just X11 4/5)
+		if tea.MouseEvent(msg).IsWheel() {
+			delta := 3
+			// WheelUp/WheelLeft = scroll up, WheelDown/WheelRight = scroll down
+			isUp := msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelLeft
 			if m.graphFocused {
-				// Scroll graph pane
-				var cmd tea.Cmd
-				m.viewport, cmd = m.viewport.Update(msg)
-				return m, cmd
+				if isUp {
+					m.viewport.ScrollUp(delta)
+				} else {
+					m.viewport.ScrollDown(delta)
+				}
 			} else {
-				// Scroll files pane
-				var cmd tea.Cmd
-				m.filesViewport, cmd = m.filesViewport.Update(msg)
-				return m, cmd
+				if isUp {
+					m.filesViewport.ScrollUp(delta)
+				} else {
+					m.filesViewport.ScrollDown(delta)
+				}
 			}
+			return m, nil
 		}
 
 	case zone.MsgZoneInBounds:
-		return m.handleZoneClick(msg.Zone)
+		updated, cmd := m.handleZoneClick(msg.Zone)
+		*m = updated
+		return m, cmd
 	}
 
 	return m, nil
 }
 
-func (m GraphModel) View() string {
+// graphLineIndexForCommit returns the line index in the graph content for the given commit index.
+// Matches the layout in data.go: each commit uses 1 line plus len(commit.GraphLines) connector lines.
+func graphLineIndexForCommit(commits []internal.Commit, commitIndex int) int {
+	if commitIndex <= 0 {
+		return 0
+	}
+	lineIdx := 0
+	for j := 0; j < commitIndex && j < len(commits); j++ {
+		lineIdx += 1 + len(commits[j].GraphLines)
+	}
+	return lineIdx
+}
+
+// View uses a pointer receiver so viewport YOffset updates (scroll-to-selection) persist on the model.
+func (m *GraphModel) View() string {
 	// Graph view with split panes: graph (scrollable) | actions (fixed) | files (scrollable)
 	graphResult := m.getGraphResult()
-
-	headerHeight := 1
-	statusHeight := 1
-	separatorLines := 2 // Two separator lines between sections
-	paddingLines := 1   // Padding after header
 
 	// Use a minimum actions height during loading to keep layout stable
 	actionsContent := graphResult.ActionsBar
@@ -125,8 +169,9 @@ func (m GraphModel) View() string {
 	}
 	actionsHeight := strings.Count(actionsContent, "\n") + 1
 
-	// Calculate available height for the two scrollable panes
-	availableHeight := max(m.height-headerHeight-statusHeight-actionsHeight-separatorLines-paddingLines, 6)
+	// Content area layout: graph pane + separator + actions + separator + files pane = m.height
+	// So graphHeight + filesHeight = m.height - actionsHeight - 2 (the two separator lines)
+	availableHeight := max(m.height-actionsHeight-2, 6)
 
 	// Split height: 60% for graph, 40% for files
 	graphHeight := (availableHeight * 60) / 100
@@ -134,15 +179,34 @@ func (m GraphModel) View() string {
 	graphHeight = max(graphHeight, 3)
 	filesHeight = max(filesHeight, 3)
 
+	graphVisible := max(graphHeight, 2)
+
 	// Set up graph viewport (store content and scroll state; we slice manually to preserve zone markup)
-	m.viewport.Height = graphHeight
+	m.viewport.Height = graphVisible
 	savedGraphOffset := m.viewport.YOffset
 	if graphResult.GraphContent != "" {
 		m.viewport.SetContent(graphResult.GraphContent)
 	}
 	m.viewport.YOffset = savedGraphOffset
-	maxGraphOffset := max(m.viewport.TotalLineCount()-graphHeight, 0)
+	maxGraphOffset := max(m.viewport.TotalLineCount()-graphVisible, 0)
 	m.viewport.YOffset = max(min(m.viewport.YOffset, maxGraphOffset), 0)
+
+	// Keep selected commit visible only when selection changed via keys/click (so mouse scroll isn't overridden)
+	// GraphContent has a header at line 0 ("Graph (Tab to switch):"), so selected commit is at content line lineIdx+1
+	if m.scrollToSelectedCommit {
+		m.scrollToSelectedCommit = false
+		if m.repository != nil && m.selectedCommit >= 0 && m.selectedCommit < len(m.repository.Graph.Commits) {
+			lineIdx := graphLineIndexForCommit(m.repository.Graph.Commits, m.selectedCommit)
+			contentLine := lineIdx + 1
+			if contentLine < m.viewport.YOffset {
+				// Selection above view: scroll up one line
+				m.viewport.YOffset = max(0, m.viewport.YOffset-1)
+			} else if contentLine >= m.viewport.YOffset+graphVisible {
+				// Selection below view: scroll so it appears on last visible line (don't scroll before it goes off)
+				m.viewport.YOffset = min(contentLine-(graphVisible-1), maxGraphOffset)
+			}
+		}
+	}
 
 	// Slice graph content manually so ZoneCommit(i) etc. are preserved (viewport.View() would corrupt them)
 	graphLines := strings.Split(graphResult.GraphContent, "\n")
@@ -150,7 +214,7 @@ func (m GraphModel) View() string {
 	if gYOff < 0 {
 		gYOff = 0
 	}
-	gEnd := min(gYOff+graphHeight, len(graphLines))
+	gEnd := min(gYOff+graphVisible, len(graphLines))
 	gStart := min(gYOff, gEnd)
 	var visibleGraph string
 	if gStart < gEnd {
@@ -164,13 +228,30 @@ func (m GraphModel) View() string {
 	if filesContent == "" {
 		filesContent = lipgloss.NewStyle().Foreground(lipgloss.Color("#666666")).Render("  Loading changed files...")
 	}
-	savedFilesOffset := m.filesViewport.YOffset
+	filesLines := strings.Split(filesContent, "\n")
+	totalFilesLines := len(filesLines)
+	maxFilesOffset := max(totalFilesLines-filesHeight, 0)
+	savedFilesOffset := max(min(m.filesViewport.YOffset, maxFilesOffset), 0)
 	m.filesViewport.SetContent(filesContent)
 	m.filesViewport.YOffset = savedFilesOffset
-	maxFilesOffset := max(m.filesViewport.TotalLineCount()-filesHeight, 0)
-	m.filesViewport.YOffset = max(min(m.filesViewport.YOffset, maxFilesOffset), 0)
 
-	filesLines := strings.Split(filesContent, "\n")
+	// Keep selected file visible only when selection changed via keys/click (so mouse scroll isn't overridden)
+	if m.scrollToSelectedFile {
+		m.scrollToSelectedFile = false
+		if len(m.changedFiles) > 0 && m.selectedFile >= 0 && m.selectedFile < len(m.changedFiles) &&
+			graphResult.FileIndexToLineIndex != nil && m.selectedFile < len(graphResult.FileIndexToLineIndex) {
+			lineIdx := graphResult.FileIndexToLineIndex[m.selectedFile]
+			if lineIdx >= 0 {
+				if lineIdx < m.filesViewport.YOffset {
+					m.filesViewport.YOffset = max(0, lineIdx)
+				} else if lineIdx >= m.filesViewport.YOffset+filesHeight {
+					m.filesViewport.YOffset = min(lineIdx-filesHeight+1, maxFilesOffset)
+				}
+			}
+		}
+	}
+
+	m.filesViewport.YOffset = max(min(m.filesViewport.YOffset, maxFilesOffset), 0)
 	fYOff := m.filesViewport.YOffset
 	if fYOff < 0 {
 		fYOff = 0

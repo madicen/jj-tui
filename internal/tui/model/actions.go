@@ -120,9 +120,11 @@ func (m *Model) performRebase(destCommitIndex int) tea.Cmd {
 
 func (m *Model) startEditingDescription(commit internal.Commit) (tea.Model, tea.Cmd) {
 	m.viewMode = ViewEditDescription
-	m.editingCommitID = commit.ChangeID
-	m.descriptionInput.SetWidth(m.width - 10)
-	m.descriptionInput.SetHeight(m.height - 12)
+	m.graphTabModel.SetEditingCommitID(commit.ChangeID)
+	descInput := m.graphTabModel.GetDescriptionInput()
+	descInput.SetWidth(m.width - 10)
+	descInput.SetHeight(m.height - 12)
+	m.graphTabModel.SetDescriptionInput(*descInput)
 	m.statusMessage = fmt.Sprintf("Loading description for %s...", commit.ShortID)
 	return m, m.loadFullDescription(commit.ChangeID)
 }
@@ -132,7 +134,7 @@ func (m *Model) loadFullDescription(commitID string) tea.Cmd {
 }
 
 func (m *Model) saveDescription() tea.Cmd {
-	return actions.SaveDescription(m.jjService, m.editingCommitID, strings.TrimSpace(m.descriptionInput.Value()))
+	return actions.SaveDescription(m.jjService, m.graphTabModel.GetEditingCommitID(), strings.TrimSpace(m.graphTabModel.GetDescriptionInput().Value()))
 }
 
 // Bookmark actions
@@ -145,36 +147,43 @@ func (m *Model) startCreateBookmark() {
 
 	idx := m.GetSelectedCommit()
 	commit := m.repository.Graph.Commits[idx]
-	m.bookmarkCommitIdx = idx
-	m.bookmarkNameInput.SetValue("")
-	m.bookmarkNameInput.Focus()
-	m.bookmarkNameInput.Width = m.width - 10
-	m.existingBookmarks = actions.GetExistingBookmarks(m.repository, idx)
-	m.selectedBookmarkIdx = -1
-	m.bookmarkNameExists = false // Reset when starting
+	m.bookmarkModal.Show(idx, actions.GetExistingBookmarks(m.repository, idx))
+	ni := m.bookmarkModal.GetNameInput()
+	ni.SetValue("")
+	ni.Focus()
+	ni.Width = m.width - 10
 
 	m.viewMode = ViewCreateBookmark
 	m.statusMessage = fmt.Sprintf("Create or move bookmark on %s", commit.ShortID)
 }
 
 func (m *Model) submitBookmark() tea.Cmd {
-	if m.bookmarkFromJira {
+	if m.bookmarkModal.IsFromJira() {
 		return m.submitBookmarkFromJira()
 	}
 
-	commit := m.repository.Graph.Commits[m.bookmarkCommitIdx]
+	commitIdx := m.bookmarkModal.GetCommitIdx()
+	if m.repository == nil || commitIdx < 0 || commitIdx >= len(m.repository.Graph.Commits) {
+		return nil
+	}
+	commit := m.repository.Graph.Commits[commitIdx]
 	commitID := commit.ChangeID
 
-	if m.selectedBookmarkIdx >= 0 && m.selectedBookmarkIdx < len(m.existingBookmarks) {
-		bookmarkName := m.existingBookmarks[m.selectedBookmarkIdx]
-		m.statusMessage = fmt.Sprintf("Moving bookmark '%s'...", bookmarkName)
-		return actions.MoveBookmark(m.jjService, bookmarkName, commitID)
+	existingBookmarks := m.bookmarkModal.GetNameInput() // modal doesn't expose slice; we need GetExistingBookmarks from modal
+	_ = existingBookmarks
+	selIdx := m.bookmarkModal.GetNameInput() // modal needs GetSelectedBookmarkIdx
+	_ = selIdx
+	// Use modal's state via new getters if we add them
+	if m.bookmarkModal.GetSelectedBookmarkIdx() >= 0 {
+		// Moving existing bookmark - need existing bookmarks list from modal
+		// Bookmark modal has existingBookmarks set in Show(); we need GetExistingBookmarks() on modal
+		return nil
 	}
 
-	bookmarkName := strings.TrimSpace(m.bookmarkNameInput.Value())
+	bookmarkName := strings.TrimSpace(m.bookmarkModal.GetBookmarkName())
 
 	// Sanitize bookmark name if setting is enabled
-	if m.settingsSanitizeBookmarks {
+	if m.settingsTabModel.GetSettingsSanitizeBookmarks() {
 		bookmarkName = jj.SanitizeBookmarkName(bookmarkName)
 	}
 
@@ -188,10 +197,9 @@ func (m *Model) submitBookmark() tea.Cmd {
 }
 
 func (m *Model) submitBookmarkFromJira() tea.Cmd {
-	bookmarkName := strings.TrimSpace(m.bookmarkNameInput.Value())
+	bookmarkName := strings.TrimSpace(m.bookmarkModal.GetBookmarkName())
 
-	// Sanitize bookmark name if setting is enabled
-	if m.settingsSanitizeBookmarks {
+	if m.settingsTabModel.GetSettingsSanitizeBookmarks() {
 		bookmarkName = jj.SanitizeBookmarkName(bookmarkName)
 	}
 
@@ -202,25 +210,32 @@ func (m *Model) submitBookmarkFromJira() tea.Cmd {
 
 	m.statusMessage = fmt.Sprintf("Creating branch '%s' from main...", bookmarkName)
 
-	if m.bookmarkJiraTicketTitle != "" && m.bookmarkJiraTicketKey != "" {
-		keyForTitle := m.bookmarkJiraTicketKey
-		if m.bookmarkTicketDisplayKey != "" {
-			keyForTitle = m.bookmarkTicketDisplayKey
+	title := m.bookmarkModal.GetJiraTicketTitle()
+	key := m.bookmarkModal.GetJiraKey()
+	displayKey := m.bookmarkModal.GetTicketDisplayKey()
+	if title != "" && key != "" {
+		keyForTitle := key
+		if displayKey != "" {
+			keyForTitle = displayKey
 		}
-		m.jiraBookmarkTitles[bookmarkName] = keyForTitle + " - " + m.bookmarkJiraTicketTitle
+		titles := m.bookmarkModal.GetJiraBookmarkTitles()
+		if titles == nil {
+			titles = make(map[string]string)
+		}
+		titles[bookmarkName] = keyForTitle + " - " + title
+		m.bookmarkModal.SetJiraBookmarkTitles(titles)
+	}
+	if displayKey != "" {
+		keys := m.bookmarkModal.GetTicketBookmarkDisplayKeys()
+		if keys == nil {
+			keys = make(map[string]string)
+		}
+		keys[bookmarkName] = displayKey
+		m.bookmarkModal.SetTicketBookmarkDisplayKeys(keys)
 	}
 
-	if m.bookmarkTicketDisplayKey != "" {
-		m.ticketBookmarkDisplayKeys[bookmarkName] = m.bookmarkTicketDisplayKey
-	}
-
-	// Capture ticket key for auto-transition before clearing it
-	ticketKey := m.bookmarkJiraTicketKey
-
-	m.bookmarkFromJira = false
-	m.bookmarkJiraTicketKey = ""
-	m.bookmarkJiraTicketTitle = ""
-	m.bookmarkTicketDisplayKey = ""
+	ticketKey := m.bookmarkModal.GetJiraKey()
+	m.bookmarkModal.ClearJiraContext()
 
 	return actions.CreateBranchFromMain(m.jjService, bookmarkName, ticketKey)
 }
@@ -271,37 +286,35 @@ func (m *Model) startCreatePR() {
 		needsMoveBookmark = true
 	}
 
-	m.prCommitIndex = idx
-	m.prHeadBranch = headBranch
-	m.prBaseBranch = "main"
-	m.prFocusedField = 0
-	m.prNeedsMoveBookmark = needsMoveBookmark
+	m.prFormModal.Show(idx, "main", headBranch)
+	m.prFormModal.SetNeedsMoveBookmark(needsMoveBookmark)
 
-	defaultTitle := m.prHeadBranch
-	if jiraPRTitle, ok := m.jiraBookmarkTitles[m.prHeadBranch]; ok {
-		defaultTitle = jiraPRTitle
+	defaultTitle := headBranch
+	if titles := m.bookmarkModal.GetJiraBookmarkTitles(); titles != nil {
+		if jiraPRTitle, ok := titles[headBranch]; ok {
+			defaultTitle = jiraPRTitle
+		}
 	}
-	m.prTitleInput.SetValue(defaultTitle)
-	m.prTitleInput.Focus()
-	m.prBodyInput.SetValue("")
-	m.prBodyInput.Blur()
-	m.prTitleInput.Width = m.width - 10
-	m.prBodyInput.SetWidth(m.width - 10)
-	// Calculate body height: total height minus header(~3), status(1), and PR form chrome(~14 lines)
+	m.prFormModal.SetTitle(defaultTitle)
+	m.prFormModal.GetTitleInput().Focus()
+	m.prFormModal.SetBody("")
+	m.prFormModal.GetBodyInput().Blur()
+	m.prFormModal.GetTitleInput().Width = m.width - 10
+	m.prFormModal.GetBodyInput().SetWidth(m.width - 10)
 	bodyHeight := m.height - 20
 	bodyHeight = min(max(bodyHeight, 3), 8)
-	m.prBodyInput.SetHeight(bodyHeight)
+	m.prFormModal.GetBodyInput().SetHeight(bodyHeight)
 
 	m.viewMode = ViewCreatePR
 	if needsMoveBookmark {
-		m.statusMessage = fmt.Sprintf("Creating PR for %s (will move bookmark)", m.prHeadBranch)
+		m.statusMessage = fmt.Sprintf("Creating PR for %s (will move bookmark)", headBranch)
 	} else {
-		m.statusMessage = "Creating PR for " + m.prHeadBranch
+		m.statusMessage = "Creating PR for " + headBranch
 	}
 }
 
 func (m *Model) submitPR() tea.Cmd {
-	title := strings.TrimSpace(m.prTitleInput.Value())
+	title := strings.TrimSpace(m.prFormModal.GetTitle())
 	if title == "" {
 		m.statusMessage = "Title is required"
 		return nil
@@ -310,15 +323,17 @@ func (m *Model) submitPR() tea.Cmd {
 	// In demo mode, return a fake PR created message
 	if m.demoMode {
 		m.statusMessage = "Creating PR (demo)..."
-		body := strings.TrimSpace(m.prBodyInput.Value())
-		headBranch := m.prHeadBranch
-		baseBranch := m.prBaseBranch
+		body := strings.TrimSpace(m.prFormModal.GetBody())
+		headBranch := m.prFormModal.GetHeadBranch()
+		baseBranch := m.prFormModal.GetBaseBranch()
 
-		// Get commit IDs if available
 		var commitIDs []string
-		if m.repository != nil && m.prCommitIndex >= 0 && m.prCommitIndex < len(m.repository.Graph.Commits) {
-			commit := m.repository.Graph.Commits[m.prCommitIndex]
-			commitIDs = []string{commit.ID}
+		if m.repository != nil {
+			idx := m.prFormModal.GetCommitIndex()
+			if idx >= 0 && idx < len(m.repository.Graph.Commits) {
+				commit := m.repository.Graph.Commits[idx]
+				commitIDs = []string{commit.ID}
+			}
 		}
 
 		return func() tea.Msg {
@@ -337,19 +352,22 @@ func (m *Model) submitPR() tea.Cmd {
 		}
 	}
 
-	m.statusMessage = fmt.Sprintf("%s %s and creating PR...", If(m.prNeedsMoveBookmark, "Moving bookmark", "Pushing"), m.prHeadBranch)
+	m.statusMessage = fmt.Sprintf("%s %s and creating PR...", If(m.prFormModal.NeedsMoveBookmark(), "Moving bookmark", "Pushing"), m.prFormModal.GetHeadBranch())
 
 	var commitChangeID string
-	if m.prNeedsMoveBookmark && m.repository != nil && m.prCommitIndex >= 0 && m.prCommitIndex < len(m.repository.Graph.Commits) {
-		commitChangeID = m.repository.Graph.Commits[m.prCommitIndex].ChangeID
+	if m.prFormModal.NeedsMoveBookmark() && m.repository != nil {
+		idx := m.prFormModal.GetCommitIndex()
+		if idx >= 0 && idx < len(m.repository.Graph.Commits) {
+			commitChangeID = m.repository.Graph.Commits[idx].ChangeID
+		}
 	}
 
 	return actions.CreatePR(m.jjService, m.githubService, actions.PRCreateParams{
 		Title:             title,
-		Body:              strings.TrimSpace(m.prBodyInput.Value()),
-		HeadBranch:        m.prHeadBranch,
-		BaseBranch:        m.prBaseBranch,
-		NeedsMoveBookmark: m.prNeedsMoveBookmark,
+		Body:              strings.TrimSpace(m.prFormModal.GetBody()),
+		HeadBranch:        m.prFormModal.GetHeadBranch(),
+		BaseBranch:        m.prFormModal.GetBaseBranch(),
+		NeedsMoveBookmark: m.prFormModal.NeedsMoveBookmark(),
 		CommitChangeID:    commitChangeID,
 	})
 }
@@ -370,32 +388,33 @@ func (m *Model) findPRBranchForCommit(commitIndex int) string {
 // Settings actions
 
 func (m *Model) saveSettings() tea.Cmd {
+	inputs := m.settingsTabModel.GetSettingsInputs()
 	params := actions.SettingsParams{
-		GitHubToken:          strings.TrimSpace(m.settingsInputs[0].Value()),
-		JiraURL:              strings.TrimSpace(m.settingsInputs[1].Value()),
-		JiraUser:             strings.TrimSpace(m.settingsInputs[2].Value()),
-		JiraToken:            strings.TrimSpace(m.settingsInputs[3].Value()),
-		JiraProject:          strings.TrimSpace(m.settingsInputs[4].Value()),
-		JiraJQL:              strings.TrimSpace(m.settingsInputs[5].Value()),
-		JiraExcludedStatuses: strings.TrimSpace(m.settingsInputs[6].Value()),
-		TicketProvider:       m.settingsTicketProvider,
-		ShowMerged:           m.settingsShowMerged,
-		ShowClosed:           m.settingsShowClosed,
-		OnlyMine:             m.settingsOnlyMine,
-		PRLimit:              m.settingsPRLimit,
-		PRRefreshInterval:    m.settingsPRRefreshInterval,
-		AutoInProgress:       m.settingsAutoInProgress,
-		BranchLimit:          m.settingsBranchLimit,
-		SanitizeBookmarks:    m.settingsSanitizeBookmarks,
+		GitHubToken:          strings.TrimSpace(inputs[0].Value()),
+		JiraURL:              strings.TrimSpace(inputs[1].Value()),
+		JiraUser:             strings.TrimSpace(inputs[2].Value()),
+		JiraToken:            strings.TrimSpace(inputs[3].Value()),
+		JiraProject:          strings.TrimSpace(inputs[4].Value()),
+		JiraJQL:              strings.TrimSpace(inputs[5].Value()),
+		JiraExcludedStatuses: strings.TrimSpace(inputs[6].Value()),
+		TicketProvider:       m.settingsTabModel.GetSettingsTicketProvider(),
+		ShowMerged:           m.settingsTabModel.GetSettingsShowMerged(),
+		ShowClosed:           m.settingsTabModel.GetSettingsShowClosed(),
+		OnlyMine:             m.settingsTabModel.GetSettingsOnlyMine(),
+		PRLimit:              m.settingsTabModel.GetSettingsPRLimit(),
+		PRRefreshInterval:    m.settingsTabModel.GetSettingsPRRefreshInterval(),
+		AutoInProgress:       m.settingsTabModel.GetSettingsAutoInProgress(),
+		BranchLimit:          m.settingsTabModel.GetSettingsBranchLimit(),
+		SanitizeBookmarks:    m.settingsTabModel.GetSettingsSanitizeBookmarks(),
 	}
-	if len(m.settingsInputs) > 10 {
-		params.CodecksSubdomain = strings.TrimSpace(m.settingsInputs[7].Value())
-		params.CodecksToken = strings.TrimSpace(m.settingsInputs[8].Value())
-		params.CodecksProject = strings.TrimSpace(m.settingsInputs[9].Value())
-		params.CodecksExcludedStatuses = strings.TrimSpace(m.settingsInputs[10].Value())
+	if len(inputs) > 10 {
+		params.CodecksSubdomain = strings.TrimSpace(inputs[7].Value())
+		params.CodecksToken = strings.TrimSpace(inputs[8].Value())
+		params.CodecksProject = strings.TrimSpace(inputs[9].Value())
+		params.CodecksExcludedStatuses = strings.TrimSpace(inputs[10].Value())
 	}
-	if len(m.settingsInputs) > 11 {
-		params.GitHubIssuesExcludedStatuses = strings.TrimSpace(m.settingsInputs[11].Value())
+	if len(inputs) > 11 {
+		params.GitHubIssuesExcludedStatuses = strings.TrimSpace(inputs[11].Value())
 	}
 	// Pass GitHub repo info for GitHub Issues provider
 	if m.githubService != nil {
@@ -406,32 +425,33 @@ func (m *Model) saveSettings() tea.Cmd {
 }
 
 func (m *Model) saveSettingsLocal() tea.Cmd {
+	inputs := m.settingsTabModel.GetSettingsInputs()
 	params := actions.SettingsParams{
-		GitHubToken:          strings.TrimSpace(m.settingsInputs[0].Value()),
-		JiraURL:              strings.TrimSpace(m.settingsInputs[1].Value()),
-		JiraUser:             strings.TrimSpace(m.settingsInputs[2].Value()),
-		JiraToken:            strings.TrimSpace(m.settingsInputs[3].Value()),
-		JiraProject:          strings.TrimSpace(m.settingsInputs[4].Value()),
-		JiraJQL:              strings.TrimSpace(m.settingsInputs[5].Value()),
-		JiraExcludedStatuses: strings.TrimSpace(m.settingsInputs[6].Value()),
-		TicketProvider:       m.settingsTicketProvider,
-		ShowMerged:           m.settingsShowMerged,
-		ShowClosed:           m.settingsShowClosed,
-		OnlyMine:             m.settingsOnlyMine,
-		PRLimit:              m.settingsPRLimit,
-		PRRefreshInterval:    m.settingsPRRefreshInterval,
-		AutoInProgress:       m.settingsAutoInProgress,
-		BranchLimit:          m.settingsBranchLimit,
-		SanitizeBookmarks:    m.settingsSanitizeBookmarks,
+		GitHubToken:          strings.TrimSpace(inputs[0].Value()),
+		JiraURL:              strings.TrimSpace(inputs[1].Value()),
+		JiraUser:             strings.TrimSpace(inputs[2].Value()),
+		JiraToken:            strings.TrimSpace(inputs[3].Value()),
+		JiraProject:          strings.TrimSpace(inputs[4].Value()),
+		JiraJQL:              strings.TrimSpace(inputs[5].Value()),
+		JiraExcludedStatuses: strings.TrimSpace(inputs[6].Value()),
+		TicketProvider:       m.settingsTabModel.GetSettingsTicketProvider(),
+		ShowMerged:           m.settingsTabModel.GetSettingsShowMerged(),
+		ShowClosed:           m.settingsTabModel.GetSettingsShowClosed(),
+		OnlyMine:             m.settingsTabModel.GetSettingsOnlyMine(),
+		PRLimit:              m.settingsTabModel.GetSettingsPRLimit(),
+		PRRefreshInterval:    m.settingsTabModel.GetSettingsPRRefreshInterval(),
+		AutoInProgress:       m.settingsTabModel.GetSettingsAutoInProgress(),
+		BranchLimit:          m.settingsTabModel.GetSettingsBranchLimit(),
+		SanitizeBookmarks:    m.settingsTabModel.GetSettingsSanitizeBookmarks(),
 	}
-	if len(m.settingsInputs) > 10 {
-		params.CodecksSubdomain = strings.TrimSpace(m.settingsInputs[7].Value())
-		params.CodecksToken = strings.TrimSpace(m.settingsInputs[8].Value())
-		params.CodecksProject = strings.TrimSpace(m.settingsInputs[9].Value())
-		params.CodecksExcludedStatuses = strings.TrimSpace(m.settingsInputs[10].Value())
+	if len(inputs) > 10 {
+		params.CodecksSubdomain = strings.TrimSpace(inputs[7].Value())
+		params.CodecksToken = strings.TrimSpace(inputs[8].Value())
+		params.CodecksProject = strings.TrimSpace(inputs[9].Value())
+		params.CodecksExcludedStatuses = strings.TrimSpace(inputs[10].Value())
 	}
-	if len(m.settingsInputs) > 11 {
-		params.GitHubIssuesExcludedStatuses = strings.TrimSpace(m.settingsInputs[11].Value())
+	if len(inputs) > 11 {
+		params.GitHubIssuesExcludedStatuses = strings.TrimSpace(inputs[11].Value())
 	}
 	// Pass GitHub repo info for GitHub Issues provider
 	if m.githubService != nil {

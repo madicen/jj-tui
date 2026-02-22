@@ -9,13 +9,13 @@ import (
 
 // startDeleteBookmarks initiates the bookmark deletion confirmation
 func (m *Model) startDeleteBookmarks() {
-	m.confirmingCleanup = "delete_bookmarks"
+	m.settingsTabModel.SetConfirmingCleanup("delete_bookmarks")
 	m.statusMessage = "Press Y to confirm deletion of all bookmarks, or N to cancel"
 }
 
 // startAbandonOldCommits initiates the abandon old commits confirmation
 func (m *Model) startAbandonOldCommits() {
-	m.confirmingCleanup = "abandon_old_commits"
+	m.settingsTabModel.SetConfirmingCleanup("abandon_old_commits")
 	m.statusMessage = "Press Y to confirm abandoning commits before origin/main, or N to cancel"
 }
 
@@ -116,18 +116,18 @@ func (m *Model) abandonCommitsBeforeOriginMain() tea.Cmd {
 
 // cancelCleanup cancels the current cleanup operation
 func (m *Model) cancelCleanup() {
-	m.confirmingCleanup = ""
+	m.settingsTabModel.SetConfirmingCleanup("")
 	m.statusMessage = "Cleanup cancelled"
 }
 
 // confirmCleanup executes the confirmed cleanup operation
 func (m *Model) confirmCleanup() tea.Cmd {
-	switch m.confirmingCleanup {
+	switch m.settingsTabModel.GetConfirmingCleanup() {
 	case "delete_bookmarks":
-		m.confirmingCleanup = ""
+		m.settingsTabModel.SetConfirmingCleanup("")
 		return m.deleteAllBookmarks()
 	case "abandon_old_commits":
-		m.confirmingCleanup = ""
+		m.settingsTabModel.SetConfirmingCleanup("")
 		return m.abandonCommitsBeforeOriginMain()
 	default:
 		return nil

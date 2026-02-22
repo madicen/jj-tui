@@ -26,105 +26,54 @@ import (
 
 // New creates a new Model
 func New(ctx context.Context) *Model {
-	// Create textarea for description editing
+	// Load config for initial values
+	cfg, _ := config.Load()
+
+	// Create description textarea for graph tab (commit description editing)
 	ta := textarea.New()
 	ta.Placeholder = "Enter commit description..."
 	ta.ShowLineNumbers = false
 	ta.SetWidth(60)
 	ta.SetHeight(5)
 
-	// Load config for initial values
-	cfg, _ := config.Load()
-
-	// Create settings inputs
-	settingsInputs := createSettingsInputs(cfg)
-
-	// Initialize toggle states from config
-	showMerged := true
-	showClosed := true
-	onlyMine := false
-	prLimit := 100
-	prRefreshInterval := 120  // Default: 2 minutes
-	autoInProgress := true    // Default: enabled
-	branchLimit := 50         // Default: 50 branches
-	sanitizeBookmarks := true // Default: enabled
-	ticketProvider := ""      // Default: none selected (will use legacy auto-detect on save)
-	if cfg != nil {
-		showMerged = cfg.ShowMergedPRs()
-		showClosed = cfg.ShowClosedPRs()
-		onlyMine = cfg.OnlyMyPRs()
-		prLimit = cfg.PRLimit()
-		prRefreshInterval = cfg.PRRefreshInterval()
-		autoInProgress = cfg.AutoInProgressOnBranch()
-		branchLimit = cfg.BranchLimit()
-		sanitizeBookmarks = cfg.ShouldSanitizeBookmarkNames()
-		ticketProvider = cfg.TicketProvider
-	}
-
-	// PR title input
-	prTitle := textinput.New()
-	prTitle.Placeholder = "Pull request title"
-	prTitle.CharLimit = 200
-	prTitle.Width = 60
-
-	// PR body textarea
-	prBody := textarea.New()
-	prBody.Placeholder = "Describe your changes..."
-	prBody.ShowLineNumbers = false
-	prBody.SetWidth(60)
-	prBody.SetHeight(8)
-
-	// Bookmark name input
-	bookmarkName := textinput.New()
-	bookmarkName.Placeholder = "bookmark-name"
-	bookmarkName.CharLimit = 100
-	bookmarkName.Width = 50
-
-	// Initialize tab models
 	zm := zone.New()
 	graphTabModel := graphtab.NewGraphModel(zm)
+	graphTabModel.SetDescriptionInput(ta)
+
+	settingsTabModel := settingstab.NewModel()
+	settingsInputs := createSettingsInputs(cfg)
+	settingsTabModel.SetInputs(settingsInputs)
+	if cfg != nil {
+		settingsTabModel.SetSettingsShowMerged(cfg.ShowMergedPRs())
+		settingsTabModel.SetSettingsShowClosed(cfg.ShowClosedPRs())
+		settingsTabModel.SetSettingsOnlyMine(cfg.OnlyMyPRs())
+		settingsTabModel.SetSettingsPRLimit(cfg.PRLimit())
+		settingsTabModel.SetSettingsPRRefreshInterval(cfg.PRRefreshInterval())
+		settingsTabModel.SetSettingsAutoInProgress(cfg.AutoInProgressOnBranch())
+		settingsTabModel.SetSettingsBranchLimit(cfg.BranchLimit())
+		settingsTabModel.SetSettingsSanitizeBookmarks(cfg.ShouldSanitizeBookmarkNames())
+		settingsTabModel.SetSettingsTicketProvider(cfg.TicketProvider)
+	}
 
 	return &Model{
-		ctx:                       ctx,
-		zoneManager:               zm,
-		viewMode:                  ViewCommitGraph,
-		statusMessage:             "Initializing...",
-		loading:                   true,
-		descriptionInput:          ta,
-		settingsInputs:            settingsInputs,
-		settingsShowMerged:        showMerged,
-		settingsShowClosed:        showClosed,
-		settingsOnlyMine:          onlyMine,
-		settingsPRLimit:           prLimit,
-		settingsPRRefreshInterval: prRefreshInterval,
-		settingsAutoInProgress:    autoInProgress,
-		settingsBranchLimit:       branchLimit,
-		settingsSanitizeBookmarks: sanitizeBookmarks,
-		settingsTicketProvider:    ticketProvider,
-		prTitleInput:              prTitle,
-		prBodyInput:               prBody,
-		prBaseBranch:              "main",
-		prCommitIndex:             -1,
-		bookmarkNameInput:         bookmarkName,
-		bookmarkCommitIdx:         -1,
-		selectedBookmarkIdx:       -1,
-		jiraBookmarkTitles:        make(map[string]string),
-		ticketBookmarkDisplayKeys: make(map[string]string),
-		// Initialize tab models
-		graphTabModel:    graphTabModel,
-		prsTabModel:      prstab.NewModel(zm),
+		ctx:             ctx,
+		zoneManager:     zm,
+		viewMode:        ViewCommitGraph,
+		statusMessage:   "Initializing...",
+		loading:         true,
+		graphFocused:    true, // match graph tab default so wheel scroll works without clicking first
+		graphTabModel:   graphTabModel,
+		prsTabModel:     prstab.NewModel(zm),
 		branchesTabModel: branchestab.NewModel(zm),
-		ticketsTabModel:  ticketstab.NewModel(zm),
-		settingsTabModel: settingstab.NewModel(),
-		helpTabModel:     helptab.NewModel(zm),
-
-		// Initialize modal models
-		errorModal:     errortab.NewModel(),
-		warningModal:   warningtab.NewModel(),
-		conflictModal:  conflicttab.NewModel(zm),
-		divergentModal: divergenttab.NewModel(zm),
-		bookmarkModal:  bookmarktab.NewModel(zm),
-		prFormModal:    prformtab.NewModel(),
+		ticketsTabModel: ticketstab.NewModel(zm),
+		settingsTabModel: settingsTabModel,
+		helpTabModel:    helptab.NewModel(zm),
+		errorModal:      errortab.NewModel(),
+		warningModal:    warningtab.NewModel(),
+		conflictModal:   conflicttab.NewModel(zm),
+		divergentModal:  divergenttab.NewModel(zm),
+		bookmarkModal:   bookmarktab.NewModel(zm),
+		prFormModal:     prformtab.NewModel(),
 	}
 }
 

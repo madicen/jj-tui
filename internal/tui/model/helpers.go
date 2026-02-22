@@ -165,8 +165,7 @@ func (m *Model) checkBookmarkNameExists(name string) bool {
 		}
 	}
 
-	// Also check the existingBookmarks list (bookmarks that can be moved)
-	for _, bookmark := range m.existingBookmarks {
+	for _, bookmark := range m.bookmarkModal.GetExistingBookmarks() {
 		if bookmark == name {
 			return true
 		}
@@ -177,35 +176,29 @@ func (m *Model) checkBookmarkNameExists(name string) bool {
 
 // updateBookmarkNameExists updates the bookmarkNameExists flag based on current input
 func (m *Model) updateBookmarkNameExists() {
-	name := m.bookmarkNameInput.Value()
-
-	// If sanitization is enabled, check the sanitized name
-	if m.settingsSanitizeBookmarks {
+	name := m.bookmarkModal.GetBookmarkName()
+	if m.settingsTabModel.GetSettingsSanitizeBookmarks() {
 		name = jj.SanitizeBookmarkName(name)
 	}
-
-	m.bookmarkNameExists = m.checkBookmarkNameExists(name)
+	m.bookmarkModal.SetNameExists(m.checkBookmarkNameExists(name))
 }
 
 func PropagateUpdate(msg tea.Msg, updatables ...any) (results []tea.Cmd) {
 	for _, updatable := range updatables {
-		objValue := reflect.ValueOf(updatable)
-		if objValue.Kind() != reflect.Ptr {
+		ptrValue := reflect.ValueOf(updatable)
+		if ptrValue.Kind() != reflect.Ptr {
 			panic("updatable must be a pointer")
 		}
-		objValue = objValue.Elem()
-		method := objValue.MethodByName("Update")
+		// Call Update on the pointer so both value and pointer receivers work (*GraphModel has Update)
+		method := ptrValue.MethodByName("Update")
 		if !method.IsValid() {
 			panic("updatable must have an Update method")
 		}
-		// Call the "Update" method with the provided msg argument
 		callResults := method.Call([]reflect.Value{reflect.ValueOf(msg)})
 		if len(callResults) != 2 {
 			panic("Update method must return (model, tea.Cmd)")
 		}
-		// Set the first result as the new value of updatable
 		updatedValue := callResults[0]
-		// Update returns (tea.Model, tea.Cmd); extract concrete value from interface for Set
 		if updatedValue.Kind() == reflect.Interface && !updatedValue.IsNil() {
 			updatedValue = updatedValue.Elem()
 		}
@@ -213,8 +206,11 @@ func PropagateUpdate(msg tea.Msg, updatables ...any) (results []tea.Cmd) {
 		if !ok {
 			panic("second return value from Update must be tea.Cmd")
 		}
-		// Replace the original value through reflection
-		objValue.Set(updatedValue)
+		// If Update had pointer receiver it returns *T; we store T so set the pointee
+		if updatedValue.Kind() == reflect.Ptr {
+			updatedValue = updatedValue.Elem()
+		}
+		ptrValue.Elem().Set(updatedValue)
 		results = append(results, cmd)
 	}
 	return results

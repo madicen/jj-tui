@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
@@ -19,13 +20,15 @@ func (m GraphModel) handleKeyMsg(msg tea.KeyMsg) (GraphModel, tea.Cmd) {
 			// Navigate files in files pane
 			if len(m.changedFiles) > 0 && m.selectedFile < len(m.changedFiles)-1 {
 				m.selectedFile++
-				// Note: viewport scrolling is handled in parent model's ensureFileVisible
+				m.scrollToSelectedFile = true
 			}
 		} else {
 			// Navigate commits in graph pane
 			if m.repository != nil && m.selectedCommit < len(m.repository.Graph.Commits)-1 {
 				m.selectedCommit++
-				// Note: viewport scrolling and commit loading handled in parent
+				m.changedFilesCommitID = m.repository.Graph.Commits[m.selectedCommit].ChangeID
+				m.scrollToSelectedCommit = true
+				return m, Request{LoadChangedFiles: &m.changedFilesCommitID}.Cmd()
 			}
 		}
 		return m, nil
@@ -35,11 +38,15 @@ func (m GraphModel) handleKeyMsg(msg tea.KeyMsg) (GraphModel, tea.Cmd) {
 			// Navigate files in files pane
 			if len(m.changedFiles) > 0 && m.selectedFile > 0 {
 				m.selectedFile--
+				m.scrollToSelectedFile = true
 			}
 		} else {
 			// Navigate commits in graph pane
 			if m.selectedCommit > 0 {
 				m.selectedCommit--
+				m.changedFilesCommitID = m.repository.Graph.Commits[m.selectedCommit].ChangeID
+				m.scrollToSelectedCommit = true
+				return m, Request{LoadChangedFiles: &m.changedFilesCommitID}.Cmd()
 			}
 		}
 		return m, nil
@@ -69,15 +76,71 @@ func (m GraphModel) handleKeyMsg(msg tea.KeyMsg) (GraphModel, tea.Cmd) {
 		}
 		return m, nil
 
-	// Rebase mode navigation
+	// Rebase mode: start (r) → main checks immutable; confirm destination (enter)
 	case "r":
 		if m.repository != nil && m.selectedCommit >= 0 && m.selectedCommit < len(m.repository.Graph.Commits) {
-			m.selectionMode = SelectionRebaseDestination
-			m.rebaseSourceCommit = m.selectedCommit
+			return m, Request{StartRebaseMode: true}.Cmd()
 		}
 		return m, nil
 
-		// Selection/action keys handled by parent - just focus changes here
+	case "enter", "e":
+		if m.graphFocused && m.repository != nil && m.selectedCommit >= 0 && m.selectedCommit < len(m.repository.Graph.Commits) {
+			if m.selectionMode == SelectionRebaseDestination {
+				return m, Request{PerformRebase: true, RebaseDestIndex: m.selectedCommit}.Cmd()
+			}
+			return m, Request{Checkout: true}.Cmd()
+		}
+		return m, nil
+
+	case "n":
+		if m.repository != nil {
+			return m, Request{NewCommit: true}.Cmd()
+		}
+	case "d":
+		if m.repository != nil && m.selectedCommit >= 0 && m.selectedCommit < len(m.repository.Graph.Commits) {
+			return m, Request{StartEditDescription: true}.Cmd()
+		}
+	case "s":
+		if m.repository != nil && m.selectedCommit >= 0 && m.selectedCommit < len(m.repository.Graph.Commits) {
+			return m, Request{Squash: true}.Cmd()
+		}
+	case "a":
+		if m.repository != nil && m.selectedCommit >= 0 && m.selectedCommit < len(m.repository.Graph.Commits) {
+			c := m.repository.Graph.Commits[m.selectedCommit]
+			if c.Divergent {
+				changeID := c.ChangeID
+				return m, Request{ResolveDivergent: &changeID}.Cmd()
+			}
+			return m, Request{Abandon: true}.Cmd()
+		}
+	case "m":
+		if m.repository != nil {
+			return m, Request{CreateBookmark: true}.Cmd()
+		}
+	case "x":
+		if m.repository != nil && m.selectedCommit >= 0 && m.selectedCommit < len(m.repository.Graph.Commits) {
+			return m, Request{DeleteBookmark: true}.Cmd()
+		}
+	case "u":
+		if m.repository != nil {
+			return m, Request{UpdatePR: true}.Cmd()
+		}
+	case "c":
+		if m.repository != nil {
+			return m, Request{CreatePR: true}.Cmd()
+		}
+	case "[":
+		if !m.graphFocused {
+			return m, Request{MoveFileUp: true}.Cmd()
+		}
+	case "]":
+		if !m.graphFocused {
+			return m, Request{MoveFileDown: true}.Cmd()
+		}
+	case "v":
+		if !m.graphFocused {
+			return m, Request{RevertFile: true}.Cmd()
+		}
 	}
 
 	return m, nil
@@ -112,9 +175,10 @@ func (m GraphModel) handleZoneClick(zone *zone.ZoneInfo) (GraphModel, tea.Cmd) {
 					// Rebase action is handled by parent model
 					return m, nil
 				}
-				// Normal selection
+				// Normal selection: update and request changed files load
 				m.selectedCommit = commitIndex
-				return m, nil
+				m.changedFilesCommitID = m.repository.Graph.Commits[commitIndex].ChangeID
+				return m, Request{LoadChangedFiles: &m.changedFilesCommitID}.Cmd()
 			}
 		}
 	}
@@ -163,19 +227,36 @@ func (m *GraphModel) UpdateRepository(repo *internal.Repository) {
 	}
 }
 
-// SetDimensions sets the width and height of the graph model
+// SetDimensions sets the width and height of the graph model and lazy-inits viewports if needed
+// so that mouse wheel scrolling works even when the graph never received a WindowSizeMsg.
 func (m *GraphModel) SetDimensions(width, height int) {
 	m.width = width
 	m.height = height
+	if m.viewport.Width == 0 && width > 0 && height > 0 {
+		h := max(1, height/2)
+		m.viewport = viewport.New(max(1, width), h)
+		m.viewport.MouseWheelEnabled = true
+		m.filesViewport = viewport.New(max(1, width), h)
+		m.filesViewport.MouseWheelEnabled = true
+	}
 }
 
-// SetChangedFiles updates the changed files for the selected commit (only if commitID matches current selection)
+// SetChangedFiles updates the changed files for the selected commit.
+// Accepts when commitID matches changedFilesCommitID, or when it matches the currently selected commit's ChangeID
+// (so initial load after repository load is applied even if changedFilesCommitID wasn't set before the async load).
 func (m *GraphModel) SetChangedFiles(files []jj.ChangedFile, commitID string) {
-	if commitID != m.changedFilesCommitID {
-		return // Stale load (user selected another commit before this finished)
+	accept := (commitID == m.changedFilesCommitID) ||
+		(m.repository != nil && m.selectedCommit >= 0 && m.selectedCommit < len(m.repository.Graph.Commits) &&
+			commitID == m.repository.Graph.Commits[m.selectedCommit].ChangeID)
+	if !accept {
+		return
+	}
+	if m.changedFilesCommitID != commitID {
+		m.changedFilesCommitID = commitID
 	}
 	m.changedFiles = files
 	m.selectedFile = 0
+	m.scrollToSelectedFile = true
 }
 
 // SelectCommit selects a commit by index and sets changedFilesCommitID so refresh can re-resolve selection
@@ -220,6 +301,7 @@ func (m *GraphModel) GetSelectedFile() int {
 func (m *GraphModel) SetSelectedFile(idx int) {
 	if idx >= -1 && idx < len(m.changedFiles) {
 		m.selectedFile = idx
+		m.scrollToSelectedFile = true
 	}
 }
 
@@ -278,4 +360,21 @@ func (m *GraphModel) CancelRebaseMode() {
 // IsInRebaseMode returns whether the graph is in rebase mode
 func (m *GraphModel) IsInRebaseMode() bool {
 	return m.selectionMode == SelectionRebaseDestination
+}
+
+// Description editing (ViewEditDescription)
+func (m *GraphModel) GetDescriptionInput() *textarea.Model {
+	return &m.descriptionInput
+}
+
+func (m *GraphModel) SetDescriptionInput(ta textarea.Model) {
+	m.descriptionInput = ta
+}
+
+func (m *GraphModel) GetEditingCommitID() string {
+	return m.editingCommitID
+}
+
+func (m *GraphModel) SetEditingCommitID(id string) {
+	m.editingCommitID = id
 }

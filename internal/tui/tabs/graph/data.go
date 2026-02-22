@@ -12,10 +12,11 @@ import (
 
 // GraphResult contains the split rendering for commit graph view
 type GraphResult struct {
-	GraphContent string // Commit graph (scrollable)
-	ActionsBar   string // Actions buttons (fixed in middle)
-	FilesContent string // Changed files (scrollable)
-	FullContent  string // Full content for non-split views
+	GraphContent         string // Commit graph (scrollable)
+	ActionsBar           string // Actions buttons (fixed in middle)
+	FilesContent         string // Changed files (scrollable)
+	FullContent          string // Full content for non-split views
+	FileIndexToLineIndex []int  // For each file index, the 0-based line in FilesContent where it appears (for scroll-to-selection)
 }
 
 // Graph renders the commit graph view with split panes
@@ -267,6 +268,8 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 		}
 	}
 
+	var fileIndexToLineIndex []int
+	var treeLines []string
 	// Build changed files section with focus indicator and tree view
 	if len(data.ChangedFiles) > 0 {
 		focusIndicator := "  "
@@ -275,9 +278,14 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 		}
 		fileLines = append(fileLines, lipgloss.NewStyle().Bold(true).Render(focusIndicator+"Changed Files (Tab to switch):"))
 
-		// Render files as a tree structure with selection highlighting
-		// Move buttons are rendered inline with the selected file
-		treeLines := m.renderFileTree(data)
+		// Render files as a tree structure with selection highlighting; get line indices for scroll-to-selection
+		treeLines, fileIndexToLineIndex = m.renderFileTreeWithLineIndex(data)
+		// Tree lines start at line 1 in FilesContent (line 0 is the "Changed Files..." header)
+		for i := range fileIndexToLineIndex {
+			if fileIndexToLineIndex[i] >= 0 {
+				fileIndexToLineIndex[i]++
+			}
+		}
 		fileLines = append(fileLines, treeLines...)
 	}
 
@@ -300,10 +308,11 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 	graphContent = lipgloss.NewStyle().Bold(true).Render(focusIndicator+"Graph (Tab to switch):") + "\n" + graphContent
 
 	return GraphResult{
-		GraphContent: graphContent,
-		ActionsBar:   strings.Join(actionLines, "\n"),
-		FilesContent: strings.Join(fileLines, "\n"),
-		FullContent:  strings.Join(allLines, "\n"),
+		GraphContent:         graphContent,
+		ActionsBar:            strings.Join(actionLines, "\n"),
+		FilesContent:          strings.Join(fileLines, "\n"),
+		FullContent:           strings.Join(allLines, "\n"),
+		FileIndexToLineIndex:  fileIndexToLineIndex,
 	}
 }
 
@@ -316,9 +325,19 @@ type fileTreeNode struct {
 	fileIndex int // Original index in the files list (for selection tracking)
 }
 
-// renderFileTree builds a tree structure from the changed files and renders it
-// Accepts GraphData to support selection highlighting
+// renderFileTree builds a tree structure from the changed files and renders it.
+// Deprecated: use renderFileTreeWithLineIndex for scroll-to-selection.
 func (m *GraphModel) renderFileTree(data GraphData) []string {
+	lines, _ := m.renderFileTreeWithLineIndex(data)
+	return lines
+}
+
+// renderFileTreeWithLineIndex renders the file tree and returns each file's 0-based line index within the tree output.
+func (m *GraphModel) renderFileTreeWithLineIndex(data GraphData) (lines []string, fileIndexToLineIndex []int) {
+	fileIndexToLineIndex = make([]int, len(data.ChangedFiles))
+	for i := range fileIndexToLineIndex {
+		fileIndexToLineIndex[i] = -1
+	}
 	// Build the tree
 	root := &fileTreeNode{children: make(map[string]*fileTreeNode), fileIndex: -1}
 
@@ -349,10 +368,63 @@ func (m *GraphModel) renderFileTree(data GraphData) []string {
 		}
 	}
 
-	// Render the tree
-	var lines []string
-	m.renderTreeNode(root, "", &lines, true, data)
-	return lines
+	// Render the tree, recording line index for each file
+	var lineIdx int
+	m.renderTreeNodeWithLineIndex(root, "", &lines, true, data, &lineIdx, fileIndexToLineIndex)
+	return lines, fileIndexToLineIndex
+}
+
+// renderTreeNodeWithLineIndex is like renderTreeNode but records the line index for each file for scroll-to-selection.
+func (m *GraphModel) renderTreeNodeWithLineIndex(node *fileTreeNode, indent string, lines *[]string, isRoot bool, data GraphData, lineIdx *int, fileIndexToLineIndex []int) {
+	if !isRoot {
+		if node.isFile {
+			if node.fileIndex >= 0 && node.fileIndex < len(fileIndexToLineIndex) {
+				fileIndexToLineIndex[node.fileIndex] = *lineIdx
+			}
+			*lineIdx++
+			// Check if this file is selected
+			isSelected := !data.GraphFocused && node.fileIndex == data.SelectedFile
+			statusStyle, statusChar := GetStatusStyle(node.status)
+
+			var fileLine string
+			if isSelected {
+				selectedStyle := lipgloss.NewStyle().
+					Background(lipgloss.Color("#3d4f5f")).
+					Foreground(lipgloss.Color("#ffffff"))
+				fileLine = fmt.Sprintf("%s%s %s", indent, statusStyle.Render(statusChar), selectedStyle.Render(node.name))
+			} else {
+				fileLine = fmt.Sprintf("%s%s %s", indent, statusStyle.Render(statusChar), node.name)
+			}
+			*lines = append(*lines, m.zoneManager.Mark(mouse.ZoneChangedFile(node.fileIndex), fileLine))
+		} else {
+			*lineIdx++
+			dirStyle := lipgloss.NewStyle().Foreground(styles.ColorPrimary)
+			*lines = append(*lines, fmt.Sprintf("%s%s/", indent, dirStyle.Render(node.name)))
+		}
+	}
+
+	var dirs, fileNodes []string
+	for name, child := range node.children {
+		if child.isFile {
+			fileNodes = append(fileNodes, name)
+		} else {
+			dirs = append(dirs, name)
+		}
+	}
+	sort.Strings(dirs)
+	sort.Strings(fileNodes)
+
+	newIndent := indent
+	if !isRoot {
+		newIndent = indent + "  "
+	}
+
+	for _, name := range dirs {
+		m.renderTreeNodeWithLineIndex(node.children[name], newIndent, lines, false, data, lineIdx, fileIndexToLineIndex)
+	}
+	for _, name := range fileNodes {
+		m.renderTreeNodeWithLineIndex(node.children[name], newIndent, lines, false, data, lineIdx, fileIndexToLineIndex)
+	}
 }
 
 // renderTreeNode recursively renders a tree node with selection support

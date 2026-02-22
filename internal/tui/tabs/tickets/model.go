@@ -1,10 +1,14 @@
 package tickets
 
 import (
+	"fmt"
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/tickets"
+	"github.com/madicen/jj-tui/internal/tui/mouse"
 )
 
 // Model represents the state of the Tickets tab
@@ -12,6 +16,7 @@ type Model struct {
 	zoneManager          *zone.Manager
 	ticketList           []tickets.Ticket
 	selectedTicket       int
+	listYOffset          int // Scroll offset for list (details stay fixed)
 	availableTransitions []tickets.Transition
 	transitionInProgress bool
 	statusChangeMode     bool
@@ -39,6 +44,12 @@ func (m Model) Init() tea.Cmd {
 	return nil
 }
 
+// SetDimensions sets the content area size (used for list-only scrolling)
+func (m *Model) SetDimensions(width, height int) {
+	m.width = width
+	m.height = height
+}
+
 // Update handles messages for the Tickets tab
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -48,12 +59,28 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyMsg:
 		return m.handleKeyMsg(msg)
+	case zone.MsgZoneInBounds:
+		return m.handleZoneClick(msg.Zone)
+	case tea.MouseMsg:
+		// Wheel: use IsWheel() so we accept any encoding; scroll without requiring list to be clicked first
+		if tea.MouseEvent(msg).IsWheel() {
+			isUp := msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelLeft
+			if isUp {
+				m.listYOffset -= 3
+				if m.listYOffset < 0 {
+					m.listYOffset = 0
+				}
+			} else {
+				m.listYOffset += 3
+			}
+			return m, nil
+		}
 	}
 	return m, nil
 }
 
-// View renders the Tickets tab
-func (m Model) View() string {
+// View renders the Tickets tab (pointer receiver so render can persist listYOffset clamp)
+func (m *Model) View() string {
 	if m.width == 0 || m.height == 0 {
 		return "Loading..."
 	}
@@ -99,6 +126,81 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.statusChangeMode = false
 		}
 		return m, nil
+	case "c":
+		return m, Request{ToggleStatusChangeMode: true}.Cmd()
+	case "i", "D", "B", "N":
+		if m.statusChangeMode && !m.transitionInProgress && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
+			if id := m.transitionIDByKey(msg.String()); id != "" {
+				return m, Request{TransitionID: id}.Cmd()
+			}
+		}
+		return m, nil
+	case "o":
+		return m, Request{OpenInBrowser: true}.Cmd()
+	case "enter", "e":
+		if m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
+			return m, Request{StartBookmarkFromTicket: true}.Cmd()
+		}
+		return m, nil
+	}
+	return m, nil
+}
+
+func (m *Model) transitionIDByKey(key string) string {
+	for _, t := range m.availableTransitions {
+		lower := strings.ToLower(t.Name)
+		switch key {
+		case "i":
+			if strings.Contains(lower, "progress") {
+				return t.ID
+			}
+			if strings.Contains(lower, "start") && !strings.Contains(lower, "not start") && !strings.Contains(lower, "not_start") {
+				return t.ID
+			}
+		case "D":
+			if strings.Contains(lower, "done") || strings.Contains(lower, "complete") || strings.Contains(lower, "resolve") {
+				return t.ID
+			}
+		case "B":
+			if strings.Contains(lower, "block") {
+				return t.ID
+			}
+		case "N":
+			if strings.Contains(lower, "not") && strings.Contains(lower, "start") {
+				return t.ID
+			}
+		}
+	}
+	return ""
+}
+
+// handleZoneClick handles zone clicks; returns a request cmd for actions.
+func (m Model) handleZoneClick(z *zone.ZoneInfo) (Model, tea.Cmd) {
+	if m.zoneManager == nil || z == nil {
+		return m, nil
+	}
+	for i := range m.ticketList {
+		if m.zoneManager.Get(mouse.ZoneJiraTicket(i)) == z {
+			m.selectedTicket = i
+			return m, nil
+		}
+	}
+	if m.zoneManager.Get(mouse.ZoneJiraCreateBranch) == z {
+		return m, Request{StartBookmarkFromTicket: true}.Cmd()
+	}
+	if m.zoneManager.Get(mouse.ZoneJiraChangeStatus) == z {
+		return m, Request{ToggleStatusChangeMode: true}.Cmd()
+	}
+	if m.zoneManager.Get(mouse.ZoneTicketOpenBrowser) == z {
+		return m, Request{OpenInBrowser: true}.Cmd()
+	}
+	if m.statusChangeMode && !m.transitionInProgress && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
+		for i, t := range m.availableTransitions {
+			zoneID := mouse.ZoneJiraTransition + fmt.Sprintf("%d", i)
+			if m.zoneManager.Get(zoneID) == z {
+				return m, Request{TransitionID: t.ID}.Cmd()
+			}
+		}
 	}
 	return m, nil
 }
@@ -108,6 +210,11 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 // GetSelectedTicket returns the index of the selected ticket
 func (m *Model) GetSelectedTicket() int {
 	return m.selectedTicket
+}
+
+// GetListYOffset returns the list scroll offset (for tests and accessors)
+func (m *Model) GetListYOffset() int {
+	return m.listYOffset
 }
 
 // SetSelectedTicket sets the selected ticket index

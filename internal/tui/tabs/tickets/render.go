@@ -17,7 +17,7 @@ func mark(z *zone.Manager, id, content string) string {
 	return z.Mark(id, content)
 }
 
-func (m Model) renderTickets() string {
+func (m *Model) renderTickets() string {
 	if !m.jiraService {
 		noTickets := []string{
 			styles.TitleStyle.Render("Ticket Integration"),
@@ -181,6 +181,47 @@ func (m Model) renderTickets() string {
 	}
 
 	fixedHeader := strings.Join(headerLines, "\n")
-	scrollableList := strings.Join(listLines, "\n")
-	return fixedHeader + "\n" + scrollableList
+	headerLineCount := len(headerLines)
+	listHeight := m.height - headerLineCount
+	if listHeight <= 0 {
+		listHeight = 0
+	}
+	totalListLines := len(listLines)
+	maxListOffset := 0
+	if totalListLines > listHeight {
+		maxListOffset = totalListLines - listHeight
+	}
+	if m.listYOffset > maxListOffset {
+		m.listYOffset = maxListOffset
+	}
+	if m.listYOffset < 0 {
+		m.listYOffset = 0
+	}
+	if m.selectedTicket >= 0 && m.selectedTicket < totalListLines {
+		if m.selectedTicket < m.listYOffset {
+			m.listYOffset = m.selectedTicket
+		} else if m.selectedTicket >= m.listYOffset+listHeight {
+			m.listYOffset = m.selectedTicket - listHeight + 1
+		}
+	}
+	start := m.listYOffset
+	end := start + listHeight
+	if end > totalListLines {
+		end = totalListLines
+	}
+	var visibleList string
+	if start < end {
+		visibleList = strings.Join(listLines[start:end], "\n")
+	} else {
+		visibleList = ""
+	}
+	out := fixedHeader + "\n" + visibleList
+	outLines := strings.Split(out, "\n")
+	for len(outLines) < m.height {
+		outLines = append(outLines, "")
+	}
+	if len(outLines) > m.height {
+		outLines = outLines[:m.height]
+	}
+	return strings.Join(outLines, "\n")
 }

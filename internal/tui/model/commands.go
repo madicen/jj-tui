@@ -611,23 +611,13 @@ func (m *Model) startBookmarkFromTicket(ticket tickets.Ticket) {
 		keyForBookmark = ticket.DisplayKey
 	}
 
-	// Format bookmark name as "KEY-Title" with spaces replaced by hyphens
-	// and invalid characters removed
 	bookmarkName := formatBookmarkName(keyForBookmark, ticket.Summary)
-	m.bookmarkNameInput.SetValue(bookmarkName)
-	m.bookmarkNameInput.Focus()
-	m.bookmarkNameInput.Width = m.width - 10
+	m.bookmarkModal.Show(-1, nil) // -1 = new branch from main, no existing bookmarks
+	m.bookmarkModal.GetNameInput().SetValue(bookmarkName)
+	m.bookmarkModal.GetNameInput().Focus()
+	m.bookmarkModal.GetNameInput().Width = m.width - 10
+	m.bookmarkModal.SetFromJira(ticket.Key, ticket.Summary, ticket.DisplayKey)
 
-	// Mark that this is coming from ticket service (will create new branch from main)
-	m.bookmarkFromJira = true // Reusing this flag for any ticket provider
-	m.bookmarkJiraTicketKey = ticket.Key
-	m.bookmarkJiraTicketTitle = ticket.Summary     // Store the ticket summary for PR title
-	m.bookmarkTicketDisplayKey = ticket.DisplayKey // Store short ID for commit messages
-	m.bookmarkCommitIdx = -1                       // -1 means create new branch from main
-	m.existingBookmarks = nil                      // Don't show existing bookmarks for ticket flow
-	m.selectedBookmarkIdx = -1
-
-	// Check if the pre-filled name already exists
 	m.updateBookmarkNameExists()
 
 	m.viewMode = ViewCreateBookmark
@@ -688,11 +678,11 @@ func (m *Model) startGitHubLogin() tea.Cmd {
 // pollGitHubToken returns a command that polls for the GitHub access token in the background.
 func (m *Model) pollGitHubToken() tea.Cmd {
 	return func() tea.Msg {
-		if m.githubDeviceCode == "" {
+		if m.settingsTabModel.GetGitHubDeviceCode() == "" {
 			return nil
 		}
 
-		token, err := github.PollForToken(m.githubDeviceCode)
+		token, err := github.PollForToken(m.settingsTabModel.GetGitHubDeviceCode())
 		if err != nil {
 			if err.Error() == "slow_down" {
 				// Signal to handler to increase poll interval.
@@ -741,7 +731,7 @@ func (m *Model) loadBranches() tea.Cmd {
 	}
 
 	jjSvc := m.jjService
-	branchLimit := m.settingsBranchLimit
+	branchLimit := m.settingsTabModel.GetSettingsBranchLimit()
 	return func() tea.Msg {
 		// Get branches (limited by recency first, then stats calculated)
 		// The limit is applied in ListBranches after sorting by commit timestamp

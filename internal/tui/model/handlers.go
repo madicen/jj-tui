@@ -6,6 +6,13 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/madicen/jj-tui/internal/tui/actions"
+	branchestab "github.com/madicen/jj-tui/internal/tui/tabs/branches"
+	graphtab "github.com/madicen/jj-tui/internal/tui/tabs/graph"
+	helptab "github.com/madicen/jj-tui/internal/tui/tabs/help"
+	prstab "github.com/madicen/jj-tui/internal/tui/tabs/prs"
+	settingstab "github.com/madicen/jj-tui/internal/tui/tabs/settings"
+	ticketstab "github.com/madicen/jj-tui/internal/tui/tabs/tickets"
 )
 
 func (m *Model) handleCheckoutCommit() (tea.Model, tea.Cmd) {
@@ -104,6 +111,160 @@ func (m *Model) handleGraphFoucsMessage() string {
 	return If(m.graphFocused, "Graph pane focused", "Files pane focused")
 }
 
+// handleGraphRequest processes requests from the graph tab (keys/zones); main runs jj commands.
+func (m *Model) handleGraphRequest(r graphtab.Request) (tea.Model, tea.Cmd) {
+	if r.LoadChangedFiles != nil {
+		return m, m.loadChangedFiles(*r.LoadChangedFiles)
+	}
+	if r.Checkout {
+		return m.handleCheckoutCommit()
+	}
+	if r.Squash {
+		return m.handleSquashCommit()
+	}
+	if r.Abandon {
+		return m.handleAbandonCommit()
+	}
+	if r.StartEditDescription {
+		return m.handleDescribeCommit()
+	}
+	if r.NewCommit {
+		return m.handleNewCommit()
+	}
+	if r.StartRebaseMode {
+		return m.handleRebase()
+	}
+	if r.PerformRebase {
+		return m, m.performRebase(r.RebaseDestIndex)
+	}
+	if r.ResolveDivergent != nil {
+		m.statusMessage = "Loading divergent commit info..."
+		return m, m.loadDivergentCommitInfo(*r.ResolveDivergent)
+	}
+	if r.CreateBookmark {
+		return m.handleCreateBookmark()
+	}
+	if r.DeleteBookmark {
+		if m.isSelectedCommitValid() && m.jjService != nil {
+			commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
+			if len(commit.Branches) == 0 {
+				m.statusMessage = "No bookmark on this commit to delete"
+				return m, nil
+			}
+			return m, m.deleteBookmark()
+		}
+		return m, nil
+	}
+	if r.CreatePR {
+		return m.handleCreatePR()
+	}
+	if r.UpdatePR {
+		return m.handleUpdatePR()
+	}
+	if r.MoveFileUp {
+		return m.handleMoveFileUp()
+	}
+	if r.MoveFileDown {
+		return m.handleMoveFileDown()
+	}
+	if r.RevertFile {
+		return m.handleRevertFile()
+	}
+	return m, nil
+}
+
+func (m *Model) handlePRsRequest(r prstab.Request) (tea.Model, tea.Cmd) {
+	if r.OpenInBrowser {
+		return m.handleOpenPRInBrowser()
+	}
+	if r.MergePR {
+		return m.handleMergePR()
+	}
+	if r.ClosePR {
+		return m.handleClosePR()
+	}
+	return m, nil
+}
+
+func (m *Model) handleBranchesRequest(r branchestab.Request) (tea.Model, tea.Cmd) {
+	if r.TrackBranch {
+		return m.handleTrackBranch()
+	}
+	if r.UntrackBranch {
+		return m.handleUntrackBranch()
+	}
+	if r.RestoreLocalBranch {
+		return m.handleRestoreLocalBranch()
+	}
+	if r.DeleteBranchBookmark {
+		return m.handleDeleteBranchBookmark()
+	}
+	if r.PushBranch {
+		return m.handlePushBranch()
+	}
+	if r.FetchAll {
+		return m.handleFetchAll()
+	}
+	if r.ResolveBookmarkConflict {
+		return m.handleResolveBookmarkConflict()
+	}
+	return m, nil
+}
+
+func (m *Model) handleTicketsRequest(r ticketstab.Request) (tea.Model, tea.Cmd) {
+	if r.OpenInBrowser {
+		return m.handleOpenTicketInBrowser()
+	}
+	if r.ToggleStatusChangeMode {
+		return m.handleToggleStatusChangeMode()
+	}
+	if r.StartBookmarkFromTicket {
+		return m.handleStartBookmarkFromTicket()
+	}
+	if r.TransitionID != "" {
+		if m.viewMode != ViewTickets || m.ticketService == nil || m.transitionInProgress {
+			return m, nil
+		}
+		if m.GetSelectedTicket() < 0 || m.GetSelectedTicket() >= len(m.ticketList) {
+			return m, nil
+		}
+		var transitionName string
+		for _, t := range m.availableTransitions {
+			if t.ID == r.TransitionID {
+				transitionName = t.Name
+				break
+			}
+		}
+		m.transitionInProgress = true
+		m.ticketsTabModel.SetTransitionInProgress(true)
+		ticket := m.ticketList[m.GetSelectedTicket()]
+		m.statusMessage = fmt.Sprintf("Setting %s to %s...", ticket.DisplayKey, transitionName)
+		return m, m.transitionTicket(r.TransitionID)
+	}
+	return m, nil
+}
+
+func (m *Model) handleHelpRequest(r helptab.Request) (tea.Model, tea.Cmd) {
+	if r.CopyCommand != "" {
+		m.statusMessage = "Copied: " + r.CopyCommand
+		return m, actions.CopyToClipboard(r.CopyCommand)
+	}
+	return m, nil
+}
+
+func (m *Model) handleSettingsRequest(r settingstab.Request) (tea.Model, tea.Cmd) {
+	if r.Cancel {
+		return m.handleSettingsCancel()
+	}
+	if r.SaveSettings {
+		return m, m.saveSettings()
+	}
+	if r.SaveSettingsLocal {
+		return m, m.saveSettingsLocal()
+	}
+	return m, nil
+}
+
 func (m *Model) handleNavigateToGraphTab() (tea.Model, tea.Cmd) {
 	m.viewMode = ViewCommitGraph
 	m.statusMessage = "Loading commit graph"
@@ -132,13 +293,13 @@ func (m *Model) handleNavigateToTicketsTab() (tea.Model, tea.Cmd) {
 
 func (m *Model) handleNavigateToSettingsTab() (tea.Model, tea.Cmd) {
 	m.viewMode = ViewSettings
-	// Focus first input when entering settings
-	m.settingsFocusedField = 0
-	for i := range m.settingsInputs {
+	m.settingsTabModel.SetFocusedField(0)
+	inputs := m.settingsTabModel.GetSettingsInputs()
+	for i := range inputs {
 		if i == 0 {
-			m.settingsInputs[i].Focus()
+			inputs[i].Focus()
 		} else {
-			m.settingsInputs[i].Blur()
+			inputs[i].Blur()
 		}
 	}
 	return m, nil
@@ -146,8 +307,8 @@ func (m *Model) handleNavigateToSettingsTab() (tea.Model, tea.Cmd) {
 
 func (m *Model) handleNavigateToHelpTab() (tea.Model, tea.Cmd) {
 	m.viewMode = ViewHelp
-	m.helpTab = 0             // Start on Shortcuts tab
-	m.helpSelectedCommand = 0 // Start with first command selected
+	m.helpTabModel.SetHelpTab(0)
+	m.helpTabModel.SetSelectedCommand(0)
 	m.statusMessage = "Loaded Help"
 	return m, nil
 }
@@ -558,7 +719,7 @@ func (m *Model) handleDescriptionSave() (tea.Model, tea.Cmd) {
 func (m *Model) handleDescriptionCancel() (tea.Model, tea.Cmd) {
 	if m.viewMode == ViewEditDescription {
 		m.viewMode = ViewCommitGraph
-		m.editingCommitID = ""
+		m.graphTabModel.SetEditingCommitID("")
 		m.statusMessage = "Description edit cancelled"
 	}
 	return m, nil

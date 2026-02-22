@@ -186,6 +186,21 @@ func (m *Model) GetFocusedField() int {
 	return m.focusedField
 }
 
+// SetFocusedField sets the focused field and syncs Focus/Blur on inputs
+func (m *Model) SetFocusedField(i int) {
+	if i != 0 && i != 1 {
+		return
+	}
+	m.focusedField = i
+	if i == 0 {
+		m.titleInput.Focus()
+		m.bodyInput.Blur()
+	} else {
+		m.titleInput.Blur()
+		m.bodyInput.Focus()
+	}
+}
+
 // SetNeedsMoveBookmark sets whether bookmark needs to be moved
 func (m *Model) SetNeedsMoveBookmark(needs bool) {
 	m.needsMoveBookmark = needs

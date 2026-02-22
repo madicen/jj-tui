@@ -183,6 +183,23 @@ func (m *Model) GetChangeID() string {
 	return m.changeID
 }
 
+// SetSelectedIdx sets the selected commit index
+func (m *Model) SetSelectedIdx(idx int) {
+	if idx >= 0 && idx < len(m.commitIDs) {
+		m.selectedIdx = idx
+	}
+}
+
+// GetSelectedIdx returns the selected commit index
+func (m *Model) GetSelectedIdx() int {
+	return m.selectedIdx
+}
+
+// GetCommitCount returns the number of divergent commits
+func (m *Model) GetCommitCount() int {
+	return len(m.commitIDs)
+}
+
 // UpdateRepository updates the repository
 func (m *Model) UpdateRepository(repo *internal.Repository) {
 	// Divergent modal doesn't use repository directly

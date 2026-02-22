@@ -10,6 +10,8 @@ import (
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/integrations/github"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
+	"github.com/madicen/jj-tui/internal/tickets"
+	graphtab "github.com/madicen/jj-tui/internal/tui/tabs/graph"
 )
 
 // Helper to create a test model with sample data (bypasses jj service)
@@ -42,7 +44,7 @@ func newTestModel() *Model {
 	m.branchesTabModel.UpdateRepository(m.repository)
 	m.ticketsTabModel.SetTicketServiceInfo("", false)
 
-	// Initialize viewport by processing a window size message
+	// Initialize by processing a window size message
 	m.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
 
 	return m
@@ -86,6 +88,44 @@ func TestCommitSelectedMsgChangesSelection(t *testing.T) {
 
 	if m.GetSelectedCommit() != 1 {
 		t.Errorf("Expected selected commit 1, got %d", m.GetSelectedCommit())
+	}
+}
+
+// TestChangedFilesLoadedMsgUpdatesGraphTab verifies that when changed files load after repository load
+// (e.g. initial load), the graph tab's changed files list is updated even if changedFilesCommitID
+// was not set before the async load completed.
+func TestChangedFilesLoadedMsgUpdatesGraphTab(t *testing.T) {
+	ctx := context.Background()
+	m := New(ctx)
+	defer m.Close()
+	m.loading = false
+	repo := &internal.Repository{
+		Path: "/test/repo",
+		Graph: internal.CommitGraph{
+			Commits: []internal.Commit{
+				{ID: "a1", ShortID: "a1", ChangeID: "cid0", Summary: "First"},
+				{ID: "b2", ShortID: "b2", ChangeID: "cid1", Summary: "Second"},
+			},
+		},
+	}
+	m.SetRepository(repo)
+	m.graphTabModel.UpdateRepository(m.repository)
+	// Do not call SelectCommit so changedFilesCommitID stays "" (simulates initial load before
+	// loadChangedFiles request was made, or race where the msg arrives before we set it).
+	// selectedCommit is 0 by default. Deliver changed files for the first commit.
+	loadedFiles := []jj.ChangedFile{{Path: "foo.go", Status: "M"}, {Path: "bar/baz.go", Status: "A"}}
+	newModel, _ := m.Update(changedFilesLoadedMsg{commitID: "cid0", files: loadedFiles})
+	m = newModel.(*Model)
+
+	got := m.graphTabModel.GetChangedFiles()
+	if len(got) != 2 {
+		t.Fatalf("GetChangedFiles(): expected 2 files, got %d", len(got))
+	}
+	if got[0].Path != "foo.go" || got[0].Status != "M" {
+		t.Errorf("GetChangedFiles()[0]: expected foo.go M, got %s %s", got[0].Path, got[0].Status)
+	}
+	if got[1].Path != "bar/baz.go" || got[1].Status != "A" {
+		t.Errorf("GetChangedFiles()[1]: expected bar/baz.go A, got %s %s", got[1].Path, got[1].Status)
 	}
 }
 
@@ -647,8 +687,8 @@ func TestDescriptionEditingFlow(t *testing.T) {
 		if m.viewMode != ViewEditDescription {
 			t.Errorf("Expected ViewEditDescription, got %v", m.viewMode)
 		}
-		if m.editingCommitID != commit.ChangeID {
-			t.Errorf("Expected editingCommitID %s, got %s", commit.ChangeID, m.editingCommitID)
+		if m.graphTabModel.GetEditingCommitID() != commit.ChangeID {
+			t.Errorf("Expected editingCommitID %s, got %s", commit.ChangeID, m.graphTabModel.GetEditingCommitID())
 		}
 	})
 
@@ -676,7 +716,7 @@ func TestDescriptionEditingFlow(t *testing.T) {
 
 		// Start editing
 		m.viewMode = ViewEditDescription
-		m.editingCommitID = "abc1"
+		m.graphTabModel.SetEditingCommitID("abc1")
 
 		// Press esc
 		escMsg := tea.KeyMsg{Type: tea.KeyEsc}
@@ -686,7 +726,7 @@ func TestDescriptionEditingFlow(t *testing.T) {
 		if m.viewMode != ViewCommitGraph {
 			t.Errorf("Expected ViewCommitGraph after esc, got %v", m.viewMode)
 		}
-		if m.editingCommitID != "" {
+		if m.graphTabModel.GetEditingCommitID() != "" {
 			t.Error("Expected editingCommitID to be cleared")
 		}
 	})
@@ -698,7 +738,7 @@ func TestDescriptionEditingFlow(t *testing.T) {
 		// Start editing
 		commit := m.repository.Graph.Commits[0]
 		m.viewMode = ViewEditDescription
-		m.editingCommitID = commit.ChangeID
+		m.graphTabModel.SetEditingCommitID(commit.ChangeID)
 
 		view := m.View()
 
@@ -805,10 +845,17 @@ func TestRebaseModeFlow(t *testing.T) {
 		m.graphTabModel.SelectCommit(0)
 		m.repository.Graph.Commits[0].Immutable = false
 
-		// Press 'r' to enter rebase mode
+		// Press 'r' - graph returns StartRebaseMode request; main runs it and enters rebase mode
 		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}}
-		newModel, _ := m.Update(msg)
+		newModel, cmd := m.Update(msg)
 		m = newModel.(*Model)
+		if cmd != nil {
+			if req, ok := cmd().(graphtab.Request); ok {
+				var v tea.Model
+				v, _ = m.Update(req)
+				m = v.(*Model)
+			}
+		}
 
 		if m.selectionMode != SelectionRebaseDestination {
 			t.Error("Expected to enter rebase destination selection mode")
@@ -862,22 +909,27 @@ func TestRebaseModeFlow(t *testing.T) {
 		m := newTestModel()
 		defer m.Close()
 
-		// Need a jjService for the key handler to try rebase
 		m.jjService = &jj.Service{RepoPath: "/test/repo"}
-
 		m.graphTabModel.SelectCommit(0)
 		m.repository.Graph.Commits[0].Immutable = true
 
-		// Press 'm' - should not enter rebase mode
-		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}}
-		newModel, _ := m.Update(msg)
+		// Press 'r' - graph returns StartRebaseMode request; main handles it and blocks with message
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}}
+		newModel, cmd := m.Update(msg)
 		m = newModel.(*Model)
+		if cmd != nil {
+			if req, ok := cmd().(graphtab.Request); ok {
+				var v tea.Model
+				v, _ = m.Update(req)
+				m = v.(*Model)
+			}
+		}
 
 		if m.selectionMode != SelectionNormal {
 			t.Error("Should not enter rebase mode for immutable commit")
 		}
 		if !containsString(m.statusMessage, "immutable") {
-			t.Error("Expected immutable warning in status message")
+			t.Errorf("Expected immutable warning in status message, got: %q", m.statusMessage)
 		}
 	})
 
@@ -927,21 +979,12 @@ func TestMouseScrollingOnViews(t *testing.T) {
 		m := createModelWithManyPRs()
 		defer m.Close()
 
-		// Switch to PR view
 		m.viewMode = ViewPullRequests
-		m.githubService = &github.Service{} // Enable GitHub to show PR list
-
-		// Render view to initialize viewport with content
+		m.githubService = &github.Service{}
+		m.prsTabModel.SetGithubService(true)
 		m.View()
 
-		initialOffset := m.viewport.YOffset
-
-		// Ensure there's content to scroll (total lines > height)
-		if m.viewport.TotalLineCount() <= m.viewport.Height {
-			t.Skipf("Not enough content to scroll: %d lines, %d height", m.viewport.TotalLineCount(), m.viewport.Height)
-		}
-
-		// Simulate mouse wheel scroll down
+		// Wheel down: list scroll offset must increase (proves event reaches PR tab model)
 		scrollDownMsg := tea.MouseMsg{
 			Action: tea.MouseActionPress,
 			Button: tea.MouseButtonWheelDown,
@@ -950,14 +993,11 @@ func TestMouseScrollingOnViews(t *testing.T) {
 		}
 		newModel, _ := m.Update(scrollDownMsg)
 		m = newModel.(*Model)
-
-		// Offset should have increased (scrolled down)
-		if m.viewport.YOffset <= initialOffset {
-			t.Errorf("Expected YOffset to increase after scroll down, got %d (was %d)", m.viewport.YOffset, initialOffset)
+		if m.GetPRsListYOffset() != 3 {
+			t.Errorf("after wheel down expected PR listYOffset 3, got %d", m.GetPRsListYOffset())
 		}
 
-		// Now scroll back up
-		afterScrollDown := m.viewport.YOffset
+		// Wheel up: offset decreases
 		scrollUpMsg := tea.MouseMsg{
 			Action: tea.MouseActionPress,
 			Button: tea.MouseButtonWheelUp,
@@ -966,59 +1006,55 @@ func TestMouseScrollingOnViews(t *testing.T) {
 		}
 		newModel, _ = m.Update(scrollUpMsg)
 		m = newModel.(*Model)
+		if m.GetPRsListYOffset() != 0 {
+			t.Errorf("after wheel up expected PR listYOffset 0, got %d", m.GetPRsListYOffset())
+		}
 
-		// Offset should have decreased (scrolled up)
-		if m.viewport.YOffset >= afterScrollDown {
-			t.Errorf("Expected YOffset to decrease after scroll up, got %d (was %d)", m.viewport.YOffset, afterScrollDown)
+		if out := m.View(); out == "" {
+			t.Error("View should return non-empty after scroll")
 		}
 	})
 
-	t.Run("mouse scroll respects bounds", func(t *testing.T) {
-		m := createModelWithManyPRs()
+	t.Run("wheel down increases tickets list scroll offset", func(t *testing.T) {
+		m := newTestModel()
 		defer m.Close()
-
-		// Switch to PR view
-		m.viewMode = ViewPullRequests
-		m.githubService = &github.Service{}
-
-		// Render view to initialize viewport
+		var list []tickets.Ticket
+		for i := 0; i < 50; i++ {
+			list = append(list, tickets.Ticket{Key: fmt.Sprintf("T-%d", i), Summary: fmt.Sprintf("Ticket %d", i)})
+		}
+		m.SetTicketList(list)
+		m.SetViewMode(ViewTickets)
+		m.ticketsTabModel.SetDimensions(80, 24)
 		m.View()
 
-		// Try scrolling up when already at top - should stay at 0
-		m.viewport.YOffset = 0
+		y0 := m.GetTicketsListYOffset()
+		wheelDown := tea.MouseMsg{
+			Action: tea.MouseActionPress,
+			Button: tea.MouseButtonWheelDown,
+			X:      50,
+			Y:      10,
+		}
+		newModel, _ := m.Update(wheelDown)
+		m = newModel.(*Model)
+		y1 := m.GetTicketsListYOffset()
+		if y1 <= y0 {
+			t.Errorf("wheel should update tickets list scroll: was %d, got %d", y0, y1)
+		}
+	})
+
+	t.Run("mouse scroll up at top does not panic", func(t *testing.T) {
+		m := createModelWithManyPRs()
+		defer m.Close()
+		m.viewMode = ViewPullRequests
+		m.githubService = &github.Service{}
+		m.View()
 		scrollUpMsg := tea.MouseMsg{
 			Action: tea.MouseActionPress,
 			Button: tea.MouseButtonWheelUp,
 			X:      50,
 			Y:      10,
 		}
-		newModel, _ := m.Update(scrollUpMsg)
-		m = newModel.(*Model)
-
-		if m.viewport.YOffset < 0 {
-			t.Errorf("YOffset should not go negative, got %d", m.viewport.YOffset)
-		}
-	})
-
-	t.Run("viewport height is correct after switching from graph to PRs", func(t *testing.T) {
-		m := createModelWithManyPRs()
-		defer m.Close()
-
-		// Start on Graph view
-		m.viewMode = ViewCommitGraph
-		m.View() // Render to set up graph viewport heights
-
-		// Switch to PR view
-		m.viewMode = ViewPullRequests
-		m.githubService = &github.Service{}
-		m.View() // Render PR view
-
-		// Viewport height should be reasonable (not the reduced graph height)
-		// The full content height should be at least height - header - statusbar
-		minExpectedHeight := m.height - 10 // Account for header, status, fixed header in split view
-		if m.viewport.Height < minExpectedHeight/2 {
-			t.Errorf("Viewport height %d seems too small after switching from graph (expected at least %d)", m.viewport.Height, minExpectedHeight/2)
-		}
+		_, _ = m.Update(scrollUpMsg)
 	})
 }
 
@@ -1187,13 +1223,15 @@ func TestNewCommitFromImmutableParent(t *testing.T) {
 		m.repository.Graph.Commits[0].Immutable = true
 		m.repository.Graph.Commits[0].ShortID = "main"
 
-		// Press 'n' to create a new commit
+		// Press 'n' - graph returns NewCommit request; main runs it and sets status
 		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}}
 		_, cmd := m.Update(msg)
-
-		// Should return a command (not nil) - this means the action was allowed
-		if cmd == nil {
-			t.Error("Expected a command to be returned when creating commit from immutable parent")
+		if cmd != nil {
+			if req, ok := cmd().(graphtab.Request); ok {
+				var v tea.Model
+				v, _ = m.Update(req)
+				m = v.(*Model)
+			}
 		}
 
 		// Status message should indicate creating new commit, NOT an error
@@ -1232,13 +1270,17 @@ func TestNewCommitFromImmutableParent(t *testing.T) {
 		m.graphTabModel.SelectCommit(0)
 		m.repository.Graph.Commits[0].Immutable = true
 
-		// Press 'd' (describe) - should be blocked
+		// Press 'd' - graph returns StartEditDescription request; main runs it and blocks with message
 		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}}
 		_, cmd := m.Update(msg)
-
 		if cmd != nil {
-			t.Error("Describe should be blocked for immutable commit")
+			if req, ok := cmd().(graphtab.Request); ok {
+				var v tea.Model
+				v, _ = m.Update(req)
+				m = v.(*Model)
+			}
 		}
+
 		if !containsString(m.statusMessage, "immutable") {
 			t.Error("Expected immutable warning for describe action")
 		}

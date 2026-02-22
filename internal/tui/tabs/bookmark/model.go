@@ -25,6 +25,8 @@ type Model struct {
 	jiraTicketTitle     string   // Jira ticket summary if creating from Jira
 	ticketDisplayKey    string   // Short display key (e.g., "$12u" for Codecks)
 	bookmarkNameExists  bool     // True if entered name matches an existing bookmark
+	jiraBookmarkTitles  map[string]string // Maps bookmark names to formatted PR titles ("KEY - Title")
+	ticketBookmarkDisplayKeys map[string]string // Maps bookmark names to ticket short IDs for commit messages
 	statusMessage       string
 	repository          *internal.Repository
 	zoneManager         *zone.Manager
@@ -130,6 +132,16 @@ func (m *Model) GetCommitIdx() int {
 	return m.commitIdx
 }
 
+// GetExistingBookmarks returns the list of existing bookmarks (for move)
+func (m *Model) GetExistingBookmarks() []string {
+	return m.existingBookmarks
+}
+
+// GetSelectedBookmarkIdx returns the selected existing bookmark index (-1 for new)
+func (m *Model) GetSelectedBookmarkIdx() int {
+	return m.selectedBookmarkIdx
+}
+
 // SetFromJira sets the jira context
 func (m *Model) SetFromJira(ticketKey, ticketTitle, displayKey string) {
 	m.fromJira = true
@@ -154,6 +166,16 @@ func (m *Model) IsFromJira() bool {
 // GetJiraKey returns the Jira ticket key
 func (m *Model) GetJiraKey() string {
 	return m.jiraTicketKey
+}
+
+// GetJiraTicketTitle returns the Jira ticket summary
+func (m *Model) GetJiraTicketTitle() string {
+	return m.jiraTicketTitle
+}
+
+// GetTicketDisplayKey returns the short display key for commit messages
+func (m *Model) GetTicketDisplayKey() string {
+	return m.ticketDisplayKey
 }
 
 // SetNameExists sets whether the name already exists
@@ -189,6 +211,24 @@ func (m *Model) GetNameInput() *textinput.Model {
 // UpdateRepository updates the repository (for rendering commit target)
 func (m *Model) UpdateRepository(repo *internal.Repository) {
 	m.repository = repo
+}
+
+// JiraBookmarkTitles / TicketBookmarkDisplayKeys (for PR title formatting from bookmarks)
+func (m *Model) GetJiraBookmarkTitles() map[string]string { return m.jiraBookmarkTitles }
+func (m *Model) SetJiraBookmarkTitles(mp map[string]string) {
+	if mp != nil {
+		m.jiraBookmarkTitles = mp
+	} else {
+		m.jiraBookmarkTitles = make(map[string]string)
+	}
+}
+func (m *Model) GetTicketBookmarkDisplayKeys() map[string]string { return m.ticketBookmarkDisplayKeys }
+func (m *Model) SetTicketBookmarkDisplayKeys(mp map[string]string) {
+	if mp != nil {
+		m.ticketBookmarkDisplayKeys = mp
+	} else {
+		m.ticketBookmarkDisplayKeys = make(map[string]string)
+	}
 }
 
 // SetZoneManager sets the zone manager for clickable elements

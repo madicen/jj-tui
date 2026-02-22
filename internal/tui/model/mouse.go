@@ -75,10 +75,9 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 		return m, nil
 	}
 
-	// GitHub login copy code button
-	if userClicked(mouse.ZoneGitHubLoginCopyCode) && m.githubUserCode != "" {
+	if userClicked(mouse.ZoneGitHubLoginCopyCode) && m.settingsTabModel.GetGitHubUserCode() != "" {
 		m.statusMessage = "Copying code to clipboard..."
-		return m, actions.CopyToClipboard(m.githubUserCode)
+		return m, actions.CopyToClipboard(m.settingsTabModel.GetGitHubUserCode())
 	}
 
 	// Check tab zones
@@ -204,30 +203,7 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 		}
 	}
 
-	// Check PR zones
-	if m.repository != nil {
-		for index := range m.repository.PRs {
-			if userClicked(mouse.ZonePR(index)) {
-				m.prsTabModel.SetSelectedPR(index)
-				return m, nil
-			}
-		}
-	}
-
-	// Check PR open in browser button
-	if userClicked(mouse.ZonePROpenBrowser) {
-		return m.handleOpenPRInBrowser()
-	}
-
-	// Check PR merge button
-	if userClicked(mouse.ZonePRMerge) {
-		return m.handleMergePR()
-	}
-
-	// Check PR close button
-	if userClicked(mouse.ZonePRClose) {
-		return m.handleClosePR()
-	}
+	// PR zones (list, open, merge, close) delegated to PRs tab when ViewPullRequests
 
 	// Description editor zones
 	if userClicked(mouse.ZoneDescSave) {
@@ -239,18 +215,18 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 
 	// Bookmark creation zones
 	if m.viewMode == ViewCreateBookmark {
-		// Check for clicks on existing bookmarks
-		for i := range m.existingBookmarks {
+		existing := m.bookmarkModal.GetExistingBookmarks()
+		for i := range existing {
 			if userClicked(mouse.ZoneExistingBookmark(i)) {
-				m.selectedBookmarkIdx = i
-				m.bookmarkNameInput.Blur()
+				m.bookmarkModal.SetSelectedBookmarkIdx(i)
+				m.bookmarkModal.GetNameInput().Blur()
 				return m, nil
 			}
 		}
 
 		if userClicked(mouse.ZoneBookmarkName) {
-			m.selectedBookmarkIdx = -1 // Switch to new bookmark mode
-			m.bookmarkNameInput.Focus()
+			m.bookmarkModal.SetSelectedBookmarkIdx(-1)
+			m.bookmarkModal.GetNameInput().Focus()
 			return m, nil
 		}
 		if userClicked(mouse.ZoneBookmarkSubmit) {
@@ -264,20 +240,16 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 	// Bookmark conflict resolution zones
 	if m.viewMode == ViewBookmarkConflict {
 		if userClicked(mouse.ZoneConflictKeepLocal) {
-			m.conflictSelectedOption = 0 // mouse.ZoneConflictKeepLocal
+			m.conflictModal.SetSelectedOption(0)
 			return m, nil
 		}
 		if userClicked(mouse.ZoneConflictResetRemote) {
-			m.conflictSelectedOption = 1
+			m.conflictModal.SetSelectedOption(1)
 			return m, nil
 		}
 		if userClicked(mouse.ZoneConflictConfirm) {
-			resolution := "keep_local"
-			if m.conflictSelectedOption == 1 {
-				resolution = "reset_remote"
-			}
 			m.statusMessage = "Resolving bookmark conflict..."
-			return m, m.resolveBookmarkConflict(m.conflictBookmarkName, resolution)
+			return m, m.resolveBookmarkConflict(m.conflictModal.GetBookmarkName(), m.conflictModal.GetSelectedOption())
 		}
 		if userClicked(mouse.ZoneConflictCancel) {
 			m.viewMode = ViewBranches
@@ -288,18 +260,18 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 
 	// Divergent commit resolution zones
 	if m.viewMode == ViewDivergentCommit {
-		// Check for clicks on divergent commit options
-		for i := range m.divergentCommitIDs {
+		n := m.divergentModal.GetCommitCount()
+		for i := 0; i < n; i++ {
 			if userClicked(mouse.ZoneDivergentCommit(i)) {
-				m.divergentSelectedIdx = i
+				m.divergentModal.SetSelectedIdx(i)
 				return m, nil
 			}
 		}
 		if userClicked(mouse.ZoneDivergentConfirm) {
-			if len(m.divergentCommitIDs) > 0 && m.divergentSelectedIdx < len(m.divergentCommitIDs) {
-				keepCommitID := m.divergentCommitIDs[m.divergentSelectedIdx]
+			keepCommitID := m.divergentModal.GetSelectedCommitID()
+			if keepCommitID != "" {
 				m.statusMessage = "Resolving divergent commit..."
-				return m, m.resolveDivergentCommit(m.divergentChangeID, keepCommitID)
+				return m, m.resolveDivergentCommit(m.divergentModal.GetChangeID(), keepCommitID)
 			}
 		}
 		if userClicked(mouse.ZoneDivergentCancel) {
@@ -309,18 +281,13 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 		}
 	}
 
-	// PR creation zones
 	if m.viewMode == ViewCreatePR {
 		if userClicked(mouse.ZonePRTitle) {
-			m.prFocusedField = 0
-			m.prTitleInput.Focus()
-			m.prBodyInput.Blur()
+			m.prFormModal.SetFocusedField(0)
 			return m, nil
 		}
 		if userClicked(mouse.ZonePRBody) {
-			m.prFocusedField = 1
-			m.prTitleInput.Blur()
-			m.prBodyInput.Focus()
+			m.prFormModal.SetFocusedField(1)
 			return m, nil
 		}
 		if userClicked(mouse.ZonePRSubmit) {
@@ -331,138 +298,69 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 		}
 	}
 
-	// Check ticket zones
-	for i := range m.ticketList {
-		if userClicked(mouse.ZoneJiraTicket(i)) {
-			m.ticketsTabModel.SetSelectedTicket(i)
-			return m, nil
-		}
-	}
+	// Ticket zones (list, create branch, change status, transitions, open browser) delegated to Tickets tab when ViewTickets
 
-	// Check ticket create branch button
-	if userClicked(mouse.ZoneJiraCreateBranch) {
-		return m.handleStartBookmarkFromTicket()
-	}
-
-	// Check "Change Status" button to toggle status change mode
-	if userClicked(mouse.ZoneJiraChangeStatus) {
-		return m.handleToggleStatusChangeMode()
-	}
-
-	// Check ticket transition buttons (only when status change mode is active)
-	if m.viewMode == ViewTickets && m.ticketService != nil && !m.transitionInProgress && m.statusChangeMode {
-		for i, t := range m.availableTransitions {
-			zoneID := mouse.ZoneJiraTransition + fmt.Sprintf("%d", i)
-			if userClicked(zoneID) {
-				if m.GetSelectedTicket() >= 0 && m.GetSelectedTicket() < len(m.ticketList) {
-					m.transitionInProgress = true
-					m.ticketsTabModel.SetTransitionInProgress(true)
-					ticket := m.ticketList[m.GetSelectedTicket()]
-					m.statusMessage = fmt.Sprintf("Setting %s to %s...", ticket.DisplayKey, t.Name)
-					return m, m.transitionTicket(t.ID)
-				}
-			}
-		}
-	}
-
-	// Check ticket open in browser button
-	if userClicked(mouse.ZoneTicketOpenBrowser) {
-		if m.viewMode == ViewTickets {
-			return m.handleOpenTicketInBrowser()
-		}
-	}
-
-	// Check branch zones
-	for i := range m.branchList {
-		if userClicked(mouse.ZoneBranch(i)) {
-			m.branchesTabModel.SetSelectedBranch(i)
-			return m, nil
-		}
-	}
-
-	// Check branch action buttons
-	if m.viewMode == ViewBranches {
-		if userClicked(mouse.ZoneBranchTrack) {
-			return m.handleTrackBranch()
-		}
-		if userClicked(mouse.ZoneBranchUntrack) {
-			return m.handleUntrackBranch()
-		}
-		if userClicked(mouse.ZoneBranchRestore) {
-			return m.handleRestoreLocalBranch()
-		}
-		if userClicked(mouse.ZoneBranchDelete) {
-			return m.handleDeleteBranchBookmark()
-		}
-		if userClicked(mouse.ZoneBranchPush) {
-			return m.handlePushBranch()
-		}
-		if userClicked(mouse.ZoneBranchFetch) {
-			return m.handleFetchAll()
-		}
-		if userClicked(mouse.ZoneBranchResolveConflict) {
-			return m.handleResolveBookmarkConflict()
-		}
-	}
+	// Branch zones (list + action buttons) delegated to Branches tab when ViewBranches
 
 	// Settings input field clicks
 	if m.viewMode == ViewSettings {
+		inputs := m.settingsTabModel.GetSettingsInputs()
 		// Settings sub-tabs
 		if userClicked(mouse.ZoneSettingsTabGitHub) {
-			m.settingsTab = 0
+			m.settingsTabModel.SetSettingsTab(0)
 			return m, nil
 		}
 		if userClicked(mouse.ZoneSettingsTabJira) {
-			m.settingsTab = 1
+			m.settingsTabModel.SetSettingsTab(1)
 			return m, nil
 		}
 		if userClicked(mouse.ZoneSettingsTabCodecks) {
-			m.settingsTab = 2
+			m.settingsTabModel.SetSettingsTab(2)
 			return m, nil
 		}
 		if userClicked(mouse.ZoneSettingsTabTickets) {
-			m.settingsTab = 3
+			m.settingsTabModel.SetSettingsTab(3)
 			return m, nil
 		}
 		if userClicked(mouse.ZoneSettingsTabBranches) {
-			m.settingsTab = 4
+			m.settingsTabModel.SetSettingsTab(4)
 			return m, nil
 		}
 		if userClicked(mouse.ZoneSettingsTabAdvanced) {
-			m.settingsTab = 5
+			m.settingsTabModel.SetSettingsTab(5)
 			return m, nil
 		}
 
 		// Handle Tickets tab operations
-		if m.settingsTab == 3 {
+		if m.settingsTabModel.GetSettingsTab() == 3 {
 			// Ticket provider selection
 			if userClicked(mouse.ZoneSettingsTicketProviderNone) {
-				m.settingsTicketProvider = ""
+				m.settingsTabModel.SetSettingsTicketProvider("")
 				return m, nil
 			}
 			if userClicked(mouse.ZoneSettingsTicketProviderJira) {
-				m.settingsTicketProvider = "jira"
+				m.settingsTabModel.SetSettingsTicketProvider("jira")
 				return m, nil
 			}
 			if userClicked(mouse.ZoneSettingsTicketProviderCodecks) {
-				m.settingsTicketProvider = "codecks"
+				m.settingsTabModel.SetSettingsTicketProvider("codecks")
 				return m, nil
 			}
 			if userClicked(mouse.ZoneSettingsTicketProviderGitHubIssues) {
-				m.settingsTicketProvider = "github_issues"
+				m.settingsTabModel.SetSettingsTicketProvider("github_issues")
 				return m, nil
 			}
 			// Auto-status toggle (now in Tickets tab)
 			if userClicked(mouse.ZoneSettingsAutoInProgress) {
-				m.settingsAutoInProgress = !m.settingsAutoInProgress
+				m.settingsTabModel.SetSettingsAutoInProgress(!(m.settingsTabModel.GetSettingsAutoInProgress()))
 				return m, nil
 			}
 		}
 
 		// Handle Advanced tab operations
-		if m.settingsTab == 5 {
+		if m.settingsTabModel.GetSettingsTab() == 5 {
 			// Cleanup confirmation buttons
-			if m.confirmingCleanup != "" {
+			if m.settingsTabModel.GetConfirmingCleanup() != "" {
 				if userClicked(mouse.ZoneSettingsAdvancedConfirmYes) {
 					return m, m.confirmCleanup()
 				}
@@ -484,7 +382,7 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 			}
 			// Sanitize bookmarks toggle
 			if userClicked(mouse.ZoneSettingsSanitizeBookmarks) {
-				m.settingsSanitizeBookmarks = !m.settingsSanitizeBookmarks
+				m.settingsTabModel.SetSettingsSanitizeBookmarks(!(m.settingsTabModel.GetSettingsSanitizeBookmarks()))
 				return m, nil
 			}
 			return m, nil
@@ -498,70 +396,70 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 
 		// GitHub filter toggles
 		if userClicked(mouse.ZoneSettingsGitHubOnlyMine) {
-			m.settingsOnlyMine = !m.settingsOnlyMine
+			m.settingsTabModel.SetSettingsOnlyMine(!(m.settingsTabModel.GetSettingsOnlyMine()))
 			return m, nil
 		}
 		if userClicked(mouse.ZoneSettingsGitHubShowMerged) {
-			m.settingsShowMerged = !m.settingsShowMerged
+			m.settingsTabModel.SetSettingsShowMerged(!m.settingsTabModel.GetSettingsShowMerged())
 			return m, nil
 		}
 		if userClicked(mouse.ZoneSettingsGitHubShowClosed) {
-			m.settingsShowClosed = !m.settingsShowClosed
+			m.settingsTabModel.SetSettingsShowClosed(!m.settingsTabModel.GetSettingsShowClosed())
 			return m, nil
 		}
 		if userClicked(mouse.ZoneSettingsGitHubPRLimitDecrease) {
-			if m.settingsPRLimit > 25 {
-				m.settingsPRLimit -= 25
+			if m.settingsTabModel.GetSettingsPRLimit() > 25 {
+				m.settingsTabModel.SetSettingsPRLimit(m.settingsTabModel.GetSettingsPRLimit() - 25)
 			}
 			return m, nil
 		}
 		if userClicked(mouse.ZoneSettingsGitHubPRLimitIncrease) {
-			if m.settingsPRLimit < 500 {
-				m.settingsPRLimit += 25
+			if m.settingsTabModel.GetSettingsPRLimit() < 500 {
+				m.settingsTabModel.SetSettingsPRLimit(m.settingsTabModel.GetSettingsPRLimit() + 25)
 			}
 			return m, nil
 		}
 
 		// PR Refresh Interval controls
 		if userClicked(mouse.ZoneSettingsGitHubRefreshDecrease) {
-			if m.settingsPRRefreshInterval > 30 {
-				m.settingsPRRefreshInterval -= 30 // Decrease by 30 seconds
-			} else if m.settingsPRRefreshInterval > 0 {
-				m.settingsPRRefreshInterval = 0 // Go to disabled
+			if m.settingsTabModel.GetSettingsPRRefreshInterval() > 30 {
+				m.settingsTabModel.SetSettingsPRRefreshInterval(m.settingsTabModel.GetSettingsPRRefreshInterval() - 30) // Decrease by 30 seconds
+			} else if m.settingsTabModel.GetSettingsPRRefreshInterval() > 0 {
+				m.settingsTabModel.SetSettingsPRRefreshInterval(0) // Go to disabled
 			}
 			return m, nil
 		}
 		if userClicked(mouse.ZoneSettingsGitHubRefreshIncrease) {
-			if m.settingsPRRefreshInterval == 0 {
-				m.settingsPRRefreshInterval = 30 // Enable at 30 seconds
-			} else if m.settingsPRRefreshInterval < 600 {
-				m.settingsPRRefreshInterval += 30 // Increase by 30 seconds (max 10 min)
+			if m.settingsTabModel.GetSettingsPRRefreshInterval() == 0 {
+				m.settingsTabModel.SetSettingsPRRefreshInterval(30) // Enable at 30 seconds
+			} else if m.settingsTabModel.GetSettingsPRRefreshInterval() < 600 {
+				m.settingsTabModel.SetSettingsPRRefreshInterval(m.settingsTabModel.GetSettingsPRRefreshInterval() + 30) // Increase by 30 seconds (max 10 min)
 			}
 			return m, nil
 		}
 		if userClicked(mouse.ZoneSettingsGitHubRefreshToggle) {
-			if m.settingsPRRefreshInterval == 0 {
-				m.settingsPRRefreshInterval = 120 // Enable at 2 minutes (default)
+			if m.settingsTabModel.GetSettingsPRRefreshInterval() == 0 {
+				m.settingsTabModel.SetSettingsPRRefreshInterval(120) // Enable at 2 minutes (default)
 			} else {
-				m.settingsPRRefreshInterval = 0 // Disable
+				m.settingsTabModel.SetSettingsPRRefreshInterval(0) // Disable
 			}
 			return m, nil
 		}
 
 		// Branch Limit controls
 		if userClicked(mouse.ZoneSettingsBranchLimitDecrease) {
-			if m.settingsBranchLimit > 10 {
-				m.settingsBranchLimit -= 10
-			} else if m.settingsBranchLimit > 0 {
-				m.settingsBranchLimit = 0 // 0 means unlimited
+			if m.settingsTabModel.GetSettingsBranchLimit() > 10 {
+				m.settingsTabModel.SetSettingsBranchLimit(m.settingsTabModel.GetSettingsBranchLimit() - 10)
+			} else if m.settingsTabModel.GetSettingsBranchLimit() > 0 {
+				m.settingsTabModel.SetSettingsBranchLimit(0) // 0 means unlimited
 			}
 			return m, nil
 		}
 		if userClicked(mouse.ZoneSettingsBranchLimitIncrease) {
-			if m.settingsBranchLimit == 0 {
-				m.settingsBranchLimit = 10 // Start at 10
-			} else if m.settingsBranchLimit < 200 {
-				m.settingsBranchLimit += 10 // Increase by 10 (max 200)
+			if m.settingsTabModel.GetSettingsBranchLimit() == 0 {
+				m.settingsTabModel.SetSettingsBranchLimit(10) // Start at 10
+			} else if m.settingsTabModel.GetSettingsBranchLimit() < 200 {
+				m.settingsTabModel.SetSettingsBranchLimit(m.settingsTabModel.GetSettingsBranchLimit() + 10) // Increase by 10 (max 200)
 			}
 			return m, nil
 		}
@@ -585,14 +483,14 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 		}
 		for i, zoneID := range clearZones {
 			if userClicked(zoneID) {
-				if i < len(m.settingsInputs) {
-					m.settingsInputs[i].SetValue("")
-					m.settingsInputs[i].Focus()
-					m.settingsFocusedField = i
+				if i < len(inputs) {
+					m.settingsTabModel.SetSettingInputValue(i, "")
+					inputs[i].Focus()
+					m.settingsTabModel.SetFocusedField(i)
 					// Blur other inputs
-					for j := range m.settingsInputs {
+					for j := range inputs {
 						if j != i {
-							m.settingsInputs[j].Blur()
+							inputs[j].Blur()
 						}
 					}
 				}
@@ -617,12 +515,12 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 		}
 		for i, zoneID := range settingsZones {
 			if userClicked(zoneID) {
-				m.settingsFocusedField = i
-				for j := range m.settingsInputs {
+				m.settingsTabModel.SetFocusedField(i)
+				for j := range inputs {
 					if j == i {
-						m.settingsInputs[j].Focus()
+						inputs[j].Focus()
 					} else {
-						m.settingsInputs[j].Blur()
+						inputs[j].Blur()
 					}
 				}
 				return m, nil
@@ -648,18 +546,18 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 	// Help view tab clicks
 	if m.viewMode == ViewHelp {
 		if userClicked(mouse.ZoneHelpTabShortcuts) {
-			m.helpTab = 0
-			m.helpSelectedCommand = 0
+			m.helpTabModel.SetHelpTab(0)
+			m.helpTabModel.SetSelectedCommand(0)
 			return m, nil
 		}
 		if userClicked(mouse.ZoneHelpTabCommands) {
-			m.helpTab = 1
-			m.helpSelectedCommand = 0
+			m.helpTabModel.SetHelpTab(1)
+			m.helpTabModel.SetSelectedCommand(0)
 			return m, nil
 		}
 
 		// Command copy buttons (only on Commands tab)
-		if m.helpTab == 1 {
+		if m.helpTabModel.GetHelpTab() == 1 {
 			history := m.getFilteredCommandHistory()
 			for i := 0; i < len(history) && i < 50; i++ {
 				if userClicked(fmt.Sprintf("%s%d", mouse.ZoneHelpCommandCopy, i)) {

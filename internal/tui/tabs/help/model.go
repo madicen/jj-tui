@@ -85,6 +85,11 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.helpSelectedCommand--
 		}
 		return m, nil
+	case "y":
+		if m.helpTab == 1 && len(m.commandHistoryEntries) > 0 && m.helpSelectedCommand >= 0 && m.helpSelectedCommand < len(m.commandHistoryEntries) {
+			return m, Request{CopyCommand: m.commandHistoryEntries[m.helpSelectedCommand].Command}.Cmd()
+		}
+		return m, nil
 	}
 	return m, nil
 }
