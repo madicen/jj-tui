@@ -52,7 +52,7 @@ func (m *Model) View() string {
 		return m.centerModal(conflictContent)
 	}
 
-	// Normal UI: render tabs/main content
+	// Normal UI: header and footer are owned by the main model; inner content from tab/modal View()
 	header := m.renderHeader()
 	statusBar := m.renderStatusBar()
 
@@ -66,7 +66,6 @@ func (m *Model) View() string {
 		m.graphTabModel.SetRebaseSourceCommit(m.rebaseSourceCommit)
 		content = m.graphTabModel.View()
 		if content == "" {
-			// Fallback to main rendering for now
 			content = m.renderGraphContent()
 		}
 	case ViewPullRequests:
@@ -112,6 +111,25 @@ func (m *Model) View() string {
 		content = m.renderGitHubLogin()
 	default:
 		content = m.renderGraphContent()
+	}
+
+	// Keep header and footer always visible: put inner content in a viewport with height = total - header - footer
+	headerHeight := strings.Count(header, "\n") + 1
+	statusHeight := strings.Count(statusBar, "\n") + 1
+	contentHeight := max(m.height-headerHeight-statusHeight, 1)
+
+	if m.viewportReady {
+		m.viewport.Width = m.width
+		m.viewport.Height = contentHeight
+		m.viewport.SetContent(content)
+		// Clamp YOffset if content shortened
+		if total := m.viewport.TotalLineCount(); total > 0 && contentHeight > 0 {
+			maxOffset := max(total-contentHeight, 0)
+			if m.viewport.YOffset > maxOffset {
+				m.viewport.YOffset = maxOffset
+			}
+		}
+		content = m.viewport.View()
 	}
 
 	v := lipgloss.JoinVertical(
