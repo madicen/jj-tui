@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/madicen/jj-tui/internal/tui/mouse"
 )
 
 // Tab styles for help view
@@ -54,8 +55,8 @@ func (r *Renderer) renderHelpTabs(activeTab HelpTab) string {
 		commandsStyle = helpTabActiveStyle
 	}
 
-	shortcutsTab := r.Mark(ZoneHelpTabShortcuts, shortcutsStyle.Render("Shortcuts"))
-	commandsTab := r.Mark(ZoneHelpTabCommands, commandsStyle.Render("History"))
+	shortcutsTab := r.Mark(mouse.ZoneHelpTabShortcuts, shortcutsStyle.Render("Shortcuts"))
+	commandsTab := r.Mark(mouse.ZoneHelpTabCommands, commandsStyle.Render("History"))
 
 	return lipgloss.JoinHorizontal(lipgloss.Left, shortcutsTab, " │ ", commandsTab)
 }
@@ -236,7 +237,7 @@ func (r *Renderer) renderHelpCommands(data HelpData) []string {
 		}
 
 		// Copy button
-		copyBtn := r.Mark(fmt.Sprintf("%s%d", ZoneHelpCommandCopy, i), copyBtnStyle.Render("[copy]"))
+		copyBtn := r.Mark(fmt.Sprintf("%s%d", mouse.ZoneHelpCommandCopy, i), copyBtnStyle.Render("[copy]"))
 
 		// Format: [time] [duration] [status] command [copy]
 		line := fmt.Sprintf("%s%s %s %s %s %s",
@@ -253,7 +254,7 @@ func (r *Renderer) renderHelpCommands(data HelpData) []string {
 			line = entryStyle.Render(line)
 		}
 
-		lines = append(lines, r.Mark(fmt.Sprintf("%s%d", ZoneHelpCommand, i), line))
+		lines = append(lines, r.Mark(fmt.Sprintf("%s%d", mouse.ZoneHelpCommand, i), line))
 
 		// Show error on next line if command failed and is selected
 		if !entry.Success && entry.Error != "" && i == data.SelectedCommand {

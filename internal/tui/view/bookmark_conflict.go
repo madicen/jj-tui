@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/madicen/jj-tui/internal/tui/mouse"
 )
 
 // BookmarkConflict renders the bookmark conflict resolution view
@@ -62,7 +63,7 @@ func (r *Renderer) BookmarkConflict(data BookmarkConflictData) string {
 		keepLocalStyle = selectedStyle
 	}
 	keepLocalLine := fmt.Sprintf("%s%s", keepLocalPrefix, "Keep Local (force push to remote)")
-	lines = append(lines, r.Mark(ZoneConflictKeepLocal, keepLocalStyle.Render(keepLocalLine)))
+	lines = append(lines, r.Mark(mouse.ZoneConflictKeepLocal, keepLocalStyle.Render(keepLocalLine)))
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Overwrites remote with your local version"))
 	lines = append(lines, "")
 
@@ -74,14 +75,14 @@ func (r *Renderer) BookmarkConflict(data BookmarkConflictData) string {
 		resetRemoteStyle = selectedStyle
 	}
 	resetRemoteLine := fmt.Sprintf("%s%s", resetRemotePrefix, "Reset to Remote (discard local)")
-	lines = append(lines, r.Mark(ZoneConflictResetRemote, resetRemoteStyle.Render(resetRemoteLine)))
+	lines = append(lines, r.Mark(mouse.ZoneConflictResetRemote, resetRemoteStyle.Render(resetRemoteLine)))
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Updates local bookmark to match remote"))
 	lines = append(lines, "")
 
 	// Action buttons
 	lines = append(lines, "")
-	confirmBtn := r.Mark(ZoneConflictConfirm, ButtonStyle.Render("Confirm (Enter)"))
-	cancelBtn := r.Mark(ZoneConflictCancel, ButtonSecondaryStyle.Render("Cancel (Esc)"))
+	confirmBtn := r.Mark(mouse.ZoneConflictConfirm, ButtonStyle.Render("Confirm (Enter)"))
+	cancelBtn := r.Mark(mouse.ZoneConflictCancel, ButtonSecondaryStyle.Render("Cancel (Esc)"))
 	lines = append(lines, confirmBtn+"  "+cancelBtn)
 
 	// Help text
@@ -98,4 +99,3 @@ func truncateSummary(summary string, maxLen int) string {
 	}
 	return summary[:maxLen-3] + "..."
 }
-

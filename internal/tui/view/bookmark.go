@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/madicen/jj-tui/internal/tui/mouse"
 )
 
 // Bookmark renders the bookmark creation view
@@ -53,7 +54,7 @@ func (r *Renderer) Bookmark(data BookmarkData) string {
 					style = CommitSelectedStyle
 				}
 				bookmarkLine := fmt.Sprintf("%s%s", prefix, bookmark)
-				lines = append(lines, r.Mark(ZoneExistingBookmark(i), style.Render(bookmarkLine)))
+				lines = append(lines, r.Mark(mouse.ZoneExistingBookmark(i), style.Render(bookmarkLine)))
 			}
 			lines = append(lines, "")
 			lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("─────────────────────────────────"))
@@ -82,7 +83,7 @@ func (r *Renderer) Bookmark(data BookmarkData) string {
 		inputStyle = inputStyle.Foreground(ColorPrimary)
 	}
 	lines = append(lines, inputStyle.Render("Name:"))
-	lines = append(lines, r.Mark(ZoneBookmarkName, "  "+data.NameInput))
+	lines = append(lines, r.Mark(mouse.ZoneBookmarkName, "  "+data.NameInput))
 
 	// Show warning if bookmark name already exists
 	if data.NameExists {
@@ -104,8 +105,8 @@ func (r *Renderer) Bookmark(data BookmarkData) string {
 	} else {
 		submitLabel = "Create (Enter)"
 	}
-	submitButton := r.Mark(ZoneBookmarkSubmit, ButtonStyle.Render(submitLabel))
-	cancelButton := r.Mark(ZoneBookmarkCancel, ButtonStyle.Render("Cancel (Esc)"))
+	submitButton := r.Mark(mouse.ZoneBookmarkSubmit, ButtonStyle.Render(submitLabel))
+	cancelButton := r.Mark(mouse.ZoneBookmarkCancel, ButtonStyle.Render("Cancel (Esc)"))
 	lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Left, submitButton, " ", cancelButton))
 
 	return strings.Join(lines, "\n")

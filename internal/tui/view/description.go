@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/madicen/jj-tui/internal/tui/mouse"
 )
 
 // Description renders the description editing view
@@ -39,8 +40,8 @@ func (r *Renderer) Description(data DescriptionData) string {
 	// Clickable action buttons
 	actionButtons := lipgloss.JoinHorizontal(
 		lipgloss.Left,
-		r.Mark(ZoneDescSave, ButtonStyle.Render("Save (Ctrl+S)")),
-		r.Mark(ZoneDescCancel, ButtonStyle.Render("Cancel (Esc)")),
+		r.Mark(mouse.ZoneDescSave, ButtonStyle.Render("Save (Ctrl+S)")),
+		r.Mark(mouse.ZoneDescCancel, ButtonStyle.Render("Cancel (Esc)")),
 	)
 
 	return lipgloss.JoinVertical(
@@ -53,4 +54,3 @@ func (r *Renderer) Description(data DescriptionData) string {
 		actionButtons,
 	)
 }
-

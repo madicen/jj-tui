@@ -76,6 +76,11 @@ func (m GraphModel) Init() tea.Cmd {
 
 func (m GraphModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		return m, nil
+
 	case tea.KeyMsg:
 		return m.handleKeyMsg(msg)
 
@@ -163,7 +168,7 @@ func (m GraphModel) View() string {
 	// Simple separator line
 	separator := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#444444")).
-		Render(strings.Repeat("─", m.width-2))
+		Render(strings.Repeat("─", max(m.width-2, 0)))
 
 	// Wrap viewports in zones for click-to-focus
 	graphPane := m.zoneManager.Mark(mouse.ZoneGraphPane, m.viewport.View())

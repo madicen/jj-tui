@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/madicen/jj-tui/internal"
+	"github.com/madicen/jj-tui/internal/tui/mouse"
 )
 
 // BranchData contains data needed for branches rendering
@@ -101,39 +102,39 @@ func (r *Renderer) Branches(data BranchData) BranchResult {
 		if branch.IsLocal {
 			// Local branch: can push or delete
 			actionButtons = append(actionButtons,
-				r.Mark(ZoneBranchPush, ButtonStyle.Render("Push (P)")),
+				r.Mark(mouse.ZoneBranchPush, ButtonStyle.Render("Push (P)")),
 			)
 			actionButtons = append(actionButtons,
-				r.Mark(ZoneBranchDelete, ButtonStyle.Render("Delete (x)")),
+				r.Mark(mouse.ZoneBranchDelete, ButtonStyle.Render("Delete (x)")),
 			)
 			// Show resolve conflict button if branch has diverged
 			if branch.HasConflict {
 				conflictBtnStyle := ButtonStyle.Background(lipgloss.Color("#FF5555"))
 				actionButtons = append(actionButtons,
-					r.Mark(ZoneBranchResolveConflict, conflictBtnStyle.Render("Resolve Conflict (c)")),
+					r.Mark(mouse.ZoneBranchResolveConflict, conflictBtnStyle.Render("Resolve Conflict (c)")),
 				)
 			}
 		} else if branch.IsTracked {
 			// Tracked remote branch: can untrack
 			actionButtons = append(actionButtons,
-				r.Mark(ZoneBranchUntrack, ButtonStyle.Render("Untrack (U)")),
+				r.Mark(mouse.ZoneBranchUntrack, ButtonStyle.Render("Untrack (U)")),
 			)
 			// If local was deleted, offer to restore it
 			if branch.LocalDeleted {
 				actionButtons = append(actionButtons,
-					r.Mark(ZoneBranchRestore, ButtonStyle.Render("Restore Local (L)")),
+					r.Mark(mouse.ZoneBranchRestore, ButtonStyle.Render("Restore Local (L)")),
 				)
 			}
 		} else {
 			// Untracked remote branch: can track
 			actionButtons = append(actionButtons,
-				r.Mark(ZoneBranchTrack, ButtonStyle.Render("Track (T)")),
+				r.Mark(mouse.ZoneBranchTrack, ButtonStyle.Render("Track (T)")),
 			)
 		}
 
 		// Fetch is always available
 		actionButtons = append(actionButtons,
-			r.Mark(ZoneBranchFetch, ButtonStyle.Render("Fetch All (F)")),
+			r.Mark(mouse.ZoneBranchFetch, ButtonStyle.Render("Fetch All (F)")),
 		)
 
 		headerLines = append(headerLines, strings.Join(actionButtons, " "))
@@ -313,5 +314,5 @@ func (r *Renderer) renderGraphBranch(branch internal.Branch, idx int, isSelected
 		conflictIndicator,
 	)
 
-	return r.Mark(ZoneBranch(idx), branchLine)
+	return r.Mark(mouse.ZoneBranch(idx), branchLine)
 }

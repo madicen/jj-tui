@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/madicen/jj-tui/internal/tui/mouse"
 )
 
 // DivergentCommit renders the divergent commit resolution view
@@ -58,7 +59,7 @@ func (r *Renderer) DivergentCommit(data DivergentCommitData) string {
 			commitIDStyle.Render(commitID),
 			style.Render(summary),
 		)
-		lines = append(lines, r.Mark(ZoneDivergentCommit(i), line))
+		lines = append(lines, r.Mark(mouse.ZoneDivergentCommit(i), line))
 	}
 
 	lines = append(lines, "")
@@ -68,8 +69,8 @@ func (r *Renderer) DivergentCommit(data DivergentCommitData) string {
 	lines = append(lines, "")
 
 	// Action buttons
-	confirmBtn := r.Mark(ZoneDivergentConfirm, ButtonStyle.Render("Keep Selected (Enter)"))
-	cancelBtn := r.Mark(ZoneDivergentCancel, ButtonSecondaryStyle.Render("Cancel (Esc)"))
+	confirmBtn := r.Mark(mouse.ZoneDivergentConfirm, ButtonStyle.Render("Keep Selected (Enter)"))
+	cancelBtn := r.Mark(mouse.ZoneDivergentCancel, ButtonSecondaryStyle.Render("Cancel (Esc)"))
 	lines = append(lines, confirmBtn+"  "+cancelBtn)
 
 	// Help text
@@ -78,4 +79,3 @@ func (r *Renderer) DivergentCommit(data DivergentCommitData) string {
 
 	return strings.Join(lines, "\n")
 }
-
