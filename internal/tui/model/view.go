@@ -143,10 +143,20 @@ func (m *Model) View() string {
 		}
 	}
 
+	// Pin footer to bottom: pad content to fixed height (avoid lipgloss on content to preserve zone markup)
+	contentLines := strings.Split(content, "\n")
+	for len(contentLines) < contentHeight {
+		contentLines = append(contentLines, "")
+	}
+	if len(contentLines) > contentHeight {
+		contentLines = contentLines[:contentHeight]
+	}
+	contentPadded := strings.Join(contentLines, "\n")
+
 	v := lipgloss.JoinVertical(
 		lipgloss.Left,
 		header,
-		content,
+		contentPadded,
 		statusBar,
 	)
 
@@ -191,10 +201,20 @@ func (m *Model) renderWithHeader(content string) string {
 		visible = ""
 	}
 
+	// Pin footer to bottom: pad content to fixed height (preserve zone markup)
+	visibleLines := strings.Split(visible, "\n")
+	for len(visibleLines) < fullContentHeight {
+		visibleLines = append(visibleLines, "")
+	}
+	if len(visibleLines) > fullContentHeight {
+		visibleLines = visibleLines[:fullContentHeight]
+	}
+	contentPadded := strings.Join(visibleLines, "\n")
+
 	v := lipgloss.JoinVertical(
 		lipgloss.Left,
 		header,
-		visible,
+		contentPadded,
 		statusBar,
 	)
 	return m.zoneManager.Scan(v)
