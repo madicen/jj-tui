@@ -84,10 +84,7 @@ func (m *Model) View() string {
 			content = m.renderTicketsContent()
 		}
 	case ViewSettings:
-		content = m.settingsTabModel.View()
-		if content == "" {
-			content = m.renderSettingsContent()
-		}
+		content = m.renderSettings()
 	case ViewHelp:
 		content = m.helpTabModel.View()
 		if content == "" {
