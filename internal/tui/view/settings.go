@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/version"
 )
 
@@ -108,9 +109,9 @@ func (r *Renderer) Settings(data SettingsData) string {
 	lines = append(lines, "")
 
 	// Action buttons
-	saveButton := r.Mark(ZoneSettingsSave, ButtonStyle.Render("Save Global (^s)"))
-	saveLocalButton := r.Mark(ZoneSettingsSaveLocal, ButtonStyle.Render("Save Local (^l)"))
-	cancelButton := r.Mark(ZoneSettingsCancel, ButtonStyle.Render("Cancel (Esc)"))
+	saveButton := r.Mark(mouse.ZoneSettingsSave, ButtonStyle.Render("Save Global (^s)"))
+	saveLocalButton := r.Mark(mouse.ZoneSettingsSaveLocal, ButtonStyle.Render("Save Local (^l)"))
+	cancelButton := r.Mark(mouse.ZoneSettingsCancel, ButtonStyle.Render("Cancel (Esc)"))
 	lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Left, saveButton, " ", saveLocalButton, " ", cancelButton))
 
 	return strings.Join(lines, "\n")
@@ -140,12 +141,12 @@ func (r *Renderer) renderSettingsTabs(activeTab SettingsTab) string {
 		advancedStyle = settingsTabActiveStyle
 	}
 
-	githubTab := r.Mark(ZoneSettingsTabGitHub, githubStyle.Render("GitHub"))
-	jiraTab := r.Mark(ZoneSettingsTabJira, jiraStyle.Render("Jira"))
-	codecksTab := r.Mark(ZoneSettingsTabCodecks, codecksStyle.Render("Codecks"))
-	ticketsTab := r.Mark(ZoneSettingsTabTickets, ticketsStyle.Render("Tickets"))
-	branchesTab := r.Mark(ZoneSettingsTabBranches, branchesStyle.Render("Branches"))
-	advancedTab := r.Mark(ZoneSettingsTabAdvanced, advancedStyle.Render("Advanced"))
+	githubTab := r.Mark(mouse.ZoneSettingsTabGitHub, githubStyle.Render("GitHub"))
+	jiraTab := r.Mark(mouse.ZoneSettingsTabJira, jiraStyle.Render("Jira"))
+	codecksTab := r.Mark(mouse.ZoneSettingsTabCodecks, codecksStyle.Render("Codecks"))
+	ticketsTab := r.Mark(mouse.ZoneSettingsTabTickets, ticketsStyle.Render("Tickets"))
+	branchesTab := r.Mark(mouse.ZoneSettingsTabBranches, branchesStyle.Render("Branches"))
+	advancedTab := r.Mark(mouse.ZoneSettingsTabAdvanced, advancedStyle.Render("Advanced"))
 
 	return lipgloss.JoinHorizontal(lipgloss.Left, githubTab, " │ ", jiraTab, " │ ", codecksTab, " │ ", ticketsTab, " │ ", branchesTab, " │ ", advancedTab)
 }
@@ -162,9 +163,9 @@ func (r *Renderer) renderGitHubSettings(data SettingsData) []string {
 	// GitHub login button or connected status
 	if data.GithubService {
 		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B")).Render("  ✓ Connected to GitHub"))
-		lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    "+r.Mark(ZoneSettingsGitHubLogin, "[Reconnect]")))
+		lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    "+r.Mark(mouse.ZoneSettingsGitHubLogin, "[Reconnect]")))
 	} else {
-		loginButton := r.Mark(ZoneSettingsGitHubLogin, ButtonStyle.Background(lipgloss.Color("#238636")).Render("Login with GitHub"))
+		loginButton := r.Mark(mouse.ZoneSettingsGitHubLogin, ButtonStyle.Background(lipgloss.Color("#238636")).Render("Login with GitHub"))
 		lines = append(lines, "  "+loginButton)
 		lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Opens browser to authenticate via GitHub App"))
 	}
@@ -178,8 +179,8 @@ func (r *Renderer) renderGitHubSettings(data SettingsData) []string {
 	}
 	lines = append(lines, githubTokenStyle.Render(githubTokenLabel))
 	if len(data.Inputs) > 0 {
-		clearBtn := r.Mark(ZoneSettingsGitHubTokenClear, clearButtonStyle.Render("[Clear]"))
-		lines = append(lines, "  "+r.Mark(ZoneSettingsGitHubToken, data.Inputs[0].View)+" "+clearBtn)
+		clearBtn := r.Mark(mouse.ZoneSettingsGitHubTokenClear, clearButtonStyle.Render("[Clear]"))
+		lines = append(lines, "  "+r.Mark(mouse.ZoneSettingsGitHubToken, data.Inputs[0].View)+" "+clearBtn)
 	}
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Get a token from: https://github.com/settings/tokens"))
 	lines = append(lines, "")
@@ -189,15 +190,15 @@ func (r *Renderer) renderGitHubSettings(data SettingsData) []string {
 	lines = append(lines, "")
 
 	// Only My PRs toggle
-	onlyMineToggle := r.renderToggle("Only My PRs", data.OnlyMyPRs, ZoneSettingsGitHubOnlyMine)
+	onlyMineToggle := r.renderToggle("Only My PRs", data.OnlyMyPRs, mouse.ZoneSettingsGitHubOnlyMine)
 	lines = append(lines, "    "+onlyMineToggle)
 
 	// Show Merged PRs toggle
-	mergedToggle := r.renderToggle("Show Merged PRs", data.ShowMergedPRs, ZoneSettingsGitHubShowMerged)
+	mergedToggle := r.renderToggle("Show Merged PRs", data.ShowMergedPRs, mouse.ZoneSettingsGitHubShowMerged)
 	lines = append(lines, "    "+mergedToggle)
 
 	// Show Closed PRs toggle
-	closedToggle := r.renderToggle("Show Closed PRs", data.ShowClosedPRs, ZoneSettingsGitHubShowClosed)
+	closedToggle := r.renderToggle("Show Closed PRs", data.ShowClosedPRs, mouse.ZoneSettingsGitHubShowClosed)
 	lines = append(lines, "    "+closedToggle)
 
 	lines = append(lines, "")
@@ -205,8 +206,8 @@ func (r *Renderer) renderGitHubSettings(data SettingsData) []string {
 	// PR Limit control
 	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("  PR Limit:"))
 	limitText := lipgloss.NewStyle().Bold(true).Render(fmt.Sprintf("%d", data.PRLimit))
-	decreaseBtn := r.Mark(ZoneSettingsGitHubPRLimitDecrease, lipgloss.NewStyle().Foreground(ColorPrimary).Render("[-]"))
-	increaseBtn := r.Mark(ZoneSettingsGitHubPRLimitIncrease, lipgloss.NewStyle().Foreground(ColorPrimary).Render("[+]"))
+	decreaseBtn := r.Mark(mouse.ZoneSettingsGitHubPRLimitDecrease, lipgloss.NewStyle().Foreground(ColorPrimary).Render("[-]"))
+	increaseBtn := r.Mark(mouse.ZoneSettingsGitHubPRLimitIncrease, lipgloss.NewStyle().Foreground(ColorPrimary).Render("[+]"))
 	lines = append(lines, "    "+decreaseBtn+" "+limitText+" "+increaseBtn)
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Max PRs to load (reduces API calls)"))
 	lines = append(lines, "")
@@ -222,9 +223,9 @@ func (r *Renderer) renderGitHubSettings(data SettingsData) []string {
 		mins := data.PRRefreshInterval / 60
 		refreshText = lipgloss.NewStyle().Bold(true).Render(fmt.Sprintf("%dm", mins))
 	}
-	refreshDecBtn := r.Mark(ZoneSettingsGitHubRefreshDecrease, lipgloss.NewStyle().Foreground(ColorPrimary).Render("[-]"))
-	refreshIncBtn := r.Mark(ZoneSettingsGitHubRefreshIncrease, lipgloss.NewStyle().Foreground(ColorPrimary).Render("[+]"))
-	toggleBtn := r.Mark(ZoneSettingsGitHubRefreshToggle, lipgloss.NewStyle().Foreground(ColorPrimary).Render("[Toggle]"))
+	refreshDecBtn := r.Mark(mouse.ZoneSettingsGitHubRefreshDecrease, lipgloss.NewStyle().Foreground(ColorPrimary).Render("[-]"))
+	refreshIncBtn := r.Mark(mouse.ZoneSettingsGitHubRefreshIncrease, lipgloss.NewStyle().Foreground(ColorPrimary).Render("[+]"))
+	toggleBtn := r.Mark(mouse.ZoneSettingsGitHubRefreshToggle, lipgloss.NewStyle().Foreground(ColorPrimary).Render("[Toggle]"))
 	lines = append(lines, "    "+refreshDecBtn+" "+refreshText+" "+refreshIncBtn+" "+toggleBtn)
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Auto-refresh PRs when viewing PR tab (0 = disabled)"))
 
@@ -260,8 +261,8 @@ func (r *Renderer) renderJiraSettings(data SettingsData) []string {
 	}
 	lines = append(lines, jiraURLStyle.Render(jiraURLLabel))
 	if len(data.Inputs) > 1 {
-		clearBtn := r.Mark(ZoneSettingsJiraURLClear, clearButtonStyle.Render("[Clear]"))
-		lines = append(lines, "  "+r.Mark(ZoneSettingsJiraURL, data.Inputs[1].View)+" "+clearBtn)
+		clearBtn := r.Mark(mouse.ZoneSettingsJiraURLClear, clearButtonStyle.Render("[Clear]"))
+		lines = append(lines, "  "+r.Mark(mouse.ZoneSettingsJiraURL, data.Inputs[1].View)+" "+clearBtn)
 	}
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    e.g., https://yourcompany.atlassian.net"))
 	lines = append(lines, "")
@@ -274,8 +275,8 @@ func (r *Renderer) renderJiraSettings(data SettingsData) []string {
 	}
 	lines = append(lines, jiraUserStyle.Render(jiraUserLabel))
 	if len(data.Inputs) > 2 {
-		clearBtn := r.Mark(ZoneSettingsJiraUserClear, clearButtonStyle.Render("[Clear]"))
-		lines = append(lines, "  "+r.Mark(ZoneSettingsJiraUser, data.Inputs[2].View)+" "+clearBtn)
+		clearBtn := r.Mark(mouse.ZoneSettingsJiraUserClear, clearButtonStyle.Render("[Clear]"))
+		lines = append(lines, "  "+r.Mark(mouse.ZoneSettingsJiraUser, data.Inputs[2].View)+" "+clearBtn)
 	}
 	lines = append(lines, "")
 
@@ -287,8 +288,8 @@ func (r *Renderer) renderJiraSettings(data SettingsData) []string {
 	}
 	lines = append(lines, jiraTokenStyle.Render(jiraTokenLabel))
 	if len(data.Inputs) > 3 {
-		clearBtn := r.Mark(ZoneSettingsJiraTokenClear, clearButtonStyle.Render("[Clear]"))
-		lines = append(lines, "  "+r.Mark(ZoneSettingsJiraToken, data.Inputs[3].View)+" "+clearBtn)
+		clearBtn := r.Mark(mouse.ZoneSettingsJiraTokenClear, clearButtonStyle.Render("[Clear]"))
+		lines = append(lines, "  "+r.Mark(mouse.ZoneSettingsJiraToken, data.Inputs[3].View)+" "+clearBtn)
 	}
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Get from: https://id.atlassian.com/manage-profile/security/api-tokens"))
 	lines = append(lines, "")
@@ -304,8 +305,8 @@ func (r *Renderer) renderJiraSettings(data SettingsData) []string {
 	}
 	lines = append(lines, projectStyle.Render(projectLabel))
 	if len(data.Inputs) > 4 {
-		clearBtn := r.Mark(ZoneSettingsJiraProjectClear, clearButtonStyle.Render("[Clear]"))
-		lines = append(lines, "  "+r.Mark(ZoneSettingsJiraProject, data.Inputs[4].View)+" "+clearBtn)
+		clearBtn := r.Mark(mouse.ZoneSettingsJiraProjectClear, clearButtonStyle.Render("[Clear]"))
+		lines = append(lines, "  "+r.Mark(mouse.ZoneSettingsJiraProject, data.Inputs[4].View)+" "+clearBtn)
 	}
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Project key(s) to filter (e.g., PROJ or PROJ,TEAM)"))
 	lines = append(lines, "")
@@ -318,8 +319,8 @@ func (r *Renderer) renderJiraSettings(data SettingsData) []string {
 	}
 	lines = append(lines, jqlStyle.Render(jqlLabel))
 	if len(data.Inputs) > 5 {
-		clearBtn := r.Mark(ZoneSettingsJiraJQLClear, clearButtonStyle.Render("[Clear]"))
-		lines = append(lines, "  "+r.Mark(ZoneSettingsJiraJQL, data.Inputs[5].View)+" "+clearBtn)
+		clearBtn := r.Mark(mouse.ZoneSettingsJiraJQLClear, clearButtonStyle.Render("[Clear]"))
+		lines = append(lines, "  "+r.Mark(mouse.ZoneSettingsJiraJQL, data.Inputs[5].View)+" "+clearBtn)
 	}
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Additional JQL filter (e.g., sprint in openSprints())"))
 	lines = append(lines, "")
@@ -332,8 +333,8 @@ func (r *Renderer) renderJiraSettings(data SettingsData) []string {
 	}
 	lines = append(lines, excludedStyle.Render(excludedLabel))
 	if len(data.Inputs) > 6 {
-		clearBtn := r.Mark(ZoneSettingsJiraExcludedClear, clearButtonStyle.Render("[Clear]"))
-		lines = append(lines, "  "+r.Mark(ZoneSettingsJiraExcluded, data.Inputs[6].View)+" "+clearBtn)
+		clearBtn := r.Mark(mouse.ZoneSettingsJiraExcludedClear, clearButtonStyle.Render("[Clear]"))
+		lines = append(lines, "  "+r.Mark(mouse.ZoneSettingsJiraExcluded, data.Inputs[6].View)+" "+clearBtn)
 	}
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Comma-separated list (e.g., Done, Won't Do, Cancelled)"))
 
@@ -358,8 +359,8 @@ func (r *Renderer) renderCodecksSettings(data SettingsData) []string {
 	}
 	lines = append(lines, codecksSubdomainStyle.Render(codecksSubdomainLabel))
 	if len(data.Inputs) > 7 {
-		clearBtn := r.Mark(ZoneSettingsCodecksSubdomainClear, clearButtonStyle.Render("[Clear]"))
-		lines = append(lines, "  "+r.Mark(ZoneSettingsCodecksSubdomain, data.Inputs[7].View)+" "+clearBtn)
+		clearBtn := r.Mark(mouse.ZoneSettingsCodecksSubdomainClear, clearButtonStyle.Render("[Clear]"))
+		lines = append(lines, "  "+r.Mark(mouse.ZoneSettingsCodecksSubdomain, data.Inputs[7].View)+" "+clearBtn)
 	}
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Your team name (e.g., 'myteam' from myteam.codecks.io)"))
 	lines = append(lines, "")
@@ -372,8 +373,8 @@ func (r *Renderer) renderCodecksSettings(data SettingsData) []string {
 	}
 	lines = append(lines, codecksTokenStyle.Render(codecksTokenLabel))
 	if len(data.Inputs) > 8 {
-		clearBtn := r.Mark(ZoneSettingsCodecksTokenClear, clearButtonStyle.Render("[Clear]"))
-		lines = append(lines, "  "+r.Mark(ZoneSettingsCodecksToken, data.Inputs[8].View)+" "+clearBtn)
+		clearBtn := r.Mark(mouse.ZoneSettingsCodecksTokenClear, clearButtonStyle.Render("[Clear]"))
+		lines = append(lines, "  "+r.Mark(mouse.ZoneSettingsCodecksToken, data.Inputs[8].View)+" "+clearBtn)
 	}
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Extract 'at' cookie from browser DevTools"))
 	lines = append(lines, "")
@@ -387,8 +388,8 @@ func (r *Renderer) renderCodecksSettings(data SettingsData) []string {
 	}
 	lines = append(lines, codecksProjectStyle.Render(codecksProjectLabel))
 	if len(data.Inputs) > 9 {
-		clearBtn := r.Mark(ZoneSettingsCodecksProjectClear, clearButtonStyle.Render("[Clear]"))
-		lines = append(lines, "  "+r.Mark(ZoneSettingsCodecksProject, data.Inputs[9].View)+" "+clearBtn)
+		clearBtn := r.Mark(mouse.ZoneSettingsCodecksProjectClear, clearButtonStyle.Render("[Clear]"))
+		lines = append(lines, "  "+r.Mark(mouse.ZoneSettingsCodecksProject, data.Inputs[9].View)+" "+clearBtn)
 	}
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Optional: Only show cards from this project"))
 	lines = append(lines, "")
@@ -401,8 +402,8 @@ func (r *Renderer) renderCodecksSettings(data SettingsData) []string {
 	}
 	lines = append(lines, excludedStyle.Render(excludedLabel))
 	if len(data.Inputs) > 10 {
-		clearBtn := r.Mark(ZoneSettingsCodecksExcludedClear, clearButtonStyle.Render("[Clear]"))
-		lines = append(lines, "  "+r.Mark(ZoneSettingsCodecksExcluded, data.Inputs[10].View)+" "+clearBtn)
+		clearBtn := r.Mark(mouse.ZoneSettingsCodecksExcludedClear, clearButtonStyle.Render("[Clear]"))
+		lines = append(lines, "  "+r.Mark(mouse.ZoneSettingsCodecksExcluded, data.Inputs[10].View)+" "+clearBtn)
 	}
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Comma-separated list (e.g., done, archived)"))
 
@@ -440,16 +441,16 @@ func (r *Renderer) renderTicketsSettings(data SettingsData) []string {
 	}
 
 	// None/Disabled option
-	lines = append(lines, "    "+renderRadio("None (Disabled)", "", ZoneSettingsTicketProviderNone, true))
+	lines = append(lines, "    "+renderRadio("None (Disabled)", "", mouse.ZoneSettingsTicketProviderNone, true))
 
 	// Jira option
-	lines = append(lines, "    "+renderRadio("Jira", "jira", ZoneSettingsTicketProviderJira, data.JiraConfigured))
+	lines = append(lines, "    "+renderRadio("Jira", "jira", mouse.ZoneSettingsTicketProviderJira, data.JiraConfigured))
 
 	// Codecks option
-	lines = append(lines, "    "+renderRadio("Codecks", "codecks", ZoneSettingsTicketProviderCodecks, data.CodecksConfigured))
+	lines = append(lines, "    "+renderRadio("Codecks", "codecks", mouse.ZoneSettingsTicketProviderCodecks, data.CodecksConfigured))
 
 	// GitHub Issues option
-	lines = append(lines, "    "+renderRadio("GitHub Issues", "github_issues", ZoneSettingsTicketProviderGitHubIssues, data.GitHubIssuesConfigured))
+	lines = append(lines, "    "+renderRadio("GitHub Issues", "github_issues", mouse.ZoneSettingsTicketProviderGitHubIssues, data.GitHubIssuesConfigured))
 
 	lines = append(lines, "")
 
@@ -478,7 +479,7 @@ func (r *Renderer) renderTicketsSettings(data SettingsData) []string {
 		autoInProgressToggle = "[✓]"
 	}
 	toggleStyle := lipgloss.NewStyle().Foreground(ColorPrimary).Bold(true)
-	autoBtn := r.Mark(ZoneSettingsAutoInProgress, toggleStyle.Render(autoInProgressToggle+" Auto-set 'In Progress' on branch creation"))
+	autoBtn := r.Mark(mouse.ZoneSettingsAutoInProgress, toggleStyle.Render(autoInProgressToggle+" Auto-set 'In Progress' on branch creation"))
 	lines = append(lines, "  "+autoBtn)
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Automatically transition ticket when creating a branch from it"))
 	lines = append(lines, "")
@@ -494,8 +495,8 @@ func (r *Renderer) renderTicketsSettings(data SettingsData) []string {
 		}
 		lines = append(lines, excludedStyle.Render(excludedLabel))
 		if len(data.Inputs) > 11 {
-			clearBtn := r.Mark(ZoneSettingsGitHubIssuesExcludedClear, clearButtonStyle.Render("[Clear]"))
-			lines = append(lines, "  "+r.Mark(ZoneSettingsGitHubIssuesExcluded, data.Inputs[11].View)+" "+clearBtn)
+			clearBtn := r.Mark(mouse.ZoneSettingsGitHubIssuesExcludedClear, clearButtonStyle.Render("[Clear]"))
+			lines = append(lines, "  "+r.Mark(mouse.ZoneSettingsGitHubIssuesExcluded, data.Inputs[11].View)+" "+clearBtn)
 		}
 		lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Comma-separated list (e.g., closed)"))
 	}
@@ -515,8 +516,8 @@ func (r *Renderer) renderBranchesSettings(data SettingsData) []string {
 	// Branch Limit control
 	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("  Branch Limit:"))
 	limitText := lipgloss.NewStyle().Bold(true).Render(fmt.Sprintf("%d", data.BranchLimit))
-	decreaseBtn := r.Mark(ZoneSettingsBranchLimitDecrease, lipgloss.NewStyle().Foreground(ColorPrimary).Render("[-]"))
-	increaseBtn := r.Mark(ZoneSettingsBranchLimitIncrease, lipgloss.NewStyle().Foreground(ColorPrimary).Render("[+]"))
+	decreaseBtn := r.Mark(mouse.ZoneSettingsBranchLimitDecrease, lipgloss.NewStyle().Foreground(ColorPrimary).Render("[-]"))
+	increaseBtn := r.Mark(mouse.ZoneSettingsBranchLimitIncrease, lipgloss.NewStyle().Foreground(ColorPrimary).Render("[+]"))
 	lines = append(lines, "    "+decreaseBtn+" "+limitText+" "+increaseBtn)
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Total branches to show (0 = all)"))
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Local always included, remote filtered by recency"))
@@ -538,7 +539,7 @@ func (r *Renderer) renderAdvancedSettings(data SettingsData) []string {
 		sanitizeToggle = "[✓]"
 	}
 	toggleStyle := lipgloss.NewStyle().Foreground(ColorPrimary).Bold(true)
-	sanitizeBtn := r.Mark(ZoneSettingsSanitizeBookmarks, toggleStyle.Render(sanitizeToggle+" Auto-fix bookmark names"))
+	sanitizeBtn := r.Mark(mouse.ZoneSettingsSanitizeBookmarks, toggleStyle.Render(sanitizeToggle+" Auto-fix bookmark names"))
 	lines = append(lines, "  "+sanitizeBtn)
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Replace spaces and invalid characters with hyphens"))
 	lines = append(lines, "")
@@ -555,8 +556,8 @@ func (r *Renderer) renderAdvancedSettings(data SettingsData) []string {
 		lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("Are you sure? This cannot be undone."))
 		lines = append(lines, "")
 
-		confirmYes := r.Mark(ZoneSettingsAdvancedConfirmYes, ButtonStyle.Background(lipgloss.Color("#F85149")).Render("Yes, Confirm"))
-		confirmNo := r.Mark(ZoneSettingsAdvancedConfirmNo, ButtonStyle.Render("Cancel"))
+		confirmYes := r.Mark(mouse.ZoneSettingsAdvancedConfirmYes, ButtonStyle.Background(lipgloss.Color("#F85149")).Render("Yes, Confirm"))
+		confirmNo := r.Mark(mouse.ZoneSettingsAdvancedConfirmNo, ButtonStyle.Render("Cancel"))
 		lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Left, confirmYes, " ", confirmNo))
 		lines = append(lines, "")
 		lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("Press Y to confirm, N/Esc to cancel"))
@@ -568,12 +569,12 @@ func (r *Renderer) renderAdvancedSettings(data SettingsData) []string {
 	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(ColorMuted).Render("Available Operations:"))
 	lines = append(lines, "")
 
-	deleteBtn := r.Mark(ZoneSettingsAdvancedDeleteBookmarks, ButtonStyle.Render("Delete All Bookmarks"))
+	deleteBtn := r.Mark(mouse.ZoneSettingsAdvancedDeleteBookmarks, ButtonStyle.Render("Delete All Bookmarks"))
 	lines = append(lines, "  "+deleteBtn)
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Delete all bookmarks in this repository"))
 	lines = append(lines, "")
 
-	abandonBtn := r.Mark(ZoneSettingsAdvancedAbandonOldCommits, ButtonStyle.Render("Abandon Old Commits"))
+	abandonBtn := r.Mark(mouse.ZoneSettingsAdvancedAbandonOldCommits, ButtonStyle.Render("Abandon Old Commits"))
 	lines = append(lines, "  "+abandonBtn)
 	lines = append(lines, lipgloss.NewStyle().Foreground(ColorMuted).Render("    Abandon commits before origin/main"))
 

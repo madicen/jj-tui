@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/madicen/jj-tui/internal"
+	"github.com/madicen/jj-tui/internal/tui/mouse"
 )
 
 // PullRequests renders the PR list view with split header/list for scrolling
@@ -113,13 +114,13 @@ func (r *Renderer) PullRequests(data PRData) PRResult {
 
 		// Build action buttons
 		var actionButtons []string
-		openBrowserBtn := r.Mark(ZonePROpenBrowser, ButtonStyle.Render("Open in Browser (o)"))
+		openBrowserBtn := r.Mark(mouse.ZonePROpenBrowser, ButtonStyle.Render("Open in Browser (o)"))
 		actionButtons = append(actionButtons, openBrowserBtn)
 
 		// Only show merge/close for open PRs
 		if pr.State == "open" {
-			mergeBtn := r.Mark(ZonePRMerge, ButtonStyle.Render("Merge (M)"))
-			closeBtn := r.Mark(ZonePRClose, ButtonStyle.Render("Close (X)"))
+			mergeBtn := r.Mark(mouse.ZonePRMerge, ButtonStyle.Render("Merge (M)"))
+			closeBtn := r.Mark(mouse.ZonePRClose, ButtonStyle.Render("Close (X)"))
 			actionButtons = append(actionButtons, mergeBtn, closeBtn)
 		}
 
@@ -185,7 +186,7 @@ func (r *Renderer) PullRequests(data PRData) PRResult {
 			pr.Title,
 		)
 
-		listLines = append(listLines, r.Mark(ZonePR(i), style.Render(prLine)))
+		listLines = append(listLines, r.Mark(mouse.ZonePR(i), style.Render(prLine)))
 	}
 
 	fixedHeader := strings.Join(headerLines, "\n")
@@ -239,7 +240,7 @@ func (r *Renderer) CreatePR(data CreatePRData) string {
 		titleStyle = titleStyle.Bold(true).Foreground(ColorPrimary)
 	}
 	lines = append(lines, titleStyle.Render(titleLabel))
-	lines = append(lines, r.Mark(ZonePRTitle, data.TitleInput))
+	lines = append(lines, r.Mark(mouse.ZonePRTitle, data.TitleInput))
 	lines = append(lines, "")
 
 	// Body field
@@ -249,13 +250,13 @@ func (r *Renderer) CreatePR(data CreatePRData) string {
 		bodyStyle = bodyStyle.Bold(true).Foreground(ColorPrimary)
 	}
 	lines = append(lines, bodyStyle.Render(bodyLabel))
-	lines = append(lines, r.Mark(ZonePRBody, data.BodyInput))
+	lines = append(lines, r.Mark(mouse.ZonePRBody, data.BodyInput))
 	lines = append(lines, "")
 	lines = append(lines, "")
 
 	// Action buttons
-	submitButton := r.Mark(ZonePRSubmit, ButtonStyle.Render("Create PR (Ctrl+S)"))
-	cancelButton := r.Mark(ZonePRCancel, ButtonStyle.Render("Cancel (Esc)"))
+	submitButton := r.Mark(mouse.ZonePRSubmit, ButtonStyle.Render("Create PR (Ctrl+S)"))
+	cancelButton := r.Mark(mouse.ZonePRCancel, ButtonStyle.Render("Cancel (Esc)"))
 	lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Left, submitButton, " ", cancelButton))
 
 	return strings.Join(lines, "\n")

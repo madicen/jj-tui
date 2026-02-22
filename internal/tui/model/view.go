@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
+	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/view"
 	"github.com/madicen/jj-tui/internal/version"
 	"github.com/mattn/go-runewidth"
@@ -187,12 +188,12 @@ func (m *Model) renderHeader() string {
 
 	// Create tabs wrapped in zones (with keyboard shortcuts)
 	tabs := []string{
-		m.zoneManager.Mark(ZoneTabGraph, m.renderTab("Graph (g)", m.viewMode == ViewCommitGraph)),
-		m.zoneManager.Mark(ZoneTabPRs, m.renderTab("PRs (p)", m.viewMode == ViewPullRequests)),
-		m.zoneManager.Mark(ZoneTabJira, m.renderTab("Tickets (t)", m.viewMode == ViewTickets)),
-		m.zoneManager.Mark(ZoneTabBranches, m.renderTab("Branches (b)", m.viewMode == ViewBranches)),
-		m.zoneManager.Mark(ZoneTabSettings, m.renderTab("Settings (,)", m.viewMode == ViewSettings)),
-		m.zoneManager.Mark(ZoneTabHelp, m.renderTab("Help (h)", m.viewMode == ViewHelp)),
+		m.zoneManager.Mark(mouse.ZoneTabGraph, m.renderTab("Graph (g)", m.viewMode == ViewCommitGraph)),
+		m.zoneManager.Mark(mouse.ZoneTabPRs, m.renderTab("PRs (p)", m.viewMode == ViewPullRequests)),
+		m.zoneManager.Mark(mouse.ZoneTabJira, m.renderTab("Tickets (t)", m.viewMode == ViewTickets)),
+		m.zoneManager.Mark(mouse.ZoneTabBranches, m.renderTab("Branches (b)", m.viewMode == ViewBranches)),
+		m.zoneManager.Mark(mouse.ZoneTabSettings, m.renderTab("Settings (,)", m.viewMode == ViewSettings)),
+		m.zoneManager.Mark(mouse.ZoneTabHelp, m.renderTab("Help (h)", m.viewMode == ViewHelp)),
 	}
 
 	tabsStr := lipgloss.JoinHorizontal(lipgloss.Right, tabs...)
@@ -306,7 +307,7 @@ func (m *Model) renderError() string {
 		lines = append(lines, "")
 
 		// Init button
-		initButton := m.zoneManager.Mark(ZoneActionJJInit, view.ButtonStyle.Background(lipgloss.Color("#238636")).Render("Initialize Repository (i)"))
+		initButton := m.zoneManager.Mark(mouse.ZoneActionJJInit, view.ButtonStyle.Background(lipgloss.Color("#238636")).Render("Initialize Repository (i)"))
 		lines = append(lines, initButton)
 		lines = append(lines, "")
 		lines = append(lines, mutedStyle.Render("This will run: jj git init"))
@@ -349,7 +350,7 @@ func (m *Model) renderError() string {
 	content.WriteString("\n\n")
 
 	// Clickable button row
-	dismissBtn := m.zoneManager.Mark(ZoneActionDismissError, buttonStyle.Render("Dismiss (Esc)"))
+	dismissBtn := m.zoneManager.Mark(mouse.ZoneActionDismissError, buttonStyle.Render("Dismiss (Esc)"))
 
 	// Show "Copied!" indicator if error was just copied
 	var copyBtn string
@@ -359,11 +360,11 @@ func (m *Model) renderError() string {
 			Bold(true)
 		copyBtn = copiedStyle.Render("✓ Copied!")
 	} else {
-		copyBtn = m.zoneManager.Mark(ZoneActionCopyError, buttonStyle.Render("Copy (c)"))
+		copyBtn = m.zoneManager.Mark(mouse.ZoneActionCopyError, buttonStyle.Render("Copy (c)"))
 	}
 
-	retryBtn := m.zoneManager.Mark(ZoneActionRetry, buttonStyle.Render("Retry (^r)"))
-	quitBtn := m.zoneManager.Mark(ZoneActionQuit, buttonStyle.Background(lipgloss.Color("#c9302c")).Render("Quit (^q)"))
+	retryBtn := m.zoneManager.Mark(mouse.ZoneActionRetry, buttonStyle.Render("Retry (^r)"))
+	quitBtn := m.zoneManager.Mark(mouse.ZoneActionQuit, buttonStyle.Background(lipgloss.Color("#c9302c")).Render("Quit (^q)"))
 
 	content.WriteString(dismissBtn + "  " + copyBtn + "  " + retryBtn + "  " + quitBtn)
 
@@ -448,8 +449,8 @@ func (m *Model) renderWarningModal() string {
 	content.WriteString("\n\n")
 
 	// Clickable button row
-	goToBtn := m.zoneManager.Mark(ZoneWarningGoToCommit, buttonStyle.Background(lipgloss.Color("#238636")).Render("Go to Commit (Enter)"))
-	dismissBtn := m.zoneManager.Mark(ZoneWarningDismiss, buttonStyle.Render("Cancel (Esc)"))
+	goToBtn := m.zoneManager.Mark(mouse.ZoneWarningGoToCommit, buttonStyle.Background(lipgloss.Color("#238636")).Render("Go to Commit (Enter)"))
+	dismissBtn := m.zoneManager.Mark(mouse.ZoneWarningDismiss, buttonStyle.Render("Cancel (Esc)"))
 
 	content.WriteString(goToBtn + "  " + dismissBtn)
 	content.WriteString("\n\n")
@@ -912,18 +913,18 @@ func (m *Model) renderStatusBar() string {
 	// Start with undo/redo if in Graph view, then quit and refresh
 	if m.viewMode == ViewCommitGraph && m.jjService != nil {
 		shortcuts = append(shortcuts,
-			m.zoneManager.Mark(ZoneActionUndo, "^z undo"),
+			m.zoneManager.Mark(mouse.ZoneActionUndo, "^z undo"),
 			" │ ",
-			m.zoneManager.Mark(ZoneActionRedo, "^y redo"),
+			m.zoneManager.Mark(mouse.ZoneActionRedo, "^y redo"),
 			" │ ",
 		)
 	}
 
 	// Always add quit and refresh (in same position for all tabs)
 	shortcuts = append(shortcuts,
-		m.zoneManager.Mark(ZoneActionQuit, "^q quit"),
+		m.zoneManager.Mark(mouse.ZoneActionRefresh, "^r refresh"),
 		" │ ",
-		m.zoneManager.Mark(ZoneActionRefresh, "^r refresh"),
+		m.zoneManager.Mark(mouse.ZoneActionQuit, "^q quit"),
 	)
 
 	// Add update notification if available
@@ -997,7 +998,7 @@ func (m *Model) renderGitHubLogin() string {
 
 		// Add copy button
 		copyButton := view.ButtonStyle.Render("Copy Code (c)")
-		lines = append(lines, "   "+m.renderer().Mark(ZoneGitHubLoginCopyCode, copyButton))
+		lines = append(lines, "   "+m.renderer().Mark(mouse.ZoneGitHubLoginCopyCode, copyButton))
 		lines = append(lines, "")
 
 		if m.githubLoginPolling {

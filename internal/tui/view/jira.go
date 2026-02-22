@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/madicen/jj-tui/internal/tui/mouse"
 )
 
 // Note: ZoneJiraTransition is a prefix - full zone ID is ZoneJiraTransition + index
@@ -95,8 +96,8 @@ func (r *Renderer) Jira(data JiraData) JiraResult {
 
 		// Primary actions
 		actionButtons = append(actionButtons,
-			r.Mark(ZoneJiraCreateBranch, ButtonStyle.Render("Create Branch (Enter)")),
-			r.Mark(ZoneJiraOpenBrowser, ButtonStyle.Render("Open in Browser (o)")),
+			r.Mark(mouse.ZoneJiraCreateBranch, ButtonStyle.Render("Create Branch (Enter)")),
+			r.Mark(mouse.ZoneJiraOpenBrowser, ButtonStyle.Render("Open in Browser (o)")),
 		)
 
 		// Status change button - collapsed or expanded
@@ -109,7 +110,7 @@ func (r *Renderer) Jira(data JiraData) JiraResult {
 					Padding(0, 1).
 					Bold(true)
 				actionButtons = append(actionButtons,
-					r.Mark(ZoneJiraChangeStatus, highlightedBtnStyle.Render("Change Status (c)")),
+					r.Mark(mouse.ZoneJiraChangeStatus, highlightedBtnStyle.Render("Change Status (c)")),
 				)
 				headerLines = append(headerLines, strings.Join(actionButtons, " "))
 				headerLines = append(headerLines, "") // Blank line between rows
@@ -160,7 +161,7 @@ func (r *Renderer) Jira(data JiraData) JiraResult {
 							Bold(true)
 					}
 
-					zoneID := ZoneJiraTransition + fmt.Sprintf("%d", i)
+					zoneID := mouse.ZoneJiraTransition + fmt.Sprintf("%d", i)
 					btn := r.Mark(zoneID, btnStyle.Render(t.Name+shortcut))
 					statusButtons = append(statusButtons, btn)
 				}
@@ -168,7 +169,7 @@ func (r *Renderer) Jira(data JiraData) JiraResult {
 			} else {
 				// Collapsed: just show "Change Status" button
 				actionButtons = append(actionButtons,
-					r.Mark(ZoneJiraChangeStatus, ButtonStyle.Render("Change Status (c)")),
+					r.Mark(mouse.ZoneJiraChangeStatus, ButtonStyle.Render("Change Status (c)")),
 				)
 				headerLines = append(headerLines, strings.Join(actionButtons, " "))
 			}
@@ -219,7 +220,7 @@ func (r *Renderer) Jira(data JiraData) JiraResult {
 			ticket.Summary,
 		)
 
-		listLines = append(listLines, r.Mark(ZoneJiraTicket(i), style.Render(ticketLine)))
+		listLines = append(listLines, r.Mark(mouse.ZoneJiraTicket(i), style.Render(ticketLine)))
 	}
 
 	fixedHeader := strings.Join(headerLines, "\n")
