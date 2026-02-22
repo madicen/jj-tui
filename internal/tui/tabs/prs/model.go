@@ -4,7 +4,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal"
-	"github.com/madicen/jj-tui/internal/tui/view"
 )
 
 // Model represents the state of the PRs tab
@@ -47,7 +46,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, nil
 }
 
-// View renders the PRs tab using the view package
+// View renders the PRs tab
 func (m Model) View() string {
 	if m.width == 0 || m.height == 0 {
 		return "Loading..."
@@ -55,14 +54,7 @@ func (m Model) View() string {
 	if m.repository == nil {
 		return "Loading pull requests..."
 	}
-	r := view.New(m.zoneManager)
-	result := r.PullRequests(view.PRData{
-		Repository:    m.repository,
-		SelectedPR:    m.selectedPR,
-		GithubService: m.githubService,
-		Width:         m.width,
-	})
-	return result.FullContent
+	return m.renderPRs()
 }
 
 // SetGithubService sets whether GitHub is connected (used by main model when rendering)

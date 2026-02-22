@@ -1,9 +1,16 @@
 package bookmark
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal"
+	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/styles"
 )
 
 // Model represents the bookmark creation dialog
@@ -19,10 +26,12 @@ type Model struct {
 	ticketDisplayKey    string   // Short display key (e.g., "$12u" for Codecks)
 	bookmarkNameExists  bool     // True if entered name matches an existing bookmark
 	statusMessage       string
+	repository          *internal.Repository
+	zoneManager         *zone.Manager
 }
 
-// NewModel creates a new Bookmark model
-func NewModel() Model {
+// NewModel creates a new Bookmark model. zoneManager may be nil.
+func NewModel(zoneManager *zone.Manager) Model {
 	nameInput := textinput.New()
 	nameInput.Placeholder = "bookmark-name"
 	nameInput.CharLimit = 100
@@ -35,6 +44,7 @@ func NewModel() Model {
 		commitIdx:           -1,
 		selectedBookmarkIdx: -1,
 		fromJira:            false,
+		zoneManager:         zoneManager,
 	}
 }
 
@@ -64,7 +74,7 @@ func (m Model) View() string {
 	if !m.shown {
 		return ""
 	}
-	return "" // Rendering handled by parent for now
+	return m.renderBookmark()
 }
 
 // handleKeyMsg handles keyboard input
@@ -151,6 +161,21 @@ func (m *Model) SetNameExists(exists bool) {
 	m.bookmarkNameExists = exists
 }
 
+// SetExistingBookmarks sets the list of existing bookmarks (synced from main model)
+func (m *Model) SetExistingBookmarks(bookmarks []string) {
+	m.existingBookmarks = bookmarks
+}
+
+// SetCommitIdx sets the commit index for the bookmark target
+func (m *Model) SetCommitIdx(idx int) {
+	m.commitIdx = idx
+}
+
+// SetSelectedBookmarkIdx sets the selected existing bookmark index
+func (m *Model) SetSelectedBookmarkIdx(idx int) {
+	m.selectedBookmarkIdx = idx
+}
+
 // NameExists returns whether the name already exists
 func (m *Model) NameExists() bool {
 	return m.bookmarkNameExists
@@ -161,7 +186,103 @@ func (m *Model) GetNameInput() *textinput.Model {
 	return &m.nameInput
 }
 
-// UpdateRepository updates the repository
+// UpdateRepository updates the repository (for rendering commit target)
 func (m *Model) UpdateRepository(repo *internal.Repository) {
-	// Bookmark model doesn't use repository directly
+	m.repository = repo
+}
+
+// SetZoneManager sets the zone manager for clickable elements
+func (m *Model) SetZoneManager(z *zone.Manager) {
+	m.zoneManager = z
+}
+
+func mark(z *zone.Manager, id, content string) string {
+	if z == nil {
+		return content
+	}
+	return z.Mark(id, content)
+}
+
+func (m Model) renderBookmark() string {
+	var lines []string
+	if m.fromJira {
+		jiraBox := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(styles.ColorPrimary).
+			Padding(0, 1).
+			Render(fmt.Sprintf("Jira Ticket: %s\n\nThis will create a new branch from main with the bookmark name below.",
+				lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render(m.jiraTicketKey),
+			))
+		lines = append(lines, jiraBox)
+		lines = append(lines, "")
+	} else {
+		if m.repository != nil && m.commitIdx >= 0 && m.commitIdx < len(m.repository.Graph.Commits) {
+			commit := m.repository.Graph.Commits[m.commitIdx]
+			commitBox := lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(styles.ColorPrimary).
+				Padding(0, 1).
+				Render(fmt.Sprintf("Target: %s\n%s",
+					lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render(commit.ShortID),
+					commit.Summary,
+				))
+			lines = append(lines, commitBox)
+			lines = append(lines, "")
+		}
+		if len(m.existingBookmarks) > 0 {
+			lines = append(lines, lipgloss.NewStyle().Bold(true).Render("Move Existing Bookmark:"))
+			lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("Click or use j/k to select, Enter to move"))
+			lines = append(lines, "")
+			for i, bookmark := range m.existingBookmarks {
+				prefix := "  "
+				style := styles.CommitStyle
+				if i == m.selectedBookmarkIdx {
+					prefix = "► "
+					style = styles.CommitSelectedStyle
+				}
+				bookmarkLine := fmt.Sprintf("%s%s", prefix, bookmark)
+				lines = append(lines, mark(m.zoneManager, mouse.ZoneExistingBookmark(i), style.Render(bookmarkLine)))
+			}
+			lines = append(lines, "")
+			lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("─────────────────────────────────"))
+			lines = append(lines, "")
+		}
+	}
+	newStyle := lipgloss.NewStyle().Bold(true)
+	if m.selectedBookmarkIdx == -1 || m.fromJira {
+		newStyle = newStyle.Foreground(styles.ColorPrimary)
+	}
+	if m.fromJira {
+		lines = append(lines, newStyle.Render("Branch/Bookmark Name:"))
+		lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("Edit if needed, then press Enter to create"))
+	} else {
+		lines = append(lines, newStyle.Render("Create New Bookmark:"))
+		lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("Type a name and press Enter"))
+	}
+	lines = append(lines, "")
+	inputStyle := lipgloss.NewStyle()
+	if m.selectedBookmarkIdx == -1 || m.fromJira {
+		inputStyle = inputStyle.Foreground(styles.ColorPrimary)
+	}
+	lines = append(lines, inputStyle.Render("Name:"))
+	lines = append(lines, mark(m.zoneManager, mouse.ZoneBookmarkName, "  "+m.nameInput.Value()))
+	if m.bookmarkNameExists {
+		warningStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#E3B341")).Bold(true)
+		lines = append(lines, "")
+		lines = append(lines, warningStyle.Render("⚠ A bookmark with this name already exists"))
+		lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("  Creating will move the existing bookmark to this commit"))
+	}
+	lines = append(lines, "")
+	var submitLabel string
+	if m.fromJira {
+		submitLabel = "Create Branch (Enter)"
+	} else if m.selectedBookmarkIdx >= 0 && m.selectedBookmarkIdx < len(m.existingBookmarks) {
+		submitLabel = fmt.Sprintf("Move '%s' (Enter)", m.existingBookmarks[m.selectedBookmarkIdx])
+	} else {
+		submitLabel = "Create (Enter)"
+	}
+	submitButton := mark(m.zoneManager, mouse.ZoneBookmarkSubmit, styles.ButtonStyle.Render(submitLabel))
+	cancelButton := mark(m.zoneManager, mouse.ZoneBookmarkCancel, styles.ButtonStyle.Render("Cancel (Esc)"))
+	lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Left, submitButton, " ", cancelButton))
+	return strings.Join(lines, "\n")
 }

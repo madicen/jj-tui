@@ -2,27 +2,42 @@ package help
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
+	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal"
 )
 
-// CommandInfo represents information about a command
+// CommandInfo represents information about a command (legacy)
 type CommandInfo struct {
 	Name  string
 	Desc  string
 	Usage string
 }
 
-// Model represents the state of the Help tab
-type Model struct {
-	helpTab             int
-	helpSelectedCommand int
-	commandHistory      []CommandInfo
+// CommandHistoryEntry is one entry for the command history list (from jj service)
+type CommandHistoryEntry struct {
+	Command   string
+	Timestamp string
+	Duration  string
+	Success   bool
+	Error     string
 }
 
-// NewModel creates a new Help tab model
-func NewModel() Model {
+// Model represents the state of the Help tab
+type Model struct {
+	zoneManager          *zone.Manager
+	helpTab              int   // 0=Shortcuts, 1=Commands
+	helpSelectedCommand  int
+	commandHistory       []CommandInfo          // legacy
+	commandHistoryEntries []CommandHistoryEntry // for rendering (set by main model)
+	width                int
+	height               int
+}
+
+// NewModel creates a new Help tab model. zoneManager may be nil.
+func NewModel(zoneManager *zone.Manager) Model {
 	return Model{
-		helpTab:             0,
+		zoneManager: zoneManager,
+		helpTab:     0,
 		helpSelectedCommand: -1,
 	}
 }
@@ -35,6 +50,10 @@ func (m Model) Init() tea.Cmd {
 // Update handles messages for the Help tab
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		return m, nil
 	case tea.KeyMsg:
 		return m.handleKeyMsg(msg)
 	}
@@ -43,7 +62,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 // View renders the Help tab
 func (m Model) View() string {
-	return ""
+	return m.renderHelp()
 }
 
 // handleKeyMsg handles keyboard input specific to the Help tab
@@ -55,7 +74,7 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 	case "j", "down":
 		if m.helpTab == 1 {
-			maxCmd := len(m.commandHistory) - 1
+			maxCmd := len(m.commandHistoryEntries) - 1
 			if maxCmd >= 0 && m.helpSelectedCommand < maxCmd {
 				m.helpSelectedCommand++
 			}
@@ -89,9 +108,14 @@ func (m *Model) GetSelectedCommand() int {
 
 // SetSelectedCommand sets the selected command index
 func (m *Model) SetSelectedCommand(idx int) {
-	if idx >= -1 && idx < len(m.commandHistory) {
+	if idx >= -1 && idx < len(m.commandHistoryEntries) {
 		m.helpSelectedCommand = idx
 	}
+}
+
+// SetCommandHistoryEntries sets the command history for the Commands sub-tab (called by main model)
+func (m *Model) SetCommandHistoryEntries(entries []CommandHistoryEntry) {
+	m.commandHistoryEntries = entries
 }
 
 // GetCommandHistory returns the command history

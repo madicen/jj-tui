@@ -1,4 +1,4 @@
-package view
+package styles
 
 import "github.com/charmbracelet/lipgloss"
 
@@ -62,7 +62,7 @@ var (
 				Bold(true)
 )
 
-// getStatusStyle returns the style and character for a file status
+// GetStatusStyle returns the style and character for a file status
 func GetStatusStyle(status string) (lipgloss.Style, string) {
 	switch status {
 	case "M":

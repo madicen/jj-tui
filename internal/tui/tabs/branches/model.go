@@ -4,7 +4,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal"
-	"github.com/madicen/jj-tui/internal/tui/view"
 )
 
 // Model represents the state of the Branches tab
@@ -47,18 +46,12 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, nil
 }
 
-// View renders the Branches tab using the view package
+// View renders the Branches tab
 func (m Model) View() string {
 	if m.width == 0 || m.height == 0 {
 		return "Loading..."
 	}
-	r := view.New(m.zoneManager)
-	result := r.Branches(view.BranchData{
-		Branches:       m.branchList,
-		SelectedBranch: m.selectedBranch,
-		Width:          m.width,
-	})
-	return result.FullContent
+	return m.renderBranches()
 }
 
 // handleKeyMsg handles keyboard input specific to the Branches tab

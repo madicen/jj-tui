@@ -2,7 +2,7 @@ package graph
 
 import (
 	"github.com/charmbracelet/lipgloss"
-	"github.com/madicen/jj-tui/internal/tui/view"
+	"github.com/madicen/jj-tui/internal/tui/styles"
 )
 
 var (
@@ -26,11 +26,11 @@ var (
 				Background(lipgloss.Color("#44475A"))
 
 	CommitIDStyle = lipgloss.NewStyle().
-			Foreground(view.ColorPrimary).
+			Foreground(styles.ColorPrimary).
 			Bold(true)
 
 	// Style for graph lines (muted color)
-	GraphStyle = lipgloss.NewStyle().Foreground(view.ColorMuted)
+	GraphStyle = lipgloss.NewStyle().Foreground(styles.ColorMuted)
 )
 
 // getStatusStyle returns the style and character for a file status
@@ -45,6 +45,6 @@ func GetStatusStyle(status string) (lipgloss.Style, string) {
 	case "R":
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("#8BE9FD")), "R" // Cyan for renamed
 	default:
-		return lipgloss.NewStyle().Foreground(view.ColorMuted), status
+		return lipgloss.NewStyle().Foreground(styles.ColorMuted), status
 	}
 }

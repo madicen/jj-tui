@@ -1,9 +1,15 @@
 package divergent
 
 import (
+	"fmt"
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal"
+	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/styles"
 )
 
 // Model represents the divergent commit resolution view
@@ -14,13 +20,15 @@ type Model struct {
 	summaries     []string
 	selectedIdx   int
 	statusMessage string
+	zoneManager   *zone.Manager
 }
 
-// NewModel creates a new Divergent model
-func NewModel() Model {
+// NewModel creates a new Divergent model. zoneManager may be nil.
+func NewModel(zoneManager *zone.Manager) Model {
 	return Model{
 		shown:       false,
 		selectedIdx: 0,
+		zoneManager: zoneManager,
 	}
 }
 
@@ -47,27 +55,75 @@ func (m Model) View() string {
 	if !m.shown {
 		return ""
 	}
+	return m.renderDivergent()
+}
 
-	style := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("3")).
-		Padding(1, 2).
-		MaxWidth(70)
+// mark wraps content in a zone if zoneManager is set
+func (m *Model) mark(id, content string) string {
+	if m.zoneManager != nil {
+		return m.zoneManager.Mark(id, content)
+	}
+	return content
+}
 
-	content := "Divergent Commits (Change: " + m.changeID + ")\n\n"
-	content += "Multiple commits with the same change ID exist.\nSelect which one to keep:\n\n"
+func (m *Model) renderDivergent() string {
+	var lines []string
 
-	for i, summary := range m.summaries {
-		marker := " "
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF79C6"))
+	lines = append(lines, titleStyle.Render("⑂ Divergent Commit: "+m.changeID))
+	lines = append(lines, "")
+
+	explanationStyle := lipgloss.NewStyle().Foreground(styles.ColorMuted)
+	lines = append(lines, explanationStyle.Render("This change ID has multiple versions. Select which one to keep."))
+	lines = append(lines, explanationStyle.Render("The other version(s) will be abandoned."))
+	lines = append(lines, "")
+
+	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render(strings.Repeat("─", 60)))
+	lines = append(lines, "")
+
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("Versions:"))
+	lines = append(lines, "")
+
+	selectedStyle := lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary)
+	unselectedStyle := lipgloss.NewStyle().Foreground(styles.ColorMuted)
+	commitIDStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#8BE9FD"))
+
+	for i, commitID := range m.commitIDs {
+		prefix := "  "
+		style := unselectedStyle
 		if i == m.selectedIdx {
-			marker = ">"
+			prefix = "► "
+			style = selectedStyle
 		}
-		content += marker + " " + summary + "\n"
+
+		summary := "(no description)"
+		if i < len(m.summaries) {
+			summary = m.summaries[i]
+		}
+		if len(summary) > 50 {
+			summary = summary[:47] + "..."
+		}
+
+		line := fmt.Sprintf("%s%s  %s",
+			prefix,
+			commitIDStyle.Render(commitID),
+			style.Render(summary),
+		)
+		lines = append(lines, m.mark(mouse.ZoneDivergentCommit(i), line))
 	}
 
-	content += "\n(Use j/k to select, enter to keep, esc to cancel)"
+	lines = append(lines, "")
+	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render(strings.Repeat("─", 60)))
+	lines = append(lines, "")
 
-	return style.Render(content)
+	confirmBtn := m.mark(mouse.ZoneDivergentConfirm, styles.ButtonStyle.Render("Keep Selected (Enter)"))
+	cancelBtn := m.mark(mouse.ZoneDivergentCancel, styles.ButtonSecondaryStyle.Render("Cancel (Esc)"))
+	lines = append(lines, confirmBtn+"  "+cancelBtn)
+
+	lines = append(lines, "")
+	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("Use j/k or click to select, Enter to confirm"))
+
+	return strings.Join(lines, "\n")
 }
 
 // handleKeyMsg handles keyboard input

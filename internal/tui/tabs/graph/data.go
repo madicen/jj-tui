@@ -7,7 +7,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
-	"github.com/madicen/jj-tui/internal/tui/view"
+	"github.com/madicen/jj-tui/internal/tui/styles"
 )
 
 // GraphResult contains the split rendering for commit graph view
@@ -60,7 +60,7 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 		var graphStyle lipgloss.Style = GraphStyle
 		if commit.IsWorking {
 			// Highlight working copy with a different color
-			graphStyle = graphStyle.Foreground(view.ColorSecondary)
+			graphStyle = graphStyle.Foreground(styles.ColorSecondary)
 		}
 		if commit.GraphPrefix != "" {
 			// Use jj's native graph prefix
@@ -116,7 +116,7 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 					branchParts = append(branchParts, b)
 				}
 			}
-			branchStr = " " + lipgloss.NewStyle().Foreground(view.ColorSecondary).Render("["+strings.Join(branchParts, ", ")+"]")
+			branchStr = " " + lipgloss.NewStyle().Foreground(styles.ColorSecondary).Render("["+strings.Join(branchParts, ", ")+"]")
 		}
 
 		// Format the commit line: selection + graph + commit_id + summary + branches + status
@@ -144,7 +144,7 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 	// Don't show action buttons in rebase mode - user is selecting destination
 	if data.InRebaseMode {
 		graphLines = append(graphLines, "")
-		graphLines = append(graphLines, lipgloss.NewStyle().Foreground(view.ColorMuted).Render("Press Enter or click to select destination, Esc to cancel"))
+		graphLines = append(graphLines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("Press Enter or click to select destination, Esc to cancel"))
 		graphContent := strings.Join(graphLines, "\n")
 		return GraphResult{
 			GraphContent: graphContent,
@@ -170,13 +170,13 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 
 		if isMutable {
 			fileActionButtons = append(fileActionButtons,
-				m.zoneManager.Mark(mouse.ZoneActionMoveFileUp, view.ButtonStyle.Render("Move to Parent ([)")),
-				m.zoneManager.Mark(mouse.ZoneActionMoveFileDown, view.ButtonStyle.Render("Move to Child (])")),
-				m.zoneManager.Mark(mouse.ZoneActionRevertFile, view.ButtonStyle.Render("Revert Changes (v)")),
+				m.zoneManager.Mark(mouse.ZoneActionMoveFileUp, styles.ButtonStyle.Render("Move to Parent ([)")),
+				m.zoneManager.Mark(mouse.ZoneActionMoveFileDown, styles.ButtonStyle.Render("Move to Child (])")),
+				m.zoneManager.Mark(mouse.ZoneActionRevertFile, styles.ButtonStyle.Render("Revert Changes (v)")),
 			)
 			actionLines = append(actionLines, lipgloss.JoinHorizontal(lipgloss.Left, fileActionButtons...))
 		} else {
-			actionLines = append(actionLines, lipgloss.NewStyle().Foreground(view.ColorMuted).Render("◆ Cannot modify files in immutable commits"))
+			actionLines = append(actionLines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("◆ Cannot modify files in immutable commits"))
 		}
 	} else {
 		// Commit actions mode
@@ -184,7 +184,7 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 
 		// Always show "New" action
 		actionButtons := []string{
-			m.zoneManager.Mark(mouse.ZoneActionNewCommit, view.ButtonStyle.Render("New (n)")),
+			m.zoneManager.Mark(mouse.ZoneActionNewCommit, styles.ButtonStyle.Render("New (n)")),
 		}
 
 		// Add commit-specific actions if a commit is selected
@@ -195,32 +195,32 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 				// For immutable commits, only show delete bookmark if it has one
 				if len(commit.Branches) > 0 {
 					actionButtons = append(actionButtons,
-						m.zoneManager.Mark(mouse.ZoneActionDelBookmark, view.ButtonStyle.Render("Del Bookmark (x)")),
+						m.zoneManager.Mark(mouse.ZoneActionDelBookmark, styles.ButtonStyle.Render("Del Bookmark (x)")),
 					)
 				}
 				actionLines = append(actionLines, lipgloss.JoinHorizontal(lipgloss.Left, actionButtons...))
 				actionLines = append(actionLines, "")
-				actionLines = append(actionLines, lipgloss.NewStyle().Foreground(view.ColorMuted).Render("◆ Selected commit is immutable (pushed to remote)"))
+				actionLines = append(actionLines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("◆ Selected commit is immutable (pushed to remote)"))
 			} else {
 				actionButtons = append(actionButtons,
-					m.zoneManager.Mark(mouse.ZoneActionCheckout, view.ButtonStyle.Render("Edit (e)")),
-					m.zoneManager.Mark(mouse.ZoneActionDescribe, view.ButtonStyle.Render("Describe (d)")),
-					m.zoneManager.Mark(mouse.ZoneActionSquash, view.ButtonStyle.Render("Squash (s)")),
-					m.zoneManager.Mark(mouse.ZoneActionRebase, view.ButtonStyle.Render("Rebase (r)")),
-					m.zoneManager.Mark(mouse.ZoneActionAbandon, view.ButtonStyle.Render("Abandon (a)")),
-					m.zoneManager.Mark(mouse.ZoneActionBookmark, view.ButtonStyle.Render("Bookmark (m)")),
+					m.zoneManager.Mark(mouse.ZoneActionCheckout, styles.ButtonStyle.Render("Edit (e)")),
+					m.zoneManager.Mark(mouse.ZoneActionDescribe, styles.ButtonStyle.Render("Describe (d)")),
+					m.zoneManager.Mark(mouse.ZoneActionSquash, styles.ButtonStyle.Render("Squash (s)")),
+					m.zoneManager.Mark(mouse.ZoneActionRebase, styles.ButtonStyle.Render("Rebase (r)")),
+					m.zoneManager.Mark(mouse.ZoneActionAbandon, styles.ButtonStyle.Render("Abandon (a)")),
+					m.zoneManager.Mark(mouse.ZoneActionBookmark, styles.ButtonStyle.Render("Bookmark (m)")),
 				)
 
 				// Show delete bookmark button if commit has bookmarks
 				if len(commit.Branches) > 0 {
 					actionButtons = append(actionButtons,
-						m.zoneManager.Mark(mouse.ZoneActionDelBookmark, view.ButtonStyle.Render("Del Bookmark (x)")),
+						m.zoneManager.Mark(mouse.ZoneActionDelBookmark, styles.ButtonStyle.Render("Del Bookmark (x)")),
 					)
 				}
 
 				// Show resolve divergent button if commit is divergent
 				if commit.Divergent {
-					divergentBtnStyle := view.ButtonStyle.Background(lipgloss.Color("#FF79C6"))
+					divergentBtnStyle := styles.ButtonStyle.Background(lipgloss.Color("#FF79C6"))
 					actionButtons = append(actionButtons,
 						m.zoneManager.Mark(mouse.ZoneActionResolveDivergent, divergentBtnStyle.Render("Resolve Divergent (a)")),
 					)
@@ -240,7 +240,7 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 						buttonLabel = fmt.Sprintf("Update PR [%s] (u)", prBranch)
 					}
 					actionButtons = append(actionButtons,
-						m.zoneManager.Mark(mouse.ZoneActionPush, view.ButtonStyle.Render(buttonLabel)),
+						m.zoneManager.Mark(mouse.ZoneActionPush, styles.ButtonStyle.Render(buttonLabel)),
 					)
 				} else {
 					// Check if this commit can create a PR (has a bookmark or is a descendant of one)
@@ -256,7 +256,7 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 							buttonLabel = fmt.Sprintf("Create PR [%s] (c)", createPRBranch)
 						}
 						actionButtons = append(actionButtons,
-							m.zoneManager.Mark(mouse.ZoneActionCreatePR, view.ButtonStyle.Render(buttonLabel)),
+							m.zoneManager.Mark(mouse.ZoneActionCreatePR, styles.ButtonStyle.Render(buttonLabel)),
 						)
 					}
 				}
@@ -376,7 +376,7 @@ func (m *GraphModel) renderTreeNode(node *fileTreeNode, indent string, lines *[]
 			*lines = append(*lines, m.zoneManager.Mark(mouse.ZoneChangedFile(node.fileIndex), fileLine))
 		} else {
 			// Render directory
-			dirStyle := lipgloss.NewStyle().Foreground(view.ColorPrimary)
+			dirStyle := lipgloss.NewStyle().Foreground(styles.ColorPrimary)
 			*lines = append(*lines, fmt.Sprintf("%s%s/", indent, dirStyle.Render(node.name)))
 		}
 	}

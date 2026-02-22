@@ -1,9 +1,15 @@
 package conflict
 
 import (
+	"fmt"
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal"
+	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/styles"
 )
 
 // Model represents the bookmark conflict resolution view
@@ -16,13 +22,15 @@ type Model struct {
 	remoteSummary  string
 	selectedOption int // 0=Keep Local, 1=Reset to Remote
 	statusMessage  string
+	zoneManager    *zone.Manager
 }
 
-// NewModel creates a new Conflict model
-func NewModel() Model {
+// NewModel creates a new Conflict model. zoneManager may be nil.
+func NewModel(zoneManager *zone.Manager) Model {
 	return Model{
 		shown:          false,
 		selectedOption: 0,
+		zoneManager:    zoneManager,
 	}
 }
 
@@ -49,32 +57,93 @@ func (m Model) View() string {
 	if !m.shown {
 		return ""
 	}
+	return m.renderConflict()
+}
 
-	style := lipgloss.NewStyle().
+// mark wraps content in a zone if zoneManager is set
+func (m *Model) mark(id, content string) string {
+	if m.zoneManager != nil {
+		return m.zoneManager.Mark(id, content)
+	}
+	return content
+}
+
+func (m *Model) renderConflict() string {
+	var lines []string
+
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF5555"))
+	lines = append(lines, titleStyle.Render("⚠ Bookmark Conflict: "+m.bookmarkName))
+	lines = append(lines, "")
+
+	explanationStyle := lipgloss.NewStyle().Foreground(styles.ColorMuted)
+	lines = append(lines, explanationStyle.Render("This bookmark has diverged - local and remote point to different commits."))
+	lines = append(lines, "")
+
+	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("3")).
-		Padding(1, 2).
-		MaxWidth(70)
+		BorderForeground(styles.ColorPrimary).
+		Padding(0, 1).
+		Width(60)
 
-	content := "Bookmark Conflict: " + m.bookmarkName + "\n\n"
-	content += "Local: " + m.localSummary + "\n"
-	content += "Remote: " + m.remoteSummary + "\n\n"
-	content += "Options:\n"
+	localHeader := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#50FA7B")).Render("Local Version")
+	localCommitID := lipgloss.NewStyle().Foreground(styles.ColorPrimary).Render(m.localCommitID)
+	localContent := fmt.Sprintf("%s\n%s\n%s", localHeader, localCommitID, truncateSummary(m.localSummary, 55))
+	lines = append(lines, boxStyle.Render(localContent))
+	lines = append(lines, "")
 
-	localStyle := lipgloss.NewStyle()
-	remoteStyle := lipgloss.NewStyle()
+	remoteHeader := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#8BE9FD")).Render("Remote Version (origin)")
+	remoteCommitID := lipgloss.NewStyle().Foreground(styles.ColorPrimary).Render(m.remoteCommitID)
+	remoteContent := fmt.Sprintf("%s\n%s\n%s", remoteHeader, remoteCommitID, truncateSummary(m.remoteSummary, 55))
+	lines = append(lines, boxStyle.Render(remoteContent))
+	lines = append(lines, "")
+
+	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render(strings.Repeat("─", 60)))
+	lines = append(lines, "")
+
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("Choose Resolution:"))
+	lines = append(lines, "")
+
+	selectedStyle := lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary)
+	unselectedStyle := lipgloss.NewStyle().Foreground(styles.ColorMuted)
+
+	keepLocalPrefix := "  "
+	keepLocalStyle := unselectedStyle
 	if m.selectedOption == 0 {
-		localStyle = localStyle.Bold(true).Foreground(lipgloss.Color("2"))
+		keepLocalPrefix = "► "
+		keepLocalStyle = selectedStyle
 	}
+	keepLocalLine := fmt.Sprintf("%s%s", keepLocalPrefix, "Keep Local (force push to remote)")
+	lines = append(lines, m.mark(mouse.ZoneConflictKeepLocal, keepLocalStyle.Render(keepLocalLine)))
+	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Overwrites remote with your local version"))
+	lines = append(lines, "")
+
+	resetRemotePrefix := "  "
+	resetRemoteStyle := unselectedStyle
 	if m.selectedOption == 1 {
-		remoteStyle = remoteStyle.Bold(true).Foreground(lipgloss.Color("2"))
+		resetRemotePrefix = "► "
+		resetRemoteStyle = selectedStyle
 	}
+	resetRemoteLine := fmt.Sprintf("%s%s", resetRemotePrefix, "Reset to Remote (discard local)")
+	lines = append(lines, m.mark(mouse.ZoneConflictResetRemote, resetRemoteStyle.Render(resetRemoteLine)))
+	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Updates local bookmark to match remote"))
+	lines = append(lines, "")
 
-	content += localStyle.Render("> Keep Local") + "\n"
-	content += remoteStyle.Render("> Reset to Remote") + "\n\n"
-	content += "(Use j/k to select, enter to apply, esc to cancel)"
+	lines = append(lines, "")
+	confirmBtn := m.mark(mouse.ZoneConflictConfirm, styles.ButtonStyle.Render("Confirm (Enter)"))
+	cancelBtn := m.mark(mouse.ZoneConflictCancel, styles.ButtonSecondaryStyle.Render("Cancel (Esc)"))
+	lines = append(lines, confirmBtn+"  "+cancelBtn)
 
-	return style.Render(content)
+	lines = append(lines, "")
+	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("Use j/k or click to select, Enter to confirm"))
+
+	return strings.Join(lines, "\n")
+}
+
+func truncateSummary(summary string, maxLen int) string {
+	if len(summary) <= maxLen {
+		return summary
+	}
+	return summary[:maxLen-3] + "..."
 }
 
 // handleKeyMsg handles keyboard input

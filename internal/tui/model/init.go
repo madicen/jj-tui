@@ -117,14 +117,14 @@ func New(ctx context.Context) *Model {
 		branchesTabModel: branchestab.NewModel(zm),
 		ticketsTabModel:  ticketstab.NewModel(zm),
 		settingsTabModel: settingstab.NewModel(),
-		helpTabModel:     helptab.NewModel(),
+		helpTabModel:     helptab.NewModel(zm),
 
 		// Initialize modal models
 		errorModal:     errortab.NewModel(),
 		warningModal:   warningtab.NewModel(),
-		conflictModal:  conflicttab.NewModel(),
-		divergentModal: divergenttab.NewModel(),
-		bookmarkModal:  bookmarktab.NewModel(),
+		conflictModal:  conflicttab.NewModel(zm),
+		divergentModal: divergenttab.NewModel(zm),
+		bookmarkModal:  bookmarktab.NewModel(zm),
 		prFormModal:    prformtab.NewModel(),
 	}
 }

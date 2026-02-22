@@ -5,7 +5,6 @@ import (
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/tickets"
-	"github.com/madicen/jj-tui/internal/tui/view"
 )
 
 // Model represents the state of the Tickets tab
@@ -53,39 +52,12 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, nil
 }
 
-// View renders the Tickets tab using the view package
+// View renders the Tickets tab
 func (m Model) View() string {
 	if m.width == 0 || m.height == 0 {
 		return "Loading..."
 	}
-	ticketViews := make([]view.JiraTicket, len(m.ticketList))
-	for i, t := range m.ticketList {
-		ticketViews[i] = view.JiraTicket{
-			Key:         t.Key,
-			DisplayKey:  t.DisplayKey,
-			Summary:     t.Summary,
-			Status:      t.Status,
-			Type:        t.Type,
-			Priority:    t.Priority,
-			Description: t.Description,
-		}
-	}
-	transitionViews := make([]view.TicketTransition, 0, len(m.availableTransitions))
-	for _, t := range m.availableTransitions {
-		transitionViews = append(transitionViews, view.TicketTransition{ID: t.ID, Name: t.Name})
-	}
-	r := view.New(m.zoneManager)
-	result := r.Jira(view.JiraData{
-		Tickets:              ticketViews,
-		SelectedTicket:       m.selectedTicket,
-		JiraService:          m.jiraService,
-		ProviderName:         m.providerName,
-		AvailableTransitions: transitionViews,
-		TransitionInProgress: m.transitionInProgress,
-		StatusChangeMode:     m.statusChangeMode,
-		Width:                m.width,
-	})
-	return result.FullContent
+	return m.renderTickets()
 }
 
 // SetTicketServiceInfo sets provider name and whether a ticket service is connected (used by main model)

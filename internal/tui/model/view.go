@@ -9,8 +9,10 @@ import (
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/styles"
 	"github.com/madicen/jj-tui/internal/tui/tabs/graph"
-	"github.com/madicen/jj-tui/internal/tui/view"
+	helptab "github.com/madicen/jj-tui/internal/tui/tabs/help"
+	settingstab "github.com/madicen/jj-tui/internal/tui/tabs/settings"
 	"github.com/madicen/jj-tui/internal/version"
 	"github.com/mattn/go-runewidth"
 )
@@ -96,18 +98,16 @@ func (m *Model) View() string {
 		content = m.renderEditDescription()
 	case ViewCreatePR:
 		content = m.prFormModal.View()
-		if content == "" {
-			content = m.renderCreatePR()
-		}
 	case ViewCreateBookmark:
+		m.syncBookmarkModalState()
 		content = m.bookmarkModal.View()
 		if content == "" {
 			content = m.renderCreateBookmark()
 		}
 	case ViewBookmarkConflict:
-		content = m.renderBookmarkConflict()
+		content = m.conflictModal.View()
 	case ViewDivergentCommit:
-		content = m.renderDivergentCommit()
+		content = m.divergentModal.View()
 	case ViewGitHubLogin:
 		content = m.renderGitHubLogin()
 	default:
@@ -178,12 +178,9 @@ func (m *Model) renderSettingsContent() string {
 }
 
 func (m *Model) renderHelpContent() string {
-	data := view.HelpData{
-		ActiveTab:       view.HelpTab(m.helpTabModel.GetHelpTab()),
-		SelectedCommand: m.helpTabModel.GetSelectedCommand(),
-	}
+	var entries []helptab.CommandHistoryEntry
 	for _, entry := range m.getFilteredCommandHistory() {
-		data.CommandHistory = append(data.CommandHistory, view.CommandHistoryEntry{
+		entries = append(entries, helptab.CommandHistoryEntry{
 			Command:   entry.Command,
 			Timestamp: entry.Timestamp.Format("15:04:05"),
 			Duration:  formatDuration(entry.Duration),
@@ -191,12 +188,8 @@ func (m *Model) renderHelpContent() string {
 			Error:     entry.Error,
 		})
 	}
-	return m.renderer().Help(data)
-}
-
-// renderer returns a view renderer with the zone manager
-func (m *Model) renderer() *view.Renderer {
-	return view.New(m.zoneManager)
+	m.helpTabModel.SetCommandHistoryEntries(entries)
+	return m.helpTabModel.View()
 }
 
 // renderHeader renders the header with clickable tabs
@@ -248,7 +241,7 @@ func (m *Model) renderTab(label string, active bool) string {
 	return TabStyle.Render(label)
 }
 
-// renderContent renders the main content based on view mode
+// renderContent renders the main content based on view mode (viewport path; uses tab/modal View())
 func (m *Model) renderContent() string {
 	var content string
 
@@ -259,29 +252,38 @@ func (m *Model) renderContent() string {
 	} else {
 		switch m.viewMode {
 		case ViewCommitGraph:
-			content = m.renderCommitGraph()
+			m.graphTabModel.SelectCommit(m.selectedCommit)
+			m.graphTabModel.SetSelectionMode(graph.SelectionMode(m.selectionMode))
+			m.graphTabModel.SetRebaseSourceCommit(m.rebaseSourceCommit)
+			content = m.graphTabModel.View()
+			if content == "" {
+				content = "Loading..."
+			}
 		case ViewPullRequests:
-			content = m.renderPullRequests()
+			content = m.prsTabModel.View()
 		case ViewTickets:
-			content = m.renderJira()
+			content = m.ticketsTabModel.View()
 		case ViewBranches:
-			content = m.renderBranches()
+			content = m.branchesTabModel.View()
 		case ViewSettings:
 			content = m.renderSettings()
 		case ViewHelp:
 			content = m.renderHelp()
 		case ViewCreatePR:
-			content = m.renderCreatePR()
+			content = m.prFormModal.View()
 		case ViewEditDescription:
 			content = m.renderEditDescription()
 		case ViewCreateBookmark:
-			content = m.renderCreateBookmark()
+			m.syncBookmarkModalState()
+			content = m.bookmarkModal.View()
 		case ViewGitHubLogin:
 			content = m.renderGitHubLogin()
 		case ViewBookmarkConflict:
-			content = m.renderBookmarkConflict()
+			content = m.conflictModal.View()
 		case ViewDivergentCommit:
-			content = m.renderDivergentCommit()
+			content = m.divergentModal.View()
+		default:
+			content = "Loading..."
 		}
 	}
 
@@ -300,11 +302,11 @@ func (m *Model) renderSplitContent() (string, string) {
 
 	switch m.viewMode {
 	case ViewPullRequests:
-		return m.renderPullRequestsSplit()
+		return m.prsTabModel.View(), ""
 	case ViewTickets:
-		return m.renderJiraSplit()
+		return m.ticketsTabModel.View(), ""
 	case ViewBranches:
-		return m.renderBranchesSplit()
+		return m.branchesTabModel.View(), ""
 	default:
 		return m.renderContent(), ""
 	}
@@ -319,7 +321,7 @@ func (m *Model) renderError() string {
 		pathStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#58A6FF"))
 
 		var lines []string
-		lines = append(lines, view.TitleStyle.Render("Welcome to jj-tui"))
+		lines = append(lines, styles.TitleStyle.Render("Welcome to jj-tui"))
 		lines = append(lines, "")
 		lines = append(lines, fmt.Sprintf("Directory: %s", pathStyle.Render(m.currentPath)))
 		lines = append(lines, "")
@@ -329,7 +331,7 @@ func (m *Model) renderError() string {
 		lines = append(lines, "")
 
 		// Init button
-		initButton := m.zoneManager.Mark(mouse.ZoneActionJJInit, view.ButtonStyle.Background(lipgloss.Color("#238636")).Render("Initialize Repository (i)"))
+		initButton := m.zoneManager.Mark(mouse.ZoneActionJJInit, styles.ButtonStyle.Background(lipgloss.Color("#238636")).Render("Initialize Repository (i)"))
 		lines = append(lines, initButton)
 		lines = append(lines, "")
 		lines = append(lines, mutedStyle.Render("This will run: jj git init"))
@@ -489,298 +491,49 @@ func (m *Model) renderWarningModal() string {
 	return modalBox
 }
 
-// getGraphResult returns the GraphResult for the commit graph view
-func (m *Model) getGraphResult() view.GraphResult {
-	return m.renderer().Graph(m.buildGraphData())
-}
-
-// buildGraphData builds the GraphData for the commit graph
-func (m *Model) buildGraphData() view.GraphData {
-	// Build a map of branches that have open PRs
-	openPRBranches := make(map[string]bool)
-	if m.repository != nil {
-		for _, pr := range m.repository.PRs {
-			if pr.State == "open" {
-				openPRBranches[pr.HeadBranch] = true
-			}
-		}
-	}
-
-	// Build a map of commit index -> PR branch name for commits that can push to a PR
-	// This includes commits with the bookmark AND their descendants
-	commitPRBranch := make(map[int]string)
-	if m.repository != nil && len(m.repository.Graph.Commits) > 0 {
-		// First, find commits that directly have PR bookmarks
-		commitIDToIndex := make(map[string]int)
-		for i, commit := range m.repository.Graph.Commits {
-			commitIDToIndex[commit.ID] = i
-			commitIDToIndex[commit.ChangeID] = i
-			// Check if this commit has a PR bookmark
-			for _, branch := range commit.Branches {
-				if openPRBranches[branch] {
-					commitPRBranch[i] = branch
-					break
-				}
-			}
-		}
-
-		// Now propagate PR branch info to descendants (commits whose parents have PR branches)
-		// We iterate multiple times to handle chains of descendants
-		changed := true
-		for changed {
-			changed = false
-			for i, commit := range m.repository.Graph.Commits {
-				if commitPRBranch[i] != "" {
-					continue // Already has a PR branch
-				}
-				// Check if any parent has a PR branch
-				for _, parentID := range commit.Parents {
-					if parentIdx, ok := commitIDToIndex[parentID]; ok {
-						if branch := commitPRBranch[parentIdx]; branch != "" {
-							commitPRBranch[i] = branch
-							changed = true
-							break
-						}
-					}
-				}
-			}
-		}
-	}
-
-	// Build a map of commit index -> bookmark name for commits that can create a PR
-	// This includes commits with bookmarks (that don't have open PRs) AND their descendants
-	commitBookmark := make(map[int]string)
-	if m.repository != nil && len(m.repository.Graph.Commits) > 0 {
-		commitIDToIndex := make(map[string]int)
-		for i, commit := range m.repository.Graph.Commits {
-			commitIDToIndex[commit.ID] = i
-			commitIDToIndex[commit.ChangeID] = i
-			// Check if this commit has a bookmark without an open PR
-			for _, branch := range commit.Branches {
-				if !openPRBranches[branch] {
-					commitBookmark[i] = branch
-					break
-				}
-			}
-		}
-
-		// Propagate bookmark info to descendants
-		changed := true
-		for changed {
-			changed = false
-			for i, commit := range m.repository.Graph.Commits {
-				if commitBookmark[i] != "" || commitPRBranch[i] != "" {
-					continue // Already has a bookmark or PR branch
-				}
-				// Check if any parent has a bookmark (without PR)
-				for _, parentID := range commit.Parents {
-					if parentIdx, ok := commitIDToIndex[parentID]; ok {
-						if branch := commitBookmark[parentIdx]; branch != "" {
-							commitBookmark[i] = branch
-							changed = true
-							break
-						}
-					}
-				}
-			}
-		}
-	}
-
-	// Convert changed files to view format
-	var changedFiles []view.ChangedFile
-	for _, f := range m.changedFiles {
-		changedFiles = append(changedFiles, view.ChangedFile{
-			Path:   f.Path,
-			Status: f.Status,
-		})
-	}
-
-	return view.GraphData{
-		Repository:         m.repository,
-		SelectedCommit:     m.selectedCommit,
-		InRebaseMode:       m.selectionMode == SelectionRebaseDestination,
-		RebaseSourceCommit: m.rebaseSourceCommit,
-		OpenPRBranches:     openPRBranches,
-		CommitPRBranch:     commitPRBranch,
-		CommitBookmark:     commitBookmark,
-		ChangedFiles:       changedFiles,
-		GraphFocused:       m.graphFocused,
-		SelectedFile:       m.selectedFile,
-	}
-}
-
-// renderCommitGraph renders the commit graph view using the view package
-func (m *Model) renderCommitGraph() string {
-	return m.renderer().Graph(m.buildGraphData()).FullContent
-}
-
-// renderPullRequests renders the PR list view using the view package
-func (m *Model) renderPullRequests() string {
-	result := m.renderer().PullRequests(view.PRData{
-		Repository:    m.repository,
-		SelectedPR:    m.selectedPR,
-		GithubService: m.isGitHubAvailable(),
-		Width:         m.width,
-	})
-	return result.FullContent
-}
-
-// renderPullRequestsSplit returns split header and list for the PR view
-// Returns (fixedHeader, scrollableList) - if scrollableList is empty, use FullContent in fixedHeader
-func (m *Model) renderPullRequestsSplit() (string, string) {
-	result := m.renderer().PullRequests(view.PRData{
-		Repository:    m.repository,
-		SelectedPR:    m.selectedPR,
-		GithubService: m.isGitHubAvailable(),
-		Width:         m.width,
-	})
-	// If there's no scrollable list (error states), return full content as the "header"
-	if result.ScrollableList == "" {
-		return result.FullContent, ""
-	}
-	return result.FixedHeader, result.ScrollableList
-}
-
-// renderJira renders the Jira tickets view using the view package
-func (m *Model) renderJira() string {
-	result := m.getJiraResult()
-	return result.FullContent
-}
-
-// renderJiraSplit returns split header and list for the Jira view
-// Returns (fixedHeader, scrollableList) - if scrollableList is empty, use FullContent in fixedHeader
-func (m *Model) renderJiraSplit() (string, string) {
-	result := m.getJiraResult()
-	// If there's no scrollable list (error states), return full content as the "header"
-	if result.ScrollableList == "" {
-		return result.FullContent, ""
-	}
-	return result.FixedHeader, result.ScrollableList
-}
-
-// getJiraResult returns the JiraResult for rendering
-func (m *Model) getJiraResult() view.JiraResult {
-	// Convert tickets.Ticket to view.JiraTicket
-	ticketViews := make([]view.JiraTicket, len(m.ticketList))
-	for i, t := range m.ticketList {
-		ticketViews[i] = view.JiraTicket{
-			Key:         t.Key,
-			DisplayKey:  t.DisplayKey,
-			Summary:     t.Summary,
-			Status:      t.Status,
-			Type:        t.Type,
-			Priority:    t.Priority,
-			Description: t.Description,
-		}
-	}
-
-	var providerName string
-	if m.ticketService != nil {
-		providerName = m.ticketService.GetProviderName()
-	}
-
-	// Convert transitions to view format
-	var transitionViews []view.TicketTransition
-	for _, t := range m.availableTransitions {
-		transitionViews = append(transitionViews, view.TicketTransition{
-			ID:   t.ID,
-			Name: t.Name,
-		})
-	}
-
-	return m.renderer().Jira(view.JiraData{
-		Tickets:              ticketViews,
-		SelectedTicket:       m.selectedTicket,
-		JiraService:          m.ticketService != nil,
-		ProviderName:         providerName,
-		AvailableTransitions: transitionViews,
-		TransitionInProgress: m.transitionInProgress,
-		StatusChangeMode:     m.statusChangeMode,
-		Width:                m.width,
-	})
-}
-
-// renderSettings renders the settings view using the view package
+// renderSettings renders the settings view via the settings tab package
 func (m *Model) renderSettings() string {
-	inputs := make([]view.InputView, len(m.settingsInputs))
-	for i, input := range m.settingsInputs {
-		inputs[i] = view.InputView{View: input.View()}
-	}
-
-	// Check for local config
-	hasLocalConfig := config.HasLocalConfig()
-	cfg, _ := config.Load()
-	var configSource string
-	if cfg != nil {
-		configSource = cfg.LoadedFrom()
-	}
-
-	// Get ticket provider display name
-	var ticketProviderName string
-	if m.ticketService != nil {
-		ticketProviderName = m.ticketService.GetProviderName()
-	}
-
-	// Check what's configured for provider availability
-	jiraConfigured := strings.TrimSpace(m.settingsInputs[1].Value()) != "" &&
-		strings.TrimSpace(m.settingsInputs[2].Value()) != "" &&
-		strings.TrimSpace(m.settingsInputs[3].Value()) != ""
-	codecksConfigured := len(m.settingsInputs) > 8 &&
-		strings.TrimSpace(m.settingsInputs[7].Value()) != "" &&
-		strings.TrimSpace(m.settingsInputs[8].Value()) != ""
-	githubIssuesConfigured := m.isGitHubAvailable()
-
-	return m.renderer().Settings(view.SettingsData{
-		Inputs:                 inputs,
+	data := settingstab.RenderData{
 		FocusedField:           m.settingsFocusedField,
 		GithubService:          m.isGitHubAvailable(),
 		JiraService:            m.ticketService != nil,
-		HasLocalConfig:         hasLocalConfig,
-		ConfigSource:           configSource,
-		ActiveTab:              view.SettingsTab(m.settingsTab),
+		ActiveTab:              settingstab.ActiveTab(m.settingsTab),
 		ShowMergedPRs:          m.settingsShowMerged,
 		ShowClosedPRs:          m.settingsShowClosed,
 		OnlyMyPRs:              m.settingsOnlyMine,
 		PRLimit:                m.settingsPRLimit,
 		PRRefreshInterval:      m.settingsPRRefreshInterval,
 		TicketProvider:         m.settingsTicketProvider,
-		TicketProviderName:     ticketProviderName,
 		AutoInProgressOnBranch: m.settingsAutoInProgress,
-		JiraConfigured:         jiraConfigured,
-		CodecksConfigured:      codecksConfigured,
-		GitHubIssuesConfigured: githubIssuesConfigured,
 		BranchLimit:            m.settingsBranchLimit,
 		SanitizeBookmarks:      m.settingsSanitizeBookmarks,
 		ConfirmingCleanup:      m.confirmingCleanup,
-	})
+	}
+	data.Inputs = make([]struct{ View string }, len(m.settingsInputs))
+	for i, input := range m.settingsInputs {
+		data.Inputs[i].View = input.View()
+	}
+	data.HasLocalConfig = config.HasLocalConfig()
+	if cfg, _ := config.Load(); cfg != nil {
+		data.ConfigSource = cfg.LoadedFrom()
+	}
+	if m.ticketService != nil {
+		data.TicketProviderName = m.ticketService.GetProviderName()
+	}
+	data.JiraConfigured = strings.TrimSpace(m.settingsInputs[1].Value()) != "" &&
+		strings.TrimSpace(m.settingsInputs[2].Value()) != "" &&
+		strings.TrimSpace(m.settingsInputs[3].Value()) != ""
+	data.CodecksConfigured = len(m.settingsInputs) > 8 &&
+		strings.TrimSpace(m.settingsInputs[7].Value()) != "" &&
+		strings.TrimSpace(m.settingsInputs[8].Value()) != ""
+	data.GitHubIssuesConfigured = m.isGitHubAvailable()
+
+	return settingstab.Render(m.zoneManager, data)
 }
 
-// renderHelp renders the help view using the view package
+// renderHelp renders the help view via the help tab
 func (m *Model) renderHelp() string {
-	data := view.HelpData{
-		ActiveTab:       view.HelpTab(m.helpTab),
-		SelectedCommand: m.helpSelectedCommand,
-	}
-
-	// Get command history from jj service (filtered to exclude auto-refresh commands)
-	if m.jjService != nil {
-		history := m.jjService.GetCommandHistory()
-		for _, entry := range history {
-			// Filter out auto-refresh commands that spam the list
-			if isAutoRefreshCommand(entry.Command) {
-				continue
-			}
-			data.CommandHistory = append(data.CommandHistory, view.CommandHistoryEntry{
-				Command:   entry.Command,
-				Timestamp: entry.Timestamp.Format("15:04:05"),
-				Duration:  formatDuration(entry.Duration),
-				Success:   entry.Success,
-				Error:     entry.Error,
-			})
-		}
-	}
-
-	return m.renderer().Help(data)
+	return m.renderHelpContent()
 }
 
 // isAutoRefreshCommand returns true if the command is part of auto-refresh
@@ -826,87 +579,66 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%.1fs", d.Seconds())
 }
 
-// renderBranches renders the branches view using the view package
-func (m *Model) renderBranches() string {
-	result := m.getBranchesResult()
-	return result.FullContent
-}
-
-// renderBranchesSplit returns split header and list for the branches view
-func (m *Model) renderBranchesSplit() (string, string) {
-	result := m.getBranchesResult()
-	if result.ScrollableList == "" {
-		return result.FullContent, ""
+// syncBookmarkModalState copies main model bookmark state into the bookmark modal before rendering
+func (m *Model) syncBookmarkModalState() {
+	m.bookmarkModal.UpdateRepository(m.repository)
+	m.bookmarkModal.SetBookmarkName(m.bookmarkNameInput.Value())
+	m.bookmarkModal.SetExistingBookmarks(m.existingBookmarks)
+	m.bookmarkModal.SetCommitIdx(m.bookmarkCommitIdx)
+	m.bookmarkModal.SetSelectedBookmarkIdx(m.selectedBookmarkIdx)
+	m.bookmarkModal.SetNameExists(m.bookmarkNameExists)
+	if m.bookmarkFromJira {
+		m.bookmarkModal.SetFromJira(m.bookmarkJiraTicketKey, m.bookmarkJiraTicketTitle, m.bookmarkTicketDisplayKey)
+	} else {
+		m.bookmarkModal.ClearJiraContext()
 	}
-	return result.FixedHeader, result.ScrollableList
 }
 
-// getBranchesResult returns the BranchResult for rendering
-func (m *Model) getBranchesResult() view.BranchResult {
-	return m.renderer().Branches(view.BranchData{
-		Branches:       m.branchList,
-		SelectedBranch: m.selectedBranch,
-		Width:          m.width,
-	})
-}
-
-// renderCreatePR renders the create PR view using the view package
-func (m *Model) renderCreatePR() string {
-	return m.renderer().CreatePR(view.CreatePRData{
-		Repository:     m.repository,
-		SelectedCommit: m.prCommitIndex,
-		GithubService:  m.isGitHubAvailable(),
-		TitleInput:     m.prTitleInput.View(),
-		BodyInput:      m.prBodyInput.View(),
-		HeadBranch:     m.prHeadBranch,
-		BaseBranch:     m.prBaseBranch,
-		FocusedField:   m.prFocusedField,
-	})
-}
-
-// renderCreateBookmark renders the bookmark creation view using the view package
+// renderCreateBookmark is fallback when bookmark modal View() returns "" (modal owns rendering now)
 func (m *Model) renderCreateBookmark() string {
-	return m.renderer().Bookmark(view.BookmarkData{
-		Repository:        m.repository,
-		CommitIndex:       m.bookmarkCommitIdx,
-		NameInput:         m.bookmarkNameInput.View(),
-		ExistingBookmarks: m.existingBookmarks,
-		SelectedBookmark:  m.selectedBookmarkIdx,
-		FromJira:          m.bookmarkFromJira,
-		JiraTicketKey:     m.bookmarkJiraTicketKey,
-		NameExists:        m.bookmarkNameExists,
-	})
+	return ""
 }
 
-// renderBookmarkConflict renders the bookmark conflict resolution view
-func (m *Model) renderBookmarkConflict() string {
-	return m.renderer().BookmarkConflict(view.BookmarkConflictData{
-		BookmarkName:   m.conflictBookmarkName,
-		LocalCommitID:  m.conflictLocalCommitID,
-		RemoteCommitID: m.conflictRemoteCommitID,
-		LocalSummary:   m.conflictLocalSummary,
-		RemoteSummary:  m.conflictRemoteSummary,
-		SelectedOption: m.conflictSelectedOption,
-	})
-}
+// renderBookmarkConflict and renderDivergentCommit removed; conflict/divergent modals own rendering
 
-// renderDivergentCommit renders the divergent commit resolution view
-func (m *Model) renderDivergentCommit() string {
-	return m.renderer().DivergentCommit(view.DivergentCommitData{
-		ChangeID:    m.divergentChangeID,
-		CommitIDs:   m.divergentCommitIDs,
-		Summaries:   m.divergentCommitSummaries,
-		SelectedIdx: m.divergentSelectedIdx,
-	})
-}
-
-// renderEditDescription renders the description editing view using the view package
+// renderEditDescription renders the description editing view
 func (m *Model) renderEditDescription() string {
-	return m.renderer().Description(view.DescriptionData{
-		Repository:      m.repository,
-		EditingCommitID: m.editingCommitID,
-		InputView:       m.descriptionInput.View(),
-	})
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#8BE9FD"))
+	subtitleStyle := lipgloss.NewStyle().Foreground(styles.ColorMuted)
+
+	var commitInfo string
+	if m.repository != nil {
+		for _, commit := range m.repository.Graph.Commits {
+			if commit.ChangeID == m.editingCommitID {
+				changeIDShort := commit.ChangeID
+				if len(changeIDShort) > 8 {
+					changeIDShort = changeIDShort[:8]
+				}
+				commitInfo = fmt.Sprintf("%s (%s)", commit.ShortID, changeIDShort)
+				break
+			}
+		}
+	}
+	if commitInfo == "" {
+		commitInfo = m.editingCommitID
+	}
+
+	header := titleStyle.Render("Edit Commit Description")
+	commitLine := subtitleStyle.Render(fmt.Sprintf("Commit: %s", commitInfo))
+	actionButtons := lipgloss.JoinHorizontal(
+		lipgloss.Left,
+		m.zoneManager.Mark(mouse.ZoneDescSave, styles.ButtonStyle.Render("Save (Ctrl+S)")),
+		m.zoneManager.Mark(mouse.ZoneDescCancel, styles.ButtonStyle.Render("Cancel (Esc)")),
+	)
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		header,
+		commitLine,
+		"",
+		m.descriptionInput.View(),
+		"",
+		actionButtons,
+	)
 }
 
 // renderStatusBar renders the status bar with global shortcuts
@@ -995,7 +727,7 @@ func (m *Model) renderStatusBar() string {
 func (m *Model) renderGitHubLogin() string {
 	var lines []string
 
-	lines = append(lines, view.TitleStyle.Render("GitHub Login"))
+	lines = append(lines, styles.TitleStyle.Render("GitHub Login"))
 	lines = append(lines, "")
 	lines = append(lines, "")
 
@@ -1019,8 +751,8 @@ func (m *Model) renderGitHubLogin() string {
 		lines = append(lines, "")
 
 		// Add copy button
-		copyButton := view.ButtonStyle.Render("Copy Code (c)")
-		lines = append(lines, "   "+m.renderer().Mark(mouse.ZoneGitHubLoginCopyCode, copyButton))
+		copyButton := styles.ButtonStyle.Render("Copy Code (c)")
+		lines = append(lines, "   "+m.zoneManager.Mark(mouse.ZoneGitHubLoginCopyCode, copyButton))
 		lines = append(lines, "")
 
 		if m.githubLoginPolling {
