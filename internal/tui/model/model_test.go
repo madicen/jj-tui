@@ -36,7 +36,7 @@ func newTestModel() *Model {
 
 	// Sync repository and selection to tab models (bypasses repositoryLoadedMsg in tests)
 	m.graphTabModel.UpdateRepository(m.repository)
-	m.graphTabModel.SelectCommit(m.selectedCommit)
+	m.graphTabModel.SelectCommit(0)
 	m.prsTabModel.UpdateRepository(m.repository)
 	m.prsTabModel.SetGithubService(m.isGitHubAvailable())
 	m.branchesTabModel.UpdateRepository(m.repository)
@@ -79,8 +79,6 @@ func TestTabSelectedMsgChangesView(t *testing.T) {
 func TestCommitSelectedMsgChangesSelection(t *testing.T) {
 	m := newTestModel()
 	defer m.Close()
-
-	m.selectedCommit = -1 // Reset
 
 	msg, _ := m.handleSelectCommit(1)
 	newModel, _ := m.Update(msg)
@@ -128,7 +126,7 @@ func TestKeyboardNavigation(t *testing.T) {
 	m := newTestModel()
 	defer m.Close()
 
-	m.selectedCommit = 0
+	m.graphTabModel.SelectCommit(0)
 
 	// Press j to move down
 	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")}
@@ -300,7 +298,7 @@ func TestWorkingCopyNodeAppearsInGraph(t *testing.T) {
 		},
 	})
 	m.graphTabModel.UpdateRepository(m.repository)
-	m.graphTabModel.SelectCommit(m.selectedCommit)
+	m.graphTabModel.SelectCommit(0)
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 80})
 	defer m.Close()
 
@@ -462,7 +460,7 @@ func TestViewShowsActionsWhenCommitSelected(t *testing.T) {
 	m := newTestModel()
 	defer m.Close()
 
-	m.selectedCommit = 0
+	m.graphTabModel.SelectCommit(0)
 
 	view := m.View()
 
@@ -638,7 +636,7 @@ func TestDescriptionEditingFlow(t *testing.T) {
 		defer m.Close()
 
 		// Select a mutable commit
-		m.selectedCommit = 0
+		m.graphTabModel.SelectCommit(0)
 		commit := m.repository.Graph.Commits[0]
 		commit.Description = "Original description"
 		m.repository.Graph.Commits[0] = commit
@@ -659,11 +657,11 @@ func TestDescriptionEditingFlow(t *testing.T) {
 		defer m.Close()
 
 		// Make the selected commit immutable
-		m.selectedCommit = 0
+		m.graphTabModel.SelectCommit(0)
 		m.repository.Graph.Commits[0].Immutable = true
 
 		// Verify the commit is marked as immutable
-		commit := m.repository.Graph.Commits[m.selectedCommit]
+		commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
 		if !commit.Immutable {
 			t.Error("Test commit should be marked immutable")
 		}
@@ -734,7 +732,7 @@ func TestActionButtonsInCommitGraph(t *testing.T) {
 		m := newTestModel()
 		defer m.Close()
 
-		m.selectedCommit = 0
+		m.graphTabModel.SelectCommit(0)
 		m.repository.Graph.Commits[0].Immutable = false
 
 		view := m.View()
@@ -763,7 +761,7 @@ func TestActionButtonsInCommitGraph(t *testing.T) {
 		m := newTestModel()
 		defer m.Close()
 
-		m.selectedCommit = 0
+		m.graphTabModel.SelectCommit(0)
 		m.repository.Graph.Commits[0].Immutable = true
 
 		view := m.View()
@@ -804,7 +802,7 @@ func TestRebaseModeFlow(t *testing.T) {
 		// Need a jjService for rebase to work (use a stub)
 		m.jjService = &jj.Service{RepoPath: "/test/repo"}
 
-		m.selectedCommit = 0
+		m.graphTabModel.SelectCommit(0)
 		m.repository.Graph.Commits[0].Immutable = false
 
 		// Press 'r' to enter rebase mode
@@ -824,7 +822,7 @@ func TestRebaseModeFlow(t *testing.T) {
 		m := newTestModel()
 		defer m.Close()
 
-		m.selectedCommit = 0
+		m.graphTabModel.SelectCommit(0)
 		m.repository.Graph.Commits[0].Immutable = false
 		m.selectionMode = SelectionRebaseDestination
 		m.rebaseSourceCommit = 0
@@ -843,7 +841,7 @@ func TestRebaseModeFlow(t *testing.T) {
 		m := newTestModel()
 		defer m.Close()
 
-		m.selectedCommit = 0
+		m.graphTabModel.SelectCommit(0)
 		m.selectionMode = SelectionRebaseDestination
 		m.rebaseSourceCommit = 0
 
@@ -867,7 +865,7 @@ func TestRebaseModeFlow(t *testing.T) {
 		// Need a jjService for the key handler to try rebase
 		m.jjService = &jj.Service{RepoPath: "/test/repo"}
 
-		m.selectedCommit = 0
+		m.graphTabModel.SelectCommit(0)
 		m.repository.Graph.Commits[0].Immutable = true
 
 		// Press 'm' - should not enter rebase mode
@@ -887,7 +885,7 @@ func TestRebaseModeFlow(t *testing.T) {
 		m := newTestModel()
 		defer m.Close()
 
-		m.selectedCommit = 1 // Select destination
+		m.graphTabModel.SelectCommit(1) // Select destination
 		m.selectionMode = SelectionRebaseDestination
 		m.rebaseSourceCommit = 0
 
@@ -1185,7 +1183,7 @@ func TestNewCommitFromImmutableParent(t *testing.T) {
 		m.jjService = &jj.Service{RepoPath: "/test/repo"}
 
 		// Mark the first commit as immutable (like main or root())
-		m.selectedCommit = 0
+		m.graphTabModel.SelectCommit(0)
 		m.repository.Graph.Commits[0].Immutable = true
 		m.repository.Graph.Commits[0].ShortID = "main"
 
@@ -1214,7 +1212,7 @@ func TestNewCommitFromImmutableParent(t *testing.T) {
 		m := newTestModel()
 		defer m.Close()
 
-		m.selectedCommit = 0
+		m.graphTabModel.SelectCommit(0)
 		m.repository.Graph.Commits[0].Immutable = true
 
 		view := m.View()
@@ -1231,7 +1229,7 @@ func TestNewCommitFromImmutableParent(t *testing.T) {
 		defer m.Close()
 
 		m.jjService = &jj.Service{RepoPath: "/test/repo"}
-		m.selectedCommit = 0
+		m.graphTabModel.SelectCommit(0)
 		m.repository.Graph.Commits[0].Immutable = true
 
 		// Press 'd' (describe) - should be blocked

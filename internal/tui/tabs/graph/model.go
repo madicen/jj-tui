@@ -134,46 +134,59 @@ func (m GraphModel) View() string {
 	graphHeight = max(graphHeight, 3)
 	filesHeight = max(filesHeight, 3)
 
-	// Set up graph viewport
+	// Set up graph viewport (store content and scroll state; we slice manually to preserve zone markup)
 	m.viewport.Height = graphHeight
-
-	// Save scroll position before SetContent (which resets YOffset)
 	savedGraphOffset := m.viewport.YOffset
-
-	// Always set content if we have valid graph content (even during loading, to avoid stale content from other views)
 	if graphResult.GraphContent != "" {
 		m.viewport.SetContent(graphResult.GraphContent)
 	}
-
-	// Restore scroll position and clamp to valid range
 	m.viewport.YOffset = savedGraphOffset
 	maxGraphOffset := max(m.viewport.TotalLineCount()-graphHeight, 0)
 	m.viewport.YOffset = max(min(m.viewport.YOffset, maxGraphOffset), 0)
 
-	// Set up files viewport - show placeholder if no files yet
+	// Slice graph content manually so ZoneCommit(i) etc. are preserved (viewport.View() would corrupt them)
+	graphLines := strings.Split(graphResult.GraphContent, "\n")
+	gYOff := m.viewport.YOffset
+	if gYOff < 0 {
+		gYOff = 0
+	}
+	gEnd := min(gYOff+graphHeight, len(graphLines))
+	gStart := min(gYOff, gEnd)
+	var visibleGraph string
+	if gStart < gEnd {
+		visibleGraph = strings.Join(graphLines[gStart:gEnd], "\n")
+	}
+	graphPane := m.zoneManager.Mark(mouse.ZoneGraphPane, visibleGraph)
+
+	// Set up files pane - slice content manually to preserve ZoneChangedFile(i) markup
 	m.filesViewport.Height = filesHeight
 	filesContent := graphResult.FilesContent
 	if filesContent == "" {
 		filesContent = lipgloss.NewStyle().Foreground(lipgloss.Color("#666666")).Render("  Loading changed files...")
 	}
-
-	// Save scroll position before SetContent
 	savedFilesOffset := m.filesViewport.YOffset
 	m.filesViewport.SetContent(filesContent)
-
-	// Restore scroll position and clamp to valid range
 	m.filesViewport.YOffset = savedFilesOffset
 	maxFilesOffset := max(m.filesViewport.TotalLineCount()-filesHeight, 0)
 	m.filesViewport.YOffset = max(min(m.filesViewport.YOffset, maxFilesOffset), 0)
+
+	filesLines := strings.Split(filesContent, "\n")
+	fYOff := m.filesViewport.YOffset
+	if fYOff < 0 {
+		fYOff = 0
+	}
+	fEnd := min(fYOff+filesHeight, len(filesLines))
+	fStart := min(fYOff, fEnd)
+	var visibleFiles string
+	if fStart < fEnd {
+		visibleFiles = strings.Join(filesLines[fStart:fEnd], "\n")
+	}
+	filesPane := m.zoneManager.Mark(mouse.ZoneFilesPane, visibleFiles)
 
 	// Simple separator line
 	separator := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#444444")).
 		Render(strings.Repeat("─", max(m.width-2, 0)))
-
-	// Wrap viewports in zones for click-to-focus
-	graphPane := m.zoneManager.Mark(mouse.ZoneGraphPane, m.viewport.View())
-	filesPane := m.zoneManager.Mark(mouse.ZoneFilesPane, m.filesViewport.View())
 
 	v := lipgloss.JoinVertical(
 		lipgloss.Left,
@@ -184,7 +197,8 @@ func (m GraphModel) View() string {
 		filesPane,
 	)
 
-	return m.zoneManager.Scan(v)
+	// Return raw view so the main model can do a single Scan() on the full screen (avoids double-Scan breaking zone positions)
+	return v
 }
 
 // getGraphResult returns the GraphResult for the commit graph view

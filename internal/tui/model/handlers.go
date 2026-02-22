@@ -10,7 +10,7 @@ import (
 
 func (m *Model) handleCheckoutCommit() (tea.Model, tea.Cmd) {
 	if m.isSelectedCommitValid() && m.jjService != nil {
-		commit := m.repository.Graph.Commits[m.selectedCommit]
+		commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
 		if commit.Immutable {
 			m.statusMessage = "Cannot edit: commit is immutable"
 			return m, nil
@@ -22,7 +22,7 @@ func (m *Model) handleCheckoutCommit() (tea.Model, tea.Cmd) {
 
 func (m *Model) handleSquashCommit() (tea.Model, tea.Cmd) {
 	if m.isSelectedCommitValid() && m.jjService != nil {
-		commit := m.repository.Graph.Commits[m.selectedCommit]
+		commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
 		if commit.Immutable {
 			m.statusMessage = "Cannot squash: commit is immutable"
 			return m, nil
@@ -34,7 +34,7 @@ func (m *Model) handleSquashCommit() (tea.Model, tea.Cmd) {
 
 func (m *Model) handleAbandonCommit() (tea.Model, tea.Cmd) {
 	if m.isSelectedCommitValid() && m.jjService != nil {
-		commit := m.repository.Graph.Commits[m.selectedCommit]
+		commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
 		if commit.Immutable {
 			m.statusMessage = "Cannot abandon: commit is immutable"
 			return m, nil
@@ -50,7 +50,7 @@ func (m *Model) handleAbandonCommit() (tea.Model, tea.Cmd) {
 
 func (m *Model) handleResolveDivergentCommit() (tea.Model, tea.Cmd) {
 	if m.isSelectedCommitValid() && m.jjService != nil {
-		commit := m.repository.Graph.Commits[m.selectedCommit]
+		commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
 		if !commit.Divergent {
 			m.statusMessage = "This commit is not divergent"
 			return m, nil
@@ -63,7 +63,7 @@ func (m *Model) handleResolveDivergentCommit() (tea.Model, tea.Cmd) {
 
 func (m *Model) handleDescribeCommit() (tea.Model, tea.Cmd) {
 	if m.isSelectedCommitValid() && m.jjService != nil {
-		commit := m.repository.Graph.Commits[m.selectedCommit]
+		commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
 		if commit.Immutable {
 			m.statusMessage = "Cannot edit description: commit is immutable"
 			return m, nil
@@ -78,7 +78,7 @@ func (m *Model) handleNewCommit() (tea.Model, tea.Cmd) {
 		// Create a new commit as a child of the selected commit
 		// This is valid even for immutable commits - we're creating a child, not modifying the parent
 		if m.isSelectedCommitValid() {
-			commit := m.repository.Graph.Commits[m.selectedCommit]
+			commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
 			m.statusMessage = fmt.Sprintf("Creating new commit from %s...", commit.ShortID)
 		} else {
 			m.statusMessage = "Creating new commit..."
@@ -90,7 +90,7 @@ func (m *Model) handleNewCommit() (tea.Model, tea.Cmd) {
 
 func (m *Model) handleRebase() (tea.Model, tea.Cmd) {
 	if m.isSelectedCommitValid() && m.jjService != nil {
-		commit := m.repository.Graph.Commits[m.selectedCommit]
+		commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
 		if commit.Immutable {
 			m.statusMessage = "Cannot rebase: commit is immutable"
 			return m, nil
@@ -164,10 +164,10 @@ func (m *Model) handleTrackBranch() (tea.Model, tea.Cmd) {
 	if m.viewMode != ViewBranches || len(m.branchList) == 0 {
 		return m, nil
 	}
-	if m.selectedBranch < 0 || m.selectedBranch >= len(m.branchList) {
+	if m.GetSelectedBranch() < 0 || m.GetSelectedBranch() >= len(m.branchList) {
 		return m, nil
 	}
-	branch := m.branchList[m.selectedBranch]
+	branch := m.branchList[m.GetSelectedBranch()]
 	if branch.IsLocal || branch.IsTracked {
 		m.statusMessage = "Branch is already tracked"
 		return m, nil
@@ -180,10 +180,10 @@ func (m *Model) handleUntrackBranch() (tea.Model, tea.Cmd) {
 	if m.viewMode != ViewBranches || len(m.branchList) == 0 {
 		return m, nil
 	}
-	if m.selectedBranch < 0 || m.selectedBranch >= len(m.branchList) {
+	if m.GetSelectedBranch() < 0 || m.GetSelectedBranch() >= len(m.branchList) {
 		return m, nil
 	}
-	branch := m.branchList[m.selectedBranch]
+	branch := m.branchList[m.GetSelectedBranch()]
 	if !branch.IsTracked {
 		m.statusMessage = "Branch is not tracked"
 		return m, nil
@@ -196,10 +196,10 @@ func (m *Model) handleRestoreLocalBranch() (tea.Model, tea.Cmd) {
 	if m.viewMode != ViewBranches || len(m.branchList) == 0 {
 		return m, nil
 	}
-	if m.selectedBranch < 0 || m.selectedBranch >= len(m.branchList) {
+	if m.GetSelectedBranch() < 0 || m.GetSelectedBranch() >= len(m.branchList) {
 		return m, nil
 	}
-	branch := m.branchList[m.selectedBranch]
+	branch := m.branchList[m.GetSelectedBranch()]
 	if !branch.LocalDeleted {
 		m.statusMessage = "Branch local copy is not deleted"
 		return m, nil
@@ -212,10 +212,10 @@ func (m *Model) handleDeleteBranchBookmark() (tea.Model, tea.Cmd) {
 	if m.viewMode != ViewBranches || len(m.branchList) == 0 {
 		return m, nil
 	}
-	if m.selectedBranch < 0 || m.selectedBranch >= len(m.branchList) {
+	if m.GetSelectedBranch() < 0 || m.GetSelectedBranch() >= len(m.branchList) {
 		return m, nil
 	}
-	branch := m.branchList[m.selectedBranch]
+	branch := m.branchList[m.GetSelectedBranch()]
 	if !branch.IsLocal {
 		m.statusMessage = "Can only delete local bookmarks"
 		return m, nil
@@ -233,10 +233,10 @@ func (m *Model) handleResolveBookmarkConflict() (tea.Model, tea.Cmd) {
 	if m.viewMode != ViewBranches || len(m.branchList) == 0 {
 		return m, nil
 	}
-	if m.selectedBranch < 0 || m.selectedBranch >= len(m.branchList) {
+	if m.GetSelectedBranch() < 0 || m.GetSelectedBranch() >= len(m.branchList) {
 		return m, nil
 	}
-	branch := m.branchList[m.selectedBranch]
+	branch := m.branchList[m.GetSelectedBranch()]
 	if !branch.HasConflict {
 		m.statusMessage = "This bookmark is not conflicted"
 		return m, nil
@@ -249,10 +249,10 @@ func (m *Model) handlePushBranch() (tea.Model, tea.Cmd) {
 	if m.viewMode != ViewBranches || len(m.branchList) == 0 {
 		return m, nil
 	}
-	if m.selectedBranch < 0 || m.selectedBranch >= len(m.branchList) {
+	if m.GetSelectedBranch() < 0 || m.GetSelectedBranch() >= len(m.branchList) {
 		return m, nil
 	}
-	branch := m.branchList[m.selectedBranch]
+	branch := m.branchList[m.GetSelectedBranch()]
 	if !branch.IsLocal {
 		m.statusMessage = "Can only push local branches"
 		return m, nil
@@ -302,13 +302,9 @@ func (m *Model) handleRedo() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleSelectCommit(index int) (tea.Model, tea.Cmd) {
-	m.selectedCommit = index
-	// Load changed files for the selected commit
-	if m.repository != nil && m.selectedCommit >= 0 && m.selectedCommit < len(m.repository.Graph.Commits) {
-		commit := m.repository.Graph.Commits[m.selectedCommit]
-		m.changedFilesCommitID = commit.ChangeID
-		m.changedFiles = nil // Clear old files while loading
-		m.selectedFile = 0   // Reset file selection
+	m.graphTabModel.SelectCommit(index)
+	if m.repository != nil && index >= 0 && index < len(m.repository.Graph.Commits) {
+		commit := m.repository.Graph.Commits[index]
 		return m, m.loadChangedFiles(commit.ChangeID)
 	}
 	return m, nil
@@ -337,7 +333,7 @@ func (m *Model) handleCreatePR() (tea.Model, tea.Cmd) {
 
 func (m *Model) handleCreateBookmark() (tea.Model, tea.Cmd) {
 	if m.isSelectedCommitValid() && m.jjService != nil {
-		commit := m.repository.Graph.Commits[m.selectedCommit]
+		commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
 		if commit.Immutable {
 			m.statusMessage = "Cannot create bookmark: commit is immutable"
 			return m, nil
@@ -351,7 +347,7 @@ func (m *Model) handleCreateBookmark() (tea.Model, tea.Cmd) {
 
 func (m *Model) handleDeleteBookmark() (tea.Model, tea.Cmd) {
 	if m.isSelectedCommitValid() && m.jjService != nil {
-		commit := m.repository.Graph.Commits[m.selectedCommit]
+		commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
 		if len(commit.Branches) == 0 {
 			m.statusMessage = "No bookmark on this commit to delete"
 			return m, nil
@@ -363,8 +359,7 @@ func (m *Model) handleDeleteBookmark() (tea.Model, tea.Cmd) {
 
 func (m *Model) handleUpdatePR() (tea.Model, tea.Cmd) {
 	if m.isSelectedCommitValid() && m.jjService != nil {
-		// Find the PR branch for this commit (could be on this commit or an ancestor)
-		prBranch := m.findPRBranchForCommit(m.selectedCommit)
+		prBranch := m.findPRBranchForCommit(m.GetSelectedCommit())
 		if prBranch == "" {
 			m.statusMessage = "No open PR found for this commit or its ancestors"
 			return m, nil
@@ -381,8 +376,7 @@ func (m *Model) handleUpdatePR() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		commit := m.repository.Graph.Commits[m.selectedCommit]
-		// Check if we need to move the bookmark (commit doesn't have it directly)
+		commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
 		needsMoveBookmark := true
 		if slices.Contains(commit.Branches, prBranch) {
 			needsMoveBookmark = false
@@ -393,8 +387,8 @@ func (m *Model) handleUpdatePR() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleOpenPRInBrowser() (tea.Model, tea.Cmd) {
-	if m.repository != nil && m.selectedPR >= 0 && m.selectedPR < len(m.repository.PRs) {
-		pr := m.repository.PRs[m.selectedPR]
+	if m.repository != nil && m.GetSelectedPR() >= 0 && m.GetSelectedPR() < len(m.repository.PRs) {
+		pr := m.repository.PRs[m.GetSelectedPR()]
 		if pr.URL != "" {
 			if m.demoMode {
 				m.statusMessage = fmt.Sprintf("PR #%d: %s (demo mode - browser disabled)", pr.Number, pr.URL)
@@ -408,8 +402,8 @@ func (m *Model) handleOpenPRInBrowser() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleOpenTicketInBrowser() (tea.Model, tea.Cmd) {
-	if m.ticketService != nil && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
-		ticket := m.ticketList[m.selectedTicket]
+	if m.ticketService != nil && m.GetSelectedTicket() >= 0 && m.GetSelectedTicket() < len(m.ticketList) {
+		ticket := m.ticketList[m.GetSelectedTicket()]
 		ticketURL := m.ticketService.GetTicketURL(ticket)
 		m.statusMessage = fmt.Sprintf("Opening %s...", ticket.DisplayKey)
 		return m, openURL(ticketURL)
@@ -418,8 +412,8 @@ func (m *Model) handleOpenTicketInBrowser() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleMergePR() (tea.Model, tea.Cmd) {
-	if m.viewMode == ViewPullRequests && m.isGitHubAvailable() && m.repository != nil && m.selectedPR >= 0 && m.selectedPR < len(m.repository.PRs) {
-		pr := m.repository.PRs[m.selectedPR]
+	if m.viewMode == ViewPullRequests && m.isGitHubAvailable() && m.repository != nil && m.GetSelectedPR() >= 0 && m.GetSelectedPR() < len(m.repository.PRs) {
+		pr := m.repository.PRs[m.GetSelectedPR()]
 		if pr.State != "open" {
 			m.statusMessage = "Can only merge open PRs"
 			return m, nil
@@ -431,8 +425,8 @@ func (m *Model) handleMergePR() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleClosePR() (tea.Model, tea.Cmd) {
-	if m.viewMode == ViewPullRequests && m.isGitHubAvailable() && m.repository != nil && m.selectedPR >= 0 && m.selectedPR < len(m.repository.PRs) {
-		pr := m.repository.PRs[m.selectedPR]
+	if m.viewMode == ViewPullRequests && m.isGitHubAvailable() && m.repository != nil && m.GetSelectedPR() >= 0 && m.GetSelectedPR() < len(m.repository.PRs) {
+		pr := m.repository.PRs[m.GetSelectedPR()]
 		if pr.State != "open" {
 			m.statusMessage = "Can only close open PRs"
 			return m, nil
@@ -457,8 +451,8 @@ func (m *Model) handleToggleStatusChangeMode() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleStartBookmarkFromTicket() (tea.Model, tea.Cmd) {
-	if m.viewMode == ViewTickets && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) && m.jjService != nil {
-		ticket := m.ticketList[m.selectedTicket]
+	if m.viewMode == ViewTickets && m.GetSelectedTicket() >= 0 && m.GetSelectedTicket() < len(m.ticketList) && m.jjService != nil {
+		ticket := m.ticketList[m.GetSelectedTicket()]
 		m.startBookmarkFromTicket(ticket)
 	}
 	return m, nil
@@ -468,7 +462,7 @@ func (m *Model) handleTransitionToInProgress() (tea.Model, tea.Cmd) {
 	if m.viewMode != ViewTickets || m.ticketService == nil || !m.statusChangeMode || m.transitionInProgress {
 		return m, nil
 	}
-	if m.selectedTicket < 0 || m.selectedTicket >= len(m.ticketList) {
+	if m.GetSelectedTicket() < 0 || m.GetSelectedTicket() >= len(m.ticketList) {
 		return m, nil
 	}
 	// Find "in progress" transition (must contain "progress" or "start" but NOT "not start")
@@ -479,7 +473,7 @@ func (m *Model) handleTransitionToInProgress() (tea.Model, tea.Cmd) {
 		if isInProgress {
 			m.transitionInProgress = true
 			m.ticketsTabModel.SetTransitionInProgress(true)
-			ticket := m.ticketList[m.selectedTicket]
+			ticket := m.ticketList[m.GetSelectedTicket()]
 			m.statusMessage = fmt.Sprintf("Setting %s to %s...", ticket.DisplayKey, t.Name)
 			return m, m.transitionTicket(t.ID)
 		}
@@ -492,7 +486,7 @@ func (m *Model) handleTransitionToDone() (tea.Model, tea.Cmd) {
 	if m.viewMode != ViewTickets || m.ticketService == nil || !m.statusChangeMode || m.transitionInProgress {
 		return m, nil
 	}
-	if m.selectedTicket < 0 || m.selectedTicket >= len(m.ticketList) {
+	if m.GetSelectedTicket() < 0 || m.GetSelectedTicket() >= len(m.ticketList) {
 		return m, nil
 	}
 	// Find "done" transition
@@ -501,7 +495,7 @@ func (m *Model) handleTransitionToDone() (tea.Model, tea.Cmd) {
 		if strings.Contains(lowerName, "done") || strings.Contains(lowerName, "complete") || strings.Contains(lowerName, "resolve") {
 			m.transitionInProgress = true
 			m.ticketsTabModel.SetTransitionInProgress(true)
-			ticket := m.ticketList[m.selectedTicket]
+			ticket := m.ticketList[m.GetSelectedTicket()]
 			m.statusMessage = fmt.Sprintf("Setting %s to %s...", ticket.DisplayKey, t.Name)
 			return m, m.transitionTicket(t.ID)
 		}
@@ -514,7 +508,7 @@ func (m *Model) handleTransitionToBlocked() (tea.Model, tea.Cmd) {
 	if m.viewMode != ViewTickets || m.ticketService == nil || !m.statusChangeMode || m.transitionInProgress {
 		return m, nil
 	}
-	if m.selectedTicket < 0 || m.selectedTicket >= len(m.ticketList) {
+	if m.GetSelectedTicket() < 0 || m.GetSelectedTicket() >= len(m.ticketList) {
 		return m, nil
 	}
 	// Find "blocked" transition
@@ -523,7 +517,7 @@ func (m *Model) handleTransitionToBlocked() (tea.Model, tea.Cmd) {
 		if strings.Contains(lowerName, "block") {
 			m.transitionInProgress = true
 			m.ticketsTabModel.SetTransitionInProgress(true)
-			ticket := m.ticketList[m.selectedTicket]
+			ticket := m.ticketList[m.GetSelectedTicket()]
 			m.statusMessage = fmt.Sprintf("Setting %s to %s...", ticket.DisplayKey, t.Name)
 			return m, m.transitionTicket(t.ID)
 		}
@@ -536,7 +530,7 @@ func (m *Model) handleTransitionToNotStarted() (tea.Model, tea.Cmd) {
 	if m.viewMode != ViewTickets || m.ticketService == nil || !m.statusChangeMode || m.transitionInProgress {
 		return m, nil
 	}
-	if m.selectedTicket < 0 || m.selectedTicket >= len(m.ticketList) {
+	if m.GetSelectedTicket() < 0 || m.GetSelectedTicket() >= len(m.ticketList) {
 		return m, nil
 	}
 	// Find "not started" transition
@@ -545,7 +539,7 @@ func (m *Model) handleTransitionToNotStarted() (tea.Model, tea.Cmd) {
 		if strings.Contains(lowerName, "not") && strings.Contains(lowerName, "start") {
 			m.transitionInProgress = true
 			m.ticketsTabModel.SetTransitionInProgress(true)
-			ticket := m.ticketList[m.selectedTicket]
+			ticket := m.ticketList[m.GetSelectedTicket()]
 			m.statusMessage = fmt.Sprintf("Setting %s to %s...", ticket.DisplayKey, t.Name)
 			return m, m.transitionTicket(t.ID)
 		}
@@ -612,24 +606,23 @@ func (m *Model) handleMoveFileUp() (tea.Model, tea.Cmd) {
 	if m.viewMode != ViewCommitGraph || m.graphFocused {
 		return m, nil
 	}
-	if m.jjService == nil || len(m.changedFiles) == 0 {
+	changedFiles := m.graphTabModel.GetChangedFiles()
+	if m.jjService == nil || len(changedFiles) == 0 {
 		return m, nil
 	}
-	if m.selectedFile < 0 || m.selectedFile >= len(m.changedFiles) {
+	selFile := m.graphTabModel.GetSelectedFile()
+	if selFile < 0 || selFile >= len(changedFiles) {
 		return m, nil
 	}
-
-	// Get the selected commit and verify it's mutable
-	if m.repository == nil || m.selectedCommit < 0 || m.selectedCommit >= len(m.repository.Graph.Commits) {
+	if m.repository == nil || m.GetSelectedCommit() < 0 || m.GetSelectedCommit() >= len(m.repository.Graph.Commits) {
 		return m, nil
 	}
-	commit := m.repository.Graph.Commits[m.selectedCommit]
+	commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
 	if commit.Immutable {
 		m.statusMessage = "Cannot move file: commit is immutable"
 		return m, nil
 	}
-
-	file := m.changedFiles[m.selectedFile]
+	file := changedFiles[selFile]
 	commitID := commit.ChangeID
 	// "Move to Parent" - creates a new commit BEFORE this one (toward main/root)
 	m.statusMessage = fmt.Sprintf("Moving %s to new parent commit...", file.Path)
@@ -640,24 +633,23 @@ func (m *Model) handleMoveFileDown() (tea.Model, tea.Cmd) {
 	if m.viewMode != ViewCommitGraph || m.graphFocused {
 		return m, nil
 	}
-	if m.jjService == nil || len(m.changedFiles) == 0 {
+	changedFiles := m.graphTabModel.GetChangedFiles()
+	if m.jjService == nil || len(changedFiles) == 0 {
 		return m, nil
 	}
-	if m.selectedFile < 0 || m.selectedFile >= len(m.changedFiles) {
+	selFile := m.graphTabModel.GetSelectedFile()
+	if selFile < 0 || selFile >= len(changedFiles) {
 		return m, nil
 	}
-
-	// Get the selected commit and verify it's mutable
-	if m.repository == nil || m.selectedCommit < 0 || m.selectedCommit >= len(m.repository.Graph.Commits) {
+	if m.repository == nil || m.GetSelectedCommit() < 0 || m.GetSelectedCommit() >= len(m.repository.Graph.Commits) {
 		return m, nil
 	}
-	commit := m.repository.Graph.Commits[m.selectedCommit]
+	commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
 	if commit.Immutable {
 		m.statusMessage = "Cannot move file: commit is immutable"
 		return m, nil
 	}
-
-	file := m.changedFiles[m.selectedFile]
+	file := changedFiles[selFile]
 	commitID := commit.ChangeID
 	// "Move to Child" - creates a new commit AFTER this one (toward tips/branches)
 	m.statusMessage = fmt.Sprintf("Moving %s to new child commit...", file.Path)
@@ -668,24 +660,23 @@ func (m *Model) handleRevertFile() (tea.Model, tea.Cmd) {
 	if m.viewMode != ViewCommitGraph || m.graphFocused {
 		return m, nil
 	}
-	if m.jjService == nil || len(m.changedFiles) == 0 {
+	changedFiles := m.graphTabModel.GetChangedFiles()
+	if m.jjService == nil || len(changedFiles) == 0 {
 		return m, nil
 	}
-	if m.selectedFile < 0 || m.selectedFile >= len(m.changedFiles) {
+	selFile := m.graphTabModel.GetSelectedFile()
+	if selFile < 0 || selFile >= len(changedFiles) {
 		return m, nil
 	}
-
-	// Get the selected commit and verify it's mutable
-	if m.repository == nil || m.selectedCommit < 0 || m.selectedCommit >= len(m.repository.Graph.Commits) {
+	if m.repository == nil || m.GetSelectedCommit() < 0 || m.GetSelectedCommit() >= len(m.repository.Graph.Commits) {
 		return m, nil
 	}
-	commit := m.repository.Graph.Commits[m.selectedCommit]
+	commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
 	if commit.Immutable {
 		m.statusMessage = "Cannot revert file: commit is immutable"
 		return m, nil
 	}
-
-	file := m.changedFiles[m.selectedFile]
+	file := changedFiles[selFile]
 	commitID := commit.ChangeID
 	m.statusMessage = fmt.Sprintf("Reverting changes to %s...", file.Path)
 	return m, m.revertFile(commitID, file.Path)

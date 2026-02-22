@@ -36,7 +36,7 @@ func (m *Model) createNewCommit() tea.Cmd {
 	if m.isSelectedCommitValid() {
 		// Always use the selected commit as parent - creating a child of any commit
 		// (including immutable ones like main) is valid since we're not modifying the parent
-		commit := m.repository.Graph.Commits[m.selectedCommit]
+		commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
 		parentCommitID = commit.ChangeID
 	}
 	return actions.NewCommit(m.jjService, parentCommitID)
@@ -46,14 +46,14 @@ func (m *Model) checkoutCommit() tea.Cmd {
 	if !m.isSelectedCommitValid() {
 		return nil
 	}
-	return actions.Checkout(m.jjService, m.repository.Graph.Commits[m.selectedCommit].ChangeID)
+	return actions.Checkout(m.jjService, m.repository.Graph.Commits[m.GetSelectedCommit()].ChangeID)
 }
 
 func (m *Model) squashCommit() tea.Cmd {
 	if !m.isSelectedCommitValid() {
 		return nil
 	}
-	commit := m.repository.Graph.Commits[m.selectedCommit]
+	commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
 	m.statusMessage = fmt.Sprintf("Squashing %s...", commit.ShortID)
 	return actions.Squash(m.jjService, commit.ChangeID)
 }
@@ -62,7 +62,7 @@ func (m *Model) abandonCommit() tea.Cmd {
 	if !m.isSelectedCommitValid() {
 		return nil
 	}
-	commit := m.repository.Graph.Commits[m.selectedCommit]
+	commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
 	m.statusMessage = fmt.Sprintf("Abandoning %s...", commit.ShortID)
 	return actions.Abandon(m.jjService, commit.ChangeID)
 }
@@ -83,9 +83,10 @@ func (m *Model) startRebaseMode() {
 	if !m.isSelectedCommitValid() {
 		return
 	}
-	commit := m.repository.Graph.Commits[m.selectedCommit]
+	idx := m.GetSelectedCommit()
+	commit := m.repository.Graph.Commits[idx]
 	m.selectionMode = SelectionRebaseDestination
-	m.rebaseSourceCommit = m.selectedCommit
+	m.rebaseSourceCommit = idx
 	m.statusMessage = fmt.Sprintf("Select destination for rebasing %s (Esc to cancel)", commit.ShortID)
 }
 
@@ -142,12 +143,13 @@ func (m *Model) startCreateBookmark() {
 		return
 	}
 
-	commit := m.repository.Graph.Commits[m.selectedCommit]
-	m.bookmarkCommitIdx = m.selectedCommit
+	idx := m.GetSelectedCommit()
+	commit := m.repository.Graph.Commits[idx]
+	m.bookmarkCommitIdx = idx
 	m.bookmarkNameInput.SetValue("")
 	m.bookmarkNameInput.Focus()
 	m.bookmarkNameInput.Width = m.width - 10
-	m.existingBookmarks = actions.GetExistingBookmarks(m.repository, m.selectedCommit)
+	m.existingBookmarks = actions.GetExistingBookmarks(m.repository, idx)
 	m.selectedBookmarkIdx = -1
 	m.bookmarkNameExists = false // Reset when starting
 
@@ -229,7 +231,7 @@ func (m *Model) deleteBookmark() tea.Cmd {
 		return nil
 	}
 
-	commit := m.repository.Graph.Commits[m.selectedCommit]
+	commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
 	if len(commit.Branches) == 0 {
 		m.statusMessage = "No bookmark on this commit to delete"
 		return nil
@@ -252,7 +254,8 @@ func (m *Model) startCreatePR() {
 		return
 	}
 
-	commit := m.repository.Graph.Commits[m.selectedCommit]
+	idx := m.GetSelectedCommit()
+	commit := m.repository.Graph.Commits[idx]
 	var headBranch string
 	var needsMoveBookmark bool
 
@@ -260,7 +263,7 @@ func (m *Model) startCreatePR() {
 		headBranch = commit.Branches[0]
 		needsMoveBookmark = false
 	} else {
-		headBranch = m.findBookmarkForCommit(m.selectedCommit)
+		headBranch = m.findBookmarkForCommit(idx)
 		if headBranch == "" {
 			m.statusMessage = "No bookmark found. Create one first with 'b'."
 			return
@@ -268,7 +271,7 @@ func (m *Model) startCreatePR() {
 		needsMoveBookmark = true
 	}
 
-	m.prCommitIndex = m.selectedCommit
+	m.prCommitIndex = idx
 	m.prHeadBranch = headBranch
 	m.prBaseBranch = "main"
 	m.prFocusedField = 0

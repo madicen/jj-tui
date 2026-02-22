@@ -48,9 +48,7 @@ type Model struct {
 	viewMode       ViewMode
 	width          int
 	height         int
-	selectedCommit int
-	selectedPR     int
-	selectedTicket int
+	// Selection state lives in tab models: graph (commit/file), prs, tickets, branches
 	statusMessage  string
 	err            error
 	loading        bool
@@ -72,27 +70,21 @@ type Model struct {
 	warningCommits     []internal.Commit // commits with issues (for display)
 	warningSelectedIdx int               // selected commit index in warning modal
 
-	// Changed files for selected commit
-	changedFiles         []jj.ChangedFile
-	changedFilesCommitID string // Which commit the files are for
-	selectedFile         int    // Index of selected file in changed files list (-1 = none)
-
 	// Viewports for scrollable content
 	viewport      viewport.Model // Main viewport (graph or other content)
 	filesViewport viewport.Model // Secondary viewport for changed files in graph view
 	viewportReady bool
 	graphFocused  bool // True if graph viewport has focus, false if files viewport
 
-	// Rebase mode state
+	// Rebase mode state (synced to/from graph tab)
 	selectionMode      SelectionMode
 	rebaseSourceCommit int // Index of commit being rebased
 
-	// Ticket state (Jira, Codecks, etc.)
+	// Ticket state (Jira, Codecks, etc.) - ticketList and transitions; selection in tickets tab
 	ticketList []tickets.Ticket
 
-	// Branch state
-	branchList     []internal.Branch
-	selectedBranch int
+	// Branch state (selection in branches tab)
+	branchList []internal.Branch
 
 	// Description editing
 	descriptionInput textarea.Model
@@ -267,36 +259,32 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		// Delegate to tab models for their specific views
+		// Delegate to tab models for their specific views (tabs own selection state)
 		switch m.viewMode {
 		case ViewCommitGraph:
-			m.graphTabModel.SelectCommit(m.selectedCommit)
 			m.graphTabModel.SetSelectionMode(graphtab.SelectionMode(m.selectionMode))
 			m.graphTabModel.SetRebaseSourceCommit(m.rebaseSourceCommit)
 			cmds := PropagateUpdate(msg, &m.graphTabModel)
-			m.selectedCommit = m.graphTabModel.GetSelectedCommit()
 			m.selectionMode = SelectionMode(m.graphTabModel.GetSelectionMode())
 			m.rebaseSourceCommit = m.graphTabModel.GetRebaseSourceCommit()
+			m.graphFocused = m.graphTabModel.IsGraphFocused()
 			if len(cmds) > 0 && cmds[0] != nil {
 				return m, cmds[0]
 			}
 			// Fall through to handleKeyMsg for graph-specific commands
 		case ViewPullRequests:
 			cmds := PropagateUpdate(msg, &m.prsTabModel)
-			m.selectedPR = m.prsTabModel.GetSelectedPR()
 			if len(cmds) > 0 && cmds[0] != nil {
 				return m, cmds[0]
 			}
 			// Fall through to handleKeyMsg for non-delegated keys
 		case ViewBranches:
 			cmds := PropagateUpdate(msg, &m.branchesTabModel)
-			m.selectedBranch = m.branchesTabModel.GetSelectedBranch()
 			if len(cmds) > 0 && cmds[0] != nil {
 				return m, cmds[0]
 			}
 		case ViewTickets:
 			cmds := PropagateUpdate(msg, &m.ticketsTabModel)
-			m.selectedTicket = m.ticketsTabModel.GetSelectedTicket()
 			if len(cmds) > 0 && cmds[0] != nil {
 				return m, cmds[0]
 			}
@@ -363,7 +351,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.statusMessage = fmt.Sprintf("Loaded %d commits", len(msg.repository.Graph.Commits))
 
-		// Sync repository to tab models
+		// Sync repository to tab models (graph tab preserves selection by ChangeID in UpdateRepository)
 		m.graphTabModel.UpdateRepository(m.repository)
 		m.prsTabModel.UpdateRepository(m.repository)
 		m.prsTabModel.SetGithubService(m.isGitHubAvailable())
@@ -376,35 +364,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmds []tea.Cmd
 		cmds = append(cmds, m.tickCmd())
 
-		// Also refresh PRs when GitHub is connected (needed for Update PR button)
 		if m.githubService != nil {
 			cmds = append(cmds, m.loadPRs())
 		}
 
-		// Re-sync selection by ChangeID if we have one tracked
-		if m.changedFilesCommitID != "" {
-			found := false
-			for i, commit := range msg.repository.Graph.Commits {
-				if commit.ChangeID == m.changedFilesCommitID {
-					m.selectedCommit = i
-					found = true
-					break
-				}
-			}
-			if !found {
-				// Commit no longer exists, reset selection
-				m.selectedCommit = -1
-				m.changedFilesCommitID = ""
-			}
-		}
-
-		// Auto-select first commit if none selected
-		if m.selectedCommit == -1 && len(msg.repository.Graph.Commits) > 0 {
-			m.selectedCommit = 0
-			// Load changed files for the auto-selected commit
-			commit := msg.repository.Graph.Commits[0]
-			m.changedFilesCommitID = commit.ChangeID
-			cmds = append(cmds, m.loadChangedFiles(commit.ChangeID))
+		// Initial selection: if graph tab has no valid selection, select first commit and load its files
+		commits := msg.repository.Graph.Commits
+		if len(commits) > 0 && m.graphTabModel.GetSelectedCommit() < 0 {
+			m.graphTabModel.SelectCommit(0)
+			cmds = append(cmds, m.loadChangedFiles(commits[0].ChangeID))
 		}
 		return m, tea.Batch(cmds...)
 
@@ -418,10 +386,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.repository.PRs = oldPRs // Restore PRs temporarily
 		m.loading = false
 		// Don't clear m.err here - let errors persist until dismissed
-		// Find and select the working copy commit
+		// Find and select the working copy commit (graph tab owns selection)
 		for i, commit := range msg.repository.Graph.Commits {
 			if commit.IsWorking {
-				m.selectedCommit = i
+				m.graphTabModel.SelectCommit(i)
 				break
 			}
 		}
@@ -449,7 +417,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.repository = msg.repository
 			m.repository.PRs = oldPRs // Restore PRs
-			// Sync repository to tab models so they render updated data
+			// Sync repository to tab models (graph tab preserves selection in UpdateRepository)
 			m.graphTabModel.UpdateRepository(m.repository)
 			m.prsTabModel.UpdateRepository(m.repository)
 			m.prsTabModel.SetGithubService(m.isGitHubAvailable())
@@ -464,30 +432,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.statusMessage = fmt.Sprintf("Updated: %d commits", newCount)
 			}
 
-			// Re-sync selection by ChangeID if we have one tracked
-			if m.changedFilesCommitID != "" {
-				found := false
-				for i, commit := range msg.repository.Graph.Commits {
-					if commit.ChangeID == m.changedFilesCommitID {
-						m.selectedCommit = i
-						found = true
-						break
-					}
-				}
-				if !found {
-					// Commit no longer exists, reset selection
-					m.selectedCommit = -1
-					m.changedFilesCommitID = ""
-				}
-			}
-
-			// Ensure selection is still valid
-			if m.selectedCommit >= newCount {
-				m.selectedCommit = newCount - 1
-			}
-			if m.selectedCommit == -1 && newCount > 0 {
-				m.selectedCommit = 0
-			}
 		}
 		return m, nil
 
@@ -549,10 +493,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// Auto-select first commit if none selected and load its changed files
-		if m.selectedCommit == -1 && len(msg.repository.Graph.Commits) > 0 {
-			m.selectedCommit = 0
+		if m.graphTabModel.GetSelectedCommit() < 0 && len(msg.repository.Graph.Commits) > 0 {
+			m.graphTabModel.SelectCommit(0)
 			commit := msg.repository.Graph.Commits[0]
-			m.changedFilesCommitID = commit.ChangeID
 			cmds = append(cmds, m.loadChangedFiles(commit.ChangeID))
 		}
 
@@ -607,7 +550,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			providerName = m.ticketService.GetProviderName()
 		}
 		m.ticketsTabModel.SetTicketServiceInfo(providerName, m.ticketService != nil)
-		m.selectedTicket = m.ticketsTabModel.GetSelectedTicket()
 		// Only update status if there's no existing error
 		if m.err == nil {
 			pName := "tickets"
@@ -648,7 +590,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.branchList = msg.branches
 			m.branchesTabModel.UpdateBranches(msg.branches)
-			m.selectedBranch = m.branchesTabModel.GetSelectedBranch()
 			if m.err == nil && m.viewMode != ViewCreateBookmark {
 				m.statusMessage = fmt.Sprintf("Loaded %d branches", len(msg.branches))
 			}
@@ -880,10 +821,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.loadRepository()
 
 	case fileMoveCompletedMsg:
-		// Save the ChangeID of the commit we were working on before updating
-		originalCommitID := m.changedFilesCommitID
+		originalCommitID := m.graphTabModel.GetChangedFilesCommitID()
 
-		// Update repository with new state
 		if m.repository != nil {
 			oldPRs := m.repository.PRs
 			m.repository = msg.repository
@@ -897,32 +836,24 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.statusMessage = fmt.Sprintf("Moved %s to %s", msg.filePath, directionText)
 
-		// Find the original commit by ChangeID and update the selected index
-		// This is important because the graph structure may have changed
+		m.graphTabModel.UpdateRepository(m.repository)
 		for i, commit := range msg.repository.Graph.Commits {
 			if commit.ChangeID == originalCommitID {
-				m.selectedCommit = i
+				m.graphTabModel.SelectCommit(i)
 				break
 			}
 		}
 
-		// Reload repository and changed files
 		var cmds []tea.Cmd
 		cmds = append(cmds, m.loadRepository())
-
-		// Reload changed files for the commit we were working on
 		if originalCommitID != "" {
-			m.changedFilesCommitID = originalCommitID
-			m.changedFiles = nil // Clear old files
 			cmds = append(cmds, m.loadChangedFiles(originalCommitID))
 		}
 		return m, tea.Batch(cmds...)
 
 	case fileRevertedMsg:
-		// Save the ChangeID of the commit we were working on
-		originalCommitID := m.changedFilesCommitID
+		originalCommitID := m.graphTabModel.GetChangedFilesCommitID()
 
-		// Update repository with new state
 		if m.repository != nil {
 			oldPRs := m.repository.PRs
 			m.repository = msg.repository
@@ -932,24 +863,23 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.statusMessage = fmt.Sprintf("Reverted changes to %s", msg.filePath)
 
-		// Reload repository and changed files
+		m.graphTabModel.UpdateRepository(m.repository)
+		for i, commit := range msg.repository.Graph.Commits {
+			if commit.ChangeID == originalCommitID {
+				m.graphTabModel.SelectCommit(i)
+				break
+			}
+		}
+
 		var cmds []tea.Cmd
 		cmds = append(cmds, m.loadRepository())
-
-		// Reload changed files for the commit we were working on
 		if originalCommitID != "" {
-			m.changedFilesCommitID = originalCommitID
-			m.changedFiles = nil // Clear old files
 			cmds = append(cmds, m.loadChangedFiles(originalCommitID))
 		}
 		return m, tea.Batch(cmds...)
 
 	case changedFilesLoadedMsg:
-		// Only update if the files are for the currently selected commit
-		if msg.commitID == m.changedFilesCommitID {
-			m.changedFiles = msg.files
-			m.selectedFile = 0 // Reset file selection when files are loaded
-		}
+		m.graphTabModel.SetChangedFiles(msg.files, msg.commitID)
 		return m, nil
 
 	case tickMsg:

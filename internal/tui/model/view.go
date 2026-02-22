@@ -60,8 +60,7 @@ func (m *Model) View() string {
 	var content string
 	switch m.viewMode {
 	case ViewCommitGraph:
-		// Keep graph tab in sync with main selection and rebase state (e.g. when set by tests or handlers)
-		m.graphTabModel.SelectCommit(m.selectedCommit)
+		// Keep graph tab in sync with rebase state (selection lives in graph tab)
 		m.graphTabModel.SetSelectionMode(graph.SelectionMode(m.selectionMode))
 		m.graphTabModel.SetRebaseSourceCommit(m.rebaseSourceCommit)
 		content = m.graphTabModel.View()
@@ -110,7 +109,7 @@ func (m *Model) View() string {
 		content = m.renderGraphContent()
 	}
 
-	// Keep header and footer always visible: put inner content in a viewport with height = total - header - footer
+	// Keep header and footer always visible: show a slice of inner content (viewport stores scroll state)
 	headerHeight := strings.Count(header, "\n") + 1
 	statusHeight := strings.Count(statusBar, "\n") + 1
 	contentHeight := max(m.height-headerHeight-statusHeight, 1)
@@ -126,7 +125,22 @@ func (m *Model) View() string {
 				m.viewport.YOffset = maxOffset
 			}
 		}
-		content = m.viewport.View()
+		// Slice visible lines ourselves so zone markup (bubblezone) is preserved for mouse hit-testing.
+		// viewport.View() uses lipgloss with Width/Height which can alter or strip zone escape sequences.
+		contentLines := strings.Split(content, "\n")
+		yOff := m.viewport.YOffset
+		if yOff < 0 {
+			yOff = 0
+		}
+		end := min(yOff+contentHeight, len(contentLines))
+		start := min(yOff, end)
+		if start < end {
+			content = strings.Join(contentLines[start:end], "\n")
+		} else if len(contentLines) > 0 && start < len(contentLines) {
+			content = contentLines[start]
+		} else {
+			content = ""
+		}
 	}
 
 	v := lipgloss.JoinVertical(
@@ -150,7 +164,7 @@ func (m *Model) centerModal(content string) string {
 	return m.zoneManager.Scan(centered)
 }
 
-// renderWithHeader renders content with the standard header
+// renderWithHeader renders content with the standard header (preserves zone markup for mouse)
 func (m *Model) renderWithHeader(content string) string {
 	header := m.renderHeader()
 	statusBar := m.renderStatusBar()
@@ -161,10 +175,26 @@ func (m *Model) renderWithHeader(content string) string {
 	m.viewport.Height = fullContentHeight
 	m.viewport.SetContent(content)
 
+	contentLines := strings.Split(content, "\n")
+	yOff := m.viewport.YOffset
+	if yOff < 0 {
+		yOff = 0
+	}
+	end := min(yOff+fullContentHeight, len(contentLines))
+	start := min(yOff, end)
+	var visible string
+	if start < end {
+		visible = strings.Join(contentLines[start:end], "\n")
+	} else if len(contentLines) > 0 && start < len(contentLines) {
+		visible = contentLines[start]
+	} else {
+		visible = ""
+	}
+
 	v := lipgloss.JoinVertical(
 		lipgloss.Left,
 		header,
-		m.viewport.View(),
+		visible,
 		statusBar,
 	)
 	return m.zoneManager.Scan(v)
@@ -267,7 +297,6 @@ func (m *Model) renderContent() string {
 	} else {
 		switch m.viewMode {
 		case ViewCommitGraph:
-			m.graphTabModel.SelectCommit(m.selectedCommit)
 			m.graphTabModel.SetSelectionMode(graph.SelectionMode(m.selectionMode))
 			m.graphTabModel.SetRebaseSourceCommit(m.rebaseSourceCommit)
 			content = m.graphTabModel.View()

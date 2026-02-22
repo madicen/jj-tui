@@ -132,10 +132,34 @@ func (m GraphModel) handleZoneClick(zone *zone.ZoneInfo) (GraphModel, tea.Cmd) {
 	return m, nil
 }
 
-// UpdateRepository updates the graph model with new repository data
+// UpdateRepository updates the graph model with new repository data.
+// Preserves selection by ChangeID so it survives refresh (no reset).
 func (m *GraphModel) UpdateRepository(repo *internal.Repository) {
-	if repo != nil {
-		m.repository = repo
+	if repo == nil {
+		return
+	}
+	oldCommitID := m.changedFilesCommitID
+	m.repository = repo
+	commits := repo.Graph.Commits
+	// Re-resolve selection by ChangeID so refresh doesn't reset it
+	if oldCommitID != "" && len(commits) > 0 {
+		found := false
+		for i, c := range commits {
+			if c.ChangeID == oldCommitID {
+				m.selectedCommit = i
+				found = true
+				break
+			}
+		}
+		if !found {
+			m.selectedCommit = 0
+			m.changedFilesCommitID = ""
+			m.changedFiles = nil
+		}
+	}
+	// Clamp selection if repo shrunk
+	if m.selectedCommit >= len(commits) {
+		m.selectedCommit = max(0, len(commits)-1)
 	}
 }
 
@@ -145,17 +169,20 @@ func (m *GraphModel) SetDimensions(width, height int) {
 	m.height = height
 }
 
-// SetChangedFiles updates the changed files for the selected commit
+// SetChangedFiles updates the changed files for the selected commit (only if commitID matches current selection)
 func (m *GraphModel) SetChangedFiles(files []jj.ChangedFile, commitID string) {
-	m.changedFilesCommitID = commitID
+	if commitID != m.changedFilesCommitID {
+		return // Stale load (user selected another commit before this finished)
+	}
 	m.changedFiles = files
 	m.selectedFile = 0
 }
 
-// SelectCommit selects a commit by index
+// SelectCommit selects a commit by index and sets changedFilesCommitID so refresh can re-resolve selection
 func (m *GraphModel) SelectCommit(idx int) {
 	if m.repository != nil && idx >= 0 && idx < len(m.repository.Graph.Commits) {
 		m.selectedCommit = idx
+		m.changedFilesCommitID = m.repository.Graph.Commits[idx].ChangeID
 	}
 }
 
@@ -189,14 +216,31 @@ func (m *GraphModel) GetSelectedFile() int {
 	return m.selectedFile
 }
 
+// SetSelectedFile sets the selected file index (e.g. from main model mouse handler)
+func (m *GraphModel) SetSelectedFile(idx int) {
+	if idx >= -1 && idx < len(m.changedFiles) {
+		m.selectedFile = idx
+	}
+}
+
 // IsGraphFocused returns whether the graph pane has focus
 func (m *GraphModel) IsGraphFocused() bool {
 	return m.graphFocused
 }
 
+// SetGraphFocused sets whether the graph pane has focus (e.g. from main model pane click)
+func (m *GraphModel) SetGraphFocused(focused bool) {
+	m.graphFocused = focused
+}
+
 // GetChangedFiles returns the changed files for the selected commit
 func (m *GraphModel) GetChangedFiles() []jj.ChangedFile {
 	return m.changedFiles
+}
+
+// GetChangedFilesCommitID returns the ChangeID for which changed files are loaded (for reload after file ops)
+func (m *GraphModel) GetChangedFilesCommitID() string {
+	return m.changedFilesCommitID
 }
 
 // SetViewport sets the graph viewport (for scrolling support)

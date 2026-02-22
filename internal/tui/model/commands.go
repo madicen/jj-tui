@@ -463,13 +463,13 @@ func (m *Model) loadTickets() tea.Cmd {
 
 // loadTransitions loads the available transitions for the selected ticket
 func (m *Model) loadTransitions() tea.Cmd {
-	if m.ticketService == nil || m.selectedTicket < 0 || m.selectedTicket >= len(m.ticketList) {
+	if m.ticketService == nil || m.GetSelectedTicket() < 0 || m.GetSelectedTicket() >= len(m.ticketList) {
 		return func() tea.Msg {
 			return transitionsLoadedMsg{transitions: nil}
 		}
 	}
 
-	ticket := m.ticketList[m.selectedTicket]
+	ticket := m.ticketList[m.GetSelectedTicket()]
 	svc := m.ticketService
 
 	return func() tea.Msg {
@@ -484,11 +484,11 @@ func (m *Model) loadTransitions() tea.Cmd {
 
 // transitionTicket executes a status transition on the selected ticket
 func (m *Model) transitionTicket(transitionID string) tea.Cmd {
-	if m.ticketService == nil || m.selectedTicket < 0 || m.selectedTicket >= len(m.ticketList) {
+	if m.ticketService == nil || m.GetSelectedTicket() < 0 || m.GetSelectedTicket() >= len(m.ticketList) {
 		return nil
 	}
 
-	ticket := m.ticketList[m.selectedTicket]
+	ticket := m.ticketList[m.GetSelectedTicket()]
 	svc := m.ticketService
 
 	return func() tea.Msg {

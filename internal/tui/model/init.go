@@ -88,7 +88,6 @@ func New(ctx context.Context) *Model {
 		ctx:                       ctx,
 		zoneManager:               zm,
 		viewMode:                  ViewCommitGraph,
-		selectedCommit:            -1,
 		statusMessage:             "Initializing...",
 		loading:                   true,
 		descriptionInput:          ta,

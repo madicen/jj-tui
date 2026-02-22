@@ -57,7 +57,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				// Find this commit in the graph and select it
 				for i, c := range m.repository.Graph.Commits {
 					if c.ChangeID == selectedCommit.ChangeID {
-						m.selectedCommit = i
+						m.graphTabModel.SelectCommit(i)
 						m.showWarningModal = false
 						m.warningCommits = nil
 						// Start editing description
@@ -291,8 +291,8 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "enter", "e":
 		// In PR view, open the PR in browser
-		if m.viewMode == ViewPullRequests && m.repository != nil && m.selectedPR >= 0 && m.selectedPR < len(m.repository.PRs) {
-			pr := m.repository.PRs[m.selectedPR]
+		if m.viewMode == ViewPullRequests && m.repository != nil && m.GetSelectedPR() >= 0 && m.GetSelectedPR() < len(m.repository.PRs) {
+			pr := m.repository.PRs[m.GetSelectedPR()]
 			if pr.URL != "" {
 				if m.demoMode {
 					m.statusMessage = fmt.Sprintf("PR #%d: %s (demo mode - browser disabled)", pr.Number, pr.URL)
@@ -303,8 +303,8 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		// In Tickets view, start bookmark creation from ticket
-		if m.viewMode == ViewTickets && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) && m.jjService != nil {
-			ticket := m.ticketList[m.selectedTicket]
+		if m.viewMode == ViewTickets && m.GetSelectedTicket() >= 0 && m.GetSelectedTicket() < len(m.ticketList) && m.jjService != nil {
+			ticket := m.ticketList[m.GetSelectedTicket()]
 			m.startBookmarkFromTicket(ticket)
 			return m, nil
 		}
@@ -331,7 +331,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "x":
 		// Delete bookmark from selected commit (Graph view)
 		if m.viewMode == ViewCommitGraph && m.isSelectedCommitValid() && m.jjService != nil {
-			commit := m.repository.Graph.Commits[m.selectedCommit]
+			commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
 			if len(commit.Branches) == 0 {
 				m.statusMessage = "No bookmark on this commit to delete"
 				return m, nil
@@ -541,21 +541,21 @@ func (m *Model) handleRebaseModeKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.cancelRebaseMode()
 		return m, nil
 	case "j", "down":
-		// Move down in commit list
-		if m.repository != nil && m.selectedCommit < len(m.repository.Graph.Commits)-1 {
-			m.selectedCommit++
+		cur := m.graphTabModel.GetSelectedCommit()
+		if m.repository != nil && cur < len(m.repository.Graph.Commits)-1 {
+			m.graphTabModel.SelectCommit(cur + 1)
 		}
 		return m, nil
 	case "k", "up":
-		// Move up in commit list
-		if m.selectedCommit > 0 {
-			m.selectedCommit--
+		cur := m.graphTabModel.GetSelectedCommit()
+		if cur > 0 {
+			m.graphTabModel.SelectCommit(cur - 1)
 		}
 		return m, nil
 	case "enter":
-		// Confirm rebase destination
-		if m.selectedCommit >= 0 && m.selectedCommit < len(m.repository.Graph.Commits) {
-			return m, m.performRebase(m.selectedCommit)
+		cur := m.graphTabModel.GetSelectedCommit()
+		if cur >= 0 && cur < len(m.repository.Graph.Commits) {
+			return m, m.performRebase(cur)
 		}
 		return m, nil
 	}

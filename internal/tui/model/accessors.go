@@ -14,9 +14,9 @@ func (m *Model) GetViewMode() ViewMode {
 	return m.viewMode
 }
 
-// GetSelectedCommit returns the selected commit index
+// GetSelectedCommit returns the selected commit index (from graph tab)
 func (m *Model) GetSelectedCommit() int {
-	return m.selectedCommit
+	return m.graphTabModel.GetSelectedCommit()
 }
 
 // GetStatusMessage returns the status message
@@ -29,14 +29,19 @@ func (m *Model) GetRepository() *internal.Repository {
 	return m.repository
 }
 
-// GetSelectedPR returns the selected PR index
+// GetSelectedPR returns the selected PR index (from PR tab)
 func (m *Model) GetSelectedPR() int {
-	return m.selectedPR
+	return m.prsTabModel.GetSelectedPR()
 }
 
-// GetSelectedTicket returns the selected ticket index
+// GetSelectedTicket returns the selected ticket index (from tickets tab)
 func (m *Model) GetSelectedTicket() int {
-	return m.selectedTicket
+	return m.ticketsTabModel.GetSelectedTicket()
+}
+
+// GetSelectedBranch returns the selected branch index (from branches tab)
+func (m *Model) GetSelectedBranch() int {
+	return m.branchesTabModel.GetSelectedBranch()
 }
 
 // GetSettingsFocusedField returns the focused settings field index
@@ -76,12 +81,12 @@ func (m *Model) SetViewMode(mode ViewMode) {
 
 // SetSelectedPR sets the selected PR index for testing
 func (m *Model) SetSelectedPR(idx int) {
-	m.selectedPR = idx
+	m.prsTabModel.SetSelectedPR(idx)
 }
 
 // SetSelectedTicket sets the selected ticket index for testing
 func (m *Model) SetSelectedTicket(idx int) {
-	m.selectedTicket = idx
+	m.ticketsTabModel.SetSelectedTicket(idx)
 }
 
 // SetLoading sets the loading state for testing

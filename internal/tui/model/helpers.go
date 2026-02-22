@@ -44,8 +44,8 @@ func openURL(url string) tea.Cmd {
 // isSelectedCommitValid returns true if selectedCommit points to a valid commit
 func (m *Model) isSelectedCommitValid() bool {
 	return m.repository != nil &&
-		m.selectedCommit >= 0 &&
-		m.selectedCommit < len(m.repository.Graph.Commits)
+		m.GetSelectedCommit() >= 0 &&
+		m.GetSelectedCommit() < len(m.repository.Graph.Commits)
 }
 
 // refreshRepository starts a refresh of the repository data.
@@ -89,7 +89,7 @@ func (m *Model) findCommitsWithEmptyDescriptions() []internal.Commit {
 
 	// Walk from selected commit back through parents until we hit an immutable commit
 	visited := make(map[string]bool)
-	queue := []int{m.selectedCommit}
+	queue := []int{m.GetSelectedCommit()}
 
 	// Build index for parent lookup
 	idToIndex := make(map[string]int)

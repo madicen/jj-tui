@@ -53,7 +53,7 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 				// Find this commit in the graph and select it
 				for i, c := range m.repository.Graph.Commits {
 					if c.ChangeID == selectedCommit.ChangeID {
-						m.selectedCommit = i
+						m.graphTabModel.SelectCommit(i)
 						m.showWarningModal = false
 						m.warningCommits = nil
 						// Start editing description
@@ -123,6 +123,7 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 		if userClicked(mouse.ZoneGraphPane) {
 			if !m.graphFocused {
 				m.graphFocused = true
+				m.graphTabModel.SetGraphFocused(true)
 				m.statusMessage = m.handleGraphFoucsMessage()
 			}
 			return m, nil
@@ -130,6 +131,7 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 		if userClicked(mouse.ZoneFilesPane) {
 			if m.graphFocused {
 				m.graphFocused = false
+				m.graphTabModel.SetGraphFocused(false)
 				m.statusMessage = m.handleGraphFoucsMessage()
 			}
 			return m, nil
@@ -192,10 +194,11 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 	}
 
 	// Check changed file zones (for clicking to select a file)
-	for i := range m.changedFiles {
+	changedFiles := m.graphTabModel.GetChangedFiles()
+	for i := range changedFiles {
 		if userClicked(mouse.ZoneChangedFile(i)) {
-			m.selectedFile = i
-			// When clicking a file, switch focus to files pane
+			m.graphTabModel.SetSelectedFile(i)
+			m.graphTabModel.SetGraphFocused(false)
 			m.graphFocused = false
 			return m, nil
 		}
@@ -205,7 +208,7 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 	if m.repository != nil {
 		for index := range m.repository.PRs {
 			if userClicked(mouse.ZonePR(index)) {
-				m.selectedPR = index
+				m.prsTabModel.SetSelectedPR(index)
 				return m, nil
 			}
 		}
@@ -331,7 +334,7 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 	// Check ticket zones
 	for i := range m.ticketList {
 		if userClicked(mouse.ZoneJiraTicket(i)) {
-			m.selectedTicket = i
+			m.ticketsTabModel.SetSelectedTicket(i)
 			return m, nil
 		}
 	}
@@ -351,10 +354,10 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 		for i, t := range m.availableTransitions {
 			zoneID := mouse.ZoneJiraTransition + fmt.Sprintf("%d", i)
 			if userClicked(zoneID) {
-				if m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
+				if m.GetSelectedTicket() >= 0 && m.GetSelectedTicket() < len(m.ticketList) {
 					m.transitionInProgress = true
 					m.ticketsTabModel.SetTransitionInProgress(true)
-					ticket := m.ticketList[m.selectedTicket]
+					ticket := m.ticketList[m.GetSelectedTicket()]
 					m.statusMessage = fmt.Sprintf("Setting %s to %s...", ticket.DisplayKey, t.Name)
 					return m, m.transitionTicket(t.ID)
 				}
@@ -372,7 +375,7 @@ func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd)
 	// Check branch zones
 	for i := range m.branchList {
 		if userClicked(mouse.ZoneBranch(i)) {
-			m.selectedBranch = i
+			m.branchesTabModel.SetSelectedBranch(i)
 			return m, nil
 		}
 	}
@@ -682,7 +685,7 @@ func (m *Model) handleAction(action ActionType) (tea.Model, tea.Cmd) {
 		m.viewMode = ViewCreatePR
 	case ActionCheckout, ActionEdit:
 		if m.isSelectedCommitValid() && m.jjService != nil {
-			commit := m.repository.Graph.Commits[m.selectedCommit]
+			commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
 			if commit.Immutable {
 				m.statusMessage = "Cannot edit: commit is immutable"
 				return m, nil
@@ -691,7 +694,7 @@ func (m *Model) handleAction(action ActionType) (tea.Model, tea.Cmd) {
 		}
 	case ActionSquash:
 		if m.isSelectedCommitValid() && m.jjService != nil {
-			commit := m.repository.Graph.Commits[m.selectedCommit]
+			commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
 			if commit.Immutable {
 				m.statusMessage = "Cannot squash: commit is immutable"
 				return m, nil
