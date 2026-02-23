@@ -10,9 +10,8 @@ import (
 type Model struct {
 	urlInput      textinput.Model
 	userInput     textinput.Model
-	tokenInput    textinput.Model
-	focusedField  int
-	statusMessage string
+	tokenInput   textinput.Model
+	focusedField int
 }
 
 // NewModel creates a new Jira settings model

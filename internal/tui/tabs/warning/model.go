@@ -11,9 +11,8 @@ type Model struct {
 	shown         bool
 	title         string
 	message       string
-	commits       []internal.Commit // Commits with issues
-	selectedIdx   int               // Selected commit index
-	statusMessage string
+	commits     []internal.Commit // Commits with issues
+	selectedIdx int               // Selected commit index
 }
 
 // NewModel creates a new Warning model

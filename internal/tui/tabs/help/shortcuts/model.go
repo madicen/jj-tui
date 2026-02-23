@@ -6,9 +6,7 @@ import (
 )
 
 // Model represents the Help Shortcuts tab
-type Model struct {
-	statusMessage string
-}
+type Model struct{}
 
 // NewModel creates a new Help Shortcuts model
 func NewModel() Model {

@@ -13,9 +13,8 @@ showMerged           bool
 showClosed           bool
 onlyMine             bool
 prLimit              int
-prRefreshInterval    int
-focusedField         int
-statusMessage        string
+prRefreshInterval int
+focusedField      int
 }
 
 // NewModel creates a new GitHub settings model

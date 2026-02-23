@@ -16,7 +16,6 @@ type CommandInfo struct {
 type Model struct {
 	commandHistory []CommandInfo
 	selectedIdx    int
-	statusMessage  string
 }
 
 // NewModel creates a new Help Commands model

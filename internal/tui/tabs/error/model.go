@@ -13,9 +13,8 @@ type Model struct {
 	err           error
 	isJJRepoError bool   // true if "not a jj repository"
 	currentPath   string // Path where jj init would be run
-	copied        bool   // true if error was just copied to clipboard
-	repository    *internal.Repository
-	statusMessage string
+	copied     bool   // true if error was just copied to clipboard
+	repository *internal.Repository
 }
 
 // NewModel creates a new Error model

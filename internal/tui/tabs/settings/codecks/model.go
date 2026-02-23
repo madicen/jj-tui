@@ -8,9 +8,8 @@ import (
 
 // Model represents the Codecks settings sub-tab
 type Model struct {
-	apiKeyInput   textinput.Model
-	focusedField  int
-	statusMessage string
+	apiKeyInput  textinput.Model
+	focusedField int
 }
 
 // NewModel creates a new Codecks settings model
