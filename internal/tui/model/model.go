@@ -64,10 +64,6 @@ type Model struct {
 
 	graphFocused bool // True if graph viewport has focus, false if files viewport (graph tab only)
 
-	// Rebase mode state (synced to/from graph tab)
-	selectionMode      SelectionMode
-	rebaseSourceCommit int // Index of commit being rebased
-
 	// Branch state (selection in branches tab)
 	branchList []internal.Branch
 
@@ -157,11 +153,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Delegate to tab models for their specific views (tabs own selection state)
 		switch m.viewMode {
 		case ViewCommitGraph:
-			m.graphTabModel.SetSelectionMode(graphtab.SelectionMode(m.selectionMode))
-			m.graphTabModel.SetRebaseSourceCommit(m.rebaseSourceCommit)
 			cmds := PropagateUpdate(msg, &m.graphTabModel)
-			m.selectionMode = SelectionMode(m.graphTabModel.GetSelectionMode())
-			m.rebaseSourceCommit = m.graphTabModel.GetRebaseSourceCommit()
 			// Graph tab returns requests (LoadChangedFiles, Checkout, etc.) as cmds; run them
 			if len(cmds) > 0 && cmds[0] != nil {
 				return m, tea.Batch(cmds...)
@@ -212,12 +204,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch m.viewMode {
 			case ViewCommitGraph:
 				m.graphTabModel.SetDimensions(m.width, contentHeight)
-				m.graphTabModel.SetSelectionMode(graphtab.SelectionMode(m.selectionMode))
-				m.graphTabModel.SetRebaseSourceCommit(m.rebaseSourceCommit)
 				cmds := PropagateUpdate(msg, &m.graphTabModel)
-				m.selectionMode = SelectionMode(m.graphTabModel.GetSelectionMode())
-				m.rebaseSourceCommit = m.graphTabModel.GetRebaseSourceCommit()
-				m.graphFocused = m.graphTabModel.IsGraphFocused()
 				if len(cmds) > 0 && cmds[0] != nil {
 					return m, cmds[0]
 				}
@@ -259,11 +246,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		contentHeight := m.estimatedContentHeight()
 		switch m.viewMode {
 		case ViewCommitGraph:
-			m.graphTabModel.SetSelectionMode(graphtab.SelectionMode(m.selectionMode))
-			m.graphTabModel.SetRebaseSourceCommit(m.rebaseSourceCommit)
 			cmds := PropagateUpdate(msg, &m.graphTabModel)
-			m.selectionMode = SelectionMode(m.graphTabModel.GetSelectionMode())
-			m.rebaseSourceCommit = m.graphTabModel.GetRebaseSourceCommit()
 			if len(cmds) > 0 && cmds[0] != nil {
 				return m, cmds[0]
 			}
@@ -898,7 +881,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		// Auto-refresh: reload repository data silently (but not while editing, creating PR, creating bookmark, or selecting rebase destination)
-		if !m.loading && m.jjService != nil && m.viewMode != ViewEditDescription && m.viewMode != ViewCreatePR && m.viewMode != ViewCreateBookmark && m.selectionMode != SelectionRebaseDestination {
+		if !m.loading && m.jjService != nil && m.viewMode != ViewEditDescription && m.viewMode != ViewCreatePR && m.viewMode != ViewCreateBookmark && !m.graphTabModel.IsInRebaseMode() {
 			cmds = append(cmds, m.loadRepositorySilent())
 		}
 		cmds = append(cmds, m.tickCmd())

@@ -106,7 +106,7 @@ func (m *Model) handleRebase() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleGraphFoucsMessage() string {
-	return If(m.graphTabModel.IsGraphFocused(), "Graph pane focused", "Files pane focused")
+	return If(m.graphFocused, "Graph pane focused", "Files pane focused")
 }
 
 // handleGraphRequest processes requests from the graph tab (keys/zones); main runs jj commands.
@@ -124,6 +124,9 @@ func (m *Model) handleGraphRequest(r graphtab.Request) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if cmd != nil {
+			if r.PerformRebase {
+				m.graphTabModel.CancelRebaseMode()
+			}
 			if r.NewCommit {
 				if m.isSelectedCommitValid() {
 					commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
@@ -170,7 +173,7 @@ func (m *Model) graphRequestContext() *graphtab.RequestContext {
 		JJService:            m.jjService,
 		Repository:           m.repository,
 		SelectedCommit:       m.GetSelectedCommit(),
-		RebaseSourceCommit:   m.rebaseSourceCommit,
+		RebaseSourceCommit:   m.graphTabModel.GetRebaseSourceCommit(),
 		ChangedFiles:         m.graphTabModel.GetChangedFiles(),
 		ChangedFilesCommitID: m.graphTabModel.GetChangedFilesCommitID(),
 		SelectedFile:         m.graphTabModel.GetSelectedFile(),

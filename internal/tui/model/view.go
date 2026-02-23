@@ -10,7 +10,6 @@ import (
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/styles"
-	"github.com/madicen/jj-tui/internal/tui/tabs/graph"
 	helptab "github.com/madicen/jj-tui/internal/tui/tabs/help"
 	settingstab "github.com/madicen/jj-tui/internal/tui/tabs/settings"
 	"github.com/madicen/jj-tui/internal/version"
@@ -71,8 +70,6 @@ func (m *Model) View() string {
 	var content string
 	switch m.viewMode {
 	case ViewCommitGraph:
-		m.graphTabModel.SetSelectionMode(graph.SelectionMode(m.selectionMode))
-		m.graphTabModel.SetRebaseSourceCommit(m.rebaseSourceCommit)
 		content = m.graphTabModel.View()
 	case ViewPullRequests:
 		content = m.prsTabModel.View()

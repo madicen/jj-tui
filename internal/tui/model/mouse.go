@@ -140,7 +140,7 @@ func (m *Model) handleZoneClick(msg zone.MsgZoneInBounds) (tea.Model, tea.Cmd) {
 		for commitIndex := range m.repository.Graph.Commits {
 			if userClicked(mouse.ZoneCommit(commitIndex)) {
 				// If in rebase mode, clicking a commit selects it as destination
-				if m.selectionMode == SelectionRebaseDestination {
+				if m.graphTabModel.IsInRebaseMode() {
 					return m, m.performRebase(commitIndex)
 				}
 				// Normal selection

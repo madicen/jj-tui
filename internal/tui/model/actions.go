@@ -85,29 +85,27 @@ func (m *Model) startRebaseMode() {
 	}
 	idx := m.GetSelectedCommit()
 	commit := m.repository.Graph.Commits[idx]
-	m.selectionMode = SelectionRebaseDestination
-	m.rebaseSourceCommit = idx
+	m.graphTabModel.StartRebaseMode(idx)
 	m.statusMessage = fmt.Sprintf("Select destination for rebasing %s (Esc to cancel)", commit.ShortID)
 }
 
 func (m *Model) performRebase(destCommitIndex int) tea.Cmd {
-	sourceCommit := m.repository.Graph.Commits[m.rebaseSourceCommit]
+	srcIdx := m.graphTabModel.GetRebaseSourceCommit()
+	if srcIdx < 0 || srcIdx >= len(m.repository.Graph.Commits) {
+		return nil
+	}
+	sourceCommit := m.repository.Graph.Commits[srcIdx]
 	destCommit := m.repository.Graph.Commits[destCommitIndex]
 
-	if m.rebaseSourceCommit == destCommitIndex {
-		m.selectionMode = SelectionNormal
-		m.rebaseSourceCommit = -1
+	if srcIdx == destCommitIndex {
+		m.graphTabModel.CancelRebaseMode()
 		m.statusMessage = "Cannot rebase commit onto itself"
 		return nil
 	}
 
 	m.statusMessage = fmt.Sprintf("Rebasing %s onto %s...", sourceCommit.ShortID, destCommit.ShortID)
-	m.selectionMode = SelectionNormal
-	sourceID := sourceCommit.ChangeID
-	destID := destCommit.ChangeID
-	m.rebaseSourceCommit = -1
-
-	return actions.Rebase(m.jjService, sourceID, destID)
+	m.graphTabModel.CancelRebaseMode()
+	return actions.Rebase(m.jjService, sourceCommit.ChangeID, destCommit.ChangeID)
 }
 
 // Description actions
