@@ -27,6 +27,11 @@ type Model struct {
 	loading                   bool
 	err                       error
 
+	// Scroll state for wheel (no click required)
+	width           int
+	height          int
+	settingsYOffset int
+
 	// GitHub Device Flow (login)
 	githubDeviceCode      string
 	githubUserCode        string
@@ -55,8 +60,26 @@ func (m Model) Init() tea.Cmd {
 // Update handles messages for the Settings tab
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		return m, nil
 	case tea.KeyMsg:
 		return m.handleKeyMsg(msg)
+	case tea.MouseMsg:
+		if tea.MouseEvent(msg).IsWheel() {
+			delta := 3
+			isUp := msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelLeft
+			if isUp {
+				m.settingsYOffset -= delta
+			} else {
+				m.settingsYOffset += delta
+			}
+			if m.settingsYOffset < 0 {
+				m.settingsYOffset = 0
+			}
+			return m, nil
+		}
 	}
 	return m, nil
 }
@@ -160,6 +183,17 @@ func (m *Model) SetInputWidths(width int) {
 	for i := range m.settingsInputs {
 		m.settingsInputs[i].Width = width
 	}
+}
+
+// SetDimensions sets the content area dimensions (used for scroll viewport).
+func (m *Model) SetDimensions(width, height int) {
+	m.width = width
+	m.height = height
+}
+
+// GetSettingsYOffset returns the current scroll offset for the settings view.
+func (m *Model) GetSettingsYOffset() int {
+	return m.settingsYOffset
 }
 
 // SetSettingInputValue sets the value of the settings input at index (e.g. after GitHub login)

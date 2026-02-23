@@ -64,6 +64,8 @@ func (m *Model) View() string {
 	m.prsTabModel.SetDimensions(m.width, contentHeight)
 	m.branchesTabModel.SetDimensions(m.width, contentHeight)
 	m.ticketsTabModel.SetDimensions(m.width, contentHeight)
+	m.settingsTabModel.SetDimensions(m.width, contentHeight)
+	m.helpTabModel.SetDimensions(m.width, contentHeight)
 
 	// Delegate to tab models for their views
 	var content string
@@ -559,6 +561,8 @@ func (m *Model) renderSettings() string {
 		strings.TrimSpace(inputs[7].Value()) != "" &&
 		strings.TrimSpace(inputs[8].Value()) != ""
 	data.GitHubIssuesConfigured = m.isGitHubAvailable()
+	data.YOffset = m.settingsTabModel.GetSettingsYOffset()
+	data.ContentHeight = m.estimatedContentHeight()
 
 	return settingstab.Render(m.zoneManager, data)
 }

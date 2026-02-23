@@ -206,10 +206,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Handle wheel: IsWheel() covers standard encodings; also accept raw X11 4/5
 		isWheel := tea.MouseEvent(msg).IsWheel() || msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown
 		if isWheel {
+			contentHeight := m.estimatedContentHeight()
 			switch m.viewMode {
 			case ViewCommitGraph:
-				// Ensure dimensions match content area so viewport height is correct for scroll
-				m.graphTabModel.SetDimensions(m.width, m.estimatedContentHeight())
+				m.graphTabModel.SetDimensions(m.width, contentHeight)
 				m.graphTabModel.SetSelectionMode(graphtab.SelectionMode(m.selectionMode))
 				m.graphTabModel.SetRebaseSourceCommit(m.rebaseSourceCommit)
 				cmds := PropagateUpdate(msg, &m.graphTabModel)
@@ -220,26 +220,31 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, cmds[0]
 				}
 			case ViewPullRequests:
+				m.prsTabModel.SetDimensions(m.width, contentHeight)
 				cmds := PropagateUpdate(msg, &m.prsTabModel)
 				if len(cmds) > 0 && cmds[0] != nil {
 					return m, cmds[0]
 				}
 			case ViewBranches:
+				m.branchesTabModel.SetDimensions(m.width, contentHeight)
 				cmds := PropagateUpdate(msg, &m.branchesTabModel)
 				if len(cmds) > 0 && cmds[0] != nil {
 					return m, cmds[0]
 				}
 			case ViewTickets:
+				m.ticketsTabModel.SetDimensions(m.width, contentHeight)
 				cmds := PropagateUpdate(msg, &m.ticketsTabModel)
 				if len(cmds) > 0 && cmds[0] != nil {
 					return m, cmds[0]
 				}
 			case ViewSettings:
+				m.settingsTabModel.SetDimensions(m.width, contentHeight)
 				cmds := PropagateUpdate(msg, &m.settingsTabModel)
 				if len(cmds) > 0 && cmds[0] != nil {
 					return m, cmds[0]
 				}
 			case ViewHelp:
+				m.helpTabModel.SetDimensions(m.width, contentHeight)
 				cmds := PropagateUpdate(msg, &m.helpTabModel)
 				if len(cmds) > 0 && cmds[0] != nil {
 					return m, cmds[0]
@@ -248,6 +253,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		// Delegate other mouse to active tab (same as KeyMsg) for any other scroll/click handling
+		// Set dimensions for list tabs so wheel/scroll works even when isWheel wasn't true (e.g. terminal encoding)
+		contentHeight := m.estimatedContentHeight()
 		switch m.viewMode {
 		case ViewCommitGraph:
 			m.graphTabModel.SetSelectionMode(graphtab.SelectionMode(m.selectionMode))
@@ -260,16 +267,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, cmds[0]
 			}
 		case ViewPullRequests:
+			m.prsTabModel.SetDimensions(m.width, contentHeight)
 			cmds := PropagateUpdate(msg, &m.prsTabModel)
 			if len(cmds) > 0 && cmds[0] != nil {
 				return m, cmds[0]
 			}
 		case ViewBranches:
+			m.branchesTabModel.SetDimensions(m.width, contentHeight)
 			cmds := PropagateUpdate(msg, &m.branchesTabModel)
 			if len(cmds) > 0 && cmds[0] != nil {
 				return m, cmds[0]
 			}
 		case ViewTickets:
+			m.ticketsTabModel.SetDimensions(m.width, contentHeight)
 			cmds := PropagateUpdate(msg, &m.ticketsTabModel)
 			if len(cmds) > 0 && cmds[0] != nil {
 				return m, cmds[0]

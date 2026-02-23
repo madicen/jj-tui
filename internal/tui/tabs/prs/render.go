@@ -164,7 +164,7 @@ func (m *Model) renderPRs() string {
 	}
 
 	fixedHeader := strings.Join(headerLines, "\n")
-	headerLineCount := len(headerLines)
+	headerLineCount := strings.Count(fixedHeader, "\n") + 1
 	listHeight := m.height - headerLineCount
 	if listHeight <= 0 {
 		listHeight = 0
@@ -181,12 +181,15 @@ func (m *Model) renderPRs() string {
 	if m.listYOffset < 0 {
 		m.listYOffset = 0
 	}
-	// Keep selection in view
-	if m.selectedPR >= 0 && m.selectedPR < totalListLines {
-		if m.selectedPR < m.listYOffset {
-			m.listYOffset = m.selectedPR
-		} else if m.selectedPR >= m.listYOffset+listHeight {
-			m.listYOffset = m.selectedPR - listHeight + 1
+	// Keep selection in view only when selection changed via key/click (so mouse scroll can move selection off screen)
+	if m.scrollToSelectedPR {
+		m.scrollToSelectedPR = false
+		if m.selectedPR >= 0 && m.selectedPR < totalListLines {
+			if m.selectedPR < m.listYOffset {
+				m.listYOffset = m.selectedPR
+			} else if m.selectedPR >= m.listYOffset+listHeight {
+				m.listYOffset = m.selectedPR - listHeight + 1
+			}
 		}
 	}
 	start := m.listYOffset

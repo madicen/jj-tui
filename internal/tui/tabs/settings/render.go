@@ -46,6 +46,10 @@ type RenderData struct {
 	BranchLimit            int
 	SanitizeBookmarks      bool
 	ConfirmingCleanup      string
+
+	// Scroll: when ContentHeight > 0, only lines [YOffset : YOffset+ContentHeight] are shown
+	YOffset      int
+	ContentHeight int
 }
 
 type renderCtx struct {
@@ -134,6 +138,17 @@ func Render(zm *zone.Manager, data RenderData) string {
 	cancelBtn := r.mark(mouse.ZoneSettingsCancel, styles.ButtonStyle.Render("Cancel (Esc)"))
 	lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Left, saveBtn, " ", saveLocalBtn, " ", cancelBtn))
 
+	if data.ContentHeight > 0 {
+		visibleHeight := data.ContentHeight
+		totalLines := len(lines)
+		maxOffset := max(0, totalLines-visibleHeight)
+		start := min(data.YOffset, maxOffset)
+		if start < 0 {
+			start = 0
+		}
+		end := min(start+visibleHeight, totalLines)
+		lines = lines[start:end]
+	}
 	return strings.Join(lines, "\n")
 }
 

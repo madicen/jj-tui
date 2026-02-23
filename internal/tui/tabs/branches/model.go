@@ -22,11 +22,14 @@ type Model struct {
 }
 
 // NewModel creates a new Branches tab model. zoneManager may be nil (e.g. in tests).
+// Default dimensions (80x24) ensure wheel scroll works before first View()/SetDimensions, same as Graph viewports.
 func NewModel(zoneManager *zone.Manager) Model {
 	return Model{
-		zoneManager:   zoneManager,
+		zoneManager:    zoneManager,
 		selectedBranch: -1,
 		loading:        false,
+		width:          80,
+		height:         24,
 	}
 }
 
@@ -45,14 +48,15 @@ func (m *Model) SetDimensions(width, height int) {
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
+		// Do not use full window size: we get content-area dimensions from the main model via SetDimensions()
+		// so the list uses the correct height (below header, above status bar), same as the Graph tab.
 		return m, nil
 	case tea.KeyMsg:
 		return m.handleKeyMsg(msg)
 	case tea.MouseMsg:
-		// Wheel: use IsWheel() so we accept any encoding; scroll without requiring list to be clicked first
-		if tea.MouseEvent(msg).IsWheel() {
+		// Wheel: IsWheel() + raw X11 fallback so we accept any terminal encoding; scroll without requiring list to be clicked first
+		isWheel := tea.MouseEvent(msg).IsWheel() || msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown
+		if isWheel {
 			isUp := msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelLeft
 			if isUp {
 				m.listYOffset -= 3

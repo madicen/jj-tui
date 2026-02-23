@@ -122,7 +122,7 @@ func (m Model) renderBranches() string {
 	listContent := m.renderBranchGraph()
 	listLines := strings.Split(listContent, "\n")
 	fixedHeader := strings.Join(headerLines, "\n")
-	headerLineCount := len(headerLines)
+	headerLineCount := strings.Count(fixedHeader, "\n") + 1
 	listHeight := m.height - headerLineCount
 	if listHeight <= 0 {
 		listHeight = 0

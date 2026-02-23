@@ -181,7 +181,7 @@ func (m *Model) renderTickets() string {
 	}
 
 	fixedHeader := strings.Join(headerLines, "\n")
-	headerLineCount := len(headerLines)
+	headerLineCount := strings.Count(fixedHeader, "\n") + 1
 	listHeight := m.height - headerLineCount
 	if listHeight <= 0 {
 		listHeight = 0
@@ -197,11 +197,15 @@ func (m *Model) renderTickets() string {
 	if m.listYOffset < 0 {
 		m.listYOffset = 0
 	}
-	if m.selectedTicket >= 0 && m.selectedTicket < totalListLines {
-		if m.selectedTicket < m.listYOffset {
-			m.listYOffset = m.selectedTicket
-		} else if m.selectedTicket >= m.listYOffset+listHeight {
-			m.listYOffset = m.selectedTicket - listHeight + 1
+	// Keep selection in view only when selection changed via key/click (so mouse scroll can move selection off screen)
+	if m.scrollToSelectedTicket {
+		m.scrollToSelectedTicket = false
+		if m.selectedTicket >= 0 && m.selectedTicket < totalListLines {
+			if m.selectedTicket < m.listYOffset {
+				m.listYOffset = m.selectedTicket
+			} else if m.selectedTicket >= m.listYOffset+listHeight {
+				m.listYOffset = m.selectedTicket - listHeight + 1
+			}
 		}
 	}
 	start := m.listYOffset

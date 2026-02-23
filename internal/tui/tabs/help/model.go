@@ -24,13 +24,14 @@ type CommandHistoryEntry struct {
 
 // Model represents the state of the Help tab
 type Model struct {
-	zoneManager          *zone.Manager
-	helpTab              int   // 0=Shortcuts, 1=Commands
-	helpSelectedCommand  int
-	commandHistory       []CommandInfo          // legacy
-	commandHistoryEntries []CommandHistoryEntry // for rendering (set by main model)
-	width                int
-	height               int
+	zoneManager           *zone.Manager
+	helpTab               int   // 0=Shortcuts, 1=Commands
+	helpSelectedCommand   int
+	commandHistory        []CommandInfo          // legacy
+	commandHistoryEntries []CommandHistoryEntry  // for rendering (set by main model)
+	width                 int
+	height                int
+	helpYOffset           int   // scroll offset for wheel scrolling (no click required)
 }
 
 // NewModel creates a new Help tab model. zoneManager may be nil.
@@ -56,6 +57,20 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyMsg:
 		return m.handleKeyMsg(msg)
+	case tea.MouseMsg:
+		if tea.MouseEvent(msg).IsWheel() {
+			delta := 3
+			isUp := msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelLeft
+			if isUp {
+				m.helpYOffset -= delta
+			} else {
+				m.helpYOffset += delta
+			}
+			if m.helpYOffset < 0 {
+				m.helpYOffset = 0
+			}
+			return m, nil
+		}
 	}
 	return m, nil
 }
@@ -104,6 +119,12 @@ func (m *Model) GetHelpTab() int {
 // SetHelpTab sets the help tab
 func (m *Model) SetHelpTab(tab int) {
 	m.helpTab = tab % 2
+}
+
+// SetDimensions sets the content area size (used for scroll window height).
+func (m *Model) SetDimensions(width, height int) {
+	m.width = width
+	m.height = height
 }
 
 // GetSelectedCommand returns the index of the selected command

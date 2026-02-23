@@ -23,16 +23,26 @@ func mark(z *zone.Manager, id, content string) string {
 }
 
 func (m Model) renderHelp() string {
-	var lines []string
-	lines = append(lines, "")
-	lines = append(lines, m.renderHelpTabs())
-	lines = append(lines, "")
+	var fullLines []string
+	fullLines = append(fullLines, "")
+	fullLines = append(fullLines, m.renderHelpTabs())
+	fullLines = append(fullLines, "")
 	if m.helpTab == 0 {
-		lines = append(lines, m.renderHelpShortcuts()...)
+		fullLines = append(fullLines, m.renderHelpShortcuts()...)
 	} else {
-		lines = append(lines, m.renderHelpCommands()...)
+		fullLines = append(fullLines, m.renderHelpCommands()...)
 	}
-	return strings.Join(lines, "\n")
+	totalLines := len(fullLines)
+	visibleHeight := max(1, m.height-3)
+	start := m.helpYOffset
+	if start > totalLines-visibleHeight {
+		start = max(0, totalLines-visibleHeight)
+	}
+	if start < 0 {
+		start = 0
+	}
+	end := min(start+visibleHeight, totalLines)
+	return strings.Join(fullLines[start:end], "\n")
 }
 
 func (m Model) renderHelpTabs() string {

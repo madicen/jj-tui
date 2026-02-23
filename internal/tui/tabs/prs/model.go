@@ -19,14 +19,19 @@ type Model struct {
 	err           error
 	statusMessage string
 	githubService bool // whether GitHub is connected (for rendering)
+	// scrollToSelectedPR: when true, next render will adjust listYOffset to keep selection in view (key/click only; mouse scroll can move selection off screen)
+	scrollToSelectedPR bool
 }
 
 // NewModel creates a new PRs tab model. zoneManager may be nil (e.g. in tests).
+// Default dimensions (80x24) ensure wheel scroll works before first View()/SetDimensions, same as Graph viewports.
 func NewModel(zoneManager *zone.Manager) Model {
 	return Model{
 		zoneManager: zoneManager,
 		selectedPR:  -1,
 		loading:     false,
+		width:       80,
+		height:      24,
 	}
 }
 
@@ -45,16 +50,17 @@ func (m *Model) SetDimensions(width, height int) {
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
+		// Do not use full window size: we get content-area dimensions from the main model via SetDimensions()
+		// so the list uses the correct height (below header, above status bar), same as the Graph tab.
 		return m, nil
 	case tea.KeyMsg:
 		return m.handleKeyMsg(msg)
 	case zone.MsgZoneInBounds:
 		return m.handleZoneClick(msg.Zone)
 	case tea.MouseMsg:
-		// Wheel: use IsWheel() so we accept any encoding; scroll without requiring list to be clicked first
-		if tea.MouseEvent(msg).IsWheel() {
+		// Wheel: IsWheel() + raw X11 fallback so we accept any terminal encoding; scroll without requiring list to be clicked first
+		isWheel := tea.MouseEvent(msg).IsWheel() || msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown
+		if isWheel {
 			isUp := msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelLeft
 			if isUp {
 				m.listYOffset -= 3
@@ -92,11 +98,13 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "j", "down":
 		if m.repository != nil && m.selectedPR < len(m.repository.PRs)-1 {
 			m.selectedPR++
+			m.scrollToSelectedPR = true
 		}
 		return m, nil
 	case "k", "up":
 		if m.selectedPR > 0 {
 			m.selectedPR--
+			m.scrollToSelectedPR = true
 		}
 		return m, nil
 	case "pgup", "ctrl+u", "ctrl+b":

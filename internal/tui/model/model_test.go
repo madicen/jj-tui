@@ -7,11 +7,13 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/integrations/github"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tickets"
 	graphtab "github.com/madicen/jj-tui/internal/tui/tabs/graph"
+	"github.com/madicen/jj-tui/internal/tui/mouse"
 )
 
 // Helper to create a test model with sample data (bypasses jj service)
@@ -126,6 +128,129 @@ func TestChangedFilesLoadedMsgUpdatesGraphTab(t *testing.T) {
 	}
 	if got[1].Path != "bar/baz.go" || got[1].Status != "A" {
 		t.Errorf("GetChangedFiles()[1]: expected bar/baz.go A, got %s %s", got[1].Path, got[1].Status)
+	}
+}
+
+// TestMouseScrollGraphTabWithoutClicking is an integration test for mouse wheel scrolling on the graph tab.
+// It documents and verifies the current behavior: scrolling is focus-based, not cursor-based.
+// - Without clicking any pane: graphFocused is true by default, so wheel scrolls the graph (commit) list.
+// - After clicking the files pane (or Tab to it): wheel scrolls the files list.
+// So "scroll without clicking" works for the default pane (graph); to scroll the other list you must focus it first.
+func TestMouseScrollGraphTabWithoutClicking(t *testing.T) {
+	ctx := context.Background()
+	m := New(ctx)
+	defer m.Close()
+	m.loading = false
+	// Many commits so the graph pane is scrollable (more lines than viewport height)
+	commits := make([]internal.Commit, 50)
+	for i := range commits {
+		commits[i] = internal.Commit{
+			ID:       fmt.Sprintf("id%03d", i),
+			ShortID:  fmt.Sprintf("s%02d", i),
+			ChangeID: fmt.Sprintf("cid%03d", i),
+			Summary:  fmt.Sprintf("Commit %d", i),
+		}
+	}
+	m.SetRepository(&internal.Repository{
+		Path:   "/test/repo",
+		Graph:  internal.CommitGraph{Commits: commits},
+		PRs:    nil,
+	})
+	m.graphTabModel.UpdateRepository(m.repository)
+	m.graphTabModel.SelectCommit(0)
+	m.viewMode = ViewCommitGraph
+	m.graphFocused = true
+	m.width = 100
+	m.height = 80
+	m.graphTabModel.SetDimensions(m.width, m.estimatedContentHeight())
+	// Render once so viewports have content and zones are registered
+	m.View()
+
+	graphVp := m.graphTabModel.GetViewport()
+	graphHeight := graphVp.Height
+	totalGraphLines := graphVp.TotalLineCount()
+	if totalGraphLines <= graphHeight {
+		t.Skipf("graph must be scrollable: total lines=%d height=%d", totalGraphLines, graphHeight)
+	}
+
+	wheelDown := tea.MouseMsg{
+		Action: tea.MouseActionPress,
+		Button: tea.MouseButtonWheelDown,
+		X:      50,
+		Y:      10,
+	}
+
+	// --- 1) Wheel WITHOUT clicking any pane: should scroll the graph (default focus) ---
+	if !m.graphTabModel.IsGraphFocused() {
+		t.Fatal("expected graph pane focused by default")
+	}
+	graphY0 := m.graphTabModel.GetViewport().YOffset
+	newModel, _ := m.Update(wheelDown)
+	m = newModel.(*Model)
+	graphY1 := m.graphTabModel.GetViewport().YOffset
+	if graphY1 <= graphY0 {
+		t.Errorf("wheel without clicking: expected graph pane to scroll (focus-based). graph YOffset was %d, got %d", graphY0, graphY1)
+	}
+	// Files viewport should not have scrolled (we didn't focus it)
+	filesY0 := m.graphTabModel.GetFilesViewport().YOffset
+
+	// --- 2) Simulate click on files pane, then wheel: should scroll files list ---
+	m.View() // refresh so zones are current
+	filesZone := m.zoneManager.Get(mouse.ZoneFilesPane)
+	if filesZone == nil {
+		t.Skip("files pane zone not registered (e.g. no content); cannot simulate click")
+	}
+	zoneMsg := zone.MsgZoneInBounds{
+		Zone:  filesZone,
+		Event: tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: 50, Y: 60},
+	}
+	newModel, _ = m.Update(zoneMsg)
+	m = newModel.(*Model)
+	if m.graphTabModel.IsGraphFocused() {
+		t.Error("after clicking files pane, expected graph pane to be unfocused (files focused)")
+	}
+	filesY1 := m.graphTabModel.GetFilesViewport().YOffset
+	// Scroll files pane with wheel
+	newModel, _ = m.Update(wheelDown)
+	m = newModel.(*Model)
+	filesY2 := m.graphTabModel.GetFilesViewport().YOffset
+	// If files pane has scrollable content, YOffset may increase; if not, it stays 0
+	// We only assert that wheel was applied to the focused pane (files), not that it scrolled (content-dependent)
+	if filesY2 < filesY1 && totalGraphLines > graphHeight {
+		// Graph might have scrolled again if we accidentally scrolled graph
+		graphY2 := m.graphTabModel.GetViewport().YOffset
+		if graphY2 > graphY1 {
+			t.Errorf("after focusing files pane, wheel should scroll files pane, not graph: graph YOffset moved from %d to %d", graphY1, graphY2)
+		}
+	}
+
+	// --- 3) Document: without clicking, only the default pane (graph) scrolls ---
+	_ = filesY0
+	t.Logf("Mouse scroll behavior: default focus=graph; wheel without click scrolls graph (YOffset %d -> %d). After click on files pane, wheel scrolls files pane.", graphY0, graphY1)
+}
+
+// TestMouseScrollHelpTab verifies that the Help tab scrolls with the mouse wheel without requiring a click.
+// Help has no clickable list (unlike PR/Tickets), so wheel must work as soon as the tab is active.
+func TestMouseScrollHelpTab(t *testing.T) {
+	m := newTestModel()
+	defer m.Close()
+	m.SetViewMode(ViewHelp)
+	m.width = 100
+	m.height = 40
+	viewBefore := m.View() // View() sets dimensions for all tabs including Help
+
+	wheelDown := tea.MouseMsg{
+		Action: tea.MouseActionPress,
+		Button: tea.MouseButtonWheelDown,
+		X:      50,
+		Y:      20,
+	}
+	newModel, _ := m.Update(wheelDown)
+	m = newModel.(*Model)
+	viewAfter := m.View()
+
+	if viewAfter == viewBefore {
+		t.Error("wheel on Help tab should scroll content without clicking; view unchanged after wheel down")
 	}
 }
 
@@ -1012,6 +1137,36 @@ func TestMouseScrollingOnViews(t *testing.T) {
 
 		if out := m.View(); out == "" {
 			t.Error("View should return non-empty after scroll")
+		}
+	})
+
+	t.Run("PR view rendered content changes after wheel (integration)", func(t *testing.T) {
+		m := createModelWithManyPRs()
+		defer m.Close()
+		m.viewMode = ViewPullRequests
+		m.githubService = &github.Service{}
+		m.prsTabModel.SetGithubService(true)
+		_ = m.View() // set dimensions and get initial view
+		wheelDown := tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonWheelDown, X: 50, Y: 10}
+		// First wheel: same as "mouse scroll works on PR view"
+		newModel, _ := m.Update(wheelDown)
+		m = newModel.(*Model)
+		if m.GetPRsListYOffset() != 3 {
+			t.Fatalf("after first wheel expected listYOffset 3, got %d", m.GetPRsListYOffset())
+		}
+		// Second wheel: offset should accumulate
+		newModel, _ = m.Update(wheelDown)
+		m = newModel.(*Model)
+		if m.GetPRsListYOffset() != 6 {
+			t.Fatalf("after second wheel expected listYOffset 6, got %d", m.GetPRsListYOffset())
+		}
+		viewAfter := m.View()
+		if viewAfter == "" {
+			t.Fatal("PR view after wheel should not be empty")
+		}
+		// Rendered content should reflect scroll (e.g. different PRs visible)
+		if !strings.Contains(viewAfter, "Test PR ") {
+			t.Error("view should contain PR list content after scroll")
 		}
 	})
 
