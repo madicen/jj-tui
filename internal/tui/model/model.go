@@ -207,6 +207,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKeyMsg(msg)
 
 	case tea.MouseMsg:
+		// Modal views: run zone check on release first so form clicks aren't consumed by the delegate switch.
+		if (m.viewMode == ViewCreatePR || m.viewMode == ViewEditDescription || m.viewMode == ViewCreateBookmark) &&
+			msg.Action == tea.MouseActionRelease {
+			return m.zoneManager.AnyInBoundsAndUpdate(m, msg)
+		}
 		// Handle wheel: IsWheel() covers standard encodings; also accept raw X11 4/5
 		isWheel := tea.MouseEvent(msg).IsWheel() || msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown
 		if isWheel {
@@ -330,7 +335,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, cmds[0]
 			}
 		}
-		return m.handleZoneClick(msg.Zone)
+		return m.handleZoneClick(msg)
 
 	case graphtab.Request:
 		return m.handleGraphRequest(msg)

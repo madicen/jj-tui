@@ -77,6 +77,15 @@ func (m *Model) createIsZoneClickedFunc(clickedZone *zone.ZoneInfo) func(string)
 	}
 }
 
+// createIsZoneClickedFuncWithEvent returns a function that checks if the given zone ID contains the mouse event.
+// Use this when zone pointer comparison is unreliable (e.g. Create PR form); InBounds is more robust.
+func (m *Model) createIsZoneClickedFuncWithEvent(event tea.MouseMsg) func(string) bool {
+	return func(zoneID string) bool {
+		z := m.zoneManager.Get(zoneID)
+		return z != nil && z.InBounds(event)
+	}
+}
+
 // findCommitsWithEmptyDescriptions finds all commits from the selected commit
 // back to main that have empty descriptions (excluding immutable/root commits)
 func (m *Model) findCommitsWithEmptyDescriptions() []internal.Commit {

@@ -1,14 +1,21 @@
 package prform
 
 import (
+	"fmt"
+
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal"
+	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/styles"
 )
 
 // Model represents the PR creation dialog
 type Model struct {
+	zoneManager       *zone.Manager
 	shown             bool
 	titleInput        textinput.Model
 	bodyInput         textarea.Model
@@ -20,8 +27,8 @@ type Model struct {
 	statusMessage     string
 }
 
-// NewModel creates a new PR creation model
-func NewModel() Model {
+// NewModel creates a new PR creation model. zoneManager may be nil (zones will be omitted).
+func NewModel(zoneManager *zone.Manager) Model {
 	titleInput := textinput.New()
 	titleInput.Placeholder = "Pull request title"
 	titleInput.CharLimit = 200
@@ -34,6 +41,7 @@ func NewModel() Model {
 	bodyInput.SetHeight(8)
 
 	return Model{
+		zoneManager:  zoneManager,
 		shown:        false,
 		titleInput:   titleInput,
 		bodyInput:    bodyInput,
@@ -75,10 +83,48 @@ func (m Model) View() string {
 	if !m.shown {
 		return ""
 	}
-	return "" // Rendering handled by parent for now
+	return m.renderForm()
 }
 
-// handleKeyMsg handles keyboard input
+// renderForm builds the Create PR form UI (title, branch info, inputs, buttons)
+func (m Model) renderForm() string {
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#8BE9FD"))
+	subtitleStyle := lipgloss.NewStyle().Foreground(styles.ColorMuted)
+	buttonStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#FFFFFF")).
+		Background(lipgloss.Color("#30363d")).
+		Padding(0, 1).
+		Bold(true)
+
+	mark := func(id, s string) string {
+		if m.zoneManager == nil {
+			return s
+		}
+		return m.zoneManager.Mark(id, s)
+	}
+
+	branchLine := subtitleStyle.Render(fmt.Sprintf("Branch: %s → %s", m.baseBranch, m.headBranch))
+	titleInput := mark(mouse.ZonePRTitle, m.titleInput.View())
+	bodyInput := mark(mouse.ZonePRBody, m.bodyInput.View())
+	submitBtn := mark(mouse.ZonePRSubmit, buttonStyle.Render("Create PR (Ctrl+S)"))
+	cancelBtn := mark(mouse.ZonePRCancel, buttonStyle.Render("Cancel (Esc)"))
+
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		titleStyle.Render("Create Pull Request"),
+		branchLine,
+		"",
+		"Title:",
+		titleInput,
+		"",
+		"Body:",
+		bodyInput,
+		"",
+		lipgloss.JoinHorizontal(lipgloss.Left, submitBtn, "  ", cancelBtn),
+	)
+}
+
+// handleKeyMsg handles keyboard input: special keys (esc, tab, ctrl+enter) here; all others go to the focused field.
 func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
@@ -100,7 +146,15 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 		// Create PR - handled outside
 		return m, nil
 	}
-	return m, nil
+	// Forward typing and other keys to the focused input
+	if m.focusedField == 0 {
+		var cmd tea.Cmd
+		m.titleInput, cmd = m.titleInput.Update(msg)
+		return m, cmd
+	}
+	var cmd tea.Cmd
+	m.bodyInput, cmd = m.bodyInput.Update(msg)
+	return m, cmd
 }
 
 // Accessors

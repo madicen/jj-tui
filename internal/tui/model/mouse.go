@@ -10,12 +10,12 @@ import (
 )
 
 // handleZoneClick handles clicks detected by bubblezone
-func (m *Model) handleZoneClick(clickedZone *zone.ZoneInfo) (tea.Model, tea.Cmd) {
-	if clickedZone == nil {
+func (m *Model) handleZoneClick(msg zone.MsgZoneInBounds) (tea.Model, tea.Cmd) {
+	if msg.Zone == nil {
 		return m, nil
 	}
-
-	userClicked := m.createIsZoneClickedFunc(clickedZone)
+	// Use InBounds for zone matching so PR form and other zones work reliably (pointer comparison can fail after Scan)
+	userClicked := m.createIsZoneClickedFuncWithEvent(msg.Event)
 
 	// Handle error state first - error modal blocks most mouse interactions
 	if m.err != nil {

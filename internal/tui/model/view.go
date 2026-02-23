@@ -74,32 +74,17 @@ func (m *Model) View() string {
 		m.graphTabModel.SetSelectionMode(graph.SelectionMode(m.selectionMode))
 		m.graphTabModel.SetRebaseSourceCommit(m.rebaseSourceCommit)
 		content = m.graphTabModel.View()
-		if content == "" {
-			content = m.renderGraphContent()
-		}
 	case ViewPullRequests:
 		content = m.prsTabModel.View()
-		if content == "" {
-			content = m.renderPRsContent()
-		}
 	case ViewBranches:
 		content = m.branchesTabModel.View()
-		if content == "" {
-			content = m.renderBranchesContent()
-		}
 	case ViewTickets:
 		content = m.ticketsTabModel.View()
-		if content == "" {
-			content = m.renderTicketsContent()
-		}
 	case ViewSettings:
 		content = m.renderSettings()
 	case ViewHelp:
 		m.syncHelpCommandHistory()
 		content = m.helpTabModel.View()
-		if content == "" {
-			content = m.renderHelpContent()
-		}
 	case ViewEditDescription:
 		content = m.renderEditDescription()
 	case ViewCreatePR:
@@ -107,9 +92,6 @@ func (m *Model) View() string {
 	case ViewCreateBookmark:
 		m.syncBookmarkModalState()
 		content = m.bookmarkModal.View()
-		if content == "" {
-			content = m.renderCreateBookmark()
-		}
 	case ViewBookmarkConflict:
 		content = m.conflictModal.View()
 	case ViewDivergentCommit:
@@ -117,7 +99,7 @@ func (m *Model) View() string {
 	case ViewGitHubLogin:
 		content = m.renderGitHubLogin()
 	default:
-		content = m.renderGraphContent()
+		content = m.graphTabModel.View()
 	}
 
 	// Pin footer to bottom: pad content to fixed height (avoid lipgloss on content to preserve zone markup)
@@ -187,43 +169,6 @@ func (m *Model) renderWithHeader(content string) string {
 		statusBar,
 	)
 	return m.zoneManager.Scan(v)
-}
-
-// Rendering helper methods (simplified stubs that delegate to models)
-
-func (m *Model) renderGraphContent() string {
-	return "Graph view - rendering delegated to graphTabModel"
-}
-
-func (m *Model) renderPRsContent() string {
-	return "Pull Requests view - rendering delegated to prsTabModel"
-}
-
-func (m *Model) renderBranchesContent() string {
-	return "Branches view - rendering delegated to branchesTabModel"
-}
-
-func (m *Model) renderTicketsContent() string {
-	return "Tickets view - rendering delegated to ticketsTabModel"
-}
-
-func (m *Model) renderSettingsContent() string {
-	return "Settings view - rendering delegated to settingsTabModel"
-}
-
-func (m *Model) renderHelpContent() string {
-	var entries []helptab.CommandHistoryEntry
-	for _, entry := range m.getFilteredCommandHistory() {
-		entries = append(entries, helptab.CommandHistoryEntry{
-			Command:   entry.Command,
-			Timestamp: entry.Timestamp.Format("15:04:05"),
-			Duration:  formatDuration(entry.Duration),
-			Success:   entry.Success,
-			Error:     entry.Error,
-		})
-	}
-	m.helpTabModel.SetCommandHistoryEntries(entries)
-	return m.helpTabModel.View()
 }
 
 // renderHeader renders the header with clickable tabs
@@ -367,94 +312,6 @@ func (m *Model) renderError() string {
 	return modalBox
 }
 
-// renderWarningModal renders the warning modal (e.g., for empty commit descriptions)
-func (m *Model) renderWarningModal() string {
-	modalWidth := min(max(m.width-8, 50), 80)
-
-	// Styles - amber/yellow theme for warnings
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#E3B341")).
-		MarginBottom(1)
-
-	messageStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#C9D1D9")).
-		Width(modalWidth - 4)
-
-	mutedStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#8B949E"))
-
-	commitStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#58A6FF"))
-
-	selectedCommitStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#FFFFFF")).
-		Background(lipgloss.Color("#30363d")).
-		Bold(true)
-
-	buttonStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#FFFFFF")).
-		Background(lipgloss.Color("#30363d")).
-		Padding(0, 1).
-		Bold(true)
-
-	// Build modal content
-	var content strings.Builder
-	content.WriteString(titleStyle.Render("⚠ " + m.warningTitle))
-	content.WriteString("\n\n")
-	content.WriteString(messageStyle.Render(m.warningMessage))
-	content.WriteString("\n\n")
-
-	// List commits with empty descriptions
-	if len(m.warningCommits) > 0 {
-		content.WriteString(mutedStyle.Render("Commits without descriptions:"))
-		content.WriteString("\n")
-		for i, commit := range m.warningCommits {
-			changeID := commit.ChangeID
-			if len(changeID) > 8 {
-				changeID = changeID[:8]
-			}
-			summary := commit.Summary
-			if summary == "" {
-				summary = "(no description)"
-			}
-			if len(summary) > 40 {
-				summary = summary[:37] + "..."
-			}
-
-			line := fmt.Sprintf("  %s  %s", changeID, summary)
-			if i == m.warningSelectedIdx {
-				content.WriteString(selectedCommitStyle.Render(line))
-			} else {
-				content.WriteString(commitStyle.Render(line))
-			}
-			content.WriteString("\n")
-		}
-	}
-
-	content.WriteString("\n")
-	content.WriteString(mutedStyle.Render("─────────────────────────────────────"))
-	content.WriteString("\n\n")
-
-	// Clickable button row
-	goToBtn := m.zoneManager.Mark(mouse.ZoneWarningGoToCommit, buttonStyle.Background(lipgloss.Color("#238636")).Render("Go to Commit (Enter)"))
-	dismissBtn := m.zoneManager.Mark(mouse.ZoneWarningDismiss, buttonStyle.Render("Cancel (Esc)"))
-
-	content.WriteString(goToBtn + "  " + dismissBtn)
-	content.WriteString("\n\n")
-	content.WriteString(mutedStyle.Render("Use ↑/↓ to select a commit, Enter to edit its description"))
-
-	// Create the modal box with amber border
-	modalBox := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#E3B341")).
-		Padding(1, 2).
-		Width(modalWidth).
-		Render(content.String())
-
-	return modalBox
-}
-
 // renderSettings renders the settings view via the settings tab package
 func (m *Model) renderSettings() string {
 	inputs := m.settingsTabModel.GetSettingsInputs()
@@ -561,13 +418,6 @@ func formatDuration(d time.Duration) string {
 func (m *Model) syncBookmarkModalState() {
 	m.bookmarkModal.UpdateRepository(m.repository)
 }
-
-// renderCreateBookmark is fallback when bookmark modal View() returns "" (modal owns rendering now)
-func (m *Model) renderCreateBookmark() string {
-	return ""
-}
-
-// renderBookmarkConflict and renderDivergentCommit removed; conflict/divergent modals own rendering
 
 // renderEditDescription renders the description editing view
 func (m *Model) renderEditDescription() string {

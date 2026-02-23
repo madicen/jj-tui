@@ -73,7 +73,7 @@ func New(ctx context.Context) *Model {
 		conflictModal:   conflicttab.NewModel(zm),
 		divergentModal:  divergenttab.NewModel(zm),
 		bookmarkModal:   bookmarktab.NewModel(zm),
-		prFormModal:     prformtab.NewModel(),
+		prFormModal:     prformtab.NewModel(zm),
 	}
 }
 
