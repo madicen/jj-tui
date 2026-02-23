@@ -106,7 +106,7 @@ func (m *Model) handleRebase() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleGraphFoucsMessage() string {
-	return If(m.graphFocused, "Graph pane focused", "Files pane focused")
+	return If(m.graphTabModel.IsGraphFocused(), "Graph pane focused", "Files pane focused")
 }
 
 // handleGraphRequest processes requests from the graph tab (keys/zones); main runs jj commands.
@@ -174,7 +174,7 @@ func (m *Model) graphRequestContext() *graphtab.RequestContext {
 		ChangedFiles:         m.graphTabModel.GetChangedFiles(),
 		ChangedFilesCommitID: m.graphTabModel.GetChangedFilesCommitID(),
 		SelectedFile:         m.graphTabModel.GetSelectedFile(),
-		GraphFocused:         m.graphFocused,
+		GraphFocused:         m.graphTabModel.IsGraphFocused(),
 	}
 }
 
@@ -676,7 +676,7 @@ func (m *Model) handleSettingsCancel() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleMoveFileUp() (tea.Model, tea.Cmd) {
-	if m.viewMode != ViewCommitGraph || m.graphFocused {
+	if m.viewMode != ViewCommitGraph || m.graphTabModel.IsGraphFocused() {
 		return m, nil
 	}
 	changedFiles := m.graphTabModel.GetChangedFiles()
@@ -703,7 +703,7 @@ func (m *Model) handleMoveFileUp() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleMoveFileDown() (tea.Model, tea.Cmd) {
-	if m.viewMode != ViewCommitGraph || m.graphFocused {
+	if m.viewMode != ViewCommitGraph || m.graphTabModel.IsGraphFocused() {
 		return m, nil
 	}
 	changedFiles := m.graphTabModel.GetChangedFiles()
@@ -730,7 +730,7 @@ func (m *Model) handleMoveFileDown() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleRevertFile() (tea.Model, tea.Cmd) {
-	if m.viewMode != ViewCommitGraph || m.graphFocused {
+	if m.viewMode != ViewCommitGraph || m.graphTabModel.IsGraphFocused() {
 		return m, nil
 	}
 	changedFiles := m.graphTabModel.GetChangedFiles()

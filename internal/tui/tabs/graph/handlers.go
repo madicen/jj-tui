@@ -150,53 +150,69 @@ func (m GraphModel) handleZoneClick(msg zone.MsgZoneInBounds) (GraphModel, tea.C
 	if msg.Zone == nil {
 		return m, nil
 	}
+	zone := msg.Zone
 	event := msg.Event
 	inBounds := func(id string) bool {
 		z := m.zoneManager.Get(id)
 		return z != nil && z.InBounds(event)
 	}
 
-	// Check for pane focus zones by event position (reliable after Scan)
-	if inBounds(mouse.ZoneGraphPane) {
-		if !m.graphFocused {
-			m.graphFocused = true
-		}
-		return m, nil
-	}
-
-	if inBounds(mouse.ZoneFilesPane) {
-		if m.graphFocused {
-			m.graphFocused = false
-		}
-		return m, nil
-	}
-
-	// Check for commit selection zones (pointer comparison still used for list zones)
-	zone := msg.Zone
+	// Check commit and file zones first (the zone that was actually hit).
+	// Pane zones wrap the whole graph/files area, so we must not check them first or they'd swallow commit clicks.
 	if m.repository != nil {
 		for commitIndex := range m.repository.Graph.Commits {
 			if m.zoneManager.Get(mouse.ZoneCommit(commitIndex)) == zone {
-				// If in rebase mode, clicking a commit selects it as destination
+				m.graphFocused = true // clicking a commit focuses the graph pane
 				if m.selectionMode == SelectionRebaseDestination {
-					// Rebase action is handled by parent model
-					return m, nil
+					return m, Request{PerformRebase: true, RebaseDestIndex: commitIndex}.Cmd()
 				}
-				// Normal selection: update and request changed files load
 				m.selectedCommit = commitIndex
 				m.changedFilesCommitID = m.repository.Graph.Commits[commitIndex].ChangeID
 				return m, Request{LoadChangedFiles: &m.changedFilesCommitID}.Cmd()
 			}
 		}
 	}
-
-	// Check for changed file zones
 	for i := range m.changedFiles {
 		if m.zoneManager.Get(mouse.ZoneChangedFile(i)) == zone {
 			m.selectedFile = i
-			// When clicking a file, switch focus to files pane
 			m.graphFocused = false
 			return m, nil
 		}
+	}
+
+	// Pane focus: only when click wasn't on a commit or file (e.g. connector lines or empty area).
+	// If zone was the pane (not a commit), check by position whether we're inside a commit zone so commit clicks still work.
+	if inBounds(mouse.ZoneGraphPane) {
+		if m.repository != nil {
+			for commitIndex := range m.repository.Graph.Commits {
+				if inBounds(mouse.ZoneCommit(commitIndex)) {
+					m.graphFocused = true // clicking a commit focuses the graph pane
+					if m.selectionMode == SelectionRebaseDestination {
+						return m, Request{PerformRebase: true, RebaseDestIndex: commitIndex}.Cmd()
+					}
+					m.selectedCommit = commitIndex
+					m.changedFilesCommitID = m.repository.Graph.Commits[commitIndex].ChangeID
+					return m, Request{LoadChangedFiles: &m.changedFilesCommitID}.Cmd()
+				}
+			}
+		}
+		if !m.graphFocused {
+			m.graphFocused = true
+		}
+		return m, nil
+	}
+	if inBounds(mouse.ZoneFilesPane) {
+		for i := range m.changedFiles {
+			if inBounds(mouse.ZoneChangedFile(i)) {
+				m.selectedFile = i
+				m.graphFocused = false
+				return m, nil
+			}
+		}
+		if m.graphFocused {
+			m.graphFocused = false
+		}
+		return m, nil
 	}
 
 	return m, nil

@@ -124,7 +124,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.graphFocused = true
 
 		// Resize text areas to fit new window width
 		inputWidth := min(
@@ -163,7 +162,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds := PropagateUpdate(msg, &m.graphTabModel)
 			m.selectionMode = SelectionMode(m.graphTabModel.GetSelectionMode())
 			m.rebaseSourceCommit = m.graphTabModel.GetRebaseSourceCommit()
-			m.graphFocused = m.graphTabModel.IsGraphFocused()
 			// Graph tab returns requests (LoadChangedFiles, Checkout, etc.) as cmds; run them
 			if len(cmds) > 0 && cmds[0] != nil {
 				return m, tea.Batch(cmds...)
@@ -266,7 +264,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds := PropagateUpdate(msg, &m.graphTabModel)
 			m.selectionMode = SelectionMode(m.graphTabModel.GetSelectionMode())
 			m.rebaseSourceCommit = m.graphTabModel.GetRebaseSourceCommit()
-			m.graphFocused = m.graphTabModel.IsGraphFocused()
 			if len(cmds) > 0 && cmds[0] != nil {
 				return m, cmds[0]
 			}

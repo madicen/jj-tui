@@ -133,7 +133,7 @@ func TestChangedFilesLoadedMsgUpdatesGraphTab(t *testing.T) {
 
 // TestMouseScrollGraphTabWithoutClicking is an integration test for mouse wheel scrolling on the graph tab.
 // It documents and verifies the current behavior: scrolling is focus-based, not cursor-based.
-// - Without clicking any pane: graphFocused is true by default, so wheel scrolls the graph (commit) list.
+// - Without clicking any pane: graph tab's focus is on graph by default, so wheel scrolls the graph (commit) list.
 // - After clicking the files pane (or Tab to it): wheel scrolls the files list.
 // So "scroll without clicking" works for the default pane (graph); to scroll the other list you must focus it first.
 func TestMouseScrollGraphTabWithoutClicking(t *testing.T) {
@@ -159,7 +159,7 @@ func TestMouseScrollGraphTabWithoutClicking(t *testing.T) {
 	m.graphTabModel.UpdateRepository(m.repository)
 	m.graphTabModel.SelectCommit(0)
 	m.viewMode = ViewCommitGraph
-	m.graphFocused = true
+	m.graphTabModel.SetGraphFocused(true)
 	m.width = 100
 	m.height = 80
 	m.graphTabModel.SetDimensions(m.width, m.estimatedContentHeight())

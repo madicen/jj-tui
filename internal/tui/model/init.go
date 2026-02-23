@@ -61,7 +61,6 @@ func New(ctx context.Context) *Model {
 		viewMode:        ViewCommitGraph,
 		statusMessage:   "Initializing...",
 		loading:         true,
-		graphFocused:    true, // match graph tab default so wheel scroll works without clicking first
 		graphTabModel:   graphTabModel,
 		prsTabModel:     prstab.NewModel(zm),
 		branchesTabModel: branchestab.NewModel(zm),
