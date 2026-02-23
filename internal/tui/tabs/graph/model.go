@@ -11,6 +11,7 @@ import (
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/mattn/go-runewidth"
 )
 
 // GraphModel represents the state of the Graph tab
@@ -144,6 +145,23 @@ func (m *GraphModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// paneZoneContent pads each line to the given width so the zone spans the full pane width and
+// clicks on the right half of the screen register. Uses lipgloss.Width for measurement (strips
+// ANSI/zone markers) and runewidth for padding so the rendered width is correct.
+func paneZoneContent(content string, width int) string {
+	if width <= 0 || content == "" {
+		return content
+	}
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		w := lipgloss.Width(line)
+		if w < width {
+			lines[i] = line + runewidth.FillRight("", width-w)
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
 // graphLineIndexForCommit returns the line index in the graph content for the given commit index.
 // Matches the layout in data.go: each commit uses 1 line plus len(commit.GraphLines) connector lines.
 func graphLineIndexForCommit(commits []internal.Commit, commitIndex int) int {
@@ -220,7 +238,7 @@ func (m *GraphModel) View() string {
 	if gStart < gEnd {
 		visibleGraph = strings.Join(graphLines[gStart:gEnd], "\n")
 	}
-	graphPane := m.zoneManager.Mark(mouse.ZoneGraphPane, visibleGraph)
+	graphPane := m.zoneManager.Mark(mouse.ZoneGraphPane, paneZoneContent(visibleGraph, m.width))
 
 	// Set up files pane - slice content manually to preserve ZoneChangedFile(i) markup
 	m.filesViewport.Height = filesHeight
@@ -262,7 +280,7 @@ func (m *GraphModel) View() string {
 	if fStart < fEnd {
 		visibleFiles = strings.Join(filesLines[fStart:fEnd], "\n")
 	}
-	filesPane := m.zoneManager.Mark(mouse.ZoneFilesPane, visibleFiles)
+	filesPane := m.zoneManager.Mark(mouse.ZoneFilesPane, paneZoneContent(visibleFiles, m.width))
 
 	// Simple separator line
 	separator := lipgloss.NewStyle().
