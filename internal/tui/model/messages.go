@@ -3,11 +3,96 @@ package model
 import (
 	"time"
 
-	"github.com/madicen/jj-tui/internal/github"
-	"github.com/madicen/jj-tui/internal/jj"
-	"github.com/madicen/jj-tui/internal/models"
+	"github.com/madicen/jj-tui/internal"
+	"github.com/madicen/jj-tui/internal/integrations/github"
+	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tickets"
 )
+
+// Public messages and view types (used by tests and external packages).
+
+// TabSelectedMsg is emitted when a tab is clicked
+type TabSelectedMsg struct {
+	Tab ViewMode
+}
+
+// ActionMsg is emitted when an action button is clicked
+type ActionMsg struct {
+	Action ActionType
+}
+
+// ActionType represents the type of action triggered
+type ActionType string
+
+const (
+	ActionQuit     ActionType = "quit"
+	ActionRefresh  ActionType = "refresh"
+	ActionNewPR    ActionType = "new_pr"
+	ActionCheckout ActionType = "checkout"
+	ActionEdit     ActionType = "edit"
+	ActionSquash   ActionType = "squash"
+	ActionRebase   ActionType = "rebase"
+	ActionHelp     ActionType = "help"
+)
+
+// SelectionMode indicates what the user is selecting commits for
+type SelectionMode int
+
+const (
+	SelectionNormal            SelectionMode = iota // Normal selection
+	SelectionRebaseDestination                      // Selecting destination for rebase
+)
+
+// ViewMode represents different views in the TUI
+type ViewMode int
+
+const (
+	ViewCommitGraph ViewMode = iota
+	ViewPullRequests
+	ViewTickets
+	ViewBranches
+	ViewSettings
+	ViewHelp
+	ViewCreatePR
+	ViewEditDescription
+	ViewCreateBookmark
+	ViewGitHubLogin      // GitHub Device Flow login
+	ViewBookmarkConflict // Bookmark conflict resolution dialog
+	ViewDivergentCommit  // Divergent commit resolution dialog
+)
+
+func (v ViewMode) String() string {
+	switch v {
+	case ViewCommitGraph:
+		return "commit_graph"
+	case ViewPullRequests:
+		return "pull_requests"
+	case ViewTickets:
+		return "jira"
+	case ViewBranches:
+		return "branches"
+	case ViewSettings:
+		return "settings"
+	case ViewHelp:
+		return "help"
+	case ViewCreatePR:
+		return "create_pr"
+	case ViewEditDescription:
+		return "edit_description"
+	case ViewCreateBookmark:
+		return "create_bookmark"
+	case ViewGitHubLogin:
+		return "github_login"
+	case ViewBookmarkConflict:
+		return "bookmark_conflict"
+	case ViewDivergentCommit:
+		return "divergent_commit"
+	default:
+		return "unknown"
+	}
+}
+
+// Internal message types (not exported).
 
 // tickMsg is sent on each timer tick for auto-refresh (jj repository)
 type tickMsg time.Time
@@ -17,12 +102,12 @@ type prTickMsg time.Time
 
 // repositoryLoadedMsg is sent when repository data is loaded
 type repositoryLoadedMsg struct {
-	repository *models.Repository
+	repository *internal.Repository
 }
 
 // editCompletedMsg is sent when an edit operation completes
 type editCompletedMsg struct {
-	repository *models.Repository
+	repository *internal.Repository
 }
 
 // servicesInitializedMsg is sent when all services are initialized
@@ -30,15 +115,15 @@ type servicesInitializedMsg struct {
 	jjService     *jj.Service
 	githubService *github.Service
 	ticketService tickets.Service
-	ticketError   error  // Error from ticket service initialization (for debugging)
-	repository    *models.Repository
+	ticketError   error // Error from ticket service initialization (for debugging)
+	repository    *internal.Repository
 	githubInfo    string // Diagnostic info about GitHub connection (token source, repo)
 	demoMode      bool   // True if running in demo mode with mock services
 }
 
 // prsLoadedMsg is sent when PRs are loaded from GitHub
 type prsLoadedMsg struct {
-	prs []models.GitHubPR
+	prs []internal.GitHubPR
 }
 
 // ticketsLoadedMsg is sent when tickets are loaded
@@ -112,7 +197,7 @@ type descriptionSavedMsg struct {
 
 // prCreatedMsg is sent when a PR is successfully created
 type prCreatedMsg struct {
-	pr *models.GitHubPR
+	pr *internal.GitHubPR
 }
 
 // prMergedMsg is sent when a PR is successfully merged
@@ -186,7 +271,7 @@ type changedFilesLoadedMsg struct {
 
 // silentRepositoryLoadedMsg is for background refreshes that don't update the status
 type silentRepositoryLoadedMsg struct {
-	repository *models.Repository
+	repository *internal.Repository
 }
 
 // descriptionLoadedMsg contains the full description fetched from jj
@@ -209,20 +294,20 @@ type undoCompletedMsg struct {
 
 // fileMoveCompletedMsg is sent when a file is moved to a new commit
 type fileMoveCompletedMsg struct {
-	repository *models.Repository
+	repository *internal.Repository
 	filePath   string
 	direction  string // "up" or "down"
 }
 
 // fileRevertedMsg is sent when a file's changes are reverted
 type fileRevertedMsg struct {
-	repository *models.Repository
+	repository *internal.Repository
 	filePath   string
 }
 
 // branchesLoadedMsg is sent when branches are loaded
 type branchesLoadedMsg struct {
-	branches []models.Branch
+	branches []internal.Branch
 	err      error
 }
 

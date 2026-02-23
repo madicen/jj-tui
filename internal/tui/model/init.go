@@ -8,93 +8,72 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal/config"
-	"github.com/madicen/jj-tui/internal/github"
-	"github.com/madicen/jj-tui/internal/jj"
+	"github.com/madicen/jj-tui/internal/integrations/github"
+	"github.com/madicen/jj-tui/internal/integrations/jj"
+	bookmarktab "github.com/madicen/jj-tui/internal/tui/tabs/bookmark"
+	branchestab "github.com/madicen/jj-tui/internal/tui/tabs/branches"
+	conflicttab "github.com/madicen/jj-tui/internal/tui/tabs/conflict"
+	divergenttab "github.com/madicen/jj-tui/internal/tui/tabs/divergent"
+	errortab "github.com/madicen/jj-tui/internal/tui/tabs/error"
+	graphtab "github.com/madicen/jj-tui/internal/tui/tabs/graph"
+	helptab "github.com/madicen/jj-tui/internal/tui/tabs/help"
+	prformtab "github.com/madicen/jj-tui/internal/tui/tabs/prform"
+	prstab "github.com/madicen/jj-tui/internal/tui/tabs/prs"
+	settingstab "github.com/madicen/jj-tui/internal/tui/tabs/settings"
+	ticketstab "github.com/madicen/jj-tui/internal/tui/tabs/tickets"
+	warningtab "github.com/madicen/jj-tui/internal/tui/tabs/warning"
 )
 
 // New creates a new Model
 func New(ctx context.Context) *Model {
-	// Create textarea for description editing
+	// Load config for initial values
+	cfg, _ := config.Load()
+
+	// Create description textarea for graph tab (commit description editing)
 	ta := textarea.New()
 	ta.Placeholder = "Enter commit description..."
 	ta.ShowLineNumbers = false
 	ta.SetWidth(60)
 	ta.SetHeight(5)
 
-	// Load config for initial values
-	cfg, _ := config.Load()
+	zm := zone.New()
+	graphTabModel := graphtab.NewGraphModel(zm)
+	graphTabModel.SetDescriptionInput(ta)
 
-	// Create settings inputs
+	settingsTabModel := settingstab.NewModel()
 	settingsInputs := createSettingsInputs(cfg)
-
-	// Initialize toggle states from config
-	showMerged := true
-	showClosed := true
-	onlyMine := false
-	prLimit := 100
-	prRefreshInterval := 120   // Default: 2 minutes
-	autoInProgress := true     // Default: enabled
-	branchLimit := 50          // Default: 50 branches
-	sanitizeBookmarks := true  // Default: enabled
-	ticketProvider := ""       // Default: none selected (will use legacy auto-detect on save)
+	settingsTabModel.SetInputs(settingsInputs)
 	if cfg != nil {
-		showMerged = cfg.ShowMergedPRs()
-		showClosed = cfg.ShowClosedPRs()
-		onlyMine = cfg.OnlyMyPRs()
-		prLimit = cfg.PRLimit()
-		prRefreshInterval = cfg.PRRefreshInterval()
-		autoInProgress = cfg.AutoInProgressOnBranch()
-		branchLimit = cfg.BranchLimit()
-		sanitizeBookmarks = cfg.ShouldSanitizeBookmarkNames()
-		ticketProvider = cfg.TicketProvider
+		settingsTabModel.SetSettingsShowMerged(cfg.ShowMergedPRs())
+		settingsTabModel.SetSettingsShowClosed(cfg.ShowClosedPRs())
+		settingsTabModel.SetSettingsOnlyMine(cfg.OnlyMyPRs())
+		settingsTabModel.SetSettingsPRLimit(cfg.PRLimit())
+		settingsTabModel.SetSettingsPRRefreshInterval(cfg.PRRefreshInterval())
+		settingsTabModel.SetSettingsAutoInProgress(cfg.AutoInProgressOnBranch())
+		settingsTabModel.SetSettingsBranchLimit(cfg.BranchLimit())
+		settingsTabModel.SetSettingsSanitizeBookmarks(cfg.ShouldSanitizeBookmarkNames())
+		settingsTabModel.SetSettingsTicketProvider(cfg.TicketProvider)
 	}
 
-	// PR title input
-	prTitle := textinput.New()
-	prTitle.Placeholder = "Pull request title"
-	prTitle.CharLimit = 200
-	prTitle.Width = 60
-
-	// PR body textarea
-	prBody := textarea.New()
-	prBody.Placeholder = "Describe your changes..."
-	prBody.ShowLineNumbers = false
-	prBody.SetWidth(60)
-	prBody.SetHeight(8)
-
-	// Bookmark name input
-	bookmarkName := textinput.New()
-	bookmarkName.Placeholder = "bookmark-name"
-	bookmarkName.CharLimit = 100
-	bookmarkName.Width = 50
-
 	return &Model{
-		ctx:                       ctx,
-		zoneManager:               zone.New(),
-		viewMode:                  ViewCommitGraph,
-		selectedCommit:            -1,
-		statusMessage:             "Initializing...",
-		loading:                   true,
-		descriptionInput:          ta,
-		settingsInputs:            settingsInputs,
-		settingsShowMerged:        showMerged,
-		settingsShowClosed:        showClosed,
-		settingsOnlyMine:          onlyMine,
-		settingsPRLimit:           prLimit,
-		settingsPRRefreshInterval: prRefreshInterval,
-		settingsAutoInProgress:    autoInProgress,
-		settingsBranchLimit:       branchLimit,
-		settingsSanitizeBookmarks: sanitizeBookmarks,
-		settingsTicketProvider:    ticketProvider,
-		prTitleInput:              prTitle,
-		prBodyInput:               prBody,
-		prBaseBranch:              "main",
-		prCommitIndex:             -1,
-		bookmarkNameInput:         bookmarkName,
-		bookmarkCommitIdx:         -1,
-		selectedBookmarkIdx:       -1,
-		jiraBookmarkTitles:        make(map[string]string),
-		ticketBookmarkDisplayKeys: make(map[string]string),
+		ctx:             ctx,
+		zoneManager:     zm,
+		viewMode:        ViewCommitGraph,
+		statusMessage:   "Initializing...",
+		loading:         true,
+		graphFocused:    true, // match graph tab default so wheel scroll works without clicking first
+		graphTabModel:   graphTabModel,
+		prsTabModel:     prstab.NewModel(zm),
+		branchesTabModel: branchestab.NewModel(zm),
+		ticketsTabModel: ticketstab.NewModel(zm),
+		settingsTabModel: settingsTabModel,
+		helpTabModel:    helptab.NewModel(zm),
+		errorModal:      errortab.NewModel(),
+		warningModal:    warningtab.NewModel(),
+		conflictModal:   conflicttab.NewModel(zm),
+		divergentModal:  divergenttab.NewModel(zm),
+		bookmarkModal:   bookmarktab.NewModel(zm),
+		prFormModal:     prformtab.NewModel(zm),
 	}
 }
 

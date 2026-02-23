@@ -3,14 +3,19 @@ package model
 import (
 	"fmt"
 	"slices"
-	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	branchestab "github.com/madicen/jj-tui/internal/tui/tabs/branches"
+	graphtab "github.com/madicen/jj-tui/internal/tui/tabs/graph"
+	helptab "github.com/madicen/jj-tui/internal/tui/tabs/help"
+	prstab "github.com/madicen/jj-tui/internal/tui/tabs/prs"
+	settingstab "github.com/madicen/jj-tui/internal/tui/tabs/settings"
+	ticketstab "github.com/madicen/jj-tui/internal/tui/tabs/tickets"
 )
 
 func (m *Model) handleCheckoutCommit() (tea.Model, tea.Cmd) {
 	if m.isSelectedCommitValid() && m.jjService != nil {
-		commit := m.repository.Graph.Commits[m.selectedCommit]
+		commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
 		if commit.Immutable {
 			m.statusMessage = "Cannot edit: commit is immutable"
 			return m, nil
@@ -22,7 +27,7 @@ func (m *Model) handleCheckoutCommit() (tea.Model, tea.Cmd) {
 
 func (m *Model) handleSquashCommit() (tea.Model, tea.Cmd) {
 	if m.isSelectedCommitValid() && m.jjService != nil {
-		commit := m.repository.Graph.Commits[m.selectedCommit]
+		commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
 		if commit.Immutable {
 			m.statusMessage = "Cannot squash: commit is immutable"
 			return m, nil
@@ -34,7 +39,7 @@ func (m *Model) handleSquashCommit() (tea.Model, tea.Cmd) {
 
 func (m *Model) handleAbandonCommit() (tea.Model, tea.Cmd) {
 	if m.isSelectedCommitValid() && m.jjService != nil {
-		commit := m.repository.Graph.Commits[m.selectedCommit]
+		commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
 		if commit.Immutable {
 			m.statusMessage = "Cannot abandon: commit is immutable"
 			return m, nil
@@ -50,7 +55,7 @@ func (m *Model) handleAbandonCommit() (tea.Model, tea.Cmd) {
 
 func (m *Model) handleResolveDivergentCommit() (tea.Model, tea.Cmd) {
 	if m.isSelectedCommitValid() && m.jjService != nil {
-		commit := m.repository.Graph.Commits[m.selectedCommit]
+		commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
 		if !commit.Divergent {
 			m.statusMessage = "This commit is not divergent"
 			return m, nil
@@ -63,7 +68,7 @@ func (m *Model) handleResolveDivergentCommit() (tea.Model, tea.Cmd) {
 
 func (m *Model) handleDescribeCommit() (tea.Model, tea.Cmd) {
 	if m.isSelectedCommitValid() && m.jjService != nil {
-		commit := m.repository.Graph.Commits[m.selectedCommit]
+		commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
 		if commit.Immutable {
 			m.statusMessage = "Cannot edit description: commit is immutable"
 			return m, nil
@@ -78,7 +83,7 @@ func (m *Model) handleNewCommit() (tea.Model, tea.Cmd) {
 		// Create a new commit as a child of the selected commit
 		// This is valid even for immutable commits - we're creating a child, not modifying the parent
 		if m.isSelectedCommitValid() {
-			commit := m.repository.Graph.Commits[m.selectedCommit]
+			commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
 			m.statusMessage = fmt.Sprintf("Creating new commit from %s...", commit.ShortID)
 		} else {
 			m.statusMessage = "Creating new commit..."
@@ -90,7 +95,7 @@ func (m *Model) handleNewCommit() (tea.Model, tea.Cmd) {
 
 func (m *Model) handleRebase() (tea.Model, tea.Cmd) {
 	if m.isSelectedCommitValid() && m.jjService != nil {
-		commit := m.repository.Graph.Commits[m.selectedCommit]
+		commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
 		if commit.Immutable {
 			m.statusMessage = "Cannot rebase: commit is immutable"
 			return m, nil
@@ -102,6 +107,236 @@ func (m *Model) handleRebase() (tea.Model, tea.Cmd) {
 
 func (m *Model) handleGraphFoucsMessage() string {
 	return If(m.graphFocused, "Graph pane focused", "Files pane focused")
+}
+
+// handleGraphRequest processes requests from the graph tab (keys/zones); main runs jj commands.
+func (m *Model) handleGraphRequest(r graphtab.Request) (tea.Model, tea.Cmd) {
+	ctx := m.graphRequestContext()
+	// Requests executed by the graph tab (returns cmd + optional status message)
+	if r.Checkout || r.Squash || r.Abandon || r.PerformRebase || r.DeleteBookmark ||
+		r.MoveFileUp || r.MoveFileDown || r.RevertFile || r.NewCommit {
+		cmd, statusMsg := graphtab.ExecuteRequest(r, ctx)
+		if statusMsg != "" {
+			if statusMsg == graphtab.StatusNeedsDivergentDialog {
+				return m.handleResolveDivergentCommit()
+			}
+			m.statusMessage = statusMsg
+			return m, nil
+		}
+		if cmd != nil {
+			if r.NewCommit {
+				if m.isSelectedCommitValid() {
+					commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
+					m.statusMessage = fmt.Sprintf("Creating new commit from %s...", commit.ShortID)
+				} else {
+					m.statusMessage = "Creating new commit..."
+				}
+			}
+			return m, cmd
+		}
+	}
+	// Load changed files (returns model-internal message)
+	if r.LoadChangedFiles != nil {
+		return m, m.loadChangedFiles(*r.LoadChangedFiles)
+	}
+	if r.ResolveDivergent != nil {
+		m.statusMessage = "Loading divergent commit info..."
+		return m, m.loadDivergentCommitInfo(*r.ResolveDivergent)
+	}
+	if r.StartEditDescription {
+		return m.handleDescribeCommit()
+	}
+	if r.StartRebaseMode {
+		return m.handleRebase()
+	}
+	if r.CreateBookmark {
+		return m.handleCreateBookmark()
+	}
+	if r.CreatePR {
+		return m.handleCreatePR()
+	}
+	if r.UpdatePR {
+		return m.handleUpdatePR()
+	}
+	return m, nil
+}
+
+// graphRequestContext builds the context passed to graph.ExecuteRequest.
+func (m *Model) graphRequestContext() *graphtab.RequestContext {
+	if m.repository == nil {
+		return nil
+	}
+	return &graphtab.RequestContext{
+		JJService:            m.jjService,
+		Repository:           m.repository,
+		SelectedCommit:       m.GetSelectedCommit(),
+		RebaseSourceCommit:   m.rebaseSourceCommit,
+		ChangedFiles:         m.graphTabModel.GetChangedFiles(),
+		ChangedFilesCommitID: m.graphTabModel.GetChangedFilesCommitID(),
+		SelectedFile:         m.graphTabModel.GetSelectedFile(),
+		GraphFocused:         m.graphFocused,
+	}
+}
+
+func (m *Model) handlePRsRequest(r prstab.Request) (tea.Model, tea.Cmd) {
+	ctx := m.prsRequestContext()
+	cb := &prstab.Callbacks{
+		MergePR:       m.mergePR,
+		ClosePR:       m.closePR,
+		OpenInBrowser: m.openPRURL,
+	}
+	cmd, statusMsg := prstab.ExecuteRequest(r, ctx, cb)
+	if statusMsg != "" {
+		m.statusMessage = statusMsg
+		return m, nil
+	}
+	if cmd != nil {
+		if r.OpenInBrowser && ctx != nil && ctx.SelectedPRValid() {
+			pr := ctx.SelectedPRData()
+			if pr != nil {
+				m.statusMessage = fmt.Sprintf("Opening PR #%d...", pr.Number)
+			}
+		}
+		if r.MergePR && ctx != nil && ctx.SelectedPRValid() {
+			pr := ctx.SelectedPRData()
+			if pr != nil {
+				m.statusMessage = fmt.Sprintf("Merging PR #%d...", pr.Number)
+			}
+		}
+		if r.ClosePR && ctx != nil && ctx.SelectedPRValid() {
+			pr := ctx.SelectedPRData()
+			if pr != nil {
+				m.statusMessage = fmt.Sprintf("Closing PR #%d...", pr.Number)
+			}
+		}
+		return m, cmd
+	}
+	return m, nil
+}
+
+func (m *Model) prsRequestContext() *prstab.RequestContext {
+	if m.repository == nil {
+		return nil
+	}
+	return &prstab.RequestContext{
+		Repository: m.repository,
+		SelectedPR: m.GetSelectedPR(),
+		GitHubOK:   m.isGitHubAvailable(),
+		DemoMode:   m.demoMode,
+	}
+}
+
+// openPRURL opens a URL in the browser (used by PRs tab callback).
+func (m *Model) openPRURL(url string) tea.Cmd {
+	return openURL(url)
+}
+
+func (m *Model) handleBranchesRequest(r branchestab.Request) (tea.Model, tea.Cmd) {
+	if r.TrackBranch {
+		return m.handleTrackBranch()
+	}
+	if r.UntrackBranch {
+		return m.handleUntrackBranch()
+	}
+	if r.RestoreLocalBranch {
+		return m.handleRestoreLocalBranch()
+	}
+	if r.DeleteBranchBookmark {
+		return m.handleDeleteBranchBookmark()
+	}
+	if r.PushBranch {
+		return m.handlePushBranch()
+	}
+	if r.FetchAll {
+		return m.handleFetchAll()
+	}
+	if r.ResolveBookmarkConflict {
+		return m.handleResolveBookmarkConflict()
+	}
+	return m, nil
+}
+
+
+func (m *Model) ticketsRequestContext() *ticketstab.RequestContext {
+	return &ticketstab.RequestContext{
+		TicketList:           m.ticketsTabModel.GetTickets(),
+		SelectedTicket:       m.ticketsTabModel.GetSelectedTicket(),
+		AvailableTransitions: m.ticketsTabModel.GetAvailableTransitions(),
+		TransitionInProgress: m.ticketsTabModel.GetTransitionInProgress(),
+		TicketService:        m.ticketService,
+	}
+}
+
+// openTicketURL opens a URL in the browser (used by Tickets tab callback).
+func (m *Model) openTicketURL(url string) tea.Cmd {
+	return openURL(url)
+}
+
+// transitionTicketWithState sets transition-in-progress on the tab and returns the transition command (used by Tickets tab callback).
+func (m *Model) transitionTicketWithState(transitionID string) tea.Cmd {
+	m.ticketsTabModel.SetTransitionInProgress(true)
+	return m.transitionTicket(transitionID)
+}
+
+func (m *Model) handleTicketsRequest(r ticketstab.Request) (tea.Model, tea.Cmd) {
+	ctx := m.ticketsRequestContext()
+	cb := &ticketstab.Callbacks{
+		OpenInBrowser:    m.openTicketURL,
+		TransitionTicket: m.transitionTicketWithState,
+	}
+	res := ticketstab.ExecuteRequest(r, ctx, cb)
+	if res.StatusMsg != "" {
+		m.statusMessage = res.StatusMsg
+	}
+	if res.TransitionStatus != "" {
+		m.statusMessage = res.TransitionStatus
+	}
+	if res.NeedToggleMode {
+		mode := !m.ticketsTabModel.IsStatusChangeMode()
+		m.ticketsTabModel.SetStatusChangeMode(mode)
+		if mode {
+			m.statusMessage = "Change status (i/D/B/N)"
+		} else {
+			m.statusMessage = "Ready"
+		}
+		return m, nil
+	}
+	if res.NeedStartBookmark {
+		// Start bookmark from ticket removed; no-op
+		return m, nil
+	}
+	if res.Cmd != nil {
+		return m, res.Cmd
+	}
+	return m, nil
+}
+
+func (m *Model) handleHelpRequest(r helptab.Request) (tea.Model, tea.Cmd) {
+	cmd, statusMsg := helptab.ExecuteRequest(r)
+	if statusMsg != "" {
+		m.statusMessage = statusMsg
+		return m, cmd
+	}
+	return m, nil
+}
+
+func (m *Model) handleSettingsRequest(r settingstab.Request) (tea.Model, tea.Cmd) {
+	cb := &settingstab.Callbacks{
+		SaveSettings:      m.saveSettings,
+		SaveSettingsLocal: m.saveSettingsLocal,
+	}
+	res := settingstab.ExecuteRequest(r, cb)
+	if res.StatusMsg != "" {
+		m.statusMessage = res.StatusMsg
+		return m, nil
+	}
+	if res.NeedCancel {
+		return m.handleSettingsCancel()
+	}
+	if res.Cmd != nil {
+		return m, res.Cmd
+	}
+	return m, nil
 }
 
 func (m *Model) handleNavigateToGraphTab() (tea.Model, tea.Cmd) {
@@ -132,13 +367,13 @@ func (m *Model) handleNavigateToTicketsTab() (tea.Model, tea.Cmd) {
 
 func (m *Model) handleNavigateToSettingsTab() (tea.Model, tea.Cmd) {
 	m.viewMode = ViewSettings
-	// Focus first input when entering settings
-	m.settingsFocusedField = 0
-	for i := range m.settingsInputs {
+	m.settingsTabModel.SetFocusedField(0)
+	inputs := m.settingsTabModel.GetSettingsInputs()
+	for i := range inputs {
 		if i == 0 {
-			m.settingsInputs[i].Focus()
+			inputs[i].Focus()
 		} else {
-			m.settingsInputs[i].Blur()
+			inputs[i].Blur()
 		}
 	}
 	return m, nil
@@ -146,8 +381,8 @@ func (m *Model) handleNavigateToSettingsTab() (tea.Model, tea.Cmd) {
 
 func (m *Model) handleNavigateToHelpTab() (tea.Model, tea.Cmd) {
 	m.viewMode = ViewHelp
-	m.helpTab = 0             // Start on Shortcuts tab
-	m.helpSelectedCommand = 0 // Start with first command selected
+	m.helpTabModel.SetHelpTab(0)
+	m.helpTabModel.SetSelectedCommand(0)
 	m.statusMessage = "Loaded Help"
 	return m, nil
 }
@@ -164,10 +399,10 @@ func (m *Model) handleTrackBranch() (tea.Model, tea.Cmd) {
 	if m.viewMode != ViewBranches || len(m.branchList) == 0 {
 		return m, nil
 	}
-	if m.selectedBranch < 0 || m.selectedBranch >= len(m.branchList) {
+	if m.GetSelectedBranch() < 0 || m.GetSelectedBranch() >= len(m.branchList) {
 		return m, nil
 	}
-	branch := m.branchList[m.selectedBranch]
+	branch := m.branchList[m.GetSelectedBranch()]
 	if branch.IsLocal || branch.IsTracked {
 		m.statusMessage = "Branch is already tracked"
 		return m, nil
@@ -180,10 +415,10 @@ func (m *Model) handleUntrackBranch() (tea.Model, tea.Cmd) {
 	if m.viewMode != ViewBranches || len(m.branchList) == 0 {
 		return m, nil
 	}
-	if m.selectedBranch < 0 || m.selectedBranch >= len(m.branchList) {
+	if m.GetSelectedBranch() < 0 || m.GetSelectedBranch() >= len(m.branchList) {
 		return m, nil
 	}
-	branch := m.branchList[m.selectedBranch]
+	branch := m.branchList[m.GetSelectedBranch()]
 	if !branch.IsTracked {
 		m.statusMessage = "Branch is not tracked"
 		return m, nil
@@ -196,10 +431,10 @@ func (m *Model) handleRestoreLocalBranch() (tea.Model, tea.Cmd) {
 	if m.viewMode != ViewBranches || len(m.branchList) == 0 {
 		return m, nil
 	}
-	if m.selectedBranch < 0 || m.selectedBranch >= len(m.branchList) {
+	if m.GetSelectedBranch() < 0 || m.GetSelectedBranch() >= len(m.branchList) {
 		return m, nil
 	}
-	branch := m.branchList[m.selectedBranch]
+	branch := m.branchList[m.GetSelectedBranch()]
 	if !branch.LocalDeleted {
 		m.statusMessage = "Branch local copy is not deleted"
 		return m, nil
@@ -212,10 +447,10 @@ func (m *Model) handleDeleteBranchBookmark() (tea.Model, tea.Cmd) {
 	if m.viewMode != ViewBranches || len(m.branchList) == 0 {
 		return m, nil
 	}
-	if m.selectedBranch < 0 || m.selectedBranch >= len(m.branchList) {
+	if m.GetSelectedBranch() < 0 || m.GetSelectedBranch() >= len(m.branchList) {
 		return m, nil
 	}
-	branch := m.branchList[m.selectedBranch]
+	branch := m.branchList[m.GetSelectedBranch()]
 	if !branch.IsLocal {
 		m.statusMessage = "Can only delete local bookmarks"
 		return m, nil
@@ -233,10 +468,10 @@ func (m *Model) handleResolveBookmarkConflict() (tea.Model, tea.Cmd) {
 	if m.viewMode != ViewBranches || len(m.branchList) == 0 {
 		return m, nil
 	}
-	if m.selectedBranch < 0 || m.selectedBranch >= len(m.branchList) {
+	if m.GetSelectedBranch() < 0 || m.GetSelectedBranch() >= len(m.branchList) {
 		return m, nil
 	}
-	branch := m.branchList[m.selectedBranch]
+	branch := m.branchList[m.GetSelectedBranch()]
 	if !branch.HasConflict {
 		m.statusMessage = "This bookmark is not conflicted"
 		return m, nil
@@ -249,10 +484,10 @@ func (m *Model) handlePushBranch() (tea.Model, tea.Cmd) {
 	if m.viewMode != ViewBranches || len(m.branchList) == 0 {
 		return m, nil
 	}
-	if m.selectedBranch < 0 || m.selectedBranch >= len(m.branchList) {
+	if m.GetSelectedBranch() < 0 || m.GetSelectedBranch() >= len(m.branchList) {
 		return m, nil
 	}
-	branch := m.branchList[m.selectedBranch]
+	branch := m.branchList[m.GetSelectedBranch()]
 	if !branch.IsLocal {
 		m.statusMessage = "Can only push local branches"
 		return m, nil
@@ -302,13 +537,9 @@ func (m *Model) handleRedo() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleSelectCommit(index int) (tea.Model, tea.Cmd) {
-	m.selectedCommit = index
-	// Load changed files for the selected commit
-	if m.repository != nil && m.selectedCommit >= 0 && m.selectedCommit < len(m.repository.Graph.Commits) {
-		commit := m.repository.Graph.Commits[m.selectedCommit]
-		m.changedFilesCommitID = commit.ChangeID
-		m.changedFiles = nil // Clear old files while loading
-		m.selectedFile = 0   // Reset file selection
+	m.graphTabModel.SelectCommit(index)
+	if m.repository != nil && index >= 0 && index < len(m.repository.Graph.Commits) {
+		commit := m.repository.Graph.Commits[index]
 		return m, m.loadChangedFiles(commit.ChangeID)
 	}
 	return m, nil
@@ -337,7 +568,7 @@ func (m *Model) handleCreatePR() (tea.Model, tea.Cmd) {
 
 func (m *Model) handleCreateBookmark() (tea.Model, tea.Cmd) {
 	if m.isSelectedCommitValid() && m.jjService != nil {
-		commit := m.repository.Graph.Commits[m.selectedCommit]
+		commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
 		if commit.Immutable {
 			m.statusMessage = "Cannot create bookmark: commit is immutable"
 			return m, nil
@@ -351,7 +582,7 @@ func (m *Model) handleCreateBookmark() (tea.Model, tea.Cmd) {
 
 func (m *Model) handleDeleteBookmark() (tea.Model, tea.Cmd) {
 	if m.isSelectedCommitValid() && m.jjService != nil {
-		commit := m.repository.Graph.Commits[m.selectedCommit]
+		commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
 		if len(commit.Branches) == 0 {
 			m.statusMessage = "No bookmark on this commit to delete"
 			return m, nil
@@ -363,8 +594,7 @@ func (m *Model) handleDeleteBookmark() (tea.Model, tea.Cmd) {
 
 func (m *Model) handleUpdatePR() (tea.Model, tea.Cmd) {
 	if m.isSelectedCommitValid() && m.jjService != nil {
-		// Find the PR branch for this commit (could be on this commit or an ancestor)
-		prBranch := m.findPRBranchForCommit(m.selectedCommit)
+		prBranch := m.findPRBranchForCommit(m.GetSelectedCommit())
 		if prBranch == "" {
 			m.statusMessage = "No open PR found for this commit or its ancestors"
 			return m, nil
@@ -381,171 +611,13 @@ func (m *Model) handleUpdatePR() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		commit := m.repository.Graph.Commits[m.selectedCommit]
-		// Check if we need to move the bookmark (commit doesn't have it directly)
+		commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
 		needsMoveBookmark := true
 		if slices.Contains(commit.Branches, prBranch) {
 			needsMoveBookmark = false
 		}
 		return m, m.pushToPR(prBranch, commit.ChangeID, needsMoveBookmark)
 	}
-	return m, nil
-}
-
-func (m *Model) handleOpenPRInBrowser() (tea.Model, tea.Cmd) {
-	if m.repository != nil && m.selectedPR >= 0 && m.selectedPR < len(m.repository.PRs) {
-		pr := m.repository.PRs[m.selectedPR]
-		if pr.URL != "" {
-			if m.demoMode {
-				m.statusMessage = fmt.Sprintf("PR #%d: %s (demo mode - browser disabled)", pr.Number, pr.URL)
-				return m, nil
-			}
-			m.statusMessage = fmt.Sprintf("Opening PR #%d...", pr.Number)
-			return m, openURL(pr.URL)
-		}
-	}
-	return m, nil
-}
-
-func (m *Model) handleOpenTicketInBrowser() (tea.Model, tea.Cmd) {
-	if m.ticketService != nil && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
-		ticket := m.ticketList[m.selectedTicket]
-		ticketURL := m.ticketService.GetTicketURL(ticket)
-		m.statusMessage = fmt.Sprintf("Opening %s...", ticket.DisplayKey)
-		return m, openURL(ticketURL)
-	}
-	return m, nil
-}
-
-func (m *Model) handleMergePR() (tea.Model, tea.Cmd) {
-	if m.viewMode == ViewPullRequests && m.isGitHubAvailable() && m.repository != nil && m.selectedPR >= 0 && m.selectedPR < len(m.repository.PRs) {
-		pr := m.repository.PRs[m.selectedPR]
-		if pr.State != "open" {
-			m.statusMessage = "Can only merge open PRs"
-			return m, nil
-		}
-		m.statusMessage = fmt.Sprintf("Merging PR #%d...", pr.Number)
-		return m, m.mergePR(pr.Number)
-	}
-	return m, nil
-}
-
-func (m *Model) handleClosePR() (tea.Model, tea.Cmd) {
-	if m.viewMode == ViewPullRequests && m.isGitHubAvailable() && m.repository != nil && m.selectedPR >= 0 && m.selectedPR < len(m.repository.PRs) {
-		pr := m.repository.PRs[m.selectedPR]
-		if pr.State != "open" {
-			m.statusMessage = "Can only close open PRs"
-			return m, nil
-		}
-		m.statusMessage = fmt.Sprintf("Closing PR #%d...", pr.Number)
-		return m, m.closePR(pr.Number)
-	}
-	return m, nil
-}
-
-func (m *Model) handleToggleStatusChangeMode() (tea.Model, tea.Cmd) {
-	if m.viewMode == ViewTickets && m.ticketService != nil && !m.transitionInProgress {
-		m.statusChangeMode = !m.statusChangeMode
-		if m.statusChangeMode {
-			m.statusMessage = "Select a status to apply (i/D/B/N or Esc to cancel)"
-		} else {
-			m.statusMessage = "Ready"
-		}
-	}
-	return m, nil
-}
-
-func (m *Model) handleStartBookmarkFromTicket() (tea.Model, tea.Cmd) {
-	if m.viewMode == ViewTickets && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) && m.jjService != nil {
-		ticket := m.ticketList[m.selectedTicket]
-		m.startBookmarkFromTicket(ticket)
-	}
-	return m, nil
-}
-
-func (m *Model) handleTransitionToInProgress() (tea.Model, tea.Cmd) {
-	if m.viewMode != ViewTickets || m.ticketService == nil || !m.statusChangeMode || m.transitionInProgress {
-		return m, nil
-	}
-	if m.selectedTicket < 0 || m.selectedTicket >= len(m.ticketList) {
-		return m, nil
-	}
-	// Find "in progress" transition (must contain "progress" or "start" but NOT "not start")
-	for _, t := range m.availableTransitions {
-		lowerName := strings.ToLower(t.Name)
-		isInProgress := strings.Contains(lowerName, "progress") ||
-			(strings.Contains(lowerName, "start") && !strings.Contains(lowerName, "not start") && !strings.Contains(lowerName, "not_start"))
-		if isInProgress {
-			m.transitionInProgress = true
-			ticket := m.ticketList[m.selectedTicket]
-			m.statusMessage = fmt.Sprintf("Setting %s to %s...", ticket.DisplayKey, t.Name)
-			return m, m.transitionTicket(t.ID)
-		}
-	}
-	m.statusMessage = "No 'In Progress' transition available"
-	return m, nil
-}
-
-func (m *Model) handleTransitionToDone() (tea.Model, tea.Cmd) {
-	if m.viewMode != ViewTickets || m.ticketService == nil || !m.statusChangeMode || m.transitionInProgress {
-		return m, nil
-	}
-	if m.selectedTicket < 0 || m.selectedTicket >= len(m.ticketList) {
-		return m, nil
-	}
-	// Find "done" transition
-	for _, t := range m.availableTransitions {
-		lowerName := strings.ToLower(t.Name)
-		if strings.Contains(lowerName, "done") || strings.Contains(lowerName, "complete") || strings.Contains(lowerName, "resolve") {
-			m.transitionInProgress = true
-			ticket := m.ticketList[m.selectedTicket]
-			m.statusMessage = fmt.Sprintf("Setting %s to %s...", ticket.DisplayKey, t.Name)
-			return m, m.transitionTicket(t.ID)
-		}
-	}
-	m.statusMessage = "No 'Done' transition available"
-	return m, nil
-}
-
-func (m *Model) handleTransitionToBlocked() (tea.Model, tea.Cmd) {
-	if m.viewMode != ViewTickets || m.ticketService == nil || !m.statusChangeMode || m.transitionInProgress {
-		return m, nil
-	}
-	if m.selectedTicket < 0 || m.selectedTicket >= len(m.ticketList) {
-		return m, nil
-	}
-	// Find "blocked" transition
-	for _, t := range m.availableTransitions {
-		lowerName := strings.ToLower(t.Name)
-		if strings.Contains(lowerName, "block") {
-			m.transitionInProgress = true
-			ticket := m.ticketList[m.selectedTicket]
-			m.statusMessage = fmt.Sprintf("Setting %s to %s...", ticket.DisplayKey, t.Name)
-			return m, m.transitionTicket(t.ID)
-		}
-	}
-	m.statusMessage = "No 'Blocked' transition available"
-	return m, nil
-}
-
-func (m *Model) handleTransitionToNotStarted() (tea.Model, tea.Cmd) {
-	if m.viewMode != ViewTickets || m.ticketService == nil || !m.statusChangeMode || m.transitionInProgress {
-		return m, nil
-	}
-	if m.selectedTicket < 0 || m.selectedTicket >= len(m.ticketList) {
-		return m, nil
-	}
-	// Find "not started" transition
-	for _, t := range m.availableTransitions {
-		lowerName := strings.ToLower(t.Name)
-		if strings.Contains(lowerName, "not") && strings.Contains(lowerName, "start") {
-			m.transitionInProgress = true
-			ticket := m.ticketList[m.selectedTicket]
-			m.statusMessage = fmt.Sprintf("Setting %s to %s...", ticket.DisplayKey, t.Name)
-			return m, m.transitionTicket(t.ID)
-		}
-	}
-	m.statusMessage = "No 'Not Started' transition available"
 	return m, nil
 }
 
@@ -559,7 +631,7 @@ func (m *Model) handleDescriptionSave() (tea.Model, tea.Cmd) {
 func (m *Model) handleDescriptionCancel() (tea.Model, tea.Cmd) {
 	if m.viewMode == ViewEditDescription {
 		m.viewMode = ViewCommitGraph
-		m.editingCommitID = ""
+		m.graphTabModel.SetEditingCommitID("")
 		m.statusMessage = "Description edit cancelled"
 	}
 	return m, nil
@@ -607,24 +679,23 @@ func (m *Model) handleMoveFileUp() (tea.Model, tea.Cmd) {
 	if m.viewMode != ViewCommitGraph || m.graphFocused {
 		return m, nil
 	}
-	if m.jjService == nil || len(m.changedFiles) == 0 {
+	changedFiles := m.graphTabModel.GetChangedFiles()
+	if m.jjService == nil || len(changedFiles) == 0 {
 		return m, nil
 	}
-	if m.selectedFile < 0 || m.selectedFile >= len(m.changedFiles) {
+	selFile := m.graphTabModel.GetSelectedFile()
+	if selFile < 0 || selFile >= len(changedFiles) {
 		return m, nil
 	}
-
-	// Get the selected commit and verify it's mutable
-	if m.repository == nil || m.selectedCommit < 0 || m.selectedCommit >= len(m.repository.Graph.Commits) {
+	if m.repository == nil || m.GetSelectedCommit() < 0 || m.GetSelectedCommit() >= len(m.repository.Graph.Commits) {
 		return m, nil
 	}
-	commit := m.repository.Graph.Commits[m.selectedCommit]
+	commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
 	if commit.Immutable {
 		m.statusMessage = "Cannot move file: commit is immutable"
 		return m, nil
 	}
-
-	file := m.changedFiles[m.selectedFile]
+	file := changedFiles[selFile]
 	commitID := commit.ChangeID
 	// "Move to Parent" - creates a new commit BEFORE this one (toward main/root)
 	m.statusMessage = fmt.Sprintf("Moving %s to new parent commit...", file.Path)
@@ -635,24 +706,23 @@ func (m *Model) handleMoveFileDown() (tea.Model, tea.Cmd) {
 	if m.viewMode != ViewCommitGraph || m.graphFocused {
 		return m, nil
 	}
-	if m.jjService == nil || len(m.changedFiles) == 0 {
+	changedFiles := m.graphTabModel.GetChangedFiles()
+	if m.jjService == nil || len(changedFiles) == 0 {
 		return m, nil
 	}
-	if m.selectedFile < 0 || m.selectedFile >= len(m.changedFiles) {
+	selFile := m.graphTabModel.GetSelectedFile()
+	if selFile < 0 || selFile >= len(changedFiles) {
 		return m, nil
 	}
-
-	// Get the selected commit and verify it's mutable
-	if m.repository == nil || m.selectedCommit < 0 || m.selectedCommit >= len(m.repository.Graph.Commits) {
+	if m.repository == nil || m.GetSelectedCommit() < 0 || m.GetSelectedCommit() >= len(m.repository.Graph.Commits) {
 		return m, nil
 	}
-	commit := m.repository.Graph.Commits[m.selectedCommit]
+	commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
 	if commit.Immutable {
 		m.statusMessage = "Cannot move file: commit is immutable"
 		return m, nil
 	}
-
-	file := m.changedFiles[m.selectedFile]
+	file := changedFiles[selFile]
 	commitID := commit.ChangeID
 	// "Move to Child" - creates a new commit AFTER this one (toward tips/branches)
 	m.statusMessage = fmt.Sprintf("Moving %s to new child commit...", file.Path)
@@ -663,24 +733,23 @@ func (m *Model) handleRevertFile() (tea.Model, tea.Cmd) {
 	if m.viewMode != ViewCommitGraph || m.graphFocused {
 		return m, nil
 	}
-	if m.jjService == nil || len(m.changedFiles) == 0 {
+	changedFiles := m.graphTabModel.GetChangedFiles()
+	if m.jjService == nil || len(changedFiles) == 0 {
 		return m, nil
 	}
-	if m.selectedFile < 0 || m.selectedFile >= len(m.changedFiles) {
+	selFile := m.graphTabModel.GetSelectedFile()
+	if selFile < 0 || selFile >= len(changedFiles) {
 		return m, nil
 	}
-
-	// Get the selected commit and verify it's mutable
-	if m.repository == nil || m.selectedCommit < 0 || m.selectedCommit >= len(m.repository.Graph.Commits) {
+	if m.repository == nil || m.GetSelectedCommit() < 0 || m.GetSelectedCommit() >= len(m.repository.Graph.Commits) {
 		return m, nil
 	}
-	commit := m.repository.Graph.Commits[m.selectedCommit]
+	commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
 	if commit.Immutable {
 		m.statusMessage = "Cannot revert file: commit is immutable"
 		return m, nil
 	}
-
-	file := m.changedFiles[m.selectedFile]
+	file := changedFiles[selFile]
 	commitID := commit.ChangeID
 	m.statusMessage = fmt.Sprintf("Reverting changes to %s...", file.Path)
 	return m, m.revertFile(commitID, file.Path)

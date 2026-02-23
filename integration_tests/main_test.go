@@ -10,9 +10,9 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/madicen/jj-tui/internal/github"
-	"github.com/madicen/jj-tui/internal/jj"
-	"github.com/madicen/jj-tui/internal/models"
+	"github.com/madicen/jj-tui/internal"
+	"github.com/madicen/jj-tui/internal/integrations/github"
+	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/testutil"
 	"github.com/madicen/jj-tui/internal/tui"
 )
@@ -91,16 +91,16 @@ func newTestModel() *tui.Model {
 	m := tui.New(ctx)
 	m.SetDimensions(100, 80)
 	m.SetLoading(false)
-	m.SetRepository(&models.Repository{
+	m.SetRepository(&internal.Repository{
 		Path: "/test/repo",
-		Graph: models.CommitGraph{
-			Commits: []models.Commit{
+		Graph: internal.CommitGraph{
+			Commits: []internal.Commit{
 				{ID: "abc123456789", ShortID: "abc1", ChangeID: "abc1", Summary: "First commit"},
 				{ID: "def456789012", ShortID: "def4", ChangeID: "def4", Summary: "Second commit"},
 				{ID: "ghi789012345", ShortID: "ghi7", ChangeID: "ghi7", Summary: "Third commit", IsWorking: true},
 			},
 		},
-		PRs: []models.GitHubPR{
+		PRs: []internal.GitHubPR{
 			{Number: 1, Title: "Test PR", State: "open"},
 		},
 	})
@@ -258,7 +258,7 @@ func TestPRWorkflow(t *testing.T) {
 	// without actually creating GitHub PRs
 
 	t.Run("CreatePRRequest", func(t *testing.T) {
-		req := &models.CreatePRRequest{
+		req := &internal.CreatePRRequest{
 			Title:      "Test PR",
 			Body:       "This is a test PR",
 			BaseBranch: "main",
@@ -277,7 +277,7 @@ func TestPRWorkflow(t *testing.T) {
 	})
 
 	t.Run("UpdatePRRequest", func(t *testing.T) {
-		req := &models.UpdatePRRequest{
+		req := &internal.UpdatePRRequest{
 			Title:     "Updated PR Title",
 			CommitIDs: []string{"commit1", "commit2", "commit3"},
 		}
@@ -294,16 +294,16 @@ func TestPRWorkflow(t *testing.T) {
 
 // TestRepositoryState tests repository state management
 func TestRepositoryState(t *testing.T) {
-	repo := &models.Repository{
+	repo := &internal.Repository{
 		Path: "/test/path",
-		WorkingCopy: models.Commit{
+		WorkingCopy: internal.Commit{
 			ID:        "working",
 			ShortID:   "work",
 			Summary:   "Working copy",
 			IsWorking: true,
 		},
-		Graph: models.CommitGraph{
-			Commits: []models.Commit{
+		Graph: internal.CommitGraph{
+			Commits: []internal.Commit{
 				{
 					ID:      "commit1",
 					ShortID: "com1",
@@ -321,7 +321,7 @@ func TestRepositoryState(t *testing.T) {
 				"commit1": {"commit2"},
 			},
 		},
-		PRs: []models.GitHubPR{},
+		PRs: []internal.GitHubPR{},
 	}
 
 	if repo.Path != "/test/path" {
@@ -386,7 +386,7 @@ func TestJourney_PRStateColors(t *testing.T) {
 	defer m.Close()
 
 	// Set up repository with PRs of different states
-	m.GetRepository().PRs = []models.GitHubPR{
+	m.GetRepository().PRs = []internal.GitHubPR{
 		{Number: 1, Title: "Open PR", State: "open"},
 		{Number: 2, Title: "Merged PR", State: "merged"},
 		{Number: 3, Title: "Closed PR", State: "closed"},
@@ -455,7 +455,7 @@ func TestJourney_PRNavigation(t *testing.T) {
 	m := newTestModel()
 	defer m.Close()
 
-	m.GetRepository().PRs = []models.GitHubPR{
+	m.GetRepository().PRs = []internal.GitHubPR{
 		{Number: 1, Title: "PR 1", State: "open"},
 		{Number: 2, Title: "PR 2", State: "open"},
 		{Number: 3, Title: "PR 3", State: "merged"},
@@ -591,6 +591,78 @@ func TestJourney_HelpView(t *testing.T) {
 	if !containsString(view, "Tickets") {
 		t.Error("Help view should mention Tickets shortcuts")
 	}
+}
+
+// TestHelpTabCommandHistory verifies that the Help tab's History sub-tab shows commands
+// executed via the jj service (syncHelpCommandHistory populates the list when viewing Help).
+func TestHelpTabCommandHistory(t *testing.T) {
+	if _, err := exec.LookPath("jj"); err != nil {
+		t.Skip("jj command not available")
+	}
+
+	repo := NewTestRepository(t)
+	defer repo.Cleanup()
+
+	ctx := context.Background()
+	jjSvc, err := jj.NewService(repo.Path)
+	if err != nil {
+		t.Fatalf("Failed to create jj service: %v", err)
+	}
+
+	// Run a command that is recorded in history and not filtered out (e.g. bookmark list).
+	// Auto-refresh commands like "jj log -r mutable()" are filtered; this one is not.
+	_, err = jjSvc.ListBranches(ctx, 0)
+	if err != nil {
+		t.Fatalf("ListBranches failed: %v", err)
+	}
+
+	history := jjSvc.GetCommandHistory()
+	if len(history) == 0 {
+		t.Fatalf("Expected jj service to have at least one command in history after ListBranches")
+	}
+
+	// Build model with the same jj service so Help tab can show its history
+	m := tui.NewWithServices(ctx, jjSvc, nil)
+	m.SetDimensions(100, 80)
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 80})
+
+	// Set a minimal repository so header/status bar don't choke
+	m.SetRepository(&internal.Repository{
+		Path: repo.Path,
+		Graph: internal.CommitGraph{
+			Commits:     []internal.Commit{},
+			Connections: map[string][]string{},
+		},
+	})
+	m.SetLoading(false)
+
+	// Switch to Help view
+	m.SetViewMode(tui.ViewHelp)
+	// Switch to History sub-tab (tab key)
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = newModel.(*tui.Model)
+
+	view := m.View()
+
+	// History sub-tab should show "Command History" and the executed command, not empty state
+	if !containsString(view, "Command History") {
+		t.Error("Help History sub-tab should show 'Command History' title")
+	}
+	if containsString(view, "No commands executed yet") {
+		t.Error("Help History should not show 'No commands executed yet' when jj service has history")
+	}
+	// The command we ran is "jj bookmark list --all-remotes"
+	if !containsString(view, "jj bookmark") && !containsString(view, "bookmark list") {
+		t.Errorf("Help History should show the executed jj command; view snippet: %s", truncateView(view, 500))
+	}
+}
+
+// truncateView returns a short snippet of the view for error messages
+func truncateView(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }
 
 // TestJourney_ImmutableCommitProtection tests that immutable commits can't be modified

@@ -2,14 +2,14 @@ package model
 
 import (
 	"os/exec"
+	"reflect"
 	"runtime"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	zone "github.com/lrstanley/bubblezone"
-	"github.com/madicen/jj-tui/internal/jj"
-	"github.com/madicen/jj-tui/internal/models"
+	"github.com/madicen/jj-tui/internal"
+	"github.com/madicen/jj-tui/internal/integrations/jj"
 )
 
 // Auto-refresh interval
@@ -43,8 +43,8 @@ func openURL(url string) tea.Cmd {
 // isSelectedCommitValid returns true if selectedCommit points to a valid commit
 func (m *Model) isSelectedCommitValid() bool {
 	return m.repository != nil &&
-		m.selectedCommit >= 0 &&
-		m.selectedCommit < len(m.repository.Graph.Commits)
+		m.GetSelectedCommit() >= 0 &&
+		m.GetSelectedCommit() < len(m.repository.Graph.Commits)
 }
 
 // refreshRepository starts a refresh of the repository data.
@@ -70,25 +70,28 @@ func If[T any](condition bool, trueCmd, falseCmd T) T {
 	return falseCmd
 }
 
-func (m *Model) createIsZoneClickedFunc(clickedZone *zone.ZoneInfo) func(string) bool {
-	return func(clickedZoneID string) bool {
-		return m.zoneManager.Get(clickedZoneID) == clickedZone
+// createIsZoneClickedFuncWithEvent returns a function that checks if the given zone ID contains the mouse event.
+// Use this when zone pointer comparison is unreliable (e.g. Create PR form); InBounds is more robust.
+func (m *Model) createIsZoneClickedFuncWithEvent(event tea.MouseMsg) func(string) bool {
+	return func(zoneID string) bool {
+		z := m.zoneManager.Get(zoneID)
+		return z != nil && z.InBounds(event)
 	}
 }
 
 // findCommitsWithEmptyDescriptions finds all commits from the selected commit
 // back to main that have empty descriptions (excluding immutable/root commits)
-func (m *Model) findCommitsWithEmptyDescriptions() []models.Commit {
+func (m *Model) findCommitsWithEmptyDescriptions() []internal.Commit {
 	if m.repository == nil || !m.isSelectedCommitValid() {
 		return nil
 	}
 
 	commits := m.repository.Graph.Commits
-	var emptyDescCommits []models.Commit
+	var emptyDescCommits []internal.Commit
 
 	// Walk from selected commit back through parents until we hit an immutable commit
 	visited := make(map[string]bool)
-	queue := []int{m.selectedCommit}
+	queue := []int{m.GetSelectedCommit()}
 
 	// Build index for parent lookup
 	idToIndex := make(map[string]int)
@@ -164,8 +167,7 @@ func (m *Model) checkBookmarkNameExists(name string) bool {
 		}
 	}
 
-	// Also check the existingBookmarks list (bookmarks that can be moved)
-	for _, bookmark := range m.existingBookmarks {
+	for _, bookmark := range m.bookmarkModal.GetExistingBookmarks() {
 		if bookmark == name {
 			return true
 		}
@@ -176,12 +178,42 @@ func (m *Model) checkBookmarkNameExists(name string) bool {
 
 // updateBookmarkNameExists updates the bookmarkNameExists flag based on current input
 func (m *Model) updateBookmarkNameExists() {
-	name := m.bookmarkNameInput.Value()
-
-	// If sanitization is enabled, check the sanitized name
-	if m.settingsSanitizeBookmarks {
+	name := m.bookmarkModal.GetBookmarkName()
+	if m.settingsTabModel.GetSettingsSanitizeBookmarks() {
 		name = jj.SanitizeBookmarkName(name)
 	}
+	m.bookmarkModal.SetNameExists(m.checkBookmarkNameExists(name))
+}
 
-	m.bookmarkNameExists = m.checkBookmarkNameExists(name)
+func PropagateUpdate(msg tea.Msg, updatables ...any) (results []tea.Cmd) {
+	for _, updatable := range updatables {
+		ptrValue := reflect.ValueOf(updatable)
+		if ptrValue.Kind() != reflect.Ptr {
+			panic("updatable must be a pointer")
+		}
+		// Call Update on the pointer so both value and pointer receivers work (*GraphModel has Update)
+		method := ptrValue.MethodByName("Update")
+		if !method.IsValid() {
+			panic("updatable must have an Update method")
+		}
+		callResults := method.Call([]reflect.Value{reflect.ValueOf(msg)})
+		if len(callResults) != 2 {
+			panic("Update method must return (model, tea.Cmd)")
+		}
+		updatedValue := callResults[0]
+		if updatedValue.Kind() == reflect.Interface && !updatedValue.IsNil() {
+			updatedValue = updatedValue.Elem()
+		}
+		cmd, ok := callResults[1].Interface().(tea.Cmd)
+		if !ok {
+			panic("second return value from Update must be tea.Cmd")
+		}
+		// If Update had pointer receiver it returns *T; we store T so set the pointee
+		if updatedValue.Kind() == reflect.Ptr {
+			updatedValue = updatedValue.Elem()
+		}
+		ptrValue.Elem().Set(updatedValue)
+		results = append(results, cmd)
+	}
+	return results
 }

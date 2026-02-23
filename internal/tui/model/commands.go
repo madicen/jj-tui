@@ -6,19 +6,18 @@ import (
 	"os"
 	"os/exec"
 	"reflect"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/madicen/jj-tui/internal/codecks"
+	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/config"
-	"github.com/madicen/jj-tui/internal/github"
-	"github.com/madicen/jj-tui/internal/jira"
-	"github.com/madicen/jj-tui/internal/jj"
+	"github.com/madicen/jj-tui/internal/integrations/codecks"
+	"github.com/madicen/jj-tui/internal/integrations/github"
+	"github.com/madicen/jj-tui/internal/integrations/jira"
+	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/mock"
-	"github.com/madicen/jj-tui/internal/models"
 	"github.com/madicen/jj-tui/internal/tickets"
 )
 
@@ -312,7 +311,7 @@ func (m *Model) loadPRs() tea.Cmd {
 	if m.githubService == nil {
 		return func() tea.Msg {
 			// Return a status message to show GitHub isn't connected
-			return prsLoadedMsg{prs: []models.GitHubPR{}}
+			return prsLoadedMsg{prs: []internal.GitHubPR{}}
 		}
 	}
 
@@ -461,15 +460,17 @@ func (m *Model) loadTickets() tea.Cmd {
 	}
 }
 
-// loadTransitions loads the available transitions for the selected ticket
+// loadTransitions loads the available transitions for the selected ticket (uses tickets tab state)
 func (m *Model) loadTransitions() tea.Cmd {
-	if m.ticketService == nil || m.selectedTicket < 0 || m.selectedTicket >= len(m.ticketList) {
+	ticketList := m.ticketsTabModel.GetTickets()
+	idx := m.ticketsTabModel.GetSelectedTicket()
+	if m.ticketService == nil || idx < 0 || idx >= len(ticketList) {
 		return func() tea.Msg {
 			return transitionsLoadedMsg{transitions: nil}
 		}
 	}
 
-	ticket := m.ticketList[m.selectedTicket]
+	ticket := ticketList[idx]
 	svc := m.ticketService
 
 	return func() tea.Msg {
@@ -482,13 +483,15 @@ func (m *Model) loadTransitions() tea.Cmd {
 	}
 }
 
-// transitionTicket executes a status transition on the selected ticket
+// transitionTicket executes a status transition on the selected ticket (uses tickets tab state)
 func (m *Model) transitionTicket(transitionID string) tea.Cmd {
-	if m.ticketService == nil || m.selectedTicket < 0 || m.selectedTicket >= len(m.ticketList) {
+	ticketList := m.ticketsTabModel.GetTickets()
+	idx := m.ticketsTabModel.GetSelectedTicket()
+	if m.ticketService == nil || idx < 0 || idx >= len(ticketList) {
 		return nil
 	}
 
-	ticket := m.ticketList[m.selectedTicket]
+	ticket := ticketList[idx]
 	svc := m.ticketService
 
 	return func() tea.Msg {
@@ -603,72 +606,6 @@ func (m *Model) redoOperation() tea.Cmd {
 	}
 }
 
-// startBookmarkFromTicket opens the bookmark creation screen pre-populated with the ticket key
-func (m *Model) startBookmarkFromTicket(ticket tickets.Ticket) {
-	// Use DisplayKey (short ID) if available, otherwise fall back to Key
-	keyForBookmark := ticket.Key
-	if ticket.DisplayKey != "" {
-		keyForBookmark = ticket.DisplayKey
-	}
-
-	// Format bookmark name as "KEY-Title" with spaces replaced by hyphens
-	// and invalid characters removed
-	bookmarkName := formatBookmarkName(keyForBookmark, ticket.Summary)
-	m.bookmarkNameInput.SetValue(bookmarkName)
-	m.bookmarkNameInput.Focus()
-	m.bookmarkNameInput.Width = m.width - 10
-
-	// Mark that this is coming from ticket service (will create new branch from main)
-	m.bookmarkFromJira = true // Reusing this flag for any ticket provider
-	m.bookmarkJiraTicketKey = ticket.Key
-	m.bookmarkJiraTicketTitle = ticket.Summary     // Store the ticket summary for PR title
-	m.bookmarkTicketDisplayKey = ticket.DisplayKey // Store short ID for commit messages
-	m.bookmarkCommitIdx = -1                       // -1 means create new branch from main
-	m.existingBookmarks = nil                      // Don't show existing bookmarks for ticket flow
-	m.selectedBookmarkIdx = -1
-
-	// Check if the pre-filled name already exists
-	m.updateBookmarkNameExists()
-
-	m.viewMode = ViewCreateBookmark
-	m.statusMessage = fmt.Sprintf("Create bookmark for %s (will create new branch from main)", ticket.Key)
-}
-
-// formatBookmarkName creates a valid bookmark name from a ticket key and summary
-// Format: "KEY-Title" with spaces replaced by hyphens and invalid chars removed
-func formatBookmarkName(key, summary string) string {
-	// Remove any characters that aren't valid for bookmark names
-	// Valid: a-z, A-Z, 0-9, -, _, /
-	invalidChars := regexp.MustCompile(`[^a-zA-Z0-9\-_/]`)
-
-	// Sanitize the key (e.g., strip "$" from Codecks short IDs like "$12u")
-	sanitizedKey := invalidChars.ReplaceAllString(key, "")
-	sanitizedKey = strings.Trim(sanitizedKey, "-")
-
-	// Replace spaces with hyphens in title
-	title := strings.ReplaceAll(summary, " ", "-")
-
-	// Remove invalid characters from title
-	title = invalidChars.ReplaceAllString(title, "")
-
-	// Remove multiple consecutive hyphens
-	multipleHyphens := regexp.MustCompile(`-+`)
-	title = multipleHyphens.ReplaceAllString(title, "-")
-
-	// Trim leading/trailing hyphens from title
-	title = strings.Trim(title, "-")
-
-	// Combine key and title
-	if sanitizedKey != "" && title != "" {
-		return sanitizedKey + "-" + title
-	} else if sanitizedKey != "" {
-		return sanitizedKey
-	} else if title != "" {
-		return title
-	}
-	return "bookmark"
-}
-
 // startGitHubLogin initiates the GitHub Device Flow authentication
 func (m *Model) startGitHubLogin() tea.Cmd {
 	return func() tea.Msg {
@@ -688,11 +625,11 @@ func (m *Model) startGitHubLogin() tea.Cmd {
 // pollGitHubToken returns a command that polls for the GitHub access token in the background.
 func (m *Model) pollGitHubToken() tea.Cmd {
 	return func() tea.Msg {
-		if m.githubDeviceCode == "" {
+		if m.settingsTabModel.GetGitHubDeviceCode() == "" {
 			return nil
 		}
 
-		token, err := github.PollForToken(m.githubDeviceCode)
+		token, err := github.PollForToken(m.settingsTabModel.GetGitHubDeviceCode())
 		if err != nil {
 			if err.Error() == "slow_down" {
 				// Signal to handler to increase poll interval.
@@ -741,7 +678,7 @@ func (m *Model) loadBranches() tea.Cmd {
 	}
 
 	jjSvc := m.jjService
-	branchLimit := m.settingsBranchLimit
+	branchLimit := m.settingsTabModel.GetSettingsBranchLimit()
 	return func() tea.Msg {
 		// Get branches (limited by recency first, then stats calculated)
 		// The limit is applied in ListBranches after sorting by commit timestamp

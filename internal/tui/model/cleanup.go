@@ -5,17 +5,18 @@ import (
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
+	settingstab "github.com/madicen/jj-tui/internal/tui/tabs/settings"
 )
 
 // startDeleteBookmarks initiates the bookmark deletion confirmation
 func (m *Model) startDeleteBookmarks() {
-	m.confirmingCleanup = "delete_bookmarks"
+	m.settingsTabModel.SetConfirmingCleanup("delete_bookmarks")
 	m.statusMessage = "Press Y to confirm deletion of all bookmarks, or N to cancel"
 }
 
 // startAbandonOldCommits initiates the abandon old commits confirmation
 func (m *Model) startAbandonOldCommits() {
-	m.confirmingCleanup = "abandon_old_commits"
+	m.settingsTabModel.SetConfirmingCleanup("abandon_old_commits")
 	m.statusMessage = "Press Y to confirm abandoning commits before origin/main, or N to cancel"
 }
 
@@ -116,20 +117,17 @@ func (m *Model) abandonCommitsBeforeOriginMain() tea.Cmd {
 
 // cancelCleanup cancels the current cleanup operation
 func (m *Model) cancelCleanup() {
-	m.confirmingCleanup = ""
-	m.statusMessage = "Cleanup cancelled"
+	m.settingsTabModel.SetConfirmingCleanup("")
+	m.statusMessage = settingstab.CancelCleanupStatus
 }
 
 // confirmCleanup executes the confirmed cleanup operation
 func (m *Model) confirmCleanup() tea.Cmd {
-	switch m.confirmingCleanup {
-	case "delete_bookmarks":
-		m.confirmingCleanup = ""
-		return m.deleteAllBookmarks()
-	case "abandon_old_commits":
-		m.confirmingCleanup = ""
-		return m.abandonCommitsBeforeOriginMain()
-	default:
-		return nil
+	confirmingType := m.settingsTabModel.GetConfirmingCleanup()
+	m.settingsTabModel.SetConfirmingCleanup("")
+	cb := &settingstab.CleanupCallbacks{
+		DeleteAllBookmarks: m.deleteAllBookmarks,
+		AbandonOldCommits:  m.abandonCommitsBeforeOriginMain,
 	}
+	return settingstab.ConfirmCleanup(confirmingType, cb)
 }

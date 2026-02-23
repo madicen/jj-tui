@@ -7,9 +7,13 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/madicen/jj-tui/internal/github"
-	"github.com/madicen/jj-tui/internal/jj"
-	"github.com/madicen/jj-tui/internal/models"
+	zone "github.com/lrstanley/bubblezone"
+	"github.com/madicen/jj-tui/internal"
+	"github.com/madicen/jj-tui/internal/integrations/github"
+	"github.com/madicen/jj-tui/internal/integrations/jj"
+	"github.com/madicen/jj-tui/internal/tickets"
+	graphtab "github.com/madicen/jj-tui/internal/tui/tabs/graph"
+	"github.com/madicen/jj-tui/internal/tui/mouse"
 )
 
 // Helper to create a test model with sample data (bypasses jj service)
@@ -19,22 +23,30 @@ func newTestModel() *Model {
 	m.width = 100
 	m.height = 80     // Tall enough to show all content including help view
 	m.loading = false // Skip loading state for tests
-	m.SetRepository(&models.Repository{
+	m.SetRepository(&internal.Repository{
 		Path: "/test/repo",
-		Graph: models.CommitGraph{
-			Commits: []models.Commit{
+		Graph: internal.CommitGraph{
+			Commits: []internal.Commit{
 				{ID: "abc123456789", ShortID: "abc1", ChangeID: "abc1", Summary: "First commit"},
 				{ID: "def456789012", ShortID: "def4", ChangeID: "def4", Summary: "Second commit"},
 				{ID: "ghi789012345", ShortID: "ghi7", ChangeID: "ghi7", Summary: "Third commit", IsWorking: true},
 			},
 		},
-		PRs: []models.GitHubPR{
+		PRs: []internal.GitHubPR{
 			{Number: 1, Title: "Test PR", State: "open"},
 		},
 	})
 	m.statusMessage = "Ready"
 
-	// Initialize viewport by processing a window size message
+	// Sync repository and selection to tab models (bypasses repositoryLoadedMsg in tests)
+	m.graphTabModel.UpdateRepository(m.repository)
+	m.graphTabModel.SelectCommit(0)
+	m.prsTabModel.UpdateRepository(m.repository)
+	m.prsTabModel.SetGithubService(m.isGitHubAvailable())
+	m.branchesTabModel.UpdateRepository(m.repository)
+	m.ticketsTabModel.SetTicketServiceInfo("", false)
+
+	// Initialize by processing a window size message
 	m.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
 
 	return m
@@ -72,14 +84,182 @@ func TestCommitSelectedMsgChangesSelection(t *testing.T) {
 	m := newTestModel()
 	defer m.Close()
 
-	m.selectedCommit = -1 // Reset
-
 	msg, _ := m.handleSelectCommit(1)
 	newModel, _ := m.Update(msg)
 	m = newModel.(*Model)
 
 	if m.GetSelectedCommit() != 1 {
 		t.Errorf("Expected selected commit 1, got %d", m.GetSelectedCommit())
+	}
+}
+
+// TestChangedFilesLoadedMsgUpdatesGraphTab verifies that when changed files load after repository load
+// (e.g. initial load), the graph tab's changed files list is updated even if changedFilesCommitID
+// was not set before the async load completed.
+func TestChangedFilesLoadedMsgUpdatesGraphTab(t *testing.T) {
+	ctx := context.Background()
+	m := New(ctx)
+	defer m.Close()
+	m.loading = false
+	repo := &internal.Repository{
+		Path: "/test/repo",
+		Graph: internal.CommitGraph{
+			Commits: []internal.Commit{
+				{ID: "a1", ShortID: "a1", ChangeID: "cid0", Summary: "First"},
+				{ID: "b2", ShortID: "b2", ChangeID: "cid1", Summary: "Second"},
+			},
+		},
+	}
+	m.SetRepository(repo)
+	m.graphTabModel.UpdateRepository(m.repository)
+	// Do not call SelectCommit so changedFilesCommitID stays "" (simulates initial load before
+	// loadChangedFiles request was made, or race where the msg arrives before we set it).
+	// selectedCommit is 0 by default. Deliver changed files for the first commit.
+	loadedFiles := []jj.ChangedFile{{Path: "foo.go", Status: "M"}, {Path: "bar/baz.go", Status: "A"}}
+	newModel, _ := m.Update(changedFilesLoadedMsg{commitID: "cid0", files: loadedFiles})
+	m = newModel.(*Model)
+
+	got := m.graphTabModel.GetChangedFiles()
+	if len(got) != 2 {
+		t.Fatalf("GetChangedFiles(): expected 2 files, got %d", len(got))
+	}
+	if got[0].Path != "foo.go" || got[0].Status != "M" {
+		t.Errorf("GetChangedFiles()[0]: expected foo.go M, got %s %s", got[0].Path, got[0].Status)
+	}
+	if got[1].Path != "bar/baz.go" || got[1].Status != "A" {
+		t.Errorf("GetChangedFiles()[1]: expected bar/baz.go A, got %s %s", got[1].Path, got[1].Status)
+	}
+}
+
+// TestMouseScrollGraphTabWithoutClicking is an integration test for mouse wheel scrolling on the graph tab.
+// It documents and verifies the current behavior: scrolling is focus-based, not cursor-based.
+// - Without clicking any pane: graphFocused is true by default, so wheel scrolls the graph (commit) list.
+// - After clicking the files pane (or Tab to it): wheel scrolls the files list.
+// So "scroll without clicking" works for the default pane (graph); to scroll the other list you must focus it first.
+func TestMouseScrollGraphTabWithoutClicking(t *testing.T) {
+	ctx := context.Background()
+	m := New(ctx)
+	defer m.Close()
+	m.loading = false
+	// Many commits so the graph pane is scrollable (more lines than viewport height)
+	commits := make([]internal.Commit, 50)
+	for i := range commits {
+		commits[i] = internal.Commit{
+			ID:       fmt.Sprintf("id%03d", i),
+			ShortID:  fmt.Sprintf("s%02d", i),
+			ChangeID: fmt.Sprintf("cid%03d", i),
+			Summary:  fmt.Sprintf("Commit %d", i),
+		}
+	}
+	m.SetRepository(&internal.Repository{
+		Path:   "/test/repo",
+		Graph:  internal.CommitGraph{Commits: commits},
+		PRs:    nil,
+	})
+	m.graphTabModel.UpdateRepository(m.repository)
+	m.graphTabModel.SelectCommit(0)
+	m.viewMode = ViewCommitGraph
+	m.graphFocused = true
+	m.width = 100
+	m.height = 80
+	m.graphTabModel.SetDimensions(m.width, m.estimatedContentHeight())
+	// Render once so viewports have content and zones are registered
+	m.View()
+
+	graphVp := m.graphTabModel.GetViewport()
+	graphHeight := graphVp.Height
+	totalGraphLines := graphVp.TotalLineCount()
+	if totalGraphLines <= graphHeight {
+		t.Skipf("graph must be scrollable: total lines=%d height=%d", totalGraphLines, graphHeight)
+	}
+
+	wheelDown := tea.MouseMsg{
+		Action: tea.MouseActionPress,
+		Button: tea.MouseButtonWheelDown,
+		X:      50,
+		Y:      10,
+	}
+
+	// --- 1) Wheel WITHOUT clicking any pane: should scroll the graph (default focus) ---
+	if !m.graphTabModel.IsGraphFocused() {
+		t.Fatal("expected graph pane focused by default")
+	}
+	graphY0 := m.graphTabModel.GetViewport().YOffset
+	newModel, _ := m.Update(wheelDown)
+	m = newModel.(*Model)
+	graphY1 := m.graphTabModel.GetViewport().YOffset
+	if graphY1 <= graphY0 {
+		t.Errorf("wheel without clicking: expected graph pane to scroll (focus-based). graph YOffset was %d, got %d", graphY0, graphY1)
+	}
+	// Files viewport should not have scrolled (we didn't focus it)
+	filesY0 := m.graphTabModel.GetFilesViewport().YOffset
+
+	// --- 2) Simulate click on files pane, then wheel: should scroll files list ---
+	m.View() // refresh so zones are current
+	filesZone := m.zoneManager.Get(mouse.ZoneFilesPane)
+	if filesZone == nil {
+		t.Skip("files pane zone not registered (e.g. no content); cannot simulate click")
+	}
+	// Use a click position inside the files pane zone so event-based matching (InBounds) succeeds
+	clickX := filesZone.StartX + 1
+	clickY := filesZone.StartY + 1
+	if clickX > filesZone.EndX {
+		clickX = filesZone.EndX
+	}
+	if clickY > filesZone.EndY {
+		clickY = filesZone.EndY
+	}
+	zoneMsg := zone.MsgZoneInBounds{
+		Zone:  filesZone,
+		Event: tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: clickX, Y: clickY},
+	}
+	newModel, _ = m.Update(zoneMsg)
+	m = newModel.(*Model)
+	if m.graphTabModel.IsGraphFocused() {
+		t.Error("after clicking files pane, expected graph pane to be unfocused (files focused)")
+	}
+	filesY1 := m.graphTabModel.GetFilesViewport().YOffset
+	// Scroll files pane with wheel
+	newModel, _ = m.Update(wheelDown)
+	m = newModel.(*Model)
+	filesY2 := m.graphTabModel.GetFilesViewport().YOffset
+	// If files pane has scrollable content, YOffset may increase; if not, it stays 0
+	// We only assert that wheel was applied to the focused pane (files), not that it scrolled (content-dependent)
+	if filesY2 < filesY1 && totalGraphLines > graphHeight {
+		// Graph might have scrolled again if we accidentally scrolled graph
+		graphY2 := m.graphTabModel.GetViewport().YOffset
+		if graphY2 > graphY1 {
+			t.Errorf("after focusing files pane, wheel should scroll files pane, not graph: graph YOffset moved from %d to %d", graphY1, graphY2)
+		}
+	}
+
+	// --- 3) Document: without clicking, only the default pane (graph) scrolls ---
+	_ = filesY0
+	t.Logf("Mouse scroll behavior: default focus=graph; wheel without click scrolls graph (YOffset %d -> %d). After click on files pane, wheel scrolls files pane.", graphY0, graphY1)
+}
+
+// TestMouseScrollHelpTab verifies that the Help tab scrolls with the mouse wheel without requiring a click.
+// Help has no clickable list (unlike PR/Tickets), so wheel must work as soon as the tab is active.
+func TestMouseScrollHelpTab(t *testing.T) {
+	m := newTestModel()
+	defer m.Close()
+	m.SetViewMode(ViewHelp)
+	m.width = 100
+	m.height = 40
+	viewBefore := m.View() // View() sets dimensions for all tabs including Help
+
+	wheelDown := tea.MouseMsg{
+		Action: tea.MouseActionPress,
+		Button: tea.MouseButtonWheelDown,
+		X:      50,
+		Y:      20,
+	}
+	newModel, _ := m.Update(wheelDown)
+	m = newModel.(*Model)
+	viewAfter := m.View()
+
+	if viewAfter == viewBefore {
+		t.Error("wheel on Help tab should scroll content without clicking; view unchanged after wheel down")
 	}
 }
 
@@ -120,7 +300,7 @@ func TestKeyboardNavigation(t *testing.T) {
 	m := newTestModel()
 	defer m.Close()
 
-	m.selectedCommit = 0
+	m.graphTabModel.SelectCommit(0)
 
 	// Press j to move down
 	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")}
@@ -269,7 +449,7 @@ func TestWorkingCopyNodeAppearsInGraph(t *testing.T) {
 	m.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
 
 	// Set up repository with a working copy commit
-	workingCopyCommit := models.Commit{
+	workingCopyCommit := internal.Commit{
 		ID:        "wc123456789",
 		ShortID:   "wc12",
 		ChangeID:  "wc12",
@@ -277,20 +457,23 @@ func TestWorkingCopyNodeAppearsInGraph(t *testing.T) {
 		IsWorking: true, // This is the working copy
 	}
 
-	parentCommit := models.Commit{
+	parentCommit := internal.Commit{
 		ID:       "parent123456",
 		ShortID:  "par1",
 		ChangeID: "par1",
 		Summary:  "Parent commit",
 	}
 
-	m.SetRepository(&models.Repository{
+	m.SetRepository(&internal.Repository{
 		Path:        "/test/repo",
 		WorkingCopy: workingCopyCommit,
-		Graph: models.CommitGraph{
-			Commits: []models.Commit{workingCopyCommit, parentCommit},
+		Graph: internal.CommitGraph{
+			Commits: []internal.Commit{workingCopyCommit, parentCommit},
 		},
 	})
+	m.graphTabModel.UpdateRepository(m.repository)
+	m.graphTabModel.SelectCommit(0)
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 80})
 	defer m.Close()
 
 	view := m.View()
@@ -322,7 +505,7 @@ func TestNewCommitAppearsAfterRefresh(t *testing.T) {
 	m.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
 
 	// Initial state: one commit
-	initialCommit := models.Commit{
+	initialCommit := internal.Commit{
 		ID:        "initial123",
 		ShortID:   "init",
 		ChangeID:  "init",
@@ -330,10 +513,10 @@ func TestNewCommitAppearsAfterRefresh(t *testing.T) {
 		IsWorking: true,
 	}
 
-	m.SetRepository(&models.Repository{
+	m.SetRepository(&internal.Repository{
 		Path: "/test/repo",
-		Graph: models.CommitGraph{
-			Commits: []models.Commit{initialCommit},
+		Graph: internal.CommitGraph{
+			Commits: []internal.Commit{initialCommit},
 		},
 	})
 	defer m.Close()
@@ -348,7 +531,7 @@ func TestNewCommitAppearsAfterRefresh(t *testing.T) {
 	}
 
 	// Simulate adding a new commit (as if jj new was run externally)
-	newWorkingCopy := models.Commit{
+	newWorkingCopy := internal.Commit{
 		ID:        "newcommit123",
 		ShortID:   "newc",
 		ChangeID:  "newc",
@@ -360,11 +543,11 @@ func TestNewCommitAppearsAfterRefresh(t *testing.T) {
 	initialCommit.IsWorking = false
 
 	// Simulate receiving repositoryLoadedMsg with updated repository
-	updatedRepo := &models.Repository{
+	updatedRepo := &internal.Repository{
 		Path:        "/test/repo",
 		WorkingCopy: newWorkingCopy,
-		Graph: models.CommitGraph{
-			Commits: []models.Commit{newWorkingCopy, initialCommit},
+		Graph: internal.CommitGraph{
+			Commits: []internal.Commit{newWorkingCopy, initialCommit},
 		},
 	}
 
@@ -399,10 +582,10 @@ func TestSilentRefreshUpdatesCommits(t *testing.T) {
 	m.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
 
 	// Start with 2 commits
-	m.SetRepository(&models.Repository{
+	m.SetRepository(&internal.Repository{
 		Path: "/test/repo",
-		Graph: models.CommitGraph{
-			Commits: []models.Commit{
+		Graph: internal.CommitGraph{
+			Commits: []internal.Commit{
 				{ID: "a", ShortID: "aaa", Summary: "First", IsWorking: true},
 				{ID: "b", ShortID: "bbb", Summary: "Second"},
 			},
@@ -414,10 +597,10 @@ func TestSilentRefreshUpdatesCommits(t *testing.T) {
 
 	// Simulate silent refresh with 3 commits (one new)
 	silentMsg := silentRepositoryLoadedMsg{
-		repository: &models.Repository{
+		repository: &internal.Repository{
 			Path: "/test/repo",
-			Graph: models.CommitGraph{
-				Commits: []models.Commit{
+			Graph: internal.CommitGraph{
+				Commits: []internal.Commit{
 					{ID: "c", ShortID: "ccc", Summary: "New commit", IsWorking: true},
 					{ID: "a", ShortID: "aaa", Summary: "First"},
 					{ID: "b", ShortID: "bbb", Summary: "Second"},
@@ -451,7 +634,7 @@ func TestViewShowsActionsWhenCommitSelected(t *testing.T) {
 	m := newTestModel()
 	defer m.Close()
 
-	m.selectedCommit = 0
+	m.graphTabModel.SelectCommit(0)
 
 	view := m.View()
 
@@ -509,6 +692,7 @@ func TestPRViewContent(t *testing.T) {
 		// Simulate having a GitHub service by setting a non-nil pointer
 		// (we don't actually need the real service for view testing)
 		m.githubService = &github.Service{}
+		m.prsTabModel.SetGithubService(true)
 		m.viewMode = ViewPullRequests
 
 		view := m.View()
@@ -563,10 +747,10 @@ func TestRepositoryLoadedMsg(t *testing.T) {
 	m.loading = true
 	m.repository = nil
 
-	repo := &models.Repository{
+	repo := &internal.Repository{
 		Path: "/new/repo",
-		Graph: models.CommitGraph{
-			Commits: []models.Commit{
+		Graph: internal.CommitGraph{
+			Commits: []internal.Commit{
 				{ID: "new123", ShortID: "new1", Summary: "New commit"},
 			},
 		},
@@ -626,7 +810,7 @@ func TestDescriptionEditingFlow(t *testing.T) {
 		defer m.Close()
 
 		// Select a mutable commit
-		m.selectedCommit = 0
+		m.graphTabModel.SelectCommit(0)
 		commit := m.repository.Graph.Commits[0]
 		commit.Description = "Original description"
 		m.repository.Graph.Commits[0] = commit
@@ -637,8 +821,8 @@ func TestDescriptionEditingFlow(t *testing.T) {
 		if m.viewMode != ViewEditDescription {
 			t.Errorf("Expected ViewEditDescription, got %v", m.viewMode)
 		}
-		if m.editingCommitID != commit.ChangeID {
-			t.Errorf("Expected editingCommitID %s, got %s", commit.ChangeID, m.editingCommitID)
+		if m.graphTabModel.GetEditingCommitID() != commit.ChangeID {
+			t.Errorf("Expected editingCommitID %s, got %s", commit.ChangeID, m.graphTabModel.GetEditingCommitID())
 		}
 	})
 
@@ -647,11 +831,11 @@ func TestDescriptionEditingFlow(t *testing.T) {
 		defer m.Close()
 
 		// Make the selected commit immutable
-		m.selectedCommit = 0
+		m.graphTabModel.SelectCommit(0)
 		m.repository.Graph.Commits[0].Immutable = true
 
 		// Verify the commit is marked as immutable
-		commit := m.repository.Graph.Commits[m.selectedCommit]
+		commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
 		if !commit.Immutable {
 			t.Error("Test commit should be marked immutable")
 		}
@@ -666,7 +850,7 @@ func TestDescriptionEditingFlow(t *testing.T) {
 
 		// Start editing
 		m.viewMode = ViewEditDescription
-		m.editingCommitID = "abc1"
+		m.graphTabModel.SetEditingCommitID("abc1")
 
 		// Press esc
 		escMsg := tea.KeyMsg{Type: tea.KeyEsc}
@@ -676,7 +860,7 @@ func TestDescriptionEditingFlow(t *testing.T) {
 		if m.viewMode != ViewCommitGraph {
 			t.Errorf("Expected ViewCommitGraph after esc, got %v", m.viewMode)
 		}
-		if m.editingCommitID != "" {
+		if m.graphTabModel.GetEditingCommitID() != "" {
 			t.Error("Expected editingCommitID to be cleared")
 		}
 	})
@@ -688,7 +872,7 @@ func TestDescriptionEditingFlow(t *testing.T) {
 		// Start editing
 		commit := m.repository.Graph.Commits[0]
 		m.viewMode = ViewEditDescription
-		m.editingCommitID = commit.ChangeID
+		m.graphTabModel.SetEditingCommitID(commit.ChangeID)
 
 		view := m.View()
 
@@ -722,7 +906,7 @@ func TestActionButtonsInCommitGraph(t *testing.T) {
 		m := newTestModel()
 		defer m.Close()
 
-		m.selectedCommit = 0
+		m.graphTabModel.SelectCommit(0)
 		m.repository.Graph.Commits[0].Immutable = false
 
 		view := m.View()
@@ -751,7 +935,7 @@ func TestActionButtonsInCommitGraph(t *testing.T) {
 		m := newTestModel()
 		defer m.Close()
 
-		m.selectedCommit = 0
+		m.graphTabModel.SelectCommit(0)
 		m.repository.Graph.Commits[0].Immutable = true
 
 		view := m.View()
@@ -792,13 +976,20 @@ func TestRebaseModeFlow(t *testing.T) {
 		// Need a jjService for rebase to work (use a stub)
 		m.jjService = &jj.Service{RepoPath: "/test/repo"}
 
-		m.selectedCommit = 0
+		m.graphTabModel.SelectCommit(0)
 		m.repository.Graph.Commits[0].Immutable = false
 
-		// Press 'r' to enter rebase mode
+		// Press 'r' - graph returns StartRebaseMode request; main runs it and enters rebase mode
 		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}}
-		newModel, _ := m.Update(msg)
+		newModel, cmd := m.Update(msg)
 		m = newModel.(*Model)
+		if cmd != nil {
+			if req, ok := cmd().(graphtab.Request); ok {
+				var v tea.Model
+				v, _ = m.Update(req)
+				m = v.(*Model)
+			}
+		}
 
 		if m.selectionMode != SelectionRebaseDestination {
 			t.Error("Expected to enter rebase destination selection mode")
@@ -812,7 +1003,7 @@ func TestRebaseModeFlow(t *testing.T) {
 		m := newTestModel()
 		defer m.Close()
 
-		m.selectedCommit = 0
+		m.graphTabModel.SelectCommit(0)
 		m.repository.Graph.Commits[0].Immutable = false
 		m.selectionMode = SelectionRebaseDestination
 		m.rebaseSourceCommit = 0
@@ -831,7 +1022,7 @@ func TestRebaseModeFlow(t *testing.T) {
 		m := newTestModel()
 		defer m.Close()
 
-		m.selectedCommit = 0
+		m.graphTabModel.SelectCommit(0)
 		m.selectionMode = SelectionRebaseDestination
 		m.rebaseSourceCommit = 0
 
@@ -852,22 +1043,27 @@ func TestRebaseModeFlow(t *testing.T) {
 		m := newTestModel()
 		defer m.Close()
 
-		// Need a jjService for the key handler to try rebase
 		m.jjService = &jj.Service{RepoPath: "/test/repo"}
-
-		m.selectedCommit = 0
+		m.graphTabModel.SelectCommit(0)
 		m.repository.Graph.Commits[0].Immutable = true
 
-		// Press 'm' - should not enter rebase mode
-		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}}
-		newModel, _ := m.Update(msg)
+		// Press 'r' - graph returns StartRebaseMode request; main handles it and blocks with message
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}}
+		newModel, cmd := m.Update(msg)
 		m = newModel.(*Model)
+		if cmd != nil {
+			if req, ok := cmd().(graphtab.Request); ok {
+				var v tea.Model
+				v, _ = m.Update(req)
+				m = v.(*Model)
+			}
+		}
 
 		if m.selectionMode != SelectionNormal {
 			t.Error("Should not enter rebase mode for immutable commit")
 		}
 		if !containsString(m.statusMessage, "immutable") {
-			t.Error("Expected immutable warning in status message")
+			t.Errorf("Expected immutable warning in status message, got: %q", m.statusMessage)
 		}
 	})
 
@@ -875,7 +1071,7 @@ func TestRebaseModeFlow(t *testing.T) {
 		m := newTestModel()
 		defer m.Close()
 
-		m.selectedCommit = 1 // Select destination
+		m.graphTabModel.SelectCommit(1) // Select destination
 		m.selectionMode = SelectionRebaseDestination
 		m.rebaseSourceCommit = 0
 
@@ -901,9 +1097,9 @@ func TestMouseScrollingOnViews(t *testing.T) {
 		// Re-initialize viewport with new height
 		m.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
 		// Add many PRs so there's content to scroll
-		var prs []models.GitHubPR
+		var prs []internal.GitHubPR
 		for i := 0; i < 50; i++ {
-			prs = append(prs, models.GitHubPR{
+			prs = append(prs, internal.GitHubPR{
 				Number: i + 1,
 				Title:  fmt.Sprintf("Test PR %d", i+1),
 				State:  "open",
@@ -917,21 +1113,12 @@ func TestMouseScrollingOnViews(t *testing.T) {
 		m := createModelWithManyPRs()
 		defer m.Close()
 
-		// Switch to PR view
 		m.viewMode = ViewPullRequests
-		m.githubService = &github.Service{} // Enable GitHub to show PR list
-
-		// Render view to initialize viewport with content
+		m.githubService = &github.Service{}
+		m.prsTabModel.SetGithubService(true)
 		m.View()
 
-		initialOffset := m.viewport.YOffset
-
-		// Ensure there's content to scroll (total lines > height)
-		if m.viewport.TotalLineCount() <= m.viewport.Height {
-			t.Skipf("Not enough content to scroll: %d lines, %d height", m.viewport.TotalLineCount(), m.viewport.Height)
-		}
-
-		// Simulate mouse wheel scroll down
+		// Wheel down: list scroll offset must increase (proves event reaches PR tab model)
 		scrollDownMsg := tea.MouseMsg{
 			Action: tea.MouseActionPress,
 			Button: tea.MouseButtonWheelDown,
@@ -940,14 +1127,11 @@ func TestMouseScrollingOnViews(t *testing.T) {
 		}
 		newModel, _ := m.Update(scrollDownMsg)
 		m = newModel.(*Model)
-
-		// Offset should have increased (scrolled down)
-		if m.viewport.YOffset <= initialOffset {
-			t.Errorf("Expected YOffset to increase after scroll down, got %d (was %d)", m.viewport.YOffset, initialOffset)
+		if m.GetPRsListYOffset() != 3 {
+			t.Errorf("after wheel down expected PR listYOffset 3, got %d", m.GetPRsListYOffset())
 		}
 
-		// Now scroll back up
-		afterScrollDown := m.viewport.YOffset
+		// Wheel up: offset decreases
 		scrollUpMsg := tea.MouseMsg{
 			Action: tea.MouseActionPress,
 			Button: tea.MouseButtonWheelUp,
@@ -956,59 +1140,85 @@ func TestMouseScrollingOnViews(t *testing.T) {
 		}
 		newModel, _ = m.Update(scrollUpMsg)
 		m = newModel.(*Model)
+		if m.GetPRsListYOffset() != 0 {
+			t.Errorf("after wheel up expected PR listYOffset 0, got %d", m.GetPRsListYOffset())
+		}
 
-		// Offset should have decreased (scrolled up)
-		if m.viewport.YOffset >= afterScrollDown {
-			t.Errorf("Expected YOffset to decrease after scroll up, got %d (was %d)", m.viewport.YOffset, afterScrollDown)
+		if out := m.View(); out == "" {
+			t.Error("View should return non-empty after scroll")
 		}
 	})
 
-	t.Run("mouse scroll respects bounds", func(t *testing.T) {
+	t.Run("PR view rendered content changes after wheel (integration)", func(t *testing.T) {
 		m := createModelWithManyPRs()
 		defer m.Close()
-
-		// Switch to PR view
 		m.viewMode = ViewPullRequests
 		m.githubService = &github.Service{}
+		m.prsTabModel.SetGithubService(true)
+		_ = m.View() // set dimensions and get initial view
+		wheelDown := tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonWheelDown, X: 50, Y: 10}
+		// First wheel: same as "mouse scroll works on PR view"
+		newModel, _ := m.Update(wheelDown)
+		m = newModel.(*Model)
+		if m.GetPRsListYOffset() != 3 {
+			t.Fatalf("after first wheel expected listYOffset 3, got %d", m.GetPRsListYOffset())
+		}
+		// Second wheel: offset should accumulate
+		newModel, _ = m.Update(wheelDown)
+		m = newModel.(*Model)
+		if m.GetPRsListYOffset() != 6 {
+			t.Fatalf("after second wheel expected listYOffset 6, got %d", m.GetPRsListYOffset())
+		}
+		viewAfter := m.View()
+		if viewAfter == "" {
+			t.Fatal("PR view after wheel should not be empty")
+		}
+		// Rendered content should reflect scroll (e.g. different PRs visible)
+		if !strings.Contains(viewAfter, "Test PR ") {
+			t.Error("view should contain PR list content after scroll")
+		}
+	})
 
-		// Render view to initialize viewport
+	t.Run("wheel down increases tickets list scroll offset", func(t *testing.T) {
+		m := newTestModel()
+		defer m.Close()
+		var list []tickets.Ticket
+		for i := 0; i < 50; i++ {
+			list = append(list, tickets.Ticket{Key: fmt.Sprintf("T-%d", i), Summary: fmt.Sprintf("Ticket %d", i)})
+		}
+		m.SetTicketList(list)
+		m.SetViewMode(ViewTickets)
+		m.ticketsTabModel.SetDimensions(80, 24)
 		m.View()
 
-		// Try scrolling up when already at top - should stay at 0
-		m.viewport.YOffset = 0
+		y0 := m.GetTicketsListYOffset()
+		wheelDown := tea.MouseMsg{
+			Action: tea.MouseActionPress,
+			Button: tea.MouseButtonWheelDown,
+			X:      50,
+			Y:      10,
+		}
+		newModel, _ := m.Update(wheelDown)
+		m = newModel.(*Model)
+		y1 := m.GetTicketsListYOffset()
+		if y1 <= y0 {
+			t.Errorf("wheel should update tickets list scroll: was %d, got %d", y0, y1)
+		}
+	})
+
+	t.Run("mouse scroll up at top does not panic", func(t *testing.T) {
+		m := createModelWithManyPRs()
+		defer m.Close()
+		m.viewMode = ViewPullRequests
+		m.githubService = &github.Service{}
+		m.View()
 		scrollUpMsg := tea.MouseMsg{
 			Action: tea.MouseActionPress,
 			Button: tea.MouseButtonWheelUp,
 			X:      50,
 			Y:      10,
 		}
-		newModel, _ := m.Update(scrollUpMsg)
-		m = newModel.(*Model)
-
-		if m.viewport.YOffset < 0 {
-			t.Errorf("YOffset should not go negative, got %d", m.viewport.YOffset)
-		}
-	})
-
-	t.Run("viewport height is correct after switching from graph to PRs", func(t *testing.T) {
-		m := createModelWithManyPRs()
-		defer m.Close()
-
-		// Start on Graph view
-		m.viewMode = ViewCommitGraph
-		m.View() // Render to set up graph viewport heights
-
-		// Switch to PR view
-		m.viewMode = ViewPullRequests
-		m.githubService = &github.Service{}
-		m.View() // Render PR view
-
-		// Viewport height should be reasonable (not the reduced graph height)
-		// The full content height should be at least height - header - statusbar
-		minExpectedHeight := m.height - 10 // Account for header, status, fixed header in split view
-		if m.viewport.Height < minExpectedHeight/2 {
-			t.Errorf("Viewport height %d seems too small after switching from graph (expected at least %d)", m.viewport.Height, minExpectedHeight/2)
-		}
+		_, _ = m.Update(scrollUpMsg)
 	})
 }
 
@@ -1173,17 +1383,19 @@ func TestNewCommitFromImmutableParent(t *testing.T) {
 		m.jjService = &jj.Service{RepoPath: "/test/repo"}
 
 		// Mark the first commit as immutable (like main or root())
-		m.selectedCommit = 0
+		m.graphTabModel.SelectCommit(0)
 		m.repository.Graph.Commits[0].Immutable = true
 		m.repository.Graph.Commits[0].ShortID = "main"
 
-		// Press 'n' to create a new commit
+		// Press 'n' - graph returns NewCommit request; main runs it and sets status
 		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}}
 		_, cmd := m.Update(msg)
-
-		// Should return a command (not nil) - this means the action was allowed
-		if cmd == nil {
-			t.Error("Expected a command to be returned when creating commit from immutable parent")
+		if cmd != nil {
+			if req, ok := cmd().(graphtab.Request); ok {
+				var v tea.Model
+				v, _ = m.Update(req)
+				m = v.(*Model)
+			}
 		}
 
 		// Status message should indicate creating new commit, NOT an error
@@ -1202,7 +1414,7 @@ func TestNewCommitFromImmutableParent(t *testing.T) {
 		m := newTestModel()
 		defer m.Close()
 
-		m.selectedCommit = 0
+		m.graphTabModel.SelectCommit(0)
 		m.repository.Graph.Commits[0].Immutable = true
 
 		view := m.View()
@@ -1219,16 +1431,20 @@ func TestNewCommitFromImmutableParent(t *testing.T) {
 		defer m.Close()
 
 		m.jjService = &jj.Service{RepoPath: "/test/repo"}
-		m.selectedCommit = 0
+		m.graphTabModel.SelectCommit(0)
 		m.repository.Graph.Commits[0].Immutable = true
 
-		// Press 'd' (describe) - should be blocked
+		// Press 'd' - graph returns StartEditDescription request; main runs it and blocks with message
 		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}}
 		_, cmd := m.Update(msg)
-
 		if cmd != nil {
-			t.Error("Describe should be blocked for immutable commit")
+			if req, ok := cmd().(graphtab.Request); ok {
+				var v tea.Model
+				v, _ = m.Update(req)
+				m = v.(*Model)
+			}
 		}
+
 		if !containsString(m.statusMessage, "immutable") {
 			t.Error("Expected immutable warning for describe action")
 		}

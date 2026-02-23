@@ -1,8 +1,6 @@
 package model
 
 import (
-	"fmt"
-
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen/jj-tui/internal/tui/actions"
 )
@@ -57,7 +55,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				// Find this commit in the graph and select it
 				for i, c := range m.repository.Graph.Commits {
 					if c.ChangeID == selectedCommit.ChangeID {
-						m.selectedCommit = i
+						m.graphTabModel.SelectCommit(i)
 						m.showWarningModal = false
 						m.warningCommits = nil
 						// Start editing description
@@ -119,35 +117,23 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.viewMode == ViewGitHubLogin {
 		switch msg.String() {
 		case "esc":
-			m.githubLoginPolling = false
-			m.githubDeviceCode = ""
-			m.githubUserCode = ""
+			m.settingsTabModel.SetGitHubLoginPolling(false)
+			m.settingsTabModel.SetGitHubDeviceCode("")
+			m.settingsTabModel.SetGitHubUserCode("")
 			m.viewMode = ViewSettings
 			m.statusMessage = "GitHub login cancelled"
 			return m, nil
 		case "c":
-			// Copy the user code to clipboard
-			if m.githubUserCode != "" {
+			if code := m.settingsTabModel.GetGitHubUserCode(); code != "" {
 				m.statusMessage = "Copying code to clipboard..."
-				return m, actions.CopyToClipboard(m.githubUserCode)
+				return m, actions.CopyToClipboard(code)
 			}
 			return m, nil
 		}
 		return m, nil
 	}
 
-	// Special handling for rebase mode
-	if m.selectionMode == SelectionRebaseDestination {
-		return m.handleRebaseModeKeyMsg(msg)
-	}
-
-	// Handle scroll keys - pass to viewport
-	switch msg.String() {
-	case "pgup", "pgdown", "ctrl+u", "ctrl+d", "home", "end", "ctrl+f", "ctrl+b":
-		var cmd tea.Cmd
-		m.viewport, cmd = m.viewport.Update(msg)
-		return m, cmd
-	}
+	// Scroll keys are handled by the active tab (graph, PR, tickets, branches) via PropagateUpdate
 
 	switch msg.String() {
 	case "ctrl+q", "ctrl+c":
@@ -164,15 +150,6 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleNavigateToSettingsTab()
 	case "h", "?":
 		return m.handleNavigateToHelpTab()
-	case "n":
-		if m.viewMode == ViewCommitGraph {
-			return m.handleNewCommit()
-		}
-	case "d":
-		// Edit description of selected commit
-		if m.viewMode == ViewCommitGraph {
-			return m.handleDescribeCommit()
-		}
 	case "ctrl+r":
 		return m, m.refreshRepository()
 	case "ctrl+z":
@@ -181,8 +158,8 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleRedo()
 	case "esc":
 		// Cancel status change mode in Tickets view
-		if m.viewMode == ViewTickets && m.statusChangeMode {
-			m.statusChangeMode = false
+		if m.viewMode == ViewTickets && m.ticketsTabModel.IsStatusChangeMode() {
+			m.ticketsTabModel.SetStatusChangeMode(false)
 			m.statusMessage = "Ready"
 			return m, nil
 		}
@@ -190,271 +167,8 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.viewMode = ViewCommitGraph
 		}
 	case "tab":
-		// Switch focus between graph and files panes in graph view
-		if m.viewMode == ViewCommitGraph {
-			m.graphFocused = !m.graphFocused
-			m.statusMessage = m.handleGraphFoucsMessage()
-		}
-		// Switch between help tabs
-		if m.viewMode == ViewHelp {
-			m.helpTab = (m.helpTab + 1) % 2 // 2 tabs
-			m.helpSelectedCommand = 0       // Reset selection when switching tabs
-		}
-	case "j", "down":
-		switch m.viewMode {
-		case ViewHelp:
-			// Navigate command history (only on Commands tab)
-			if m.helpTab == 1 { // Commands tab
-				if m.jjService != nil {
-					history := m.getFilteredCommandHistory()
-					maxCmd := min(len(history), 50) - 1
-					if m.helpSelectedCommand < maxCmd {
-						m.helpSelectedCommand++
-					}
-				}
-			}
-		case ViewPullRequests:
-			if m.repository != nil {
-				m.selectedPR = min(m.selectedPR+1, len(m.repository.PRs)-1)
-				m.ensureGraphCommitVisible(m.selectedPR)
-			}
-		case ViewTickets:
-			if m.selectedTicket < len(m.ticketList)-1 {
-				m.selectedTicket++
-				// Scroll viewport to keep selection visible
-				m.ensureSelectionVisible(m.selectedTicket)
-				// Load transitions for newly selected ticket
-				m.availableTransitions = nil
-				m.loadingTransitions = true
-				return m, m.loadTransitions()
-			}
-		case ViewBranches:
-			if m.selectedBranch < len(m.branchList)-1 {
-				m.selectedBranch++
-				m.ensureBranchSelectionVisible(m.selectedBranch)
-			}
-		case ViewCommitGraph:
-			if !m.graphFocused {
-				// Navigate files in files pane
-				if len(m.changedFiles) > 0 && m.selectedFile < len(m.changedFiles)-1 {
-					m.selectedFile++
-					// Scroll viewport if needed to keep selection visible
-					m.ensureFileVisible(m.selectedFile)
-				}
-			} else {
-				// Navigate commits in graph pane
-				if m.repository != nil && m.selectedCommit < len(m.repository.Graph.Commits)-1 {
-					m.selectedCommit++
-					// Scroll viewport to keep selection visible
-					m.ensureGraphCommitVisible(m.selectedCommit)
-					return m.handleSelectCommit(m.selectedCommit)
-				}
-			}
-		}
-	case "k", "up":
-		switch m.viewMode {
-		case ViewHelp:
-			// Navigate command history (only on Commands tab)
-			if m.helpTab == 1 && m.helpSelectedCommand > 0 {
-				m.helpSelectedCommand--
-			}
-		case ViewPullRequests:
-			if m.selectedPR > 0 {
-				m.selectedPR--
-				// Scroll viewport to keep selection visible
-				m.ensureSelectionVisible(m.selectedPR)
-			}
-		case ViewBranches:
-			if m.selectedBranch > 0 {
-				m.selectedBranch--
-				m.ensureBranchSelectionVisible(m.selectedBranch)
-			}
-		case ViewTickets:
-			if m.selectedTicket > 0 {
-				m.selectedTicket--
-				// Scroll viewport to keep selection visible
-				m.ensureSelectionVisible(m.selectedTicket)
-				// Load transitions for newly selected ticket
-				m.availableTransitions = nil
-				m.loadingTransitions = true
-				return m, m.loadTransitions()
-			}
-		case ViewCommitGraph:
-			if !m.graphFocused {
-				// Navigate files in files pane
-				if len(m.changedFiles) > 0 && m.selectedFile > 0 {
-					m.selectedFile--
-					// Scroll viewport if needed to keep selection visible
-					m.ensureFileVisible(m.selectedFile)
-				}
-			} else {
-				// Navigate commits in graph pane
-				if m.selectedCommit > 0 && m.repository != nil {
-					m.selectedCommit--
-					// Scroll viewport to keep selection visible
-					m.ensureGraphCommitVisible(m.selectedCommit)
-					return m.handleSelectCommit(m.selectedCommit)
-				}
-			}
-		}
-	case "c":
-		// Toggle status change mode (Tickets view only)
-		if m.viewMode == ViewTickets {
-			return m.handleToggleStatusChangeMode()
-		}
-		if m.viewMode == ViewCommitGraph {
-			return m.handleCreatePR()
-		}
-		// Resolve bookmark conflict (Branches view)
-		if m.viewMode == ViewBranches {
-			return m.handleResolveBookmarkConflict()
-		}
-	case "i":
-		// Set ticket to "In Progress" (Tickets view only, requires status change mode)
-		if m.viewMode == ViewTickets && m.statusChangeMode {
-			return m.handleTransitionToInProgress()
-		}
-	case "D":
-		// Set ticket to "Done" (Tickets view only, requires status change mode)
-		if m.viewMode == ViewTickets && m.statusChangeMode {
-			return m.handleTransitionToDone()
-		}
-	case "B":
-		// Set ticket to "Blocked" (Tickets view only, requires status change mode)
-		if m.viewMode == ViewTickets && m.statusChangeMode {
-			return m.handleTransitionToBlocked()
-		}
-	case "N":
-		// Set ticket to "Not Started" (Tickets view only, requires status change mode)
-		if m.viewMode == ViewTickets && m.statusChangeMode {
-			return m.handleTransitionToNotStarted()
-		}
-	case "o":
-		// Open PR URL in browser (PR view only)
-		if m.viewMode == ViewPullRequests {
-			return m.handleOpenPRInBrowser()
-		}
-		// Open ticket URL in browser (Tickets view only)
-		if m.viewMode == ViewTickets {
-			return m.handleOpenTicketInBrowser()
-		}
-	case "y":
-		// Copy selected command to clipboard (Help view, Commands tab only)
-		if m.viewMode == ViewHelp && m.helpTab == 1 && m.jjService != nil {
-			history := m.getFilteredCommandHistory()
-			if m.helpSelectedCommand >= 0 && m.helpSelectedCommand < len(history) {
-				cmd := history[m.helpSelectedCommand].Command
-				m.statusMessage = "Copied: " + cmd
-				return m, actions.CopyToClipboard(cmd)
-			}
-		}
-	case "M":
-		// Merge PR (PR view only, open PRs only)
-		if m.viewMode == ViewPullRequests {
-			return m.handleMergePR()
-		}
-	case "X":
-		// Close PR (PR view only, open PRs only)
-		if m.viewMode == ViewPullRequests {
-			return m.handleClosePR()
-		}
-	case "T":
-		// Track branch (Branches view only)
-		if m.viewMode == ViewBranches {
-			return m.handleTrackBranch()
-		}
-	case "U":
-		// Untrack branch (Branches view only)
-		if m.viewMode == ViewBranches {
-			return m.handleUntrackBranch()
-		}
-	case "L":
-		// Restore local branch from remote (Branches view only)
-		if m.viewMode == ViewBranches {
-			return m.handleRestoreLocalBranch()
-		}
-	case "P":
-		// Push branch (Branches view only)
-		if m.viewMode == ViewBranches {
-			return m.handlePushBranch()
-		}
-	case "F":
-		// Fetch from all remotes (Branches view only)
-		if m.viewMode == ViewBranches {
-			return m.handleFetchAll()
-		}
-	case "enter", "e":
-		// In PR view, open the PR in browser
-		if m.viewMode == ViewPullRequests && m.repository != nil && m.selectedPR >= 0 && m.selectedPR < len(m.repository.PRs) {
-			pr := m.repository.PRs[m.selectedPR]
-			if pr.URL != "" {
-				if m.demoMode {
-					m.statusMessage = fmt.Sprintf("PR #%d: %s (demo mode - browser disabled)", pr.Number, pr.URL)
-					return m, nil
-				}
-				m.statusMessage = fmt.Sprintf("Opening PR #%d...", pr.Number)
-				return m, openURL(pr.URL)
-			}
-		}
-		// In Tickets view, start bookmark creation from ticket
-		if m.viewMode == ViewTickets && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) && m.jjService != nil {
-			ticket := m.ticketList[m.selectedTicket]
-			m.startBookmarkFromTicket(ticket)
-			return m, nil
-		}
-		// In commit view, edit selected commit (jj edit)
-		if m.viewMode == ViewCommitGraph {
-			return m.handleCheckoutCommit()
-		}
-	case "s":
-		if m.viewMode == ViewCommitGraph {
-			return m.handleSquashCommit()
-		}
-	case "a":
-		if m.viewMode == ViewCommitGraph {
-			return m.handleAbandonCommit()
-		}
-	case "r":
-		if m.viewMode == ViewCommitGraph {
-			return m.handleRebase()
-		}
-	case "m":
-		if m.viewMode == ViewCommitGraph {
-			return m.handleCreateBookmark()
-		}
-	case "x":
-		// Delete bookmark from selected commit (Graph view)
-		if m.viewMode == ViewCommitGraph && m.isSelectedCommitValid() && m.jjService != nil {
-			commit := m.repository.Graph.Commits[m.selectedCommit]
-			if len(commit.Branches) == 0 {
-				m.statusMessage = "No bookmark on this commit to delete"
-				return m, nil
-			}
-			return m, m.deleteBookmark()
-		}
-		// Delete bookmark (Branches view)
-		if m.viewMode == ViewBranches {
-			return m.handleDeleteBranchBookmark()
-		}
-	case "u":
-		// Push updates to PR (for commits with PR branches or their descendants)
-		if m.viewMode == ViewCommitGraph {
-			return m.handleUpdatePR()
-		}
-	case "[":
-		// Move selected file to new parent commit (files pane must be focused)
-		if m.viewMode == ViewCommitGraph && !m.graphFocused {
-			return m.handleMoveFileUp()
-		}
-	case "]":
-		// Move selected file to new child commit (files pane must be focused)
-		if m.viewMode == ViewCommitGraph && !m.graphFocused {
-			return m.handleMoveFileDown()
-		}
-	case "v":
-		// Revert selected file changes (files pane must be focused)
-		if m.viewMode == ViewCommitGraph && !m.graphFocused {
-			return m.handleRevertFile()
+		if m.viewMode != ViewCommitGraph {
+			m.viewMode = ViewCommitGraph
 		}
 	}
 	return m, nil
@@ -469,42 +183,42 @@ func (m *Model) handleCreateBookmarkKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 	case "enter", "ctrl+s":
 		return m.handleBookmarkSubmit()
 	case "tab":
-		// Toggle between new bookmark input and existing bookmarks list
-		if m.selectedBookmarkIdx == -1 && len(m.existingBookmarks) > 0 {
-			m.selectedBookmarkIdx = 0
-			m.bookmarkNameInput.Blur()
+		existing := m.bookmarkModal.GetExistingBookmarks()
+		sel := m.bookmarkModal.GetSelectedBookmarkIdx()
+		if sel == -1 && len(existing) > 0 {
+			m.bookmarkModal.SetSelectedBookmarkIdx(0)
+			m.bookmarkModal.GetNameInput().Blur()
 		} else {
-			m.selectedBookmarkIdx = -1
-			m.bookmarkNameInput.Focus()
+			m.bookmarkModal.SetSelectedBookmarkIdx(-1)
+			m.bookmarkModal.GetNameInput().Focus()
 		}
 		return m, nil
 	}
 
-	// If we're in "new bookmark" mode (input focused), pass all other keys to input
-	if m.selectedBookmarkIdx == -1 {
+	if m.bookmarkModal.GetSelectedBookmarkIdx() == -1 {
 		var cmd tea.Cmd
-		m.bookmarkNameInput, cmd = m.bookmarkNameInput.Update(msg)
-		// Check if the entered name already exists
+		ni := m.bookmarkModal.GetNameInput()
+		*ni, cmd = ni.Update(msg)
 		m.updateBookmarkNameExists()
 		return m, cmd
 	}
 
-	// Navigation only applies when in existing bookmarks list mode
 	switch msg.String() {
 	case "j", "down":
-		// Navigate down in existing bookmarks list
-		if len(m.existingBookmarks) > 0 {
-			if m.selectedBookmarkIdx < len(m.existingBookmarks)-1 {
-				m.selectedBookmarkIdx++
+		existing := m.bookmarkModal.GetExistingBookmarks()
+		if len(existing) > 0 {
+			sel := m.bookmarkModal.GetSelectedBookmarkIdx()
+			if sel < len(existing)-1 {
+				m.bookmarkModal.SetSelectedBookmarkIdx(sel + 1)
 			}
 		}
 		return m, nil
 	case "k", "up":
-		// Navigate up in existing bookmarks list (or to new bookmark input)
-		if m.selectedBookmarkIdx > -1 {
-			m.selectedBookmarkIdx--
-			if m.selectedBookmarkIdx == -1 {
-				m.bookmarkNameInput.Focus()
+		sel := m.bookmarkModal.GetSelectedBookmarkIdx()
+		if sel > -1 {
+			m.bookmarkModal.SetSelectedBookmarkIdx(sel - 1)
+			if sel == 0 {
+				m.bookmarkModal.GetNameInput().Focus()
 			}
 		}
 		return m, nil
@@ -522,32 +236,23 @@ func (m *Model) handleBookmarkConflictKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd
 		m.statusMessage = "Conflict resolution cancelled"
 		return m, nil
 	case "enter":
-		// Confirm the selected resolution
-		resolution := "keep_local"
-		if m.conflictSelectedOption == 1 {
-			resolution = "reset_remote"
-		}
 		m.statusMessage = "Resolving bookmark conflict..."
-		return m, m.resolveBookmarkConflict(m.conflictBookmarkName, resolution)
+		return m, m.resolveBookmarkConflict(m.conflictModal.GetBookmarkName(), m.conflictModal.GetSelectedOption())
 	case "j", "down":
-		// Navigate down (select "Reset to Remote")
-		if m.conflictSelectedOption < 1 {
-			m.conflictSelectedOption = 1
+		if m.conflictModal.GetSelectedOption() != "reset_remote" {
+			m.conflictModal.SetSelectedOption(1)
 		}
 		return m, nil
 	case "k", "up":
-		// Navigate up (select "Keep Local")
-		if m.conflictSelectedOption > 0 {
-			m.conflictSelectedOption = 0
+		if m.conflictModal.GetSelectedOption() != "keep_local" {
+			m.conflictModal.SetSelectedOption(0)
 		}
 		return m, nil
 	case "l", "L":
-		// Quick select "Keep Local"
-		m.conflictSelectedOption = 0
+		m.conflictModal.SetSelectedOption(0)
 		return m, nil
 	case "r", "R":
-		// Quick select "Reset to Remote"
-		m.conflictSelectedOption = 1
+		m.conflictModal.SetSelectedOption(1)
 		return m, nil
 	}
 	return m, nil
@@ -562,98 +267,46 @@ func (m *Model) handleDivergentCommitKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd)
 		m.statusMessage = "Divergent commit resolution cancelled"
 		return m, nil
 	case "enter":
-		// Confirm the selected version to keep
-		if len(m.divergentCommitIDs) == 0 || m.divergentSelectedIdx >= len(m.divergentCommitIDs) {
-			return m, nil
+		keepCommitID := m.divergentModal.GetSelectedCommitID()
+		if keepCommitID != "" {
+			m.statusMessage = "Resolving divergent commit..."
+			return m, m.resolveDivergentCommit(m.divergentModal.GetChangeID(), keepCommitID)
 		}
-		keepCommitID := m.divergentCommitIDs[m.divergentSelectedIdx]
-		m.statusMessage = "Resolving divergent commit..."
-		return m, m.resolveDivergentCommit(m.divergentChangeID, keepCommitID)
+		return m, nil
 	case "j", "down":
-		// Navigate down
-		if m.divergentSelectedIdx < len(m.divergentCommitIDs)-1 {
-			m.divergentSelectedIdx++
+		cur := m.divergentModal.GetSelectedIdx()
+		n := m.divergentModal.GetCommitCount()
+		if n > 0 && cur < n-1 {
+			m.divergentModal.SetSelectedIdx(cur + 1)
 		}
 		return m, nil
 	case "k", "up":
-		// Navigate up
-		if m.divergentSelectedIdx > 0 {
-			m.divergentSelectedIdx--
+		cur := m.divergentModal.GetSelectedIdx()
+		if cur > 0 {
+			m.divergentModal.SetSelectedIdx(cur - 1)
 		}
 		return m, nil
 	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
-		// Quick select by number
 		idx := int(msg.String()[0] - '1')
-		if idx >= 0 && idx < len(m.divergentCommitIDs) {
-			m.divergentSelectedIdx = idx
+		if idx >= 0 && idx < m.divergentModal.GetCommitCount() {
+			m.divergentModal.SetSelectedIdx(idx)
 		}
 		return m, nil
 	}
 	return m, nil
 }
 
-// handleCreatePRKeyMsg handles keyboard input in PR creation mode
+// handleCreatePRKeyMsg delegates to the PR form modal
 func (m *Model) handleCreatePRKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		return m.handlePRCancel()
 	case "ctrl+s":
 		return m.handlePRSubmit()
-	case "tab", "down":
-		// Move to next field
-		if m.prFocusedField == 0 {
-			m.prFocusedField = 1
-			m.prTitleInput.Blur()
-			m.prBodyInput.Focus()
-		}
-		return m, nil
-	case "shift+tab", "up":
-		// Move to previous field
-		if m.prFocusedField == 1 {
-			m.prFocusedField = 0
-			m.prBodyInput.Blur()
-			m.prTitleInput.Focus()
-		}
-		return m, nil
 	}
-
-	// Pass other keys to the focused input
 	var cmd tea.Cmd
-	if m.prFocusedField == 0 {
-		m.prTitleInput, cmd = m.prTitleInput.Update(msg)
-	} else {
-		m.prBodyInput, cmd = m.prBodyInput.Update(msg)
-	}
+	m.prFormModal, cmd = m.prFormModal.Update(msg)
 	return m, cmd
-}
-
-// handleRebaseModeKeyMsg handles keyboard input during rebase destination selection
-func (m *Model) handleRebaseModeKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "esc", "q":
-		// Cancel rebase mode
-		m.cancelRebaseMode()
-		return m, nil
-	case "j", "down":
-		// Move down in commit list
-		if m.repository != nil && m.selectedCommit < len(m.repository.Graph.Commits)-1 {
-			m.selectedCommit++
-		}
-		return m, nil
-	case "k", "up":
-		// Move up in commit list
-		if m.selectedCommit > 0 {
-			m.selectedCommit--
-		}
-		return m, nil
-	case "enter":
-		// Confirm rebase destination
-		if m.selectedCommit >= 0 && m.selectedCommit < len(m.repository.Graph.Commits) {
-			return m, m.performRebase(m.selectedCommit)
-		}
-		return m, nil
-	}
-	return m, nil
 }
 
 // handleDescriptionEditKeyMsg handles keys while editing description
@@ -665,16 +318,17 @@ func (m *Model) handleDescriptionEditKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd)
 		return m.handleDescriptionSave()
 	}
 
-	// Pass other keys to the textarea
 	var cmd tea.Cmd
-	m.descriptionInput, cmd = m.descriptionInput.Update(msg)
+	descInput := m.graphTabModel.GetDescriptionInput()
+	updated, cmd := descInput.Update(msg)
+	m.graphTabModel.SetDescriptionInput(updated)
 	return m, cmd
 }
 
 // handleSettingsKeyMsg handles keys while in settings view
 func (m *Model) handleSettingsKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Handle cleanup confirmation dialog
-	if m.confirmingCleanup != "" {
+	if m.settingsTabModel.GetConfirmingCleanup() != "" {
 		switch msg.String() {
 		case "y", "Y":
 			return m, m.confirmCleanup()
@@ -689,82 +343,88 @@ func (m *Model) handleSettingsKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		return m.handleSettingsCancel()
 	case "ctrl+j":
-		// Previous sub-tab
-		m.settingsTab--
-		if m.settingsTab < 0 {
-			m.settingsTab = 5 // 6 tabs (0-5)
+		tab := m.settingsTabModel.GetSettingsTab()
+		tab--
+		if tab < 0 {
+			tab = 5
 		}
+		m.settingsTabModel.SetSettingsTab(tab)
 		return m, nil
 	case "ctrl+k":
-		// Next sub-tab
-		m.settingsTab = (m.settingsTab + 1) % 6 // 6 tabs
+		m.settingsTabModel.SetSettingsTab((m.settingsTabModel.GetSettingsTab() + 1) % 6)
 		return m, nil
 	case "ctrl+s", "enter":
-		// Handle Advanced tab specially (now at index 5)
-		if m.settingsTab == 5 {
-			// Advanced tab - these don't use settings saving, they use direct actions
+		if m.settingsTabModel.GetSettingsTab() == 5 {
 			return m, nil
 		}
-		// If on a field and press enter, move to next field
-		// If on last field, save
-		if msg.String() == "enter" && m.settingsFocusedField < len(m.settingsInputs)-1 {
-			m.settingsFocusedField++
-			for i := range m.settingsInputs {
-				if i == m.settingsFocusedField {
-					m.settingsInputs[i].Focus()
+		inputs := m.settingsTabModel.GetSettingsInputs()
+		focused := m.settingsTabModel.GetFocusedField()
+		if msg.String() == "enter" && focused < len(inputs)-1 {
+			m.settingsTabModel.SetFocusedField(focused + 1)
+			for i := range inputs {
+				if i == focused+1 {
+					inputs[i].Focus()
 				} else {
-					m.settingsInputs[i].Blur()
+					inputs[i].Blur()
 				}
 			}
 			return m, nil
 		}
-		// Save settings to global config
 		return m, m.saveSettings()
-	case "ctrl+l":
-		// Save settings to local .jj-tui.json
-		return m, m.saveSettingsLocal()
 	case "tab", "down":
-		// Skip tab for Branches and Advanced tabs (no input fields)
-		if m.settingsTab == 4 || m.settingsTab == 5 {
+		if m.settingsTabModel.GetSettingsTab() == 4 || m.settingsTabModel.GetSettingsTab() == 5 {
 			return m, nil
 		}
-		// Move to next field
-		m.settingsFocusedField = (m.settingsFocusedField + 1) % len(m.settingsInputs)
-		for i := range m.settingsInputs {
-			if i == m.settingsFocusedField {
-				m.settingsInputs[i].Focus()
+		inputs := m.settingsTabModel.GetSettingsInputs()
+		n := len(inputs)
+		if n == 0 {
+			return m, nil
+		}
+		focused := m.settingsTabModel.GetFocusedField()
+		next := (focused + 1) % n
+		m.settingsTabModel.SetFocusedField(next)
+		for i := range inputs {
+			if i == next {
+				inputs[i].Focus()
 			} else {
-				m.settingsInputs[i].Blur()
+				inputs[i].Blur()
 			}
 		}
 		return m, nil
 	case "shift+tab", "up":
-		// Skip tab for Branches and Advanced tabs (no input fields)
-		if m.settingsTab == 4 || m.settingsTab == 5 {
+		if m.settingsTabModel.GetSettingsTab() == 4 || m.settingsTabModel.GetSettingsTab() == 5 {
 			return m, nil
 		}
-		// Move to previous field
-		m.settingsFocusedField--
-		if m.settingsFocusedField < 0 {
-			m.settingsFocusedField = len(m.settingsInputs) - 1
+		inputs := m.settingsTabModel.GetSettingsInputs()
+		n := len(inputs)
+		if n == 0 {
+			return m, nil
 		}
-		for i := range m.settingsInputs {
-			if i == m.settingsFocusedField {
-				m.settingsInputs[i].Focus()
+		focused := m.settingsTabModel.GetFocusedField()
+		next := focused - 1
+		if next < 0 {
+			next = n - 1
+		}
+		m.settingsTabModel.SetFocusedField(next)
+		for i := range inputs {
+			if i == next {
+				inputs[i].Focus()
 			} else {
-				m.settingsInputs[i].Blur()
+				inputs[i].Blur()
 			}
 		}
 		return m, nil
 	}
 
-	// Skip input handling for Branches and Advanced tabs
-	if m.settingsTab == 4 || m.settingsTab == 5 {
+	if m.settingsTabModel.GetSettingsTab() == 4 || m.settingsTabModel.GetSettingsTab() == 5 {
 		return m, nil
 	}
-
-	// Pass other keys to the focused input
+	inputs := m.settingsTabModel.GetSettingsInputs()
+	focused := m.settingsTabModel.GetFocusedField()
+	if focused < 0 || focused >= len(inputs) {
+		return m, nil
+	}
 	var cmd tea.Cmd
-	m.settingsInputs[m.settingsFocusedField], cmd = m.settingsInputs[m.settingsFocusedField].Update(msg)
+	inputs[focused], cmd = inputs[focused].Update(msg)
 	return m, cmd
 }

@@ -1,8 +1,8 @@
 package model
 
 import (
-	"github.com/madicen/jj-tui/internal/github"
-	"github.com/madicen/jj-tui/internal/models"
+	"github.com/madicen/jj-tui/internal"
+	"github.com/madicen/jj-tui/internal/integrations/github"
 	"github.com/madicen/jj-tui/internal/tickets"
 )
 
@@ -14,9 +14,9 @@ func (m *Model) GetViewMode() ViewMode {
 	return m.viewMode
 }
 
-// GetSelectedCommit returns the selected commit index
+// GetSelectedCommit returns the selected commit index (from graph tab)
 func (m *Model) GetSelectedCommit() int {
-	return m.selectedCommit
+	return m.graphTabModel.GetSelectedCommit()
 }
 
 // GetStatusMessage returns the status message
@@ -25,23 +25,43 @@ func (m *Model) GetStatusMessage() string {
 }
 
 // GetRepository returns the repository
-func (m *Model) GetRepository() *models.Repository {
+func (m *Model) GetRepository() *internal.Repository {
 	return m.repository
 }
 
-// GetSelectedPR returns the selected PR index
+// GetSelectedPR returns the selected PR index (from PR tab)
 func (m *Model) GetSelectedPR() int {
-	return m.selectedPR
+	return m.prsTabModel.GetSelectedPR()
 }
 
-// GetSelectedTicket returns the selected ticket index
+// GetSelectedTicket returns the selected ticket index (from tickets tab)
 func (m *Model) GetSelectedTicket() int {
-	return m.selectedTicket
+	return m.ticketsTabModel.GetSelectedTicket()
+}
+
+// GetSelectedBranch returns the selected branch index (from branches tab)
+func (m *Model) GetSelectedBranch() int {
+	return m.branchesTabModel.GetSelectedBranch()
+}
+
+// GetPRsListYOffset returns the PR list scroll offset (for tests)
+func (m *Model) GetPRsListYOffset() int {
+	return m.prsTabModel.GetListYOffset()
+}
+
+// GetTicketsListYOffset returns the tickets list scroll offset (for tests)
+func (m *Model) GetTicketsListYOffset() int {
+	return m.ticketsTabModel.GetListYOffset()
+}
+
+// GetBranchesListYOffset returns the branches list scroll offset (for tests)
+func (m *Model) GetBranchesListYOffset() int {
+	return m.branchesTabModel.GetListYOffset()
 }
 
 // GetSettingsFocusedField returns the focused settings field index
 func (m *Model) GetSettingsFocusedField() int {
-	return m.settingsFocusedField
+	return m.settingsTabModel.GetFocusedField()
 }
 
 // GetError returns the current error
@@ -59,14 +79,15 @@ func (m *Model) SetTicketService(svc tickets.Service) {
 	m.ticketService = svc
 }
 
-// SetTicketList sets the ticket list for testing
+// SetTicketList sets the ticket list for testing (updates tickets tab)
 func (m *Model) SetTicketList(list []tickets.Ticket) {
-	m.ticketList = list
+	m.ticketsTabModel.UpdateTickets(list)
 }
 
-// SetGitHubService sets the GitHub service for testing
+// SetGitHubService sets the GitHub service for testing and syncs to the PRs tab so it shows the PR list instead of "GitHub not connected".
 func (m *Model) SetGitHubService(svc *github.Service) {
 	m.githubService = svc
+	m.prsTabModel.SetGithubService(m.isGitHubAvailable())
 }
 
 // SetViewMode sets the view mode for testing
@@ -76,12 +97,12 @@ func (m *Model) SetViewMode(mode ViewMode) {
 
 // SetSelectedPR sets the selected PR index for testing
 func (m *Model) SetSelectedPR(idx int) {
-	m.selectedPR = idx
+	m.prsTabModel.SetSelectedPR(idx)
 }
 
 // SetSelectedTicket sets the selected ticket index for testing
 func (m *Model) SetSelectedTicket(idx int) {
-	m.selectedTicket = idx
+	m.ticketsTabModel.SetSelectedTicket(idx)
 }
 
 // SetLoading sets the loading state for testing
@@ -99,144 +120,5 @@ func (m *Model) SetDimensions(width, height int) {
 func (m *Model) Close() {
 	if m.zoneManager != nil {
 		m.zoneManager.Close()
-	}
-}
-
-// ensureSelectionVisible scrolls the viewport to keep the selected line visible
-// This is called after keyboard navigation changes the selection
-func (m *Model) ensureSelectionVisible(selectedLine int) {
-	viewportHeight := m.viewport.Height
-	if viewportHeight <= 0 {
-		return
-	}
-
-	// If selection is above visible area, scroll up
-	if selectedLine < m.viewport.YOffset {
-		m.viewport.YOffset = selectedLine
-	}
-	// If selection is below visible area, scroll down
-	if selectedLine >= m.viewport.YOffset+viewportHeight {
-		m.viewport.YOffset = selectedLine - viewportHeight + 1
-	}
-
-	// Clamp to valid range
-	maxOffset := m.viewport.TotalLineCount() - viewportHeight
-	if maxOffset < 0 {
-		maxOffset = 0
-	}
-	if m.viewport.YOffset > maxOffset {
-		m.viewport.YOffset = maxOffset
-	}
-	if m.viewport.YOffset < 0 {
-		m.viewport.YOffset = 0
-	}
-}
-
-// ensureBranchSelectionVisible scrolls the viewport for the branches tab
-// The branch graph has extra lines (trunk, connectors, separator) so we need
-// to calculate the actual line number from the branch index
-func (m *Model) ensureBranchSelectionVisible(branchIndex int) {
-	if len(m.branchList) == 0 {
-		return
-	}
-
-	// Count local branches
-	numLocals := 0
-	for _, b := range m.branchList {
-		if b.IsLocal {
-			numLocals++
-		}
-	}
-
-	// Calculate actual line number in the graph
-	// Graph structure:
-	// - Line 0: trunk
-	// - Local branches: line = 1 + localIndex * 2 (with connectors between)
-	// - Separator (if both): 2 lines
-	// - Remote branches: line = baseOffset + remoteIndex * 2
-	var actualLine int
-	if branchIndex < numLocals {
-		// It's a local branch
-		actualLine = 1 + branchIndex*2
-	} else {
-		// It's a remote branch
-		remoteIndex := branchIndex - numLocals
-		if numLocals > 0 {
-			// After locals + separator
-			actualLine = 2*numLocals + 2 + remoteIndex*2
-		} else {
-			// No locals, just trunk + remotes
-			actualLine = 1 + remoteIndex*2
-		}
-	}
-
-	m.ensureSelectionVisible(actualLine)
-}
-
-// ensureGraphCommitVisible scrolls the graph viewport to keep the selected commit visible
-// This is called after keyboard navigation changes the commit selection
-// The +1 accounts for the focus indicator header line in the graph content
-func (m *Model) ensureGraphCommitVisible(commitIndex int) {
-	viewportHeight := m.viewport.Height
-	if viewportHeight <= 0 {
-		return
-	}
-
-	// Account for the focus indicator header line
-	adjustedLine := commitIndex + 1
-
-	// If selection is above visible area, scroll up
-	if adjustedLine < m.viewport.YOffset {
-		m.viewport.YOffset = adjustedLine
-	}
-	// If selection is below visible area, scroll down
-	if adjustedLine >= m.viewport.YOffset+viewportHeight {
-		m.viewport.YOffset = adjustedLine - viewportHeight + 1
-	}
-
-	// Clamp to valid range
-	maxOffset := m.viewport.TotalLineCount() - viewportHeight
-	if maxOffset < 0 {
-		maxOffset = 0
-	}
-	if m.viewport.YOffset > maxOffset {
-		m.viewport.YOffset = maxOffset
-	}
-	if m.viewport.YOffset < 0 {
-		m.viewport.YOffset = 0
-	}
-}
-
-// ensureFileVisible scrolls the files viewport to keep the selected file visible
-// This is called after keyboard navigation changes the file selection
-// The +1 accounts for the "Changed Files" header line
-func (m *Model) ensureFileVisible(fileIndex int) {
-	viewportHeight := m.filesViewport.Height
-	if viewportHeight <= 0 {
-		return
-	}
-
-	// Account for the "Changed Files" header line
-	adjustedLine := fileIndex + 1
-
-	// If selection is above visible area, scroll up
-	if adjustedLine < m.filesViewport.YOffset {
-		m.filesViewport.YOffset = adjustedLine
-	}
-	// If selection is below visible area, scroll down
-	if adjustedLine >= m.filesViewport.YOffset+viewportHeight {
-		m.filesViewport.YOffset = adjustedLine - viewportHeight + 1
-	}
-
-	// Clamp to valid range
-	maxOffset := m.filesViewport.TotalLineCount() - viewportHeight
-	if maxOffset < 0 {
-		maxOffset = 0
-	}
-	if m.filesViewport.YOffset > maxOffset {
-		m.filesViewport.YOffset = maxOffset
-	}
-	if m.filesViewport.YOffset < 0 {
-		m.filesViewport.YOffset = 0
 	}
 }
