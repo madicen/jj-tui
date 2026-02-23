@@ -117,19 +117,17 @@ func (m *Model) handleZoneClick(msg zone.MsgZoneInBounds) (tea.Model, tea.Cmd) {
 		return m.handleRedo()
 	}
 
-	// Check graph view pane zones for click-to-focus
+	// Check graph view pane zones for click-to-focus (graph tab owns focus state)
 	if m.viewMode == ViewCommitGraph {
 		if userClicked(mouse.ZoneGraphPane) {
-			if !m.graphFocused {
-				m.graphFocused = true
+			if !m.graphTabModel.IsGraphFocused() {
 				m.graphTabModel.SetGraphFocused(true)
 				m.statusMessage = m.handleGraphFoucsMessage()
 			}
 			return m, nil
 		}
 		if userClicked(mouse.ZoneFilesPane) {
-			if m.graphFocused {
-				m.graphFocused = false
+			if m.graphTabModel.IsGraphFocused() {
 				m.graphTabModel.SetGraphFocused(false)
 				m.statusMessage = m.handleGraphFoucsMessage()
 			}
@@ -198,7 +196,6 @@ func (m *Model) handleZoneClick(msg zone.MsgZoneInBounds) (tea.Model, tea.Cmd) {
 		if userClicked(mouse.ZoneChangedFile(i)) {
 			m.graphTabModel.SetSelectedFile(i)
 			m.graphTabModel.SetGraphFocused(false)
-			m.graphFocused = false
 			return m, nil
 		}
 	}
