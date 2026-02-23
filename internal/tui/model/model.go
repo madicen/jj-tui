@@ -190,10 +190,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, cmds[0]
 			}
 		case ViewSettings:
-			// Tab/shift+tab move between inputs; handle in main model so they are not consumed by the tab
-			if msg.String() == "tab" || msg.String() == "shift+tab" {
-				return m.handleKeyMsg(msg)
-			}
 			cmds := PropagateUpdate(msg, &m.settingsTabModel)
 			if len(cmds) > 0 && cmds[0] != nil {
 				return m, cmds[0]
@@ -202,6 +198,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds := PropagateUpdate(msg, &m.helpTabModel)
 			if len(cmds) > 0 && cmds[0] != nil {
 				return m, cmds[0]
+			}
+			// Tab/shift+tab switch help sub-tab; don't fall through to handleKeyMsg (which would switch to graph)
+			if msg.String() == "tab" || msg.String() == "shift+tab" {
+				return m, nil
 			}
 		}
 		return m.handleKeyMsg(msg)

@@ -95,6 +95,7 @@ func (m *Model) View() string {
 	case ViewSettings:
 		content = m.renderSettings()
 	case ViewHelp:
+		m.syncHelpCommandHistory()
 		content = m.helpTabModel.View()
 		if content == "" {
 			content = m.renderHelpContent()
@@ -275,6 +276,7 @@ func (m *Model) renderTab(label string, active bool) string {
 }
 
 
+// renderError renders an error message
 // renderError renders an error message with text wrapping
 func (m *Model) renderError() string {
 	// Special handling for "not a jj repo" - show a welcome/setup screen instead of an error
@@ -512,6 +514,21 @@ func isAutoRefreshCommand(cmd string) bool {
 		}
 	}
 	return false
+}
+
+// syncHelpCommandHistory pushes the current filtered command history into the help tab so the History sub-tab can display it.
+func (m *Model) syncHelpCommandHistory() {
+	var entries []helptab.CommandHistoryEntry
+	for _, entry := range m.getFilteredCommandHistory() {
+		entries = append(entries, helptab.CommandHistoryEntry{
+			Command:   entry.Command,
+			Timestamp: entry.Timestamp.Format("15:04:05"),
+			Duration:  formatDuration(entry.Duration),
+			Success:   entry.Success,
+			Error:     entry.Error,
+		})
+	}
+	m.helpTabModel.SetCommandHistoryEntries(entries)
 }
 
 // getFilteredCommandHistory returns command history with auto-refresh commands filtered out
