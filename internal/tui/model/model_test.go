@@ -991,11 +991,11 @@ func TestRebaseModeFlow(t *testing.T) {
 			}
 		}
 
-		if m.selectionMode != SelectionRebaseDestination {
+		if !m.graphTabModel.IsInRebaseMode() {
 			t.Error("Expected to enter rebase destination selection mode")
 		}
-		if m.rebaseSourceCommit != 0 {
-			t.Errorf("Expected rebase source to be 0, got %d", m.rebaseSourceCommit)
+		if m.graphTabModel.GetRebaseSourceCommit() != 0 {
+			t.Errorf("Expected rebase source to be 0, got %d", m.graphTabModel.GetRebaseSourceCommit())
 		}
 	})
 
@@ -1005,8 +1005,7 @@ func TestRebaseModeFlow(t *testing.T) {
 
 		m.graphTabModel.SelectCommit(0)
 		m.repository.Graph.Commits[0].Immutable = false
-		m.selectionMode = SelectionRebaseDestination
-		m.rebaseSourceCommit = 0
+		m.graphTabModel.StartRebaseMode(0)
 
 		view := m.View()
 
@@ -1023,18 +1022,17 @@ func TestRebaseModeFlow(t *testing.T) {
 		defer m.Close()
 
 		m.graphTabModel.SelectCommit(0)
-		m.selectionMode = SelectionRebaseDestination
-		m.rebaseSourceCommit = 0
+		m.graphTabModel.StartRebaseMode(0)
 
 		// Press Esc to cancel
 		msg := tea.KeyMsg{Type: tea.KeyEsc}
 		newModel, _ := m.Update(msg)
 		m = newModel.(*Model)
 
-		if m.selectionMode != SelectionNormal {
+		if m.graphTabModel.IsInRebaseMode() {
 			t.Error("Expected to exit rebase mode on Esc")
 		}
-		if m.rebaseSourceCommit != -1 {
+		if m.graphTabModel.GetRebaseSourceCommit() != -1 {
 			t.Error("Expected rebase source to be reset on cancel")
 		}
 	})
@@ -1059,7 +1057,7 @@ func TestRebaseModeFlow(t *testing.T) {
 			}
 		}
 
-		if m.selectionMode != SelectionNormal {
+		if m.graphTabModel.IsInRebaseMode() {
 			t.Error("Should not enter rebase mode for immutable commit")
 		}
 		if !containsString(m.statusMessage, "immutable") {
@@ -1072,8 +1070,7 @@ func TestRebaseModeFlow(t *testing.T) {
 		defer m.Close()
 
 		m.graphTabModel.SelectCommit(1) // Select destination
-		m.selectionMode = SelectionRebaseDestination
-		m.rebaseSourceCommit = 0
+		m.graphTabModel.StartRebaseMode(0)
 
 		view := m.View()
 
