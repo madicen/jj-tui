@@ -31,7 +31,8 @@ type Model struct {
 	commandHistoryEntries []CommandHistoryEntry  // for rendering (set by main model)
 	width                 int
 	height                int
-	helpYOffset           int   // scroll offset for wheel scrolling (no click required)
+	shortcutsYOffset      int   // scroll offset for Shortcuts sub-tab
+	historyYOffset        int   // scroll offset for History sub-tab
 }
 
 // NewModel creates a new Help tab model. zoneManager may be nil.
@@ -61,13 +62,24 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		if tea.MouseEvent(msg).IsWheel() {
 			delta := 3
 			isUp := msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelLeft
-			if isUp {
-				m.helpYOffset -= delta
+			if m.helpTab == 0 {
+				if isUp {
+					m.shortcutsYOffset -= delta
+				} else {
+					m.shortcutsYOffset += delta
+				}
+				if m.shortcutsYOffset < 0 {
+					m.shortcutsYOffset = 0
+				}
 			} else {
-				m.helpYOffset += delta
-			}
-			if m.helpYOffset < 0 {
-				m.helpYOffset = 0
+				if isUp {
+					m.historyYOffset -= delta
+				} else {
+					m.historyYOffset += delta
+				}
+				if m.historyYOffset < 0 {
+					m.historyYOffset = 0
+				}
 			}
 			return m, nil
 		}

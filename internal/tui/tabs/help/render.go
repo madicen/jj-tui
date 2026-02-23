@@ -34,7 +34,12 @@ func (m Model) renderHelp() string {
 	}
 	totalLines := len(fullLines)
 	visibleHeight := max(1, m.height-3)
-	start := m.helpYOffset
+	var start int
+	if m.helpTab == 0 {
+		start = m.shortcutsYOffset
+	} else {
+		start = m.historyYOffset
+	}
 	if start > totalLines-visibleHeight {
 		start = max(0, totalLines-visibleHeight)
 	}

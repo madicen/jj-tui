@@ -381,8 +381,7 @@ func (m *Model) handleNavigateToSettingsTab() (tea.Model, tea.Cmd) {
 
 func (m *Model) handleNavigateToHelpTab() (tea.Model, tea.Cmd) {
 	m.viewMode = ViewHelp
-	m.helpTabModel.SetHelpTab(0)
-	m.helpTabModel.SetSelectedCommand(0)
+	// Keep current help sub-tab (Shortcuts vs History) and selection so returning to Help remembers where you were
 	m.statusMessage = "Loaded Help"
 	return m, nil
 }
