@@ -227,11 +227,11 @@ func (m *Model) renderHelpContent() string {
 
 // renderHeader renders the header with clickable tabs
 func (m *Model) renderHeader() string {
-	title := TitleStyle.Render("jj-tui")
+	title := styles.TitleStyle.Render("jj-tui")
 
 	// Hide tabs when we're in "not a jj repo" state - tabs aren't functional without a repo
 	if m.notJJRepo {
-		return HeaderStyle.Width(m.width).Render(title)
+		return styles.HeaderStyle.Width(m.width).Render(title)
 	}
 
 	// Create tabs wrapped in zones (with keyboard shortcuts)
@@ -254,14 +254,14 @@ func (m *Model) renderHeader() string {
 		maxWidth := m.width - lipgloss.Width(title) - lipgloss.Width(tabsStr) - 3
 		if maxWidth > 5 { // Only show if there's a reasonable amount of space
 			repoPath := runewidth.Truncate(m.repository.Path, maxWidth, "...")
-			repo = " " + lipgloss.NewStyle().Foreground(colorMuted).Render(repoPath)
+			repo = " " + lipgloss.NewStyle().Foreground(styles.ColorMuted).Render(repoPath)
 		}
 	}
 
 	// Layout: title on left, tabs on right
 	padding := max(m.width-lipgloss.Width(title)-lipgloss.Width(repo)-lipgloss.Width(tabsStr)-2, 0)
 
-	return HeaderStyle.Width(m.width).Render(
+	return styles.HeaderStyle.Width(m.width).Render(
 		title + repo + strings.Repeat(" ", padding) + tabsStr,
 	)
 }
@@ -269,82 +269,12 @@ func (m *Model) renderHeader() string {
 // renderTab renders a single tab
 func (m *Model) renderTab(label string, active bool) string {
 	if active {
-		return TabActiveStyle.Render(label)
+		return styles.TabActiveStyle.Render(label)
 	}
-	return TabStyle.Render(label)
+	return styles.TabStyle.Render(label)
 }
 
-// renderContent renders the main content based on view mode (viewport path; uses tab/modal View())
-func (m *Model) renderContent() string {
-	var content string
 
-	if m.err != nil {
-		content = m.renderError()
-	} else if m.loading {
-		content = "Loading..."
-	} else {
-		switch m.viewMode {
-		case ViewCommitGraph:
-			m.graphTabModel.SetSelectionMode(graph.SelectionMode(m.selectionMode))
-			m.graphTabModel.SetRebaseSourceCommit(m.rebaseSourceCommit)
-			content = m.graphTabModel.View()
-			if content == "" {
-				content = "Loading..."
-			}
-		case ViewPullRequests:
-			content = m.prsTabModel.View()
-		case ViewTickets:
-			content = m.ticketsTabModel.View()
-		case ViewBranches:
-			content = m.branchesTabModel.View()
-		case ViewSettings:
-			content = m.renderSettings()
-		case ViewHelp:
-			content = m.renderHelp()
-		case ViewCreatePR:
-			content = m.prFormModal.View()
-		case ViewEditDescription:
-			content = m.renderEditDescription()
-		case ViewCreateBookmark:
-			m.syncBookmarkModalState()
-			content = m.bookmarkModal.View()
-		case ViewGitHubLogin:
-			content = m.renderGitHubLogin()
-		case ViewBookmarkConflict:
-			content = m.conflictModal.View()
-		case ViewDivergentCommit:
-			content = m.divergentModal.View()
-		default:
-			content = "Loading..."
-		}
-	}
-
-	// Don't apply height constraint - viewport handles scrolling
-	return ContentStyle.Width(m.width).Render(content)
-}
-
-// renderSplitContent returns fixed header and scrollable list for PR/Jira views
-func (m *Model) renderSplitContent() (string, string) {
-	if m.err != nil {
-		return m.renderError(), ""
-	}
-	if m.loading {
-		return "Loading...", ""
-	}
-
-	switch m.viewMode {
-	case ViewPullRequests:
-		return m.prsTabModel.View(), ""
-	case ViewTickets:
-		return m.ticketsTabModel.View(), ""
-	case ViewBranches:
-		return m.branchesTabModel.View(), ""
-	default:
-		return m.renderContent(), ""
-	}
-}
-
-// renderError renders an error message
 // renderError renders an error message with text wrapping
 func (m *Model) renderError() string {
 	// Special handling for "not a jj repo" - show a welcome/setup screen instead of an error
@@ -567,11 +497,6 @@ func (m *Model) renderSettings() string {
 	return settingstab.Render(m.zoneManager, data)
 }
 
-// renderHelp renders the help view via the help tab
-func (m *Model) renderHelp() string {
-	return m.renderHelpContent()
-}
-
 // isAutoRefreshCommand returns true if the command is part of auto-refresh
 // These are filtered from the command history to reduce noise
 func isAutoRefreshCommand(cmd string) bool {
@@ -740,7 +665,7 @@ func (m *Model) renderStatusBar() string {
 		padding = 0
 	}
 
-	return StatusBarStyle.Width(m.width).Render(
+	return styles.StatusBarStyle.Width(m.width).Render(
 		status + scrollIndicator + strings.Repeat(" ", padding) + shortcutsStr,
 	)
 }

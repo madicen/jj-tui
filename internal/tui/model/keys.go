@@ -168,27 +168,9 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.viewMode = ViewCommitGraph
 		}
 	case "tab":
-		// Tab switching within delegated views is now handled by tab models
-		// This only handles tab switching for non-delegated views
 		if m.viewMode != ViewCommitGraph {
 			m.viewMode = ViewCommitGraph
 		}
-	case "j", "down":
-		// Tab-specific navigation is now handled by tab models via delegation
-		// This switch is kept only for view modes that don't have delegated models
-		switch m.viewMode {
-		default:
-			// For non-delegated views, this will fall through to the next case
-		}
-		// c, i, D, B, N, o (Tickets), T, U, L, P, F (Branches), y (Help) handled by tabs via request
-	case "M":
-		// Merge PR handled by PRs tab via request
-	case "X":
-		// Close PR handled by PRs tab via request
-	case "enter", "e":
-		// PR open-in-browser, Tickets start bookmark, Graph checkout/rebase handled by tabs via request
-	case "x":
-		// Delete branch bookmark handled by Branches tab via request
 	}
 	return m, nil
 }

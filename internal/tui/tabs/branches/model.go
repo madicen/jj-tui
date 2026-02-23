@@ -53,6 +53,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyMsg:
 		return m.handleKeyMsg(msg)
+	case zone.MsgZoneInBounds:
+		return m.handleZoneClick(msg.Zone)
 	case tea.MouseMsg:
 		// Wheel: IsWheel() + raw X11 fallback so we accept any terminal encoding; scroll without requiring list to be clicked first
 		isWheel := tea.MouseEvent(msg).IsWheel() || msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown

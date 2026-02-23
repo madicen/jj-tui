@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/madicen/jj-tui/internal/tui/actions"
 	branchestab "github.com/madicen/jj-tui/internal/tui/tabs/branches"
 	graphtab "github.com/madicen/jj-tui/internal/tui/tabs/graph"
 	helptab "github.com/madicen/jj-tui/internal/tui/tabs/help"
@@ -113,47 +112,46 @@ func (m *Model) handleGraphFoucsMessage() string {
 
 // handleGraphRequest processes requests from the graph tab (keys/zones); main runs jj commands.
 func (m *Model) handleGraphRequest(r graphtab.Request) (tea.Model, tea.Cmd) {
+	ctx := m.graphRequestContext()
+	// Requests executed by the graph tab (returns cmd + optional status message)
+	if r.Checkout || r.Squash || r.Abandon || r.PerformRebase || r.DeleteBookmark ||
+		r.MoveFileUp || r.MoveFileDown || r.RevertFile || r.NewCommit {
+		cmd, statusMsg := graphtab.ExecuteRequest(r, ctx)
+		if statusMsg != "" {
+			if statusMsg == graphtab.StatusNeedsDivergentDialog {
+				return m.handleResolveDivergentCommit()
+			}
+			m.statusMessage = statusMsg
+			return m, nil
+		}
+		if cmd != nil {
+			if r.NewCommit {
+				if m.isSelectedCommitValid() {
+					commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
+					m.statusMessage = fmt.Sprintf("Creating new commit from %s...", commit.ShortID)
+				} else {
+					m.statusMessage = "Creating new commit..."
+				}
+			}
+			return m, cmd
+		}
+	}
+	// Load changed files (returns model-internal message)
 	if r.LoadChangedFiles != nil {
 		return m, m.loadChangedFiles(*r.LoadChangedFiles)
-	}
-	if r.Checkout {
-		return m.handleCheckoutCommit()
-	}
-	if r.Squash {
-		return m.handleSquashCommit()
-	}
-	if r.Abandon {
-		return m.handleAbandonCommit()
-	}
-	if r.StartEditDescription {
-		return m.handleDescribeCommit()
-	}
-	if r.NewCommit {
-		return m.handleNewCommit()
-	}
-	if r.StartRebaseMode {
-		return m.handleRebase()
-	}
-	if r.PerformRebase {
-		return m, m.performRebase(r.RebaseDestIndex)
 	}
 	if r.ResolveDivergent != nil {
 		m.statusMessage = "Loading divergent commit info..."
 		return m, m.loadDivergentCommitInfo(*r.ResolveDivergent)
 	}
+	if r.StartEditDescription {
+		return m.handleDescribeCommit()
+	}
+	if r.StartRebaseMode {
+		return m.handleRebase()
+	}
 	if r.CreateBookmark {
 		return m.handleCreateBookmark()
-	}
-	if r.DeleteBookmark {
-		if m.isSelectedCommitValid() && m.jjService != nil {
-			commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
-			if len(commit.Branches) == 0 {
-				m.statusMessage = "No bookmark on this commit to delete"
-				return m, nil
-			}
-			return m, m.deleteBookmark()
-		}
-		return m, nil
 	}
 	if r.CreatePR {
 		return m.handleCreatePR()
@@ -161,29 +159,77 @@ func (m *Model) handleGraphRequest(r graphtab.Request) (tea.Model, tea.Cmd) {
 	if r.UpdatePR {
 		return m.handleUpdatePR()
 	}
-	if r.MoveFileUp {
-		return m.handleMoveFileUp()
+	return m, nil
+}
+
+// graphRequestContext builds the context passed to graph.ExecuteRequest.
+func (m *Model) graphRequestContext() *graphtab.RequestContext {
+	if m.repository == nil {
+		return nil
 	}
-	if r.MoveFileDown {
-		return m.handleMoveFileDown()
+	return &graphtab.RequestContext{
+		JJService:            m.jjService,
+		Repository:           m.repository,
+		SelectedCommit:       m.GetSelectedCommit(),
+		RebaseSourceCommit:   m.rebaseSourceCommit,
+		ChangedFiles:         m.graphTabModel.GetChangedFiles(),
+		ChangedFilesCommitID: m.graphTabModel.GetChangedFilesCommitID(),
+		SelectedFile:         m.graphTabModel.GetSelectedFile(),
+		GraphFocused:         m.graphFocused,
 	}
-	if r.RevertFile {
-		return m.handleRevertFile()
+}
+
+func (m *Model) handlePRsRequest(r prstab.Request) (tea.Model, tea.Cmd) {
+	ctx := m.prsRequestContext()
+	cb := &prstab.Callbacks{
+		MergePR:       m.mergePR,
+		ClosePR:       m.closePR,
+		OpenInBrowser: m.openPRURL,
+	}
+	cmd, statusMsg := prstab.ExecuteRequest(r, ctx, cb)
+	if statusMsg != "" {
+		m.statusMessage = statusMsg
+		return m, nil
+	}
+	if cmd != nil {
+		if r.OpenInBrowser && ctx != nil && ctx.SelectedPRValid() {
+			pr := ctx.SelectedPRData()
+			if pr != nil {
+				m.statusMessage = fmt.Sprintf("Opening PR #%d...", pr.Number)
+			}
+		}
+		if r.MergePR && ctx != nil && ctx.SelectedPRValid() {
+			pr := ctx.SelectedPRData()
+			if pr != nil {
+				m.statusMessage = fmt.Sprintf("Merging PR #%d...", pr.Number)
+			}
+		}
+		if r.ClosePR && ctx != nil && ctx.SelectedPRValid() {
+			pr := ctx.SelectedPRData()
+			if pr != nil {
+				m.statusMessage = fmt.Sprintf("Closing PR #%d...", pr.Number)
+			}
+		}
+		return m, cmd
 	}
 	return m, nil
 }
 
-func (m *Model) handlePRsRequest(r prstab.Request) (tea.Model, tea.Cmd) {
-	if r.OpenInBrowser {
-		return m.handleOpenPRInBrowser()
+func (m *Model) prsRequestContext() *prstab.RequestContext {
+	if m.repository == nil {
+		return nil
 	}
-	if r.MergePR {
-		return m.handleMergePR()
+	return &prstab.RequestContext{
+		Repository: m.repository,
+		SelectedPR: m.GetSelectedPR(),
+		GitHubOK:   m.isGitHubAvailable(),
+		DemoMode:   m.demoMode,
 	}
-	if r.ClosePR {
-		return m.handleClosePR()
-	}
-	return m, nil
+}
+
+// openPRURL opens a URL in the browser (used by PRs tab callback).
+func (m *Model) openPRURL(url string) tea.Cmd {
+	return openURL(url)
 }
 
 func (m *Model) handleBranchesRequest(r branchestab.Request) (tea.Model, tea.Cmd) {
@@ -212,55 +258,83 @@ func (m *Model) handleBranchesRequest(r branchestab.Request) (tea.Model, tea.Cmd
 }
 
 func (m *Model) handleTicketsRequest(r ticketstab.Request) (tea.Model, tea.Cmd) {
-	if r.OpenInBrowser {
-		return m.handleOpenTicketInBrowser()
+	ctx := m.ticketsRequestContext()
+	cb := &ticketstab.Callbacks{
+		OpenInBrowser:    m.openTicketURL,
+		TransitionTicket: m.transitionTicketWithState,
 	}
-	if r.ToggleStatusChangeMode {
+	res := ticketstab.ExecuteRequest(r, ctx, cb)
+	if res.StatusMsg != "" {
+		m.statusMessage = res.StatusMsg
+		return m, nil
+	}
+	if res.NeedToggleMode {
 		return m.handleToggleStatusChangeMode()
 	}
-	if r.StartBookmarkFromTicket {
+	if res.NeedStartBookmark {
 		return m.handleStartBookmarkFromTicket()
 	}
-	if r.TransitionID != "" {
-		if m.viewMode != ViewTickets || m.ticketService == nil || m.transitionInProgress {
-			return m, nil
-		}
-		if m.GetSelectedTicket() < 0 || m.GetSelectedTicket() >= len(m.ticketList) {
-			return m, nil
-		}
-		var transitionName string
-		for _, t := range m.availableTransitions {
-			if t.ID == r.TransitionID {
-				transitionName = t.Name
-				break
+	if res.Cmd != nil {
+		if res.TransitionStatus != "" {
+			m.transitionInProgress = true
+			m.ticketsTabModel.SetTransitionInProgress(true)
+			m.statusMessage = res.TransitionStatus
+		} else if r.OpenInBrowser && ctx.SelectedTicketValid() {
+			if t := ctx.SelectedTicketData(); t != nil {
+				m.statusMessage = fmt.Sprintf("Opening %s...", t.DisplayKey)
 			}
 		}
-		m.transitionInProgress = true
-		m.ticketsTabModel.SetTransitionInProgress(true)
-		ticket := m.ticketList[m.GetSelectedTicket()]
-		m.statusMessage = fmt.Sprintf("Setting %s to %s...", ticket.DisplayKey, transitionName)
-		return m, m.transitionTicket(r.TransitionID)
+		return m, res.Cmd
 	}
 	return m, nil
 }
 
+func (m *Model) ticketsRequestContext() *ticketstab.RequestContext {
+	return &ticketstab.RequestContext{
+		TicketList:           m.ticketList,
+		SelectedTicket:       m.GetSelectedTicket(),
+		AvailableTransitions: m.availableTransitions,
+		TransitionInProgress: m.transitionInProgress,
+		TicketService:        m.ticketService,
+	}
+}
+
+// openTicketURL opens a URL in the browser (used by Tickets tab callback).
+func (m *Model) openTicketURL(url string) tea.Cmd {
+	return openURL(url)
+}
+
+// transitionTicketWithState sets transition-in-progress state and returns the transition command (used by Tickets tab callback).
+func (m *Model) transitionTicketWithState(transitionID string) tea.Cmd {
+	m.transitionInProgress = true
+	m.ticketsTabModel.SetTransitionInProgress(true)
+	return m.transitionTicket(transitionID)
+}
+
 func (m *Model) handleHelpRequest(r helptab.Request) (tea.Model, tea.Cmd) {
-	if r.CopyCommand != "" {
-		m.statusMessage = "Copied: " + r.CopyCommand
-		return m, actions.CopyToClipboard(r.CopyCommand)
+	cmd, statusMsg := helptab.ExecuteRequest(r)
+	if statusMsg != "" {
+		m.statusMessage = statusMsg
+		return m, cmd
 	}
 	return m, nil
 }
 
 func (m *Model) handleSettingsRequest(r settingstab.Request) (tea.Model, tea.Cmd) {
-	if r.Cancel {
+	cb := &settingstab.Callbacks{
+		SaveSettings:      m.saveSettings,
+		SaveSettingsLocal: m.saveSettingsLocal,
+	}
+	res := settingstab.ExecuteRequest(r, cb)
+	if res.StatusMsg != "" {
+		m.statusMessage = res.StatusMsg
+		return m, nil
+	}
+	if res.NeedCancel {
 		return m.handleSettingsCancel()
 	}
-	if r.SaveSettings {
-		return m, m.saveSettings()
-	}
-	if r.SaveSettingsLocal {
-		return m, m.saveSettingsLocal()
+	if res.Cmd != nil {
+		return m, res.Cmd
 	}
 	return m, nil
 }

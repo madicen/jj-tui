@@ -60,6 +60,29 @@ var (
 	RebaseHeaderStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#FFAA00")).
 				Bold(true)
+
+	// Header and layout (main model view)
+	HeaderStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color("#1F2937")).
+			Foreground(lipgloss.Color("#F9FAFB")).
+			Padding(0, 1)
+
+	TabStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#9CA3AF")).
+			Padding(0, 2)
+
+	TabActiveStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#F9FAFB")).
+			Background(ColorPrimary).
+			Padding(0, 2)
+
+	ContentStyle = lipgloss.NewStyle().
+			Padding(1, 2)
+
+	StatusBarStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color("#1F2937")).
+			Foreground(ColorMuted).
+			Padding(0, 1)
 )
 
 // GetStatusStyle returns the style and character for a file status
