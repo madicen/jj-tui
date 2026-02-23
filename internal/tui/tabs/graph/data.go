@@ -325,13 +325,6 @@ type fileTreeNode struct {
 	fileIndex int // Original index in the files list (for selection tracking)
 }
 
-// renderFileTree builds a tree structure from the changed files and renders it.
-// Deprecated: use renderFileTreeWithLineIndex for scroll-to-selection.
-func (m *GraphModel) renderFileTree(data GraphData) []string {
-	lines, _ := m.renderFileTreeWithLineIndex(data)
-	return lines
-}
-
 // renderFileTreeWithLineIndex renders the file tree and returns each file's 0-based line index within the tree output.
 func (m *GraphModel) renderFileTreeWithLineIndex(data GraphData) (lines []string, fileIndexToLineIndex []int) {
 	fileIndexToLineIndex = make([]int, len(data.ChangedFiles))
@@ -427,55 +420,3 @@ func (m *GraphModel) renderTreeNodeWithLineIndex(node *fileTreeNode, indent stri
 	}
 }
 
-// renderTreeNode recursively renders a tree node with selection support
-func (m *GraphModel) renderTreeNode(node *fileTreeNode, indent string, lines *[]string, isRoot bool, data GraphData) {
-	if !isRoot {
-		if node.isFile {
-			// Check if this file is selected
-			isSelected := !data.GraphFocused && node.fileIndex == data.SelectedFile
-			statusStyle, statusChar := GetStatusStyle(node.status)
-
-			var fileLine string
-			if isSelected {
-				// Render with selection highlight
-				selectedStyle := lipgloss.NewStyle().
-					Background(lipgloss.Color("#3d4f5f")).
-					Foreground(lipgloss.Color("#ffffff"))
-				fileLine = fmt.Sprintf("%s%s %s", indent, statusStyle.Render(statusChar), selectedStyle.Render(node.name))
-			} else {
-				fileLine = fmt.Sprintf("%s%s %s", indent, statusStyle.Render(statusChar), node.name)
-			}
-			*lines = append(*lines, m.zoneManager.Mark(mouse.ZoneChangedFile(node.fileIndex), fileLine))
-		} else {
-			// Render directory
-			dirStyle := lipgloss.NewStyle().Foreground(styles.ColorPrimary)
-			*lines = append(*lines, fmt.Sprintf("%s%s/", indent, dirStyle.Render(node.name)))
-		}
-	}
-
-	// Sort children: directories first, then files, both alphabetically
-	var dirs, fileNodes []string
-	for name, child := range node.children {
-		if child.isFile {
-			fileNodes = append(fileNodes, name)
-		} else {
-			dirs = append(dirs, name)
-		}
-	}
-	sort.Strings(dirs)
-	sort.Strings(fileNodes)
-
-	// Calculate new indent
-	newIndent := indent
-	if !isRoot {
-		newIndent = indent + "  "
-	}
-
-	// Render directories first, then files
-	for _, name := range dirs {
-		m.renderTreeNode(node.children[name], newIndent, lines, false, data)
-	}
-	for _, name := range fileNodes {
-		m.renderTreeNode(node.children[name], newIndent, lines, false, data)
-	}
-}

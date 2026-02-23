@@ -14,11 +14,8 @@ type Model struct {
 	branchList     []internal.Branch
 	selectedBranch  int
 	listYOffset     int // Scroll offset for list (details stay fixed)
-	width           int
-	height          int
-	loading         bool
-	err            error
-	statusMessage  string
+	width  int
+	height int
 }
 
 // NewModel creates a new Branches tab model. zoneManager may be nil (e.g. in tests).
@@ -27,7 +24,6 @@ func NewModel(zoneManager *zone.Manager) Model {
 	return Model{
 		zoneManager:    zoneManager,
 		selectedBranch: -1,
-		loading:        false,
 		width:          80,
 		height:         24,
 	}

@@ -40,24 +40,18 @@ type Model struct {
 	ticketService tickets.Service // Generic ticket service (Jira, Codecks, etc.)
 	repository    *internal.Repository
 	demoMode      bool // When true, uses mock services for screenshots/testing
-	debug         bool // When true, log mouse/wheel to $TMPDIR/jj-tui-debug.log (JJ_TUI_DEBUG=1)
 
 	// UI state
-	viewMode       ViewMode
-	width          int
-	height         int
+	viewMode ViewMode
+	width    int
+	height   int
 	// Selection state lives in tab models: graph (commit/file), prs, tickets, branches
-	statusMessage  string
-	err            error
-	loading        bool
-	githubInfo     string // Diagnostic info about GitHub connection
+	statusMessage string
+	err           error
+	loading       bool
+	githubInfo    string // Diagnostic info about GitHub connection
 
-	// Ticket transitions
-	availableTransitions []tickets.Transition
-	transitionInProgress bool
-	statusChangeMode     bool // whether status change buttons are expanded
-	loadingTransitions   bool
-	notJJRepo            bool   // true if error is "not a jj repository"
+	notJJRepo   bool   // true if error is "not a jj repository"
 	currentPath          string // path where we're running (for jj init)
 	errorCopied          bool   // true if error was just copied to clipboard
 
@@ -73,9 +67,6 @@ type Model struct {
 	// Rebase mode state (synced to/from graph tab)
 	selectionMode      SelectionMode
 	rebaseSourceCommit int // Index of commit being rebased
-
-	// Ticket state (Jira, Codecks, etc.) - ticketList and transitions; selection in tickets tab
-	ticketList []tickets.Ticket
 
 	// Branch state (selection in branches tab)
 	branchList []internal.Branch
@@ -160,6 +151,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		// Esc in Settings: handle in main model so a single Update() returns to graph (tab would return Request cmd that needs a second Update).
+		if m.viewMode == ViewSettings && msg.String() == "esc" {
+			return m.handleSettingsCancel()
+		}
 		// Delegate to tab models for their specific views (tabs own selection state)
 		switch m.viewMode {
 		case ViewCommitGraph:
@@ -351,6 +346,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case settingstab.Request:
 		return m.handleSettingsRequest(msg)
+
+	case ticketstab.Request:
+		return m.handleTicketsRequest(msg)
 
 	case repositoryLoadedMsg:
 		// Preserve PRs from previous repository
@@ -569,7 +567,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case ticketsLoadedMsg:
-		m.ticketList = msg.tickets
 		m.ticketsTabModel.UpdateTickets(msg.tickets)
 		providerName := ""
 		if m.ticketService != nil {
@@ -584,21 +581,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.statusMessage = fmt.Sprintf("Loaded %d %s", len(msg.tickets), pName)
 		}
-		// Load transitions for the selected ticket
-		m.availableTransitions = nil
+		// Load transitions for the selected ticket (tab owns transition state)
 		m.ticketsTabModel.SetAvailableTransitions(nil)
-		m.loadingTransitions = true
+		m.ticketsTabModel.SetLoadingTransitions(true)
 		return m, m.loadTransitions()
 
 	case transitionsLoadedMsg:
-		m.loadingTransitions = false
-		m.availableTransitions = msg.transitions
+		m.ticketsTabModel.SetLoadingTransitions(false)
 		m.ticketsTabModel.SetAvailableTransitions(msg.transitions)
 		return m, nil
 
 	case transitionCompletedMsg:
-		m.transitionInProgress = false
-		m.statusChangeMode = false // Collapse status buttons after transition
 		m.ticketsTabModel.SetTransitionInProgress(false)
 		m.ticketsTabModel.SetStatusChangeMode(false)
 		if msg.err != nil {

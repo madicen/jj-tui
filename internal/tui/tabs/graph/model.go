@@ -137,7 +137,7 @@ func (m *GraphModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case zone.MsgZoneInBounds:
-		updated, cmd := m.handleZoneClick(msg.Zone)
+		updated, cmd := m.handleZoneClick(msg)
 		*m = updated
 		return m, cmd
 	}

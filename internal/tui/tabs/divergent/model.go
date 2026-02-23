@@ -16,11 +16,10 @@ import (
 type Model struct {
 	shown         bool
 	changeID      string
-	commitIDs     []string
-	summaries     []string
-	selectedIdx   int
-	statusMessage string
-	zoneManager   *zone.Manager
+	commitIDs   []string
+	summaries   []string
+	selectedIdx int
+	zoneManager *zone.Manager
 }
 
 // NewModel creates a new Divergent model. zoneManager may be nil.

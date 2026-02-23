@@ -79,14 +79,15 @@ func (m *Model) SetTicketService(svc tickets.Service) {
 	m.ticketService = svc
 }
 
-// SetTicketList sets the ticket list for testing
+// SetTicketList sets the ticket list for testing (updates tickets tab)
 func (m *Model) SetTicketList(list []tickets.Ticket) {
-	m.ticketList = list
+	m.ticketsTabModel.UpdateTickets(list)
 }
 
-// SetGitHubService sets the GitHub service for testing
+// SetGitHubService sets the GitHub service for testing and syncs to the PRs tab so it shows the PR list instead of "GitHub not connected".
 func (m *Model) SetGitHubService(svc *github.Service) {
 	m.githubService = svc
+	m.prsTabModel.SetGithubService(m.isGitHubAvailable())
 }
 
 // SetViewMode sets the view mode for testing

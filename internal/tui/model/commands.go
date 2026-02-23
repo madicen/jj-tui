@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"reflect"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -461,15 +460,17 @@ func (m *Model) loadTickets() tea.Cmd {
 	}
 }
 
-// loadTransitions loads the available transitions for the selected ticket
+// loadTransitions loads the available transitions for the selected ticket (uses tickets tab state)
 func (m *Model) loadTransitions() tea.Cmd {
-	if m.ticketService == nil || m.GetSelectedTicket() < 0 || m.GetSelectedTicket() >= len(m.ticketList) {
+	ticketList := m.ticketsTabModel.GetTickets()
+	idx := m.ticketsTabModel.GetSelectedTicket()
+	if m.ticketService == nil || idx < 0 || idx >= len(ticketList) {
 		return func() tea.Msg {
 			return transitionsLoadedMsg{transitions: nil}
 		}
 	}
 
-	ticket := m.ticketList[m.GetSelectedTicket()]
+	ticket := ticketList[idx]
 	svc := m.ticketService
 
 	return func() tea.Msg {
@@ -482,13 +483,15 @@ func (m *Model) loadTransitions() tea.Cmd {
 	}
 }
 
-// transitionTicket executes a status transition on the selected ticket
+// transitionTicket executes a status transition on the selected ticket (uses tickets tab state)
 func (m *Model) transitionTicket(transitionID string) tea.Cmd {
-	if m.ticketService == nil || m.GetSelectedTicket() < 0 || m.GetSelectedTicket() >= len(m.ticketList) {
+	ticketList := m.ticketsTabModel.GetTickets()
+	idx := m.ticketsTabModel.GetSelectedTicket()
+	if m.ticketService == nil || idx < 0 || idx >= len(ticketList) {
 		return nil
 	}
 
-	ticket := m.ticketList[m.GetSelectedTicket()]
+	ticket := ticketList[idx]
 	svc := m.ticketService
 
 	return func() tea.Msg {
@@ -601,62 +604,6 @@ func (m *Model) redoOperation() tea.Cmd {
 		}
 		return undoCompletedMsg{message: "Redo successful"}
 	}
-}
-
-// startBookmarkFromTicket opens the bookmark creation screen pre-populated with the ticket key
-func (m *Model) startBookmarkFromTicket(ticket tickets.Ticket) {
-	// Use DisplayKey (short ID) if available, otherwise fall back to Key
-	keyForBookmark := ticket.Key
-	if ticket.DisplayKey != "" {
-		keyForBookmark = ticket.DisplayKey
-	}
-
-	bookmarkName := formatBookmarkName(keyForBookmark, ticket.Summary)
-	m.bookmarkModal.Show(-1, nil) // -1 = new branch from main, no existing bookmarks
-	m.bookmarkModal.GetNameInput().SetValue(bookmarkName)
-	m.bookmarkModal.GetNameInput().Focus()
-	m.bookmarkModal.GetNameInput().Width = m.width - 10
-	m.bookmarkModal.SetFromJira(ticket.Key, ticket.Summary, ticket.DisplayKey)
-
-	m.updateBookmarkNameExists()
-
-	m.viewMode = ViewCreateBookmark
-	m.statusMessage = fmt.Sprintf("Create bookmark for %s (will create new branch from main)", ticket.Key)
-}
-
-// formatBookmarkName creates a valid bookmark name from a ticket key and summary
-// Format: "KEY-Title" with spaces replaced by hyphens and invalid chars removed
-func formatBookmarkName(key, summary string) string {
-	// Remove any characters that aren't valid for bookmark names
-	// Valid: a-z, A-Z, 0-9, -, _, /
-	invalidChars := regexp.MustCompile(`[^a-zA-Z0-9\-_/]`)
-
-	// Sanitize the key (e.g., strip "$" from Codecks short IDs like "$12u")
-	sanitizedKey := invalidChars.ReplaceAllString(key, "")
-	sanitizedKey = strings.Trim(sanitizedKey, "-")
-
-	// Replace spaces with hyphens in title
-	title := strings.ReplaceAll(summary, " ", "-")
-
-	// Remove invalid characters from title
-	title = invalidChars.ReplaceAllString(title, "")
-
-	// Remove multiple consecutive hyphens
-	multipleHyphens := regexp.MustCompile(`-+`)
-	title = multipleHyphens.ReplaceAllString(title, "-")
-
-	// Trim leading/trailing hyphens from title
-	title = strings.Trim(title, "-")
-
-	// Combine key and title
-	if sanitizedKey != "" && title != "" {
-		return sanitizedKey + "-" + title
-	} else if sanitizedKey != "" {
-		return sanitizedKey
-	} else if title != "" {
-		return title
-	}
-	return "bookmark"
 }
 
 // startGitHubLogin initiates the GitHub Device Flow authentication

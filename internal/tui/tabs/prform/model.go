@@ -24,7 +24,6 @@ type Model struct {
 	focusedField      int  // 0=title, 1=body
 	commitIndex       int  // Index of commit PR is being created from
 	needsMoveBookmark bool // True if we need to move the bookmark to include all commits
-	statusMessage     string
 }
 
 // NewModel creates a new PR creation model. zoneManager may be nil (zones will be omitted).

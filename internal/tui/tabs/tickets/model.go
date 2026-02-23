@@ -20,25 +20,21 @@ type Model struct {
 	availableTransitions []tickets.Transition
 	transitionInProgress bool
 	statusChangeMode     bool
-	loadingTransitions   bool
-	loading              bool
-	err                  error
-	statusMessage        string
 	width                int
 	height               int
 	providerName         string // e.g. "Jira", "Codecks"
 	jiraService          bool   // whether a ticket service is connected
 	// scrollToSelectedTicket: when true, next render will adjust listYOffset to keep selection in view (key/click only; mouse scroll can move selection off screen)
 	scrollToSelectedTicket bool
+	loadingTransitions     bool // true while loading available transitions for selected ticket
 }
 
 // NewModel creates a new Tickets tab model. zoneManager may be nil (e.g. in tests).
 // Default dimensions (80x24) ensure wheel scroll works before first View()/SetDimensions, same as Graph viewports.
 func NewModel(zoneManager *zone.Manager) Model {
 	return Model{
-		zoneManager:   zoneManager,
+		zoneManager:    zoneManager,
 		selectedTicket: -1,
-		loading:        false,
 		width:          80,
 		height:         24,
 	}
@@ -112,6 +108,21 @@ func (m *Model) SetTransitionInProgress(inProgress bool) {
 // SetStatusChangeMode sets whether status change buttons are expanded (called by main model)
 func (m *Model) SetStatusChangeMode(mode bool) {
 	m.statusChangeMode = mode
+}
+
+// GetTransitionInProgress returns whether a transition is in progress (for main model request context)
+func (m *Model) GetTransitionInProgress() bool {
+	return m.transitionInProgress
+}
+
+// SetLoadingTransitions sets whether transitions are being loaded (called by main model)
+func (m *Model) SetLoadingTransitions(loading bool) {
+	m.loadingTransitions = loading
+}
+
+// GetLoadingTransitions returns whether transitions are being loaded
+func (m *Model) GetLoadingTransitions() bool {
+	return m.loadingTransitions
 }
 
 // handleKeyMsg handles keyboard input specific to the Tickets tab

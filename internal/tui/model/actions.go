@@ -90,12 +90,6 @@ func (m *Model) startRebaseMode() {
 	m.statusMessage = fmt.Sprintf("Select destination for rebasing %s (Esc to cancel)", commit.ShortID)
 }
 
-func (m *Model) cancelRebaseMode() {
-	m.selectionMode = SelectionNormal
-	m.rebaseSourceCommit = -1
-	m.statusMessage = "Rebase cancelled"
-}
-
 func (m *Model) performRebase(destCommitIndex int) tea.Cmd {
 	sourceCommit := m.repository.Graph.Commits[m.rebaseSourceCommit]
 	destCommit := m.repository.Graph.Commits[destCommitIndex]

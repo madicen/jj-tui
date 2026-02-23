@@ -21,7 +21,6 @@ type Model struct {
 	localSummary   string
 	remoteSummary  string
 	selectedOption int // 0=Keep Local, 1=Reset to Remote
-	statusMessage  string
 	zoneManager    *zone.Manager
 }
 

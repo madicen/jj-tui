@@ -13,12 +13,9 @@ type Model struct {
 	repository    *internal.Repository
 	selectedPR    int // Index of selected PR in the PRs list
 	listYOffset   int // Scroll offset for list (details stay fixed)
-	width         int
-	height        int
-	loading       bool
-	err           error
-	statusMessage string
-	githubService bool // whether GitHub is connected (for rendering)
+	width           int
+	height          int
+	githubService   bool // whether GitHub is connected (for rendering)
 	// scrollToSelectedPR: when true, next render will adjust listYOffset to keep selection in view (key/click only; mouse scroll can move selection off screen)
 	scrollToSelectedPR bool
 }
@@ -29,7 +26,6 @@ func NewModel(zoneManager *zone.Manager) Model {
 	return Model{
 		zoneManager: zoneManager,
 		selectedPR:  -1,
-		loading:     false,
 		width:       80,
 		height:      24,
 	}

@@ -158,8 +158,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleRedo()
 	case "esc":
 		// Cancel status change mode in Tickets view
-		if m.viewMode == ViewTickets && m.statusChangeMode {
-			m.statusChangeMode = false
+		if m.viewMode == ViewTickets && m.ticketsTabModel.IsStatusChangeMode() {
 			m.ticketsTabModel.SetStatusChangeMode(false)
 			m.statusMessage = "Ready"
 			return m, nil
@@ -308,35 +307,6 @@ func (m *Model) handleCreatePRKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.prFormModal, cmd = m.prFormModal.Update(msg)
 	return m, cmd
-}
-
-// handleRebaseModeKeyMsg handles keyboard input during rebase destination selection
-func (m *Model) handleRebaseModeKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "esc", "q":
-		// Cancel rebase mode
-		m.cancelRebaseMode()
-		return m, nil
-	case "j", "down":
-		cur := m.graphTabModel.GetSelectedCommit()
-		if m.repository != nil && cur < len(m.repository.Graph.Commits)-1 {
-			m.graphTabModel.SelectCommit(cur + 1)
-		}
-		return m, nil
-	case "k", "up":
-		cur := m.graphTabModel.GetSelectedCommit()
-		if cur > 0 {
-			m.graphTabModel.SelectCommit(cur - 1)
-		}
-		return m, nil
-	case "enter":
-		cur := m.graphTabModel.GetSelectedCommit()
-		if cur >= 0 && cur < len(m.repository.Graph.Commits) {
-			return m, m.performRebase(cur)
-		}
-		return m, nil
-	}
-	return m, nil
 }
 
 // handleDescriptionEditKeyMsg handles keys while editing description

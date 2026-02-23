@@ -10,11 +10,9 @@ import (
 type Model struct {
 	branchLimitInput  textinput.Model
 	sanitizeBookmarks bool
-	ticketProvider    string // explicit: "jira", "codecks", "github_issues", or ""
-	autoInProgress    bool
-	confirmingCleanup string // "" = not confirming, "delete_bookmarks", "abandon_old_commits"
-	focusedField      int
-	statusMessage     string
+	ticketProvider string // explicit: "jira", "codecks", "github_issues", or ""
+	autoInProgress bool
+	focusedField   int
 }
 
 // NewModel creates a new Advanced settings model

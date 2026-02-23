@@ -27,7 +27,6 @@ type Model struct {
 	bookmarkNameExists  bool     // True if entered name matches an existing bookmark
 	jiraBookmarkTitles  map[string]string // Maps bookmark names to formatted PR titles ("KEY - Title")
 	ticketBookmarkDisplayKeys map[string]string // Maps bookmark names to ticket short IDs for commit messages
-	statusMessage       string
 	repository          *internal.Repository
 	zoneManager         *zone.Manager
 }

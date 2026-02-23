@@ -8,7 +8,6 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 )
@@ -69,12 +68,6 @@ func If[T any](condition bool, trueCmd, falseCmd T) T {
 		return trueCmd
 	}
 	return falseCmd
-}
-
-func (m *Model) createIsZoneClickedFunc(clickedZone *zone.ZoneInfo) func(string) bool {
-	return func(clickedZoneID string) bool {
-		return m.zoneManager.Get(clickedZoneID) == clickedZone
-	}
 }
 
 // createIsZoneClickedFuncWithEvent returns a function that checks if the given zone ID contains the mouse event.

@@ -3,7 +3,6 @@ package model
 import (
 	"fmt"
 	"slices"
-	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	branchestab "github.com/madicen/jj-tui/internal/tui/tabs/branches"
@@ -257,44 +256,13 @@ func (m *Model) handleBranchesRequest(r branchestab.Request) (tea.Model, tea.Cmd
 	return m, nil
 }
 
-func (m *Model) handleTicketsRequest(r ticketstab.Request) (tea.Model, tea.Cmd) {
-	ctx := m.ticketsRequestContext()
-	cb := &ticketstab.Callbacks{
-		OpenInBrowser:    m.openTicketURL,
-		TransitionTicket: m.transitionTicketWithState,
-	}
-	res := ticketstab.ExecuteRequest(r, ctx, cb)
-	if res.StatusMsg != "" {
-		m.statusMessage = res.StatusMsg
-		return m, nil
-	}
-	if res.NeedToggleMode {
-		return m.handleToggleStatusChangeMode()
-	}
-	if res.NeedStartBookmark {
-		return m.handleStartBookmarkFromTicket()
-	}
-	if res.Cmd != nil {
-		if res.TransitionStatus != "" {
-			m.transitionInProgress = true
-			m.ticketsTabModel.SetTransitionInProgress(true)
-			m.statusMessage = res.TransitionStatus
-		} else if r.OpenInBrowser && ctx.SelectedTicketValid() {
-			if t := ctx.SelectedTicketData(); t != nil {
-				m.statusMessage = fmt.Sprintf("Opening %s...", t.DisplayKey)
-			}
-		}
-		return m, res.Cmd
-	}
-	return m, nil
-}
 
 func (m *Model) ticketsRequestContext() *ticketstab.RequestContext {
 	return &ticketstab.RequestContext{
-		TicketList:           m.ticketList,
-		SelectedTicket:       m.GetSelectedTicket(),
-		AvailableTransitions: m.availableTransitions,
-		TransitionInProgress: m.transitionInProgress,
+		TicketList:           m.ticketsTabModel.GetTickets(),
+		SelectedTicket:       m.ticketsTabModel.GetSelectedTicket(),
+		AvailableTransitions: m.ticketsTabModel.GetAvailableTransitions(),
+		TransitionInProgress: m.ticketsTabModel.GetTransitionInProgress(),
 		TicketService:        m.ticketService,
 	}
 }
@@ -304,11 +272,43 @@ func (m *Model) openTicketURL(url string) tea.Cmd {
 	return openURL(url)
 }
 
-// transitionTicketWithState sets transition-in-progress state and returns the transition command (used by Tickets tab callback).
+// transitionTicketWithState sets transition-in-progress on the tab and returns the transition command (used by Tickets tab callback).
 func (m *Model) transitionTicketWithState(transitionID string) tea.Cmd {
-	m.transitionInProgress = true
 	m.ticketsTabModel.SetTransitionInProgress(true)
 	return m.transitionTicket(transitionID)
+}
+
+func (m *Model) handleTicketsRequest(r ticketstab.Request) (tea.Model, tea.Cmd) {
+	ctx := m.ticketsRequestContext()
+	cb := &ticketstab.Callbacks{
+		OpenInBrowser:    m.openTicketURL,
+		TransitionTicket: m.transitionTicketWithState,
+	}
+	res := ticketstab.ExecuteRequest(r, ctx, cb)
+	if res.StatusMsg != "" {
+		m.statusMessage = res.StatusMsg
+	}
+	if res.TransitionStatus != "" {
+		m.statusMessage = res.TransitionStatus
+	}
+	if res.NeedToggleMode {
+		mode := !m.ticketsTabModel.IsStatusChangeMode()
+		m.ticketsTabModel.SetStatusChangeMode(mode)
+		if mode {
+			m.statusMessage = "Change status (i/D/B/N)"
+		} else {
+			m.statusMessage = "Ready"
+		}
+		return m, nil
+	}
+	if res.NeedStartBookmark {
+		// Start bookmark from ticket removed; no-op
+		return m, nil
+	}
+	if res.Cmd != nil {
+		return m, res.Cmd
+	}
+	return m, nil
 }
 
 func (m *Model) handleHelpRequest(r helptab.Request) (tea.Model, tea.Cmd) {
@@ -381,7 +381,8 @@ func (m *Model) handleNavigateToSettingsTab() (tea.Model, tea.Cmd) {
 
 func (m *Model) handleNavigateToHelpTab() (tea.Model, tea.Cmd) {
 	m.viewMode = ViewHelp
-	// Keep current help sub-tab (Shortcuts vs History) and selection so returning to Help remembers where you were
+	m.helpTabModel.SetHelpTab(0)
+	m.helpTabModel.SetSelectedCommand(0)
 	m.statusMessage = "Loaded Help"
 	return m, nil
 }
@@ -617,168 +618,6 @@ func (m *Model) handleUpdatePR() (tea.Model, tea.Cmd) {
 		}
 		return m, m.pushToPR(prBranch, commit.ChangeID, needsMoveBookmark)
 	}
-	return m, nil
-}
-
-func (m *Model) handleOpenPRInBrowser() (tea.Model, tea.Cmd) {
-	if m.repository != nil && m.GetSelectedPR() >= 0 && m.GetSelectedPR() < len(m.repository.PRs) {
-		pr := m.repository.PRs[m.GetSelectedPR()]
-		if pr.URL != "" {
-			if m.demoMode {
-				m.statusMessage = fmt.Sprintf("PR #%d: %s (demo mode - browser disabled)", pr.Number, pr.URL)
-				return m, nil
-			}
-			m.statusMessage = fmt.Sprintf("Opening PR #%d...", pr.Number)
-			return m, openURL(pr.URL)
-		}
-	}
-	return m, nil
-}
-
-func (m *Model) handleOpenTicketInBrowser() (tea.Model, tea.Cmd) {
-	if m.ticketService != nil && m.GetSelectedTicket() >= 0 && m.GetSelectedTicket() < len(m.ticketList) {
-		ticket := m.ticketList[m.GetSelectedTicket()]
-		ticketURL := m.ticketService.GetTicketURL(ticket)
-		m.statusMessage = fmt.Sprintf("Opening %s...", ticket.DisplayKey)
-		return m, openURL(ticketURL)
-	}
-	return m, nil
-}
-
-func (m *Model) handleMergePR() (tea.Model, tea.Cmd) {
-	if m.viewMode == ViewPullRequests && m.isGitHubAvailable() && m.repository != nil && m.GetSelectedPR() >= 0 && m.GetSelectedPR() < len(m.repository.PRs) {
-		pr := m.repository.PRs[m.GetSelectedPR()]
-		if pr.State != "open" {
-			m.statusMessage = "Can only merge open PRs"
-			return m, nil
-		}
-		m.statusMessage = fmt.Sprintf("Merging PR #%d...", pr.Number)
-		return m, m.mergePR(pr.Number)
-	}
-	return m, nil
-}
-
-func (m *Model) handleClosePR() (tea.Model, tea.Cmd) {
-	if m.viewMode == ViewPullRequests && m.isGitHubAvailable() && m.repository != nil && m.GetSelectedPR() >= 0 && m.GetSelectedPR() < len(m.repository.PRs) {
-		pr := m.repository.PRs[m.GetSelectedPR()]
-		if pr.State != "open" {
-			m.statusMessage = "Can only close open PRs"
-			return m, nil
-		}
-		m.statusMessage = fmt.Sprintf("Closing PR #%d...", pr.Number)
-		return m, m.closePR(pr.Number)
-	}
-	return m, nil
-}
-
-func (m *Model) handleToggleStatusChangeMode() (tea.Model, tea.Cmd) {
-	if m.viewMode == ViewTickets && m.ticketService != nil && !m.transitionInProgress {
-		m.statusChangeMode = !m.statusChangeMode
-		m.ticketsTabModel.SetStatusChangeMode(m.statusChangeMode)
-		if m.statusChangeMode {
-			m.statusMessage = "Select a status to apply (i/D/B/N or Esc to cancel)"
-		} else {
-			m.statusMessage = "Ready"
-		}
-	}
-	return m, nil
-}
-
-func (m *Model) handleStartBookmarkFromTicket() (tea.Model, tea.Cmd) {
-	if m.viewMode == ViewTickets && m.GetSelectedTicket() >= 0 && m.GetSelectedTicket() < len(m.ticketList) && m.jjService != nil {
-		ticket := m.ticketList[m.GetSelectedTicket()]
-		m.startBookmarkFromTicket(ticket)
-	}
-	return m, nil
-}
-
-func (m *Model) handleTransitionToInProgress() (tea.Model, tea.Cmd) {
-	if m.viewMode != ViewTickets || m.ticketService == nil || !m.statusChangeMode || m.transitionInProgress {
-		return m, nil
-	}
-	if m.GetSelectedTicket() < 0 || m.GetSelectedTicket() >= len(m.ticketList) {
-		return m, nil
-	}
-	// Find "in progress" transition (must contain "progress" or "start" but NOT "not start")
-	for _, t := range m.availableTransitions {
-		lowerName := strings.ToLower(t.Name)
-		isInProgress := strings.Contains(lowerName, "progress") ||
-			(strings.Contains(lowerName, "start") && !strings.Contains(lowerName, "not start") && !strings.Contains(lowerName, "not_start"))
-		if isInProgress {
-			m.transitionInProgress = true
-			m.ticketsTabModel.SetTransitionInProgress(true)
-			ticket := m.ticketList[m.GetSelectedTicket()]
-			m.statusMessage = fmt.Sprintf("Setting %s to %s...", ticket.DisplayKey, t.Name)
-			return m, m.transitionTicket(t.ID)
-		}
-	}
-	m.statusMessage = "No 'In Progress' transition available"
-	return m, nil
-}
-
-func (m *Model) handleTransitionToDone() (tea.Model, tea.Cmd) {
-	if m.viewMode != ViewTickets || m.ticketService == nil || !m.statusChangeMode || m.transitionInProgress {
-		return m, nil
-	}
-	if m.GetSelectedTicket() < 0 || m.GetSelectedTicket() >= len(m.ticketList) {
-		return m, nil
-	}
-	// Find "done" transition
-	for _, t := range m.availableTransitions {
-		lowerName := strings.ToLower(t.Name)
-		if strings.Contains(lowerName, "done") || strings.Contains(lowerName, "complete") || strings.Contains(lowerName, "resolve") {
-			m.transitionInProgress = true
-			m.ticketsTabModel.SetTransitionInProgress(true)
-			ticket := m.ticketList[m.GetSelectedTicket()]
-			m.statusMessage = fmt.Sprintf("Setting %s to %s...", ticket.DisplayKey, t.Name)
-			return m, m.transitionTicket(t.ID)
-		}
-	}
-	m.statusMessage = "No 'Done' transition available"
-	return m, nil
-}
-
-func (m *Model) handleTransitionToBlocked() (tea.Model, tea.Cmd) {
-	if m.viewMode != ViewTickets || m.ticketService == nil || !m.statusChangeMode || m.transitionInProgress {
-		return m, nil
-	}
-	if m.GetSelectedTicket() < 0 || m.GetSelectedTicket() >= len(m.ticketList) {
-		return m, nil
-	}
-	// Find "blocked" transition
-	for _, t := range m.availableTransitions {
-		lowerName := strings.ToLower(t.Name)
-		if strings.Contains(lowerName, "block") {
-			m.transitionInProgress = true
-			m.ticketsTabModel.SetTransitionInProgress(true)
-			ticket := m.ticketList[m.GetSelectedTicket()]
-			m.statusMessage = fmt.Sprintf("Setting %s to %s...", ticket.DisplayKey, t.Name)
-			return m, m.transitionTicket(t.ID)
-		}
-	}
-	m.statusMessage = "No 'Blocked' transition available"
-	return m, nil
-}
-
-func (m *Model) handleTransitionToNotStarted() (tea.Model, tea.Cmd) {
-	if m.viewMode != ViewTickets || m.ticketService == nil || !m.statusChangeMode || m.transitionInProgress {
-		return m, nil
-	}
-	if m.GetSelectedTicket() < 0 || m.GetSelectedTicket() >= len(m.ticketList) {
-		return m, nil
-	}
-	// Find "not started" transition
-	for _, t := range m.availableTransitions {
-		lowerName := strings.ToLower(t.Name)
-		if strings.Contains(lowerName, "not") && strings.Contains(lowerName, "start") {
-			m.transitionInProgress = true
-			m.ticketsTabModel.SetTransitionInProgress(true)
-			ticket := m.ticketList[m.GetSelectedTicket()]
-			m.statusMessage = fmt.Sprintf("Setting %s to %s...", ticket.DisplayKey, t.Name)
-			return m, m.transitionTicket(t.ID)
-		}
-	}
-	m.statusMessage = "No 'Not Started' transition available"
 	return m, nil
 }
 

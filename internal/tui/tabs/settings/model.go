@@ -4,7 +4,6 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen/jj-tui/internal"
-	"github.com/madicen/jj-tui/internal/tickets"
 )
 
 // Model represents the state of the Settings tab
@@ -21,11 +20,7 @@ type Model struct {
 	settingsBranchLimit       int
 	settingsSanitizeBookmarks bool
 	settingsTicketProvider    string
-	confirmingCleanup         string
-	ticketService             tickets.Service
-	statusMessage             string
-	loading                   bool
-	err                       error
+	confirmingCleanup string
 
 	// Scroll state for wheel (no click required)
 	width           int

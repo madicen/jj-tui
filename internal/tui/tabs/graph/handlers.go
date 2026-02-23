@@ -146,27 +146,33 @@ func (m GraphModel) handleKeyMsg(msg tea.KeyMsg) (GraphModel, tea.Cmd) {
 	return m, nil
 }
 
-func (m GraphModel) handleZoneClick(zone *zone.ZoneInfo) (GraphModel, tea.Cmd) {
-	if zone == nil {
+func (m GraphModel) handleZoneClick(msg zone.MsgZoneInBounds) (GraphModel, tea.Cmd) {
+	if msg.Zone == nil {
 		return m, nil
 	}
+	event := msg.Event
+	inBounds := func(id string) bool {
+		z := m.zoneManager.Get(id)
+		return z != nil && z.InBounds(event)
+	}
 
-	// Check for pane focus zones by comparing zone pointers
-	if m.zoneManager.Get(mouse.ZoneGraphPane) == zone {
+	// Check for pane focus zones by event position (reliable after Scan)
+	if inBounds(mouse.ZoneGraphPane) {
 		if !m.graphFocused {
 			m.graphFocused = true
 		}
 		return m, nil
 	}
 
-	if m.zoneManager.Get(mouse.ZoneFilesPane) == zone {
+	if inBounds(mouse.ZoneFilesPane) {
 		if m.graphFocused {
 			m.graphFocused = false
 		}
 		return m, nil
 	}
 
-	// Check for commit selection zones
+	// Check for commit selection zones (pointer comparison still used for list zones)
+	zone := msg.Zone
 	if m.repository != nil {
 		for commitIndex := range m.repository.Graph.Commits {
 			if m.zoneManager.Get(mouse.ZoneCommit(commitIndex)) == zone {

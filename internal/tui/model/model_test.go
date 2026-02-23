@@ -200,9 +200,18 @@ func TestMouseScrollGraphTabWithoutClicking(t *testing.T) {
 	if filesZone == nil {
 		t.Skip("files pane zone not registered (e.g. no content); cannot simulate click")
 	}
+	// Use a click position inside the files pane zone so event-based matching (InBounds) succeeds
+	clickX := filesZone.StartX + 1
+	clickY := filesZone.StartY + 1
+	if clickX > filesZone.EndX {
+		clickX = filesZone.EndX
+	}
+	if clickY > filesZone.EndY {
+		clickY = filesZone.EndY
+	}
 	zoneMsg := zone.MsgZoneInBounds{
 		Zone:  filesZone,
-		Event: tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: 50, Y: 60},
+		Event: tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: clickX, Y: clickY},
 	}
 	newModel, _ = m.Update(zoneMsg)
 	m = newModel.(*Model)
