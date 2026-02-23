@@ -101,16 +101,7 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 	case "ctrl+l":
 		return m, Request{SaveSettingsLocal: true}.Cmd()
-	case "tab":
-		if m.settingsFocusedField < len(m.settingsInputs) {
-			m.settingsInputs[m.settingsFocusedField].Blur()
-		}
-		m.settingsTab = (m.settingsTab + 1) % 4
-		m.settingsFocusedField = 0
-		if len(m.settingsInputs) > 0 {
-			m.settingsInputs[0].Focus()
-		}
-		return m, nil
+	// Tab is handled by the main model for moving between inputs; ^j/^k switch sub-tabs
 	case "j", "down":
 		if m.settingsFocusedField < len(m.settingsInputs)-1 {
 			if m.settingsFocusedField < len(m.settingsInputs) {
@@ -147,9 +138,12 @@ func (m *Model) GetSettingsTab() int {
 	return m.settingsTab
 }
 
-// SetSettingsTab sets the settings tab
+// SetSettingsTab sets the settings sub-tab (0=GitHub, 1=Jira, 2=Codecks, 3=Tickets, 4=Branches, 5=Advanced)
 func (m *Model) SetSettingsTab(tab int) {
-	m.settingsTab = tab % 4
+	if tab < 0 {
+		tab = 0
+	}
+	m.settingsTab = tab % 6
 }
 
 // GetFocusedField returns the currently focused input field
