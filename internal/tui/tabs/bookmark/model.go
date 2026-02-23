@@ -304,7 +304,7 @@ func (m Model) renderBookmark() string {
 		inputStyle = inputStyle.Foreground(styles.ColorPrimary)
 	}
 	lines = append(lines, inputStyle.Render("Name:"))
-	lines = append(lines, mark(m.zoneManager, mouse.ZoneBookmarkName, "  "+m.nameInput.Value()))
+	lines = append(lines, mark(m.zoneManager, mouse.ZoneBookmarkName, "  "+m.nameInput.View()))
 	if m.bookmarkNameExists {
 		warningStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#E3B341")).Bold(true)
 		lines = append(lines, "")
