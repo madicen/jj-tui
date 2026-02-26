@@ -80,6 +80,21 @@ func OpenCreateBookmark(modal *Model, repo *internal.Repository, commitIdx int, 
 	return fmt.Sprintf("Create or move bookmark on %s", data.CommitShortID)
 }
 
+// OpenCreateBookmarkFromTicket prepares and shows the bookmark creation dialog to create a branch from main for the given ticket.
+// Caller sets view mode and status message from the returned value.
+func OpenCreateBookmarkFromTicket(modal *Model, repo *internal.Repository, ticketKey, title, displayKey string, conflictSources []string, sanitize bool, width int) string {
+	modal.Show(-1, nil)
+	modal.SetFromJira(ticketKey, title, displayKey)
+	modal.SetBookmarkName(ticketKey)
+	modal.UpdateRepository(repo)
+	modal.SetNameConflictSources(conflictSources)
+	modal.UpdateNameExistsFromInput(sanitize)
+	ni := modal.GetNameInput()
+	ni.Focus()
+	ni.Width = width
+	return fmt.Sprintf("Create branch from main for ticket %s", ticketKey)
+}
+
 // SubmitBookmark builds submit input from modal state and repo/config, handles Jira side effects, and runs the submit command.
 // Returns (cmd, statusOrError). Caller sets status message and returns the cmd.
 func SubmitBookmark(modal *Model, repo *internal.Repository, cfg *config.Config, jjService *jj.Service) (tea.Cmd, string) {

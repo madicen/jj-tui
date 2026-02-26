@@ -153,7 +153,15 @@ func ExecuteRequest(r Request, ctx *RequestContext) (statusMsg string, cmd tea.C
 		if !ctx.SelectedTicketValid() || ctx.TicketService == nil {
 			return "", nil
 		}
-		return "", nil
+		ticket := ctx.SelectedTicketData()
+		if ticket == nil {
+			return "", nil
+		}
+		return "", OpenCreateBookmarkFromTicketEffect{
+			TicketKey:  ticket.Key,
+			Title:     ticket.Summary,
+			DisplayKey: ticket.DisplayKey,
+		}.Cmd()
 	}
 	if r.OpenInBrowser {
 		if ctx.TicketService == nil || !ctx.SelectedTicketValid() {

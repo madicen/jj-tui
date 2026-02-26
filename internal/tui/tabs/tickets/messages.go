@@ -104,3 +104,15 @@ func OpenURLEffectCmd(url string) tea.Cmd {
 func ToggleModeEffectCmd(status string) tea.Cmd {
 	return func() tea.Msg { return ToggleModeEffect{Status: status} }
 }
+
+// OpenCreateBookmarkFromTicketEffect tells main to open the bookmark modal to create a branch from main using the ticket key.
+type OpenCreateBookmarkFromTicketEffect struct {
+	TicketKey   string
+	Title       string
+	DisplayKey  string
+}
+
+// Cmd returns a tea.Cmd that sends this effect to main.
+func (e OpenCreateBookmarkFromTicketEffect) Cmd() tea.Cmd {
+	return func() tea.Msg { return e }
+}

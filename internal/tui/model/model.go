@@ -673,6 +673,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ticketsTabModel.SetStatusChangeMode(mode)
 		m.appState.StatusMessage = msg.Status
 		return m, nil
+	case ticketstab.OpenCreateBookmarkFromTicketEffect:
+		m.appState.ViewMode = state.ViewCreateBookmark
+		m.appState.StatusMessage = bookmarktab.OpenCreateBookmarkFromTicket(&m.bookmarkModal, m.appState.Repository, msg.TicketKey, msg.Title, msg.DisplayKey, m.branchesTabModel.BuildBookmarkNameConflictSources(), m.appState.Config != nil && m.appState.Config.ShouldSanitizeBookmarkNames(), m.width-10)
+		return m, nil
 
 	case descedittab.SaveRequestedMsg, descedittab.CancelRequestedMsg:
 		updated, cmd := m.desceditModal.Update(msg)
