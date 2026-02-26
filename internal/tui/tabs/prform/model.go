@@ -60,8 +60,23 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	if !m.shown {
 		return m, nil
 	}
-
+	// Handle request messages (main forwards these to us)
+	switch msg.(type) {
+	case CancelRequestedMsg:
+		m.shown = false
+		m.Reset()
+		return m, PerformCancelCmd()
+	case SubmitRequestedMsg:
+		return m, PerformSubmitCmd()
+	}
 	switch msg := msg.(type) {
+	case zone.MsgZoneInBounds:
+		if m.zoneManager != nil {
+			if zoneID := m.resolveClickedZone(msg); zoneID != "" {
+				return m.handleZoneClick(zoneID)
+			}
+		}
+		return m, nil
 	case tea.KeyMsg:
 		return m.handleKeyMsg(msg)
 	}
@@ -123,13 +138,13 @@ func (m Model) renderForm() string {
 	)
 }
 
-// handleKeyMsg handles keyboard input: special keys (esc, tab, ctrl+enter) here; all others go to the focused field.
+// handleKeyMsg handles keyboard input; returns request cmds for main to handle cancel/submit.
 func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
-		m.shown = false
-		m.Reset()
-		return m, nil
+		return m, CancelRequestedCmd()
+	case "ctrl+s", "ctrl+enter":
+		return m, SubmitRequestedCmd()
 	case "tab":
 		// Switch between title and body
 		m.focusedField = (m.focusedField + 1) % 2
@@ -141,9 +156,6 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.bodyInput.Focus()
 		}
 		return m, nil
-	case "ctrl+enter":
-		// Create PR - handled outside
-		return m, nil
 	}
 	// Forward typing and other keys to the focused input
 	if m.focusedField == 0 {
@@ -154,6 +166,41 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.bodyInput, cmd = m.bodyInput.Update(msg)
 	return m, cmd
+}
+
+// ZoneIDs returns the zone IDs this modal uses when rendering. Used to resolve clicks.
+func (m Model) ZoneIDs() []string {
+	return []string{mouse.ZonePRTitle, mouse.ZonePRBody, mouse.ZonePRSubmit, mouse.ZonePRCancel}
+}
+
+func (m Model) resolveClickedZone(msg zone.MsgZoneInBounds) string {
+	if msg.Zone == nil {
+		return ""
+	}
+	for _, id := range m.ZoneIDs() {
+		z := m.zoneManager.Get(id)
+		if z != nil && z.InBounds(msg.Event) {
+			return id
+		}
+	}
+	return ""
+}
+
+// handleZoneClick handles a zone click by zone ID (called from Update after resolve). Returns (updated model, cmd).
+func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
+	switch zoneID {
+	case mouse.ZonePRTitle:
+		m.SetFocusedField(0)
+		return m, nil
+	case mouse.ZonePRBody:
+		m.SetFocusedField(1)
+		return m, nil
+	case mouse.ZonePRSubmit:
+		return m, SubmitRequestedCmd()
+	case mouse.ZonePRCancel:
+		return m, CancelRequestedCmd()
+	}
+	return m, nil
 }
 
 // Accessors

@@ -12,8 +12,10 @@ import (
 	"github.com/madicen/jj-tui/internal/integrations/github"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tickets"
-	graphtab "github.com/madicen/jj-tui/internal/tui/tabs/graph"
+	"github.com/madicen/jj-tui/internal/tui/data"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/state"
+	graphtab "github.com/madicen/jj-tui/internal/tui/tabs/graph"
 )
 
 // Helper to create a test model with sample data (bypasses jj service)
@@ -22,7 +24,7 @@ func newTestModel() *Model {
 	m := New(ctx)
 	m.width = 100
 	m.height = 80     // Tall enough to show all content including help view
-	m.loading = false // Skip loading state for tests
+	m.appState.Loading = false // Skip loading state for tests
 	m.SetRepository(&internal.Repository{
 		Path: "/test/repo",
 		Graph: internal.CommitGraph{
@@ -36,14 +38,14 @@ func newTestModel() *Model {
 			{Number: 1, Title: "Test PR", State: "open"},
 		},
 	})
-	m.statusMessage = "Ready"
+	m.appState.StatusMessage = "Ready"
 
-	// Sync repository and selection to tab models (bypasses repositoryLoadedMsg in tests)
-	m.graphTabModel.UpdateRepository(m.repository)
+	// Sync repository and selection to tab models (bypasses data.RepositoryLoadedMsg in tests)
+	m.graphTabModel.UpdateRepository(m.appState.Repository)
 	m.graphTabModel.SelectCommit(0)
-	m.prsTabModel.UpdateRepository(m.repository)
+	m.prsTabModel.UpdateRepository(m.appState.Repository)
 	m.prsTabModel.SetGithubService(m.isGitHubAvailable())
-	m.branchesTabModel.UpdateRepository(m.repository)
+	m.branchesTabModel.UpdateRepository(m.appState.Repository)
 	m.ticketsTabModel.SetTicketServiceInfo("", false)
 
 	// Initialize by processing a window size message
@@ -57,11 +59,11 @@ func TestTabSelectedMsgChangesView(t *testing.T) {
 	tests := []struct {
 		name         string
 		msg          TabSelectedMsg
-		expectedView ViewMode
+		expectedView state.ViewMode
 	}{
-		{"SelectGraph", TabSelectedMsg{Tab: ViewCommitGraph}, ViewCommitGraph},
-		{"SelectPRs", TabSelectedMsg{Tab: ViewPullRequests}, ViewPullRequests},
-		{"SelectHelp", TabSelectedMsg{Tab: ViewHelp}, ViewHelp},
+		{"SelectGraph", TabSelectedMsg{Tab: state.ViewCommitGraph}, state.ViewCommitGraph},
+		{"SelectPRs", TabSelectedMsg{Tab: state.ViewPullRequests}, state.ViewPullRequests},
+		{"SelectHelp", TabSelectedMsg{Tab: state.ViewHelp}, state.ViewHelp},
 	}
 
 	for _, tt := range tests {
@@ -100,7 +102,7 @@ func TestChangedFilesLoadedMsgUpdatesGraphTab(t *testing.T) {
 	ctx := context.Background()
 	m := New(ctx)
 	defer m.Close()
-	m.loading = false
+	m.appState.Loading = false
 	repo := &internal.Repository{
 		Path: "/test/repo",
 		Graph: internal.CommitGraph{
@@ -111,23 +113,24 @@ func TestChangedFilesLoadedMsgUpdatesGraphTab(t *testing.T) {
 		},
 	}
 	m.SetRepository(repo)
-	m.graphTabModel.UpdateRepository(m.repository)
+	m.graphTabModel.UpdateRepository(m.appState.Repository)
 	// Do not call SelectCommit so changedFilesCommitID stays "" (simulates initial load before
 	// loadChangedFiles request was made, or race where the msg arrives before we set it).
 	// selectedCommit is 0 by default. Deliver changed files for the first commit.
 	loadedFiles := []jj.ChangedFile{{Path: "foo.go", Status: "M"}, {Path: "bar/baz.go", Status: "A"}}
-	newModel, _ := m.Update(changedFilesLoadedMsg{commitID: "cid0", files: loadedFiles})
+	newModel, _ := m.Update(graphtab.ChangedFilesLoadedMsg{CommitID: "cid0", Files: loadedFiles})
 	m = newModel.(*Model)
 
 	got := m.graphTabModel.GetChangedFiles()
 	if len(got) != 2 {
 		t.Fatalf("GetChangedFiles(): expected 2 files, got %d", len(got))
 	}
-	if got[0].Path != "foo.go" || got[0].Status != "M" {
-		t.Errorf("GetChangedFiles()[0]: expected foo.go M, got %s %s", got[0].Path, got[0].Status)
+	// Files are stored sorted by path so selection order matches tree display order
+	if got[0].Path != "bar/baz.go" || got[0].Status != "A" {
+		t.Errorf("GetChangedFiles()[0]: expected bar/baz.go A (first by path), got %s %s", got[0].Path, got[0].Status)
 	}
-	if got[1].Path != "bar/baz.go" || got[1].Status != "A" {
-		t.Errorf("GetChangedFiles()[1]: expected bar/baz.go A, got %s %s", got[1].Path, got[1].Status)
+	if got[1].Path != "foo.go" || got[1].Status != "M" {
+		t.Errorf("GetChangedFiles()[1]: expected foo.go M, got %s %s", got[1].Path, got[1].Status)
 	}
 }
 
@@ -140,7 +143,7 @@ func TestMouseScrollGraphTabWithoutClicking(t *testing.T) {
 	ctx := context.Background()
 	m := New(ctx)
 	defer m.Close()
-	m.loading = false
+	m.appState.Loading = false
 	// Many commits so the graph pane is scrollable (more lines than viewport height)
 	commits := make([]internal.Commit, 50)
 	for i := range commits {
@@ -156,9 +159,9 @@ func TestMouseScrollGraphTabWithoutClicking(t *testing.T) {
 		Graph:  internal.CommitGraph{Commits: commits},
 		PRs:    nil,
 	})
-	m.graphTabModel.UpdateRepository(m.repository)
+	m.graphTabModel.UpdateRepository(m.appState.Repository)
 	m.graphTabModel.SelectCommit(0)
-	m.viewMode = ViewCommitGraph
+	m.appState.ViewMode = state.ViewCommitGraph
 	m.graphTabModel.SetGraphFocused(true)
 	m.width = 100
 	m.height = 80
@@ -243,7 +246,7 @@ func TestMouseScrollGraphTabWithoutClicking(t *testing.T) {
 func TestMouseScrollHelpTab(t *testing.T) {
 	m := newTestModel()
 	defer m.Close()
-	m.SetViewMode(ViewHelp)
+	m.SetViewMode(state.ViewHelp)
 	m.width = 100
 	m.height = 40
 	viewBefore := m.View() // View() sets dimensions for all tabs including Help
@@ -267,11 +270,11 @@ func TestMouseScrollHelpTab(t *testing.T) {
 func TestKeyboardShortcuts(t *testing.T) {
 	tests := []struct {
 		key          string
-		expectedView ViewMode
+		expectedView state.ViewMode
 	}{
-		{"g", ViewCommitGraph},
-		{"p", ViewPullRequests},
-		{"h", ViewHelp},
+		{"g", state.ViewCommitGraph},
+		{"p", state.ViewPullRequests},
+		{"h", state.ViewHelp},
 	}
 
 	for _, tt := range tests {
@@ -326,14 +329,14 @@ func TestEscReturnsToGraph(t *testing.T) {
 	m := newTestModel()
 	defer m.Close()
 
-	m.viewMode = ViewHelp
+	m.appState.ViewMode = state.ViewHelp
 
 	keyMsg := tea.KeyMsg{Type: tea.KeyEsc}
 	newModel, _ := m.Update(keyMsg)
 	m = newModel.(*Model)
 
-	if m.GetViewMode() != ViewCommitGraph {
-		t.Errorf("Expected ViewCommitGraph after Esc, got %v", m.GetViewMode())
+	if m.GetViewMode() != state.ViewCommitGraph {
+		t.Errorf("Expected state.ViewCommitGraph after Esc, got %v", m.GetViewMode())
 	}
 }
 
@@ -343,8 +346,8 @@ func TestWorkflowWithMessages(t *testing.T) {
 	defer m.Close()
 
 	// Step 1: Verify initial state
-	if m.GetViewMode() != ViewCommitGraph {
-		t.Fatalf("Expected initial view to be ViewCommitGraph")
+	if m.GetViewMode() != state.ViewCommitGraph {
+		t.Fatalf("Expected initial view to be state.ViewCommitGraph")
 	}
 
 	// Step 2: Select first commit via message
@@ -357,27 +360,27 @@ func TestWorkflowWithMessages(t *testing.T) {
 	}
 
 	// Step 3: Switch to PRs view via message
-	newModel, _ = m.Update(TabSelectedMsg{Tab: ViewPullRequests})
+	newModel, _ = m.Update(TabSelectedMsg{Tab: state.ViewPullRequests})
 	m = newModel.(*Model)
 
-	if m.GetViewMode() != ViewPullRequests {
-		t.Errorf("Step 3: Expected ViewPullRequests, got %v", m.GetViewMode())
+	if m.GetViewMode() != state.ViewPullRequests {
+		t.Errorf("Step 3: Expected state.ViewPullRequests, got %v", m.GetViewMode())
 	}
 
 	// Step 4: Switch to Help view via message
-	newModel, _ = m.Update(TabSelectedMsg{Tab: ViewHelp})
+	newModel, _ = m.Update(TabSelectedMsg{Tab: state.ViewHelp})
 	m = newModel.(*Model)
 
-	if m.GetViewMode() != ViewHelp {
-		t.Errorf("Step 4: Expected ViewHelp, got %v", m.GetViewMode())
+	if m.GetViewMode() != state.ViewHelp {
+		t.Errorf("Step 4: Expected state.ViewHelp, got %v", m.GetViewMode())
 	}
 
 	// Step 5: Return to Graph via message
-	newModel, _ = m.Update(TabSelectedMsg{Tab: ViewCommitGraph})
+	newModel, _ = m.Update(TabSelectedMsg{Tab: state.ViewCommitGraph})
 	m = newModel.(*Model)
 
-	if m.GetViewMode() != ViewCommitGraph {
-		t.Errorf("Step 5: Expected ViewCommitGraph, got %v", m.GetViewMode())
+	if m.GetViewMode() != state.ViewCommitGraph {
+		t.Errorf("Step 5: Expected state.ViewCommitGraph, got %v", m.GetViewMode())
 	}
 }
 
@@ -444,7 +447,7 @@ func TestWorkingCopyNodeAppearsInGraph(t *testing.T) {
 	m := New(ctx)
 	m.width = 100
 	m.height = 30
-	m.loading = false
+	m.appState.Loading = false
 	// Initialize viewport
 	m.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
 
@@ -471,7 +474,7 @@ func TestWorkingCopyNodeAppearsInGraph(t *testing.T) {
 			Commits: []internal.Commit{workingCopyCommit, parentCommit},
 		},
 	})
-	m.graphTabModel.UpdateRepository(m.repository)
+	m.graphTabModel.UpdateRepository(m.appState.Repository)
 	m.graphTabModel.SelectCommit(0)
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 80})
 	defer m.Close()
@@ -500,7 +503,7 @@ func TestNewCommitAppearsAfterRefresh(t *testing.T) {
 	m := New(ctx)
 	m.width = 100
 	m.height = 30
-	m.loading = false
+	m.appState.Loading = false
 	// Initialize viewport
 	m.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
 
@@ -542,7 +545,7 @@ func TestNewCommitAppearsAfterRefresh(t *testing.T) {
 	// The old working copy is no longer the working copy
 	initialCommit.IsWorking = false
 
-	// Simulate receiving repositoryLoadedMsg with updated repository
+	// Simulate receiving data.RepositoryLoadedMsg with updated repository
 	updatedRepo := &internal.Repository{
 		Path:        "/test/repo",
 		WorkingCopy: newWorkingCopy,
@@ -551,7 +554,7 @@ func TestNewCommitAppearsAfterRefresh(t *testing.T) {
 		},
 	}
 
-	msg := repositoryLoadedMsg{repository: updatedRepo}
+	msg := data.RepositoryLoadedMsg{Repository: updatedRepo}
 	newModel, _ := m.Update(msg)
 	m = newModel.(*Model)
 
@@ -577,7 +580,7 @@ func TestSilentRefreshUpdatesCommits(t *testing.T) {
 	m := New(ctx)
 	m.width = 100
 	m.height = 30
-	m.loading = false
+	m.appState.Loading = false
 	// Initialize viewport
 	m.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
 
@@ -596,8 +599,8 @@ func TestSilentRefreshUpdatesCommits(t *testing.T) {
 	originalStatus := m.GetStatusMessage()
 
 	// Simulate silent refresh with 3 commits (one new)
-	silentMsg := silentRepositoryLoadedMsg{
-		repository: &internal.Repository{
+	silentMsg := data.SilentRepositoryLoadedMsg{
+		Repository: &internal.Repository{
 			Path: "/test/repo",
 			Graph: internal.CommitGraph{
 				Commits: []internal.Commit{
@@ -651,7 +654,7 @@ func TestHelpViewContent(t *testing.T) {
 	m := newTestModel()
 	defer m.Close()
 
-	m.viewMode = ViewHelp
+	m.appState.ViewMode = state.ViewHelp
 
 	view := m.View()
 
@@ -672,7 +675,7 @@ func TestPRViewContent(t *testing.T) {
 		m := newTestModel()
 		defer m.Close()
 
-		m.viewMode = ViewPullRequests
+		m.appState.ViewMode = state.ViewPullRequests
 
 		view := m.View()
 
@@ -691,9 +694,9 @@ func TestPRViewContent(t *testing.T) {
 
 		// Simulate having a GitHub service by setting a non-nil pointer
 		// (we don't actually need the real service for view testing)
-		m.githubService = &github.Service{}
+		m.appState.GitHubService = &github.Service{}
 		m.prsTabModel.SetGithubService(true)
-		m.viewMode = ViewPullRequests
+		m.appState.ViewMode = state.ViewPullRequests
 
 		view := m.View()
 
@@ -744,8 +747,8 @@ func TestRepositoryLoadedMsg(t *testing.T) {
 	m := newTestModel()
 	defer m.Close()
 
-	m.loading = true
-	m.repository = nil
+	m.appState.Loading = true
+	m.appState.Repository = nil
 
 	repo := &internal.Repository{
 		Path: "/new/repo",
@@ -756,18 +759,18 @@ func TestRepositoryLoadedMsg(t *testing.T) {
 		},
 	}
 
-	msg := repositoryLoadedMsg{repository: repo}
+	msg := data.RepositoryLoadedMsg{Repository: repo}
 	newModel, _ := m.Update(msg)
 	m = newModel.(*Model)
 
-	if m.loading {
+	if m.appState.Loading {
 		t.Error("Expected loading to be false after repository loaded")
 	}
-	if m.repository == nil {
+	if m.appState.Repository == nil {
 		t.Error("Expected repository to be set")
 	}
-	if m.repository.Path != "/new/repo" {
-		t.Errorf("Expected path '/new/repo', got '%s'", m.repository.Path)
+	if m.appState.Repository.Path != "/new/repo" {
+		t.Errorf("Expected path '/new/repo', got '%s'", m.appState.Repository.Path)
 	}
 }
 
@@ -776,16 +779,16 @@ func TestErrorMsg(t *testing.T) {
 	m := newTestModel()
 	defer m.Close()
 
-	m.loading = true
+	m.appState.Loading = true
 
 	msg := errorMsg{Err: fmt.Errorf("test error")}
 	newModel, _ := m.Update(msg)
 	m = newModel.(*Model)
 
-	if m.loading {
+	if m.appState.Loading {
 		t.Error("Expected loading to be false after error")
 	}
-	if m.err == nil {
+	if m.errorModal.GetError() == nil {
 		t.Error("Expected error to be set")
 	}
 	if !containsString(m.GetStatusMessage(), "Error") {
@@ -811,18 +814,18 @@ func TestDescriptionEditingFlow(t *testing.T) {
 
 		// Select a mutable commit
 		m.graphTabModel.SelectCommit(0)
-		commit := m.repository.Graph.Commits[0]
+		commit := m.appState.Repository.Graph.Commits[0]
 		commit.Description = "Original description"
-		m.repository.Graph.Commits[0] = commit
+		m.appState.Repository.Graph.Commits[0] = commit
 
 		// Call startEditingDescription directly (simulates pressing 'd')
 		m.startEditingDescription(commit)
 
-		if m.viewMode != ViewEditDescription {
-			t.Errorf("Expected ViewEditDescription, got %v", m.viewMode)
+		if m.appState.ViewMode != state.ViewEditDescription {
+			t.Errorf("Expected state.ViewEditDescription, got %v", m.appState.ViewMode)
 		}
-		if m.graphTabModel.GetEditingCommitID() != commit.ChangeID {
-			t.Errorf("Expected editingCommitID %s, got %s", commit.ChangeID, m.graphTabModel.GetEditingCommitID())
+		if m.desceditModal.GetEditingCommitID() != commit.ChangeID {
+			t.Errorf("Expected editingCommitID %s, got %s", commit.ChangeID, m.desceditModal.GetEditingCommitID())
 		}
 	})
 
@@ -832,10 +835,10 @@ func TestDescriptionEditingFlow(t *testing.T) {
 
 		// Make the selected commit immutable
 		m.graphTabModel.SelectCommit(0)
-		m.repository.Graph.Commits[0].Immutable = true
+		m.appState.Repository.Graph.Commits[0].Immutable = true
 
 		// Verify the commit is marked as immutable
-		commit := m.repository.Graph.Commits[m.GetSelectedCommit()]
+		commit := m.appState.Repository.Graph.Commits[m.GetSelectedCommit()]
 		if !commit.Immutable {
 			t.Error("Test commit should be marked immutable")
 		}
@@ -849,18 +852,22 @@ func TestDescriptionEditingFlow(t *testing.T) {
 		defer m.Close()
 
 		// Start editing
-		m.viewMode = ViewEditDescription
-		m.graphTabModel.SetEditingCommitID("abc1")
+		m.appState.ViewMode = state.ViewEditDescription
+		m.desceditModal.Show("abc1", "")
 
-		// Press esc
+		// Press esc — modal returns CancelRequestedCmd(); run returned cmds until done (CancelRequested -> PerformCancel)
 		escMsg := tea.KeyMsg{Type: tea.KeyEsc}
-		newModel, _ := m.Update(escMsg)
+		newModel, cmd := m.Update(escMsg)
 		m = newModel.(*Model)
-
-		if m.viewMode != ViewCommitGraph {
-			t.Errorf("Expected ViewCommitGraph after esc, got %v", m.viewMode)
+		for cmd != nil {
+			newModel, cmd = m.Update(cmd())
+			m = newModel.(*Model)
 		}
-		if m.graphTabModel.GetEditingCommitID() != "" {
+
+		if m.appState.ViewMode != state.ViewCommitGraph {
+			t.Errorf("Expected state.ViewCommitGraph after esc, got %v", m.appState.ViewMode)
+		}
+		if m.desceditModal.GetEditingCommitID() != "" {
 			t.Error("Expected editingCommitID to be cleared")
 		}
 	})
@@ -870,9 +877,9 @@ func TestDescriptionEditingFlow(t *testing.T) {
 		defer m.Close()
 
 		// Start editing
-		commit := m.repository.Graph.Commits[0]
-		m.viewMode = ViewEditDescription
-		m.graphTabModel.SetEditingCommitID(commit.ChangeID)
+		commit := m.appState.Repository.Graph.Commits[0]
+		m.appState.ViewMode = state.ViewEditDescription
+		m.desceditModal.Show(commit.ChangeID, commit.ShortID)
 
 		view := m.View()
 
@@ -907,7 +914,7 @@ func TestActionButtonsInCommitGraph(t *testing.T) {
 		defer m.Close()
 
 		m.graphTabModel.SelectCommit(0)
-		m.repository.Graph.Commits[0].Immutable = false
+		m.appState.Repository.Graph.Commits[0].Immutable = false
 
 		view := m.View()
 
@@ -936,7 +943,7 @@ func TestActionButtonsInCommitGraph(t *testing.T) {
 		defer m.Close()
 
 		m.graphTabModel.SelectCommit(0)
-		m.repository.Graph.Commits[0].Immutable = true
+		m.appState.Repository.Graph.Commits[0].Immutable = true
 
 		view := m.View()
 
@@ -974,21 +981,19 @@ func TestRebaseModeFlow(t *testing.T) {
 		defer m.Close()
 
 		// Need a jjService for rebase to work (use a stub)
-		m.jjService = &jj.Service{RepoPath: "/test/repo"}
+		m.appState.JJService = &jj.Service{RepoPath: "/test/repo"}
 
 		m.graphTabModel.SelectCommit(0)
-		m.repository.Graph.Commits[0].Immutable = false
+		m.appState.Repository.Graph.Commits[0].Immutable = false
 
 		// Press 'r' - graph returns StartRebaseMode request; main runs it and enters rebase mode
 		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}}
 		newModel, cmd := m.Update(msg)
 		m = newModel.(*Model)
 		if cmd != nil {
-			if req, ok := cmd().(graphtab.Request); ok {
-				var v tea.Model
-				v, _ = m.Update(req)
-				m = v.(*Model)
-			}
+			var v tea.Model
+			v, _ = m.Update(cmd())
+			m = v.(*Model)
 		}
 
 		if !m.graphTabModel.IsInRebaseMode() {
@@ -1004,7 +1009,7 @@ func TestRebaseModeFlow(t *testing.T) {
 		defer m.Close()
 
 		m.graphTabModel.SelectCommit(0)
-		m.repository.Graph.Commits[0].Immutable = false
+		m.appState.Repository.Graph.Commits[0].Immutable = false
 		m.graphTabModel.StartRebaseMode(0)
 
 		view := m.View()
@@ -1041,18 +1046,20 @@ func TestRebaseModeFlow(t *testing.T) {
 		m := newTestModel()
 		defer m.Close()
 
-		m.jjService = &jj.Service{RepoPath: "/test/repo"}
+		m.appState.JJService = &jj.Service{RepoPath: "/test/repo"}
 		m.graphTabModel.SelectCommit(0)
-		m.repository.Graph.Commits[0].Immutable = true
+		m.appState.Repository.Graph.Commits[0].Immutable = true
 
-		// Press 'r' - graph returns StartRebaseMode request; main handles it and blocks with message
+		// Press 'r' - graph returns Request; run it then run returned effect cmd so status is applied
 		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}}
 		newModel, cmd := m.Update(msg)
 		m = newModel.(*Model)
 		if cmd != nil {
-			if req, ok := cmd().(graphtab.Request); ok {
-				var v tea.Model
-				v, _ = m.Update(req)
+			var v tea.Model
+			v, cmd = m.Update(cmd())
+			m = v.(*Model)
+			if cmd != nil {
+				v, _ = m.Update(cmd())
 				m = v.(*Model)
 			}
 		}
@@ -1060,8 +1067,8 @@ func TestRebaseModeFlow(t *testing.T) {
 		if m.graphTabModel.IsInRebaseMode() {
 			t.Error("Should not enter rebase mode for immutable commit")
 		}
-		if !containsString(m.statusMessage, "immutable") {
-			t.Errorf("Expected immutable warning in status message, got: %q", m.statusMessage)
+		if !containsString(m.appState.StatusMessage, "immutable") {
+			t.Errorf("Expected immutable warning in status message, got: %q", m.appState.StatusMessage)
 		}
 	})
 
@@ -1102,7 +1109,7 @@ func TestMouseScrollingOnViews(t *testing.T) {
 				State:  "open",
 			})
 		}
-		m.repository.PRs = prs
+		m.appState.Repository.PRs = prs
 		return m
 	}
 
@@ -1110,8 +1117,8 @@ func TestMouseScrollingOnViews(t *testing.T) {
 		m := createModelWithManyPRs()
 		defer m.Close()
 
-		m.viewMode = ViewPullRequests
-		m.githubService = &github.Service{}
+		m.appState.ViewMode = state.ViewPullRequests
+		m.appState.GitHubService = &github.Service{}
 		m.prsTabModel.SetGithubService(true)
 		m.View()
 
@@ -1149,8 +1156,8 @@ func TestMouseScrollingOnViews(t *testing.T) {
 	t.Run("PR view rendered content changes after wheel (integration)", func(t *testing.T) {
 		m := createModelWithManyPRs()
 		defer m.Close()
-		m.viewMode = ViewPullRequests
-		m.githubService = &github.Service{}
+		m.appState.ViewMode = state.ViewPullRequests
+		m.appState.GitHubService = &github.Service{}
 		m.prsTabModel.SetGithubService(true)
 		_ = m.View() // set dimensions and get initial view
 		wheelDown := tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonWheelDown, X: 50, Y: 10}
@@ -1184,7 +1191,7 @@ func TestMouseScrollingOnViews(t *testing.T) {
 			list = append(list, tickets.Ticket{Key: fmt.Sprintf("T-%d", i), Summary: fmt.Sprintf("Ticket %d", i)})
 		}
 		m.SetTicketList(list)
-		m.SetViewMode(ViewTickets)
+		m.SetViewMode(state.ViewTickets)
 		m.ticketsTabModel.SetDimensions(80, 24)
 		m.View()
 
@@ -1206,8 +1213,8 @@ func TestMouseScrollingOnViews(t *testing.T) {
 	t.Run("mouse scroll up at top does not panic", func(t *testing.T) {
 		m := createModelWithManyPRs()
 		defer m.Close()
-		m.viewMode = ViewPullRequests
-		m.githubService = &github.Service{}
+		m.appState.ViewMode = state.ViewPullRequests
+		m.appState.GitHubService = &github.Service{}
 		m.View()
 		scrollUpMsg := tea.MouseMsg{
 			Action: tea.MouseActionPress,
@@ -1238,8 +1245,9 @@ func TestJJInitFeature(t *testing.T) {
 		if !m.IsNotJJRepo() {
 			t.Error("Expected notJJRepo to be true after error message")
 		}
-		if m.GetError() == nil {
-			t.Error("Expected error to be set")
+		// Init-repo screen is shown via initRepoModel; error modal is not set for NotJJRepo.
+		if m.initRepoModel.Path() != "/test/path" {
+			t.Error("Expected init-repo path to be set")
 		}
 	})
 
@@ -1248,9 +1256,7 @@ func TestJJInitFeature(t *testing.T) {
 		defer m.Close()
 
 		// Set up the not-jj-repo state
-		m.err = fmt.Errorf("not a jujutsu repository")
-		m.notJJRepo = true
-		m.currentPath = "/test/path"
+		m.initRepoModel.SetPath("/test/path")
 
 		view := m.View()
 
@@ -1274,8 +1280,7 @@ func TestJJInitFeature(t *testing.T) {
 		defer m.Close()
 
 		// Set up a regular error (not a jj repo error)
-		m.err = fmt.Errorf("some other error")
-		m.notJJRepo = false
+		m.errorModal.SetError(fmt.Errorf("some other error"), false, "")
 
 		view := m.View()
 
@@ -1294,12 +1299,10 @@ func TestJJInitFeature(t *testing.T) {
 		defer m.Close()
 
 		// Set up the not-jj-repo state
-		m.err = fmt.Errorf("not a jujutsu repository")
-		m.notJJRepo = true
-		m.currentPath = "/test/path"
+		m.initRepoModel.SetPath("/test/path")
 
 		// Simulate init success
-		newModel, _ := m.Update(jjInitSuccessMsg{})
+		newModel, _ := m.Update(data.JJInitSuccessMsg{})
 		m = newModel.(*Model)
 
 		if m.IsNotJJRepo() {
@@ -1315,8 +1318,7 @@ func TestJJInitFeature(t *testing.T) {
 		defer m.Close()
 
 		// Set up the not-jj-repo state
-		m.err = fmt.Errorf("not a jujutsu repository")
-		m.notJJRepo = true
+		m.initRepoModel.SetPath("/test/path")
 
 		// Press 'i' key
 		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}}
@@ -1333,8 +1335,7 @@ func TestJJInitFeature(t *testing.T) {
 		defer m.Close()
 
 		// Not in error state
-		m.err = nil
-		m.notJJRepo = false
+		m.errorModal.SetError(nil, false, "")
 
 		// Press 'i' key
 		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}}
@@ -1351,10 +1352,8 @@ func TestJJInitFeature(t *testing.T) {
 		defer m.Close()
 
 		// Set up error state while in graph view mode
-		m.viewMode = ViewCommitGraph
-		m.err = fmt.Errorf("not a jujutsu repository")
-		m.notJJRepo = true
-		m.currentPath = "/test/path"
+		m.appState.ViewMode = state.ViewCommitGraph
+		m.initRepoModel.SetPath("/test/path")
 
 		view := m.View()
 
@@ -1377,33 +1376,29 @@ func TestNewCommitFromImmutableParent(t *testing.T) {
 		defer m.Close()
 
 		// Set up jjService (required for 'n' key to work)
-		m.jjService = &jj.Service{RepoPath: "/test/repo"}
+		m.appState.JJService = &jj.Service{RepoPath: "/test/repo"}
 
 		// Mark the first commit as immutable (like main or root())
 		m.graphTabModel.SelectCommit(0)
-		m.repository.Graph.Commits[0].Immutable = true
-		m.repository.Graph.Commits[0].ShortID = "main"
+		m.appState.Repository.Graph.Commits[0].Immutable = true
+		m.appState.Repository.Graph.Commits[0].ShortID = "main"
 
-		// Press 'n' - graph returns NewCommit request; main runs it and sets status
+		// Press 'n' - graph processes via UpdateWithApp and sets status to "Creating new commit...".
+		// Do not run the returned cmd (jj NewCommit would chdir /test/repo and fail); we only assert
+		// that the UI allowed the action (status shows "Creating new commit", not "Cannot" or "immutable").
 		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}}
-		_, cmd := m.Update(msg)
-		if cmd != nil {
-			if req, ok := cmd().(graphtab.Request); ok {
-				var v tea.Model
-				v, _ = m.Update(req)
-				m = v.(*Model)
-			}
-		}
+		newModel, _ := m.Update(msg)
+		m = newModel.(*Model)
 
-		// Status message should indicate creating new commit, NOT an error
-		if containsString(m.statusMessage, "Cannot") {
-			t.Errorf("Should not show error message, got: %s", m.statusMessage)
+		// Status message should indicate creating new commit (set by graph ApplyResult), NOT an error or immutable block
+		if containsString(m.appState.StatusMessage, "Cannot") {
+			t.Errorf("Should not show error message, got: %s", m.appState.StatusMessage)
 		}
-		if containsString(m.statusMessage, "immutable") {
-			t.Errorf("Should not mention immutable restriction, got: %s", m.statusMessage)
+		if containsString(m.appState.StatusMessage, "immutable") {
+			t.Errorf("Should not mention immutable restriction, got: %s", m.appState.StatusMessage)
 		}
-		if !containsString(m.statusMessage, "Creating new commit") {
-			t.Errorf("Expected 'Creating new commit' status, got: %s", m.statusMessage)
+		if !containsString(m.appState.StatusMessage, "Creating new commit") {
+			t.Errorf("Expected 'Creating new commit' status, got: %s", m.appState.StatusMessage)
 		}
 	})
 
@@ -1412,7 +1407,7 @@ func TestNewCommitFromImmutableParent(t *testing.T) {
 		defer m.Close()
 
 		m.graphTabModel.SelectCommit(0)
-		m.repository.Graph.Commits[0].Immutable = true
+		m.appState.Repository.Graph.Commits[0].Immutable = true
 
 		view := m.View()
 
@@ -1427,22 +1422,24 @@ func TestNewCommitFromImmutableParent(t *testing.T) {
 		m := newTestModel()
 		defer m.Close()
 
-		m.jjService = &jj.Service{RepoPath: "/test/repo"}
+		m.appState.JJService = &jj.Service{RepoPath: "/test/repo"}
 		m.graphTabModel.SelectCommit(0)
-		m.repository.Graph.Commits[0].Immutable = true
+		m.appState.Repository.Graph.Commits[0].Immutable = true
 
-		// Press 'd' - graph returns StartEditDescription request; main runs it and blocks with message
+		// Press 'd' - graph returns Request; run it then run returned effect cmd so status is applied
 		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}}
 		_, cmd := m.Update(msg)
 		if cmd != nil {
-			if req, ok := cmd().(graphtab.Request); ok {
-				var v tea.Model
-				v, _ = m.Update(req)
+			var v tea.Model
+			v, cmd = m.Update(cmd())
+			m = v.(*Model)
+			if cmd != nil {
+				v, _ = m.Update(cmd())
 				m = v.(*Model)
 			}
 		}
 
-		if !containsString(m.statusMessage, "immutable") {
+		if !containsString(m.appState.StatusMessage, "immutable") {
 			t.Error("Expected immutable warning for describe action")
 		}
 	})

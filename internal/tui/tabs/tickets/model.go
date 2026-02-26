@@ -9,6 +9,7 @@ import (
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/tickets"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/state"
 )
 
 // Model represents the state of the Tickets tab
@@ -53,17 +54,109 @@ func (m *Model) SetDimensions(width, height int) {
 
 // Update handles messages for the Tickets tab
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
+	return m.update(msg, nil)
+}
+
+// UpdateWithApp handles messages and when app is non-nil runs requests in place and applies effects to app instead of sending Request/effects to main.
+func (m Model) UpdateWithApp(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
+	return m.update(msg, app)
+}
+
+func (m Model) update(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case TicketsLoadedInput:
+		m.UpdateTickets(msg.Tickets)
+		m.SetTicketServiceInfo(msg.ProviderName, msg.HasService)
+		pName := "tickets"
+		if msg.HasService && msg.ProviderName != "" {
+			pName = msg.ProviderName + " tickets"
+		}
+		if app != nil {
+			app.StatusMessage = fmt.Sprintf("Loaded %d %s", len(msg.Tickets), pName)
+			m.SetAvailableTransitions(nil)
+			m.SetLoadingTransitions(true)
+			return m, LoadTransitionsCmd(app.TicketService, m.GetTickets(), m.GetSelectedTicket())
+		}
+		return m, ApplyTicketsLoadedEffect{
+			StatusMessage: fmt.Sprintf("Loaded %d %s", len(msg.Tickets), pName),
+		}.Cmd()
+	case TransitionsLoadedMsg:
+		m.SetLoadingTransitions(false)
+		m.SetAvailableTransitions(msg.Transitions)
+		return m, nil
+	case TransitionCompletedMsg:
+		m.SetTransitionInProgress(false)
+		m.SetStatusChangeMode(false)
+		if msg.Err != nil {
+			if app != nil {
+				app.StatusMessage = fmt.Sprintf("Failed to transition %s: %v", msg.TicketKey, msg.Err)
+				return m, nil
+			}
+			return m, ApplyTransitionCompletedEffect{
+				Err:           msg.Err,
+				StatusMessage: fmt.Sprintf("Failed to transition %s: %v", msg.TicketKey, msg.Err),
+			}.Cmd()
+		}
+		reload := msg.NewStatus != ""
+		statusMsg := ""
+		if msg.NewStatus != "" {
+			statusMsg = fmt.Sprintf("Ticket %s transitioned to %s", msg.TicketKey, msg.NewStatus)
+		}
+		if app != nil {
+			app.StatusMessage = statusMsg
+			if reload {
+				return m, LoadTicketsCmd(app.TicketService, app.DemoMode)
+			}
+			return m, nil
+		}
+		return m, ApplyTransitionCompletedEffect{
+			StatusMessage: statusMsg,
+			ReloadTickets: reload,
+		}.Cmd()
+	case LoadErrorMsg:
+		if app != nil {
+			app.StatusMessage = fmt.Sprintf("Error: %v", msg.Err)
+			return m, nil
+		}
+		return m, ApplyTicketsLoadErrorEffect(msg).Cmd()
+
 	case tea.WindowSizeMsg:
-		// Do not use full window size: we get content-area dimensions from the main model via SetDimensions()
-		// so the list uses the correct height (below header, above status bar), same as the Graph tab.
 		return m, nil
 	case tea.KeyMsg:
-		return m.handleKeyMsg(msg)
+		updated, req, cmd := m.handleKeyMsg(msg)
+		if req != nil && app != nil {
+			ctx := BuildRequestContextFromApp(app, &updated)
+			statusMsg, runCmd := ExecuteRequest(*req, ctx)
+			if statusMsg != "" {
+				app.StatusMessage = statusMsg
+			}
+			if runCmd != nil && req.TransitionID != "" {
+				updated.SetTransitionInProgress(true)
+			}
+			return updated, runCmd
+		}
+		if req != nil {
+			return updated, req.Cmd()
+		}
+		return updated, cmd
 	case zone.MsgZoneInBounds:
-		return m.handleZoneClick(msg.Zone)
+		updated, req, cmd := m.handleZoneClick(msg.Zone)
+		if req != nil && app != nil {
+			ctx := BuildRequestContextFromApp(app, &updated)
+			statusMsg, runCmd := ExecuteRequest(*req, ctx)
+			if statusMsg != "" {
+				app.StatusMessage = statusMsg
+			}
+			if runCmd != nil && req.TransitionID != "" {
+				updated.SetTransitionInProgress(true)
+			}
+			return updated, runCmd
+		}
+		if req != nil {
+			return updated, req.Cmd()
+		}
+		return updated, cmd
 	case tea.MouseMsg:
-		// Wheel: IsWheel() + raw X11 fallback so we accept any terminal encoding; scroll without requiring list to be clicked first
 		isWheel := tea.MouseEvent(msg).IsWheel() || msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown
 		if isWheel {
 			isUp := msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelLeft
@@ -125,42 +218,42 @@ func (m *Model) GetLoadingTransitions() bool {
 	return m.loadingTransitions
 }
 
-// handleKeyMsg handles keyboard input specific to the Tickets tab
-func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
+// handleKeyMsg handles keyboard input; returns (updated model, optional request, cmd).
+func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, *Request, tea.Cmd) {
 	switch msg.String() {
 	case "j", "down":
 		if m.selectedTicket < len(m.ticketList)-1 {
 			m.selectedTicket++
 		}
-		return m, nil
+		return m, nil, nil
 	case "k", "up":
 		if m.selectedTicket > 0 {
 			m.selectedTicket--
 		}
-		return m, nil
+		return m, nil, nil
 	case "esc":
 		if m.statusChangeMode {
 			m.statusChangeMode = false
 		}
-		return m, nil
+		return m, nil, nil
 	case "c":
-		return m, Request{ToggleStatusChangeMode: true}.Cmd()
+		return m, &Request{ToggleStatusChangeMode: true}, nil
 	case "i", "D", "B", "N":
 		if m.statusChangeMode && !m.transitionInProgress && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
 			if id := m.transitionIDByKey(msg.String()); id != "" {
-				return m, Request{TransitionID: id}.Cmd()
+				return m, &Request{TransitionID: id}, nil
 			}
 		}
-		return m, nil
+		return m, nil, nil
 	case "o":
-		return m, Request{OpenInBrowser: true}.Cmd()
+		return m, &Request{OpenInBrowser: true}, nil
 	case "enter", "e":
 		if m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
-			return m, Request{StartBookmarkFromTicket: true}.Cmd()
+			return m, &Request{StartBookmarkFromTicket: true}, nil
 		}
-		return m, nil
+		return m, nil, nil
 	}
-	return m, nil
+	return m, nil, nil
 }
 
 func (m *Model) transitionIDByKey(key string) string {
@@ -191,36 +284,36 @@ func (m *Model) transitionIDByKey(key string) string {
 	return ""
 }
 
-// handleZoneClick handles zone clicks; returns a request cmd for actions.
-func (m Model) handleZoneClick(z *zone.ZoneInfo) (Model, tea.Cmd) {
+// handleZoneClick handles zone clicks; returns (updated model, optional request, cmd).
+func (m Model) handleZoneClick(z *zone.ZoneInfo) (Model, *Request, tea.Cmd) {
 	if m.zoneManager == nil || z == nil {
-		return m, nil
+		return m, nil, nil
 	}
 	for i := range m.ticketList {
 		if m.zoneManager.Get(mouse.ZoneJiraTicket(i)) == z {
 			m.selectedTicket = i
 			m.scrollToSelectedTicket = true
-			return m, nil
+			return m, nil, nil
 		}
 	}
 	if m.zoneManager.Get(mouse.ZoneJiraCreateBranch) == z {
-		return m, Request{StartBookmarkFromTicket: true}.Cmd()
+		return m, &Request{StartBookmarkFromTicket: true}, nil
 	}
 	if m.zoneManager.Get(mouse.ZoneJiraChangeStatus) == z {
-		return m, Request{ToggleStatusChangeMode: true}.Cmd()
+		return m, &Request{ToggleStatusChangeMode: true}, nil
 	}
 	if m.zoneManager.Get(mouse.ZoneTicketOpenBrowser) == z {
-		return m, Request{OpenInBrowser: true}.Cmd()
+		return m, &Request{OpenInBrowser: true}, nil
 	}
 	if m.statusChangeMode && !m.transitionInProgress && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
 		for i, t := range m.availableTransitions {
 			zoneID := mouse.ZoneJiraTransition + fmt.Sprintf("%d", i)
 			if m.zoneManager.Get(zoneID) == z {
-				return m, Request{TransitionID: t.ID}.Cmd()
+				return m, &Request{TransitionID: t.ID}, nil
 			}
 		}
 	}
-	return m, nil
+	return m, nil, nil
 }
 
 // Accessors

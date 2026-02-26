@@ -2,6 +2,7 @@ package divergent
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -45,6 +46,13 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		return m.handleKeyMsg(msg)
+	case zone.MsgZoneInBounds:
+		if m.zoneManager != nil {
+			if zoneID := m.resolveClickedZone(msg); zoneID != "" {
+				return m.handleZoneClick(zoneID)
+			}
+		}
+		return m, nil
 	}
 	return m, nil
 }
@@ -125,17 +133,21 @@ func (m *Model) renderDivergent() string {
 	return strings.Join(lines, "\n")
 }
 
-// handleKeyMsg handles keyboard input
+// handleKeyMsg handles keyboard input; returns PerformCancelCmd or PerformResolveCmd for main to handle.
 func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.shown = false
-		return m, nil
+		return m, PerformCancelCmd()
 	case "enter":
-		// Signal to resolve - handled outside
+		keepCommitID := m.GetSelectedCommitID()
+		if keepCommitID != "" {
+			return m, PerformResolveCmd(m.changeID, keepCommitID)
+		}
 		return m, nil
 	case "j", "down":
-		if m.selectedIdx < len(m.summaries)-1 {
+		n := len(m.commitIDs)
+		if n > 0 && m.selectedIdx < n-1 {
 			m.selectedIdx++
 		}
 		return m, nil
@@ -144,6 +156,60 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.selectedIdx--
 		}
 		return m, nil
+	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
+		idx := int(msg.String()[0] - '1')
+		if idx >= 0 && idx < len(m.commitIDs) {
+			m.selectedIdx = idx
+		}
+		return m, nil
+	}
+	return m, nil
+}
+
+// ZoneIDs returns the zone IDs this modal uses when rendering. Used to resolve clicks.
+func (m Model) ZoneIDs() []string {
+	ids := make([]string, 0, len(m.commitIDs)+2)
+	for i := range m.commitIDs {
+		ids = append(ids, mouse.ZoneDivergentCommit(i))
+	}
+	ids = append(ids, mouse.ZoneDivergentConfirm, mouse.ZoneDivergentCancel)
+	return ids
+}
+
+func (m Model) resolveClickedZone(msg zone.MsgZoneInBounds) string {
+	if msg.Zone == nil {
+		return ""
+	}
+	for _, id := range m.ZoneIDs() {
+		z := m.zoneManager.Get(id)
+		if z != nil && z.InBounds(msg.Event) {
+			return id
+		}
+	}
+	return ""
+}
+
+// handleZoneClick handles a zone click by zone ID (called from Update after resolve). Returns (updated model, cmd).
+func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
+	const prefix = "zone:divergent:commit:"
+	if strings.HasPrefix(zoneID, prefix) {
+		s := strings.TrimPrefix(zoneID, prefix)
+		i, err := strconv.Atoi(s)
+		if err == nil && i >= 0 && i < len(m.commitIDs) {
+			m.selectedIdx = i
+			return m, nil
+		}
+	}
+	if zoneID == mouse.ZoneDivergentConfirm {
+		keepCommitID := m.GetSelectedCommitID()
+		if keepCommitID != "" {
+			return m, PerformResolveCmd(m.changeID, keepCommitID)
+		}
+		return m, nil
+	}
+	if zoneID == mouse.ZoneDivergentCancel {
+		m.shown = false
+		return m, PerformCancelCmd()
 	}
 	return m, nil
 }
