@@ -26,11 +26,11 @@ A modern Terminal User Interface (TUI) for managing [Jujutsu](https://github.com
 
 - **Visual Commit Graph**: Navigate and visualize your commit history with tree structure
 - **Split-Pane View**: Graph and changed files in separate scrollable panes with click-to-focus
-- **Changed Files View**: See files modified in the selected commit with a nested folder structure
+- **Changed Files View**: See files modified in the selected commit; move files to parent/child commits or revert changes
 - **Keyboard & Mouse Support**: Full keyboard navigation with zone-based mouse support for clickable UI elements
 - **GitHub Integration**: Create and manage GitHub Pull Requests directly from the TUI
 - **GitHub Device Flow**: Login to GitHub via browser - no token copying required
-- **Ticket Integration**: View assigned tickets from Jira, Codecks, or GitHub Issues and create branches with auto-populated names
+- **Ticket Integration**: View assigned tickets from Jira, Codecks, or GitHub Issues; create a bookmark on your current commit with the ticket name
 - **Ticket Status Transitions**: Change ticket statuses directly from the TUI (In Progress, Done, etc.)
 - **Commit Management**: Edit, squash, describe, abandon, rebase, and manage commits with simple key presses
 - **New Commits from Immutable Parents**: Create new commits based on `main` or other immutable commits
@@ -113,6 +113,10 @@ jj-tui
 
 # Or specify a repository path
 jj-tui /path/to/your/jj/repo
+
+# Demo mode: use a demo repo with mock tickets/PRs (e.g. for screenshots or trying the UI)
+cd path/to/jj/repo
+jj-tui --demo
 ```
 
 ## Usage
@@ -125,10 +129,11 @@ jj-tui /path/to/your/jj/repo
 - `Ctrl+y`: Redo (undo the undo)
 - `g`: Switch to commit graph view
 - `p`: Switch to pull requests view
-- `t`: Switch to tickets (Jira) view
+- `t`: Switch to tickets view
+- `b`: Switch to branches view
 - `,`: Open settings
-- `h`: Show help
-- `Esc`: Return to main view / Cancel current action
+- `h`, `?`: Show help
+- `Esc`: Return to graph / Cancel current action
 
 ### Commit Graph View
 
@@ -142,15 +147,20 @@ The graph view has two panes: the commit graph (left) and changed files (right).
 
 **Commit Actions:**
 - `e`, `Enter`: Edit selected commit (checkout with `jj edit`)
-- `s`: Squash selected commit into parent
 - `n`: Create new commit (works even on immutable commits like `main`)
 - `d`: Edit commit description
-- `a`: Abandon commit
-- `r`: Rebase selected commit
-- `b`: Create or move bookmark on selected commit
+- `s`: Squash selected commit into parent
+- `r`: Rebase selected commit (with descendants)
+- `a`: Abandon commit (or resolve divergent)
+- `m`: Create or move bookmark on selected commit
 - `x`: Delete bookmark from selected commit
 - `c`: Create PR from selected commit (if bookmark exists)
 - `u`: Push/update PR (pushes to existing PR branch)
+
+**File pane (focus files with Tab first):**
+- `[`: Move selected file to new parent commit (split out)
+- `]`: Move selected file to new child commit (split out)
+- `v`: Revert changes to selected file in this commit
 
 ### Pull Requests View
 
@@ -161,7 +171,7 @@ The graph view has two panes: the commit graph (left) and changed files (right).
 ### Tickets View (Jira / Codecks / GitHub Issues)
 
 - `↑/↓`, `j/k`: Navigate tickets
-- `Enter`: Create branch from selected ticket
+- `Enter`: Create branch from selected ticket (creates a bookmark on your **current commit** with the ticket name)
 - `o`: Open ticket in browser
 - `c`: Change ticket status (transitions to In Progress, Done, etc.)
 - `Ctrl+r`: Refresh ticket list
@@ -199,6 +209,8 @@ You can configure your API credentials in two ways:
 Settings are saved to `~/.config/jj-tui/config.json` and persist across sessions.
 
 ### Option 2: Environment Variables
+
+You can also set credentials via environment variables; see the GitHub, Jira, and Codecks sections below for the relevant variable names. Environment variables are applied when the app starts and can be overridden by in-app settings.
 
 ## GitHub Integration
 
@@ -252,10 +264,10 @@ Get your API token from: https://id.atlassian.com/manage-profile/security/api-to
 1. Press `t` to open the Tickets view
 2. Navigate through your assigned tickets with `j/k` or arrow keys
 3. Press `Enter` to create a branch from the selected ticket
-   - Creates a new commit branched from main
-   - Creates a bookmark with a sanitized name (e.g., `PROJ-123-ticket-summary`)
-   - Rebases your current work onto the new branch
-   - Pre-populates PR title with "PROJ-123 - Ticket Summary" when you create a PR
+   - Creates a **bookmark on your current commit** with a sanitized name (e.g., `PROJ-123-ticket-summary`)
+   - Keeps your existing work and commit description intact
+   - Optional: if "In Progress on branch" is enabled in settings, transitions the ticket to In Progress
+   - When you create a PR, the title is pre-populated with "PROJ-123 - Ticket Summary"
 
 ## GitHub Issues Integration
 
@@ -270,9 +282,8 @@ If you're using GitHub Issues for task tracking, they work automatically with yo
 1. Press `t` to open the Tickets view
 2. Navigate through your assigned issues with `j/k` or arrow keys
 3. Press `Enter` to create a branch from the selected issue
-   - Creates a new commit branched from main
-   - Creates a bookmark with a sanitized name (e.g., `123-issue-summary`)
-   - Pre-populates PR title with "#123 - Issue Summary" when you create a PR
+   - Creates a **bookmark on your current commit** with a sanitized name (e.g., `123-issue-summary`)
+   - When you create a PR, the title is pre-populated with "#123 - Issue Summary"
 4. Press `c` to change issue status (Open ↔ Closed)
 5. Press `o` to open the issue in your browser
 
@@ -299,10 +310,9 @@ export CODECKS_PROJECT=Optional-Project-Name  # Optional: filter cards by projec
 2. Navigate through your assigned cards with `j/k` or arrow keys
 3. Press `o` to open the card in your browser
 4. Press `Enter` to create a branch from the selected card
-   - Creates a new commit branched from main
-   - Creates a bookmark with the short ID (e.g., `12u-add-feature-name`)
-   - Automatically prepopulates commit descriptions with the card's short ID (e.g., `$12u`)
-   - Pre-populates PR title with "$12u - Card Title" when you create a PR
+   - Creates a **bookmark on your current commit** with the card title (or short ID) as the name
+   - Automatically prepopulates commit descriptions with the card's short ID (e.g., `$12u`) when editing
+   - When you create a PR, the title is pre-populated with "$12u - Card Title"
 
 ### Codecks Features
 
@@ -381,58 +391,55 @@ The `ticket_provider` field can be one of:
 
 ```
 jj-tui/
-├── main.go                 # Application entry point
+├── main.go                    # Application entry point
+├── go.mod
 ├── internal/
-│   ├── integrations/       # External integrations
-│   │   ├── jj/             # Jujutsu command integration
-│   │   │   └── service.go
-│   │   ├── github/         # GitHub API integration
-│   │   │   ├── service.go      # GitHub PR service
-│   │   │   └── issues_service.go # GitHub Issues ticket provider
-│   │   ├── jira/           # Jira API integration
-│   │   │   └── service.go
-│   │   └── codecks/        # Codecks API integration
-│   │       └── service.go
-│   ├── tickets/            # Generic ticket service interface
-│   │   └── interface.go
-│   ├── mock/               # Mock services for demo mode
-│   │   ├── tickets.go
-│   │   └── github.go
-│   ├── config/             # Configuration management
+│   ├── config/                # Configuration (config.json, env)
 │   │   └── config.go
-│   ├── models/             # Data models
-│   │   └── commit.go
-│   └── tui/                # Terminal UI components
-│       ├── tui.go          # Public facade (re-exports from model/)
-│       ├── model/          # Core TUI model
-│       │   ├── model.go    # Main application model
-│       │   ├── view.go     # View rendering
-│       │   ├── keys.go     # Keyboard handlers
-│       │   ├── mouse.go    # Mouse handlers
-│       │   ├── actions.go  # Business logic actions
-│       │   ├── commands.go # Async commands
-│       │   ├── cleanup.go  # Repository cleanup actions
-│       │   ├── messages.go # Event message types
-│       │   ├── zones.go    # Clickable zone ID constants
-│       │   └── styles.go   # UI styling
-│       ├── actions/        # Action handlers
-│       │   └── *.go
-│       └── view/           # View renderers
-│           ├── renderer.go
-│           ├── graph.go
-│           ├── prs.go
-│           ├── jira.go
-│           ├── settings.go
-│           ├── bookmark.go
-│           └── help.go
-├── integration_tests/      # Integration tests
-│   └── main_test.go
-├── fixtures/               # Demo repository for screenshots
-│   └── setup-demo-repo.sh
-├── vhs/                    # VHS tapes for screenshot generation
-│   └── *.tape
-├── screenshots/            # Generated screenshots (used in README)
-├── Makefile
+│   ├── types.go               # Shared types (Commit, Repository, etc.)
+│   ├── integrations/
+│   │   ├── jj/                # Jujutsu CLI integration
+│   │   │   └── service.go
+│   │   ├── github/            # GitHub API (PRs, Issues)
+│   │   ├── jira/              # Jira API
+│   │   └── codecks/           # Codecks API
+│   ├── tickets/               # Ticket service interface
+│   │   └── interface.go
+│   ├── mock/                  # Mock services for demo mode
+│   ├── testutil/              # Test mocks and helpers
+│   ├── version/               # Update checks
+│   └── tui/
+│       ├── tui.go             # Public re-exports
+│       ├── state/             # App state, view mode, navigation
+│       ├── data/              # Load repo, init services, messages
+│       ├── styles/            # Lip Gloss styles
+│       ├── mouse/             # Zone IDs for clickable elements
+│       ├── util/              # Clipboard, helpers
+│       ├── model/             # Main TUI model (Update, view, keys, mouse)
+│       └── tabs/              # Tab-specific models and views
+│           ├── graph/         # Commit graph, keys, file move/revert, actions
+│           ├── prs/           # Pull requests list
+│           ├── prform/        # Create/update PR modal
+│           ├── tickets/       # Tickets list (Jira/Codecks/Issues)
+│           ├── branches/      # Branches/bookmarks list
+│           ├── bookmark/      # Create bookmark modal
+│           ├── descedit/      # Edit commit description modal
+│           ├── settings/      # Settings (GitHub, Jira, Codecks, Advanced)
+│           ├── help/          # Help + command history
+│           ├── conflict/      # Bookmark conflict resolution
+│           ├── divergent/     # Divergent commit resolution
+│           ├── warning/       # Warning modal (e.g. empty descriptions)
+│           ├── error/         # Error overlay
+│           ├── initrepo/      # Non-jj repo → jj git init
+│           └── githublogin/   # GitHub device flow
+├── fixtures/                  # Demo repository for screenshots
+│   ├── setup-demo-repo.sh
+│   └── demo-repo/             # Created by setup script
+├── vhs/                       # VHS tapes for screenshot generation
+│   ├── all.tape               # Demo GIF
+│   ├── graph.tape
+│   └── ...
+├── screenshots/               # Generated (demo.gif, *.png)
 └── README.md
 ```
 
@@ -506,21 +513,24 @@ go test ./integration_tests/ -v
 The application supports these key user workflows:
 
 ### 1. Commit Navigation
-- View commit history in a visual graph with split-pane layout
-- Navigate with keyboard shortcuts or mouse
+- View commit history in a visual graph with split-pane layout (graph + changed files)
+- Navigate with keyboard shortcuts or mouse; Tab switches focus between graph and files panes
 - See commit details, authors, and timestamps
-- View changed files for each commit in a separate scrollable pane
-- Click to switch focus between graph and files panes
+- View changed files for each commit in the files pane; move files to parent/child commits (`[` / `]`) or revert (`v`)
+- Mouse scroll works on the focused pane
 
 ### 2. Commit Management
-- Edit commits (checkout with `jj edit`)
+- Edit commits (checkout with `jj edit` — press `e` or Enter on the commit you want to work on)
 - Squash commits into their parents
 - Rebase commits onto different parents
 - Create new commits (including from immutable parents like `main`)
+- Move files between commits: split a file into a new parent or child commit (`[` / `]` with files pane focused)
+- Revert file changes in a commit (`v` with files pane focused)
 - Immutable commit protection (cannot modify pushed commits)
 
 ### 3. Bookmark Management
-- Create bookmarks on any mutable commit
+- Create bookmarks on any mutable commit (`m` in graph view)
+- Create a bookmark from a ticket on your **current commit** (Tickets tab → Enter)
 - Move existing bookmarks to different commits
 - Delete bookmarks when no longer needed
 
@@ -533,11 +543,10 @@ The application supports these key user workflows:
 
 ### 5. Ticket Integration (Jira, Codecks & GitHub Issues)
 - View assigned tickets from Jira, Codecks cards, or GitHub Issues
-- Create branches from tickets with auto-named bookmarks
-- PR titles auto-populated from ticket info
-- Commit descriptions pre-populated with ticket IDs (Codecks)
+- Create a **bookmark on your current commit** from a ticket (Enter) — keeps your work and description intact
+- PR titles and commit description placeholders auto-populated from ticket info
 - Change ticket status directly from the TUI (In Progress, Done, etc.)
-- Open tickets directly in browser
+- Open tickets in the browser
 - Consistent layout with description placeholders
 
 ### 6. Repository Monitoring
