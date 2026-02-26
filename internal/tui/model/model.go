@@ -193,10 +193,6 @@ func (m *Model) processGraphRequest(r graphtab.Request) (tea.Model, tea.Cmd) {
 	return m, graphtab.ApplyResult(res, &m.graphTabModel, ctx, &m.appState)
 }
 
-func (m *Model) handleGraphRequest(r graphtab.Request) (tea.Model, tea.Cmd) {
-	return m.processGraphRequest(r)
-}
-
 func (m *Model) handleHelpRequest(r commandhistory.Request) (tea.Model, tea.Cmd) {
 	statusMsg, cmd := commandhistory.ExecuteRequest(r)
 	if statusMsg != "" {
@@ -895,7 +891,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case prstab.ReauthNeededMsg:
 		updated, _ := m.prsTabModel.UpdateWithApp(msg, &m.appState)
 		m.prsTabModel = updated
-		return m.handleReauthNeededEffect(prstab.ApplyReauthNeededEffect{Reason: msg.Reason})
+		return m.handleReauthNeededEffect(prstab.ApplyReauthNeededEffect(msg))
 	case prstab.PrTickMsg:
 		prInput := prstab.PrTickInput{
 			IsPRView:      m.appState.ViewMode == state.ViewPullRequests,

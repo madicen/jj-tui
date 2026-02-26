@@ -118,7 +118,7 @@ func (m Model) update(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
 			app.StatusMessage = fmt.Sprintf("Error: %v", msg.Err)
 			return m, nil
 		}
-		return m, ApplyTicketsLoadErrorEffect{Err: msg.Err}.Cmd()
+		return m, ApplyTicketsLoadErrorEffect(msg).Cmd()
 
 	case tea.WindowSizeMsg:
 		return m, nil

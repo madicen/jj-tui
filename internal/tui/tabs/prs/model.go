@@ -125,12 +125,12 @@ func (m Model) update(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
 			app.StatusMessage = fmt.Sprintf("Error: %v", msg.Err)
 			return m, nil
 		}
-		return m, ApplyPrsLoadErrorEffect{Err: msg.Err}.Cmd()
+		return m, ApplyPrsLoadErrorEffect(msg).Cmd()
 	case ReauthNeededMsg:
 		if app != nil {
 			return m, nil
 		}
-		return m, ApplyReauthNeededEffect{Reason: msg.Reason}.Cmd()
+		return m, ApplyReauthNeededEffect(msg).Cmd()
 	case PrTickInput:
 		if msg.HasError || msg.GitHubService == nil {
 			return m, nil

@@ -226,15 +226,15 @@ func SubmitPR(modal *Model, repo *internal.Repository, jjService *jj.Service, gi
 		GitHubService:     githubService,
 		DemoMode:          demoMode,
 	}
-	statusMessage := "Creating PR for " + modal.GetHeadBranch()
+	cmd, errStr := SubmitPRCmd(input)
+	if errStr != "" {
+		return SubmitPRResult{StatusMessage: errStr}
+	}
+	var statusMessage string
 	if demoMode {
 		statusMessage = "Creating PR (demo)..."
 	} else {
 		statusMessage = fmt.Sprintf("%s %s and creating PR...", util.If(modal.NeedsMoveBookmark(), "Moving bookmark", "Pushing"), modal.GetHeadBranch())
-	}
-	cmd, errStr := SubmitPRCmd(input)
-	if errStr != "" {
-		return SubmitPRResult{StatusMessage: errStr}
 	}
 	return SubmitPRResult{Cmd: cmd, StatusMessage: statusMessage}
 }

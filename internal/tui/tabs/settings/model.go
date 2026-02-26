@@ -73,7 +73,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m.handleKeyMsg(msg)
 	case zone.MsgZoneInBounds:
 		if m.zoneManager != nil {
-			if zoneID := m.resolveClickedZone(msg); zoneID != "" {
+			zoneID := m.resolveClickedZone(msg)
+			if zoneID != "" {
 				return m.routeZoneToPanel(zoneID)
 			}
 		}
@@ -420,10 +421,8 @@ func (m *Model) SetSettingInputValue(index int, value string) {
 	if index == 0 {
 		m.githubModel.SetToken(value)
 	}
-	// Other indices map to jira/codecks/tickets - could be added if needed
+	// Other indices (jira/codecks/tickets) could be set here if needed
 }
-
-// UpdateRepository updates the repository (no-op for settings).
 func (m *Model) UpdateRepository(repo *internal.Repository) {}
 
 // Getters for toggle/state (delegate to sub-models)
