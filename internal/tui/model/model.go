@@ -417,7 +417,8 @@ func (m *Model) startCreatePR() {
 		return
 	}
 	idx := m.GetSelectedCommit()
-	res := prformtab.OpenCreatePR(&m.prFormModal, m.appState.Repository, idx, m.bookmarkModal.GetJiraBookmarkTitles(), m.width-10, m.height)
+	contentHeight := m.estimatedContentHeight()
+	res := prformtab.OpenCreatePR(&m.prFormModal, m.appState.Repository, idx, m.bookmarkModal.GetJiraBookmarkTitles(), m.width-10, contentHeight)
 	if !res.Ok {
 		m.appState.StatusMessage = res.StatusMessage
 		return
@@ -525,6 +526,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.desceditModal.SetDimensions(inputWidth, max(m.height-12, 3))
 		m.prFormModal.GetBodyInput().SetWidth(inputWidth)
 		m.prFormModal.GetTitleInput().Width = inputWidth
+		// PR form body uses full content height when in create-PR view
+		contentHeight := m.estimatedContentHeight()
+		if m.appState.ViewMode == state.ViewCreatePR {
+			const fixedFormLines = 9
+			bodyH := contentHeight - fixedFormLines
+			if bodyH < 3 {
+				bodyH = 3
+			}
+			m.prFormModal.GetBodyInput().SetHeight(bodyH)
+		}
 		m.bookmarkModal.GetNameInput().Width = inputWidth
 
 		m.settingsTabModel.SetInputWidths(inputWidth - 10)
@@ -536,7 +547,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Propagate dimensions to tab models so they can render
 		cmds := util.PropagateUpdate(msg, &m.graphTabModel, &m.prsTabModel, &m.branchesTabModel, &m.ticketsTabModel, &m.settingsTabModel, &m.helpTabModel)
 		// Set content-area height on tabs so graph/files split fills the content area (not full window)
-		contentHeight := m.estimatedContentHeight()
 		m.graphTabModel.SetDimensions(m.width, contentHeight)
 		m.prsTabModel.SetDimensions(m.width, contentHeight)
 		m.branchesTabModel.SetDimensions(m.width, contentHeight)

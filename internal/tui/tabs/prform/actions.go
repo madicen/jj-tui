@@ -165,6 +165,7 @@ type OpenCreatePRResult struct {
 }
 
 // OpenCreatePR prepares and shows the PR creation dialog for the selected commit's bookmark.
+// height is the content area height (available lines). The body textarea uses the rest after fixed form lines.
 // Caller sets view mode and status message from the result.
 func OpenCreatePR(modal *Model, repo *internal.Repository, commitIdx int, jiraTitles map[string]string, width, height int) OpenCreatePRResult {
 	data := PrepareCreatePR(repo, commitIdx, jiraTitles)
@@ -179,12 +180,11 @@ func OpenCreatePR(modal *Model, repo *internal.Repository, commitIdx int, jiraTi
 	modal.SetBody("")
 	modal.GetTitleInput().Width = width
 	modal.GetBodyInput().SetWidth(width)
-	bodyHeight := height - 20
+	// Use full content height: fixed lines (title, branch, "Title:", title input, "Body:", buttons) ≈ 9
+	const fixedFormLines = 9
+	bodyHeight := height - fixedFormLines
 	if bodyHeight < 3 {
 		bodyHeight = 3
-	}
-	if bodyHeight > 8 {
-		bodyHeight = 8
 	}
 	modal.GetBodyInput().SetHeight(bodyHeight)
 	statusMessage := "Creating PR for " + data.HeadBranch
