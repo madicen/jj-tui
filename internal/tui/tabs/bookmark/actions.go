@@ -85,7 +85,14 @@ func OpenCreateBookmark(modal *Model, repo *internal.Repository, commitIdx int, 
 func OpenCreateBookmarkFromTicket(modal *Model, repo *internal.Repository, ticketKey, title, displayKey string, conflictSources []string, sanitize bool, width int) string {
 	modal.Show(-1, nil)
 	modal.SetFromJira(ticketKey, title, displayKey)
-	modal.SetBookmarkName(ticketKey)
+	defaultName := strings.TrimSpace(title)
+	if defaultName == "" {
+		defaultName = ticketKey
+	}
+	if sanitize {
+		defaultName = jj.SanitizeBookmarkName(defaultName)
+	}
+	modal.SetBookmarkName(defaultName)
 	modal.UpdateRepository(repo)
 	modal.SetNameConflictSources(conflictSources)
 	modal.UpdateNameExistsFromInput(sanitize)
