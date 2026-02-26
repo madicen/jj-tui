@@ -73,9 +73,7 @@ func (m Model) update(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
 		}
 		if app != nil {
 			app.StatusMessage = statusMsg
-			if msg.InCreateBookmarkView {
-				// Caller (main) sets bookmark conflict sources after UpdateWithApp.
-			}
+			// When InCreateBookmarkView, caller (main) sets bookmark conflict sources after UpdateWithApp.
 			return m, nil
 		}
 		return m, ApplyBranchesLoadedEffect{
