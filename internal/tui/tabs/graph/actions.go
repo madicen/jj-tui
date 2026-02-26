@@ -20,6 +20,9 @@ import (
 // HandleRequest runs the requested graph action using the given context.
 func HandleRequest(r Request, ctx *RequestContext) Result {
 	if ctx == nil {
+		if r.Checkout {
+			return Result{Status: "Cannot edit: repository not loaded"}
+		}
 		return Result{}
 	}
 	if r.LoadChangedFiles != nil {
@@ -34,6 +37,9 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 		return Result{FollowUp: FollowUpLoadChangedFiles, ChangeID: commit.ChangeID, CommitIndex: idx}
 	}
 	if ctx.JJService == nil && !r.StartEditDescription && !r.StartRebaseMode && r.ResolveDivergent == nil {
+		if r.Checkout {
+			return Result{Status: "Cannot edit: not in a jj repository"}
+		}
 		return Result{}
 	}
 	if r.Checkout {
@@ -178,7 +184,13 @@ func executeCheckout(ctx *RequestContext) (tea.Cmd, string) {
 	if !ctx.IsSelectedCommitValid() {
 		return nil, ""
 	}
+	if ctx.JJService == nil {
+		return nil, "Cannot edit: not in a jj repository"
+	}
 	commit := ctx.Repository.Graph.Commits[ctx.SelectedCommit]
+	if commit.IsWorking {
+		return nil, "Already editing this commit"
+	}
 	if commit.Immutable {
 		return nil, "Cannot edit: commit is immutable"
 	}
@@ -546,6 +558,8 @@ type FileRevertedInput struct {
 }
 
 // HandleFileMoveCompletedMsg mutates app and returns the Cmd to run.
+// Caller (main model) should run LoadChangedFiles for the currently selected commit after updating the graph;
+// we do not run LoadRepository here to avoid RepositoryLoadedMsg re-entering and overwriting graph/selection state.
 func HandleFileMoveCompletedMsg(input FileMoveInput, app *state.AppState) tea.Cmd {
 	var oldPRs []internal.GitHubPR
 	if app.Repository != nil {
@@ -560,15 +574,11 @@ func HandleFileMoveCompletedMsg(input FileMoveInput, app *state.AppState) tea.Cm
 		directionText = "new child commit"
 	}
 	app.StatusMessage = fmt.Sprintf("Moved %s to %s", input.FilePath, directionText)
-	var cmds []tea.Cmd
-	cmds = append(cmds, data.LoadRepository(app.JJService))
-	if input.ChangedFilesCommitID != "" {
-		cmds = append(cmds, LoadChangedFilesCmd(app.JJService, input.ChangedFilesCommitID))
-	}
-	return tea.Batch(cmds...)
+	return nil
 }
 
 // HandleFileRevertedMsg mutates app and returns the Cmd to run.
+// Caller (main model) should run LoadChangedFiles for the currently selected commit after updating the graph.
 func HandleFileRevertedMsg(input FileRevertedInput, app *state.AppState) tea.Cmd {
 	var oldPRs []internal.GitHubPR
 	if app.Repository != nil {
@@ -579,12 +589,7 @@ func HandleFileRevertedMsg(input FileRevertedInput, app *state.AppState) tea.Cmd
 		app.Repository.PRs = oldPRs
 	}
 	app.StatusMessage = fmt.Sprintf("Reverted changes to %s", input.FilePath)
-	var cmds []tea.Cmd
-	cmds = append(cmds, data.LoadRepository(app.JJService))
-	if input.ChangedFilesCommitID != "" {
-		cmds = append(cmds, LoadChangedFilesCmd(app.JJService, input.ChangedFilesCommitID))
-	}
-	return tea.Batch(cmds...)
+	return nil
 }
 
 // UndoErrorInfo is returned when undo completed with an error.

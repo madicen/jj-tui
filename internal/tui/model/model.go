@@ -1062,7 +1062,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case divergenttab.DivergentCommitResolvedMsg:
 		return m, divergenttab.HandleDivergentCommitResolvedMsg(msg, &m.appState)
 	case graphtab.FileMoveCompletedMsg:
-		cmd := graphtab.HandleFileMoveCompletedMsg(graphtab.FileMoveInput{
+		graphtab.HandleFileMoveCompletedMsg(graphtab.FileMoveInput{
 			FileMoveCompletedMsg: msg,
 			ChangedFilesCommitID: m.graphTabModel.GetChangedFilesCommitID(),
 		}, &m.appState)
@@ -1074,10 +1074,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					break
 				}
 			}
+			// Load changed files for the currently selected commit so the files pane updates.
+			idx := m.graphTabModel.GetSelectedCommit()
+			commits := m.appState.Repository.Graph.Commits
+			if idx >= 0 && idx < len(commits) && m.appState.JJService != nil {
+				return m, graphtab.LoadChangedFilesCmd(m.appState.JJService, commits[idx].ChangeID)
+			}
 		}
-		return m, cmd
+		return m, nil
 	case graphtab.FileRevertedMsg:
-		cmd := graphtab.HandleFileRevertedMsg(graphtab.FileRevertedInput{
+		graphtab.HandleFileRevertedMsg(graphtab.FileRevertedInput{
 			FileRevertedMsg:      msg,
 			ChangedFilesCommitID: m.graphTabModel.GetChangedFilesCommitID(),
 		}, &m.appState)
@@ -1089,8 +1095,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					break
 				}
 			}
+			idx := m.graphTabModel.GetSelectedCommit()
+			commits := m.appState.Repository.Graph.Commits
+			if idx >= 0 && idx < len(commits) && m.appState.JJService != nil {
+				return m, graphtab.LoadChangedFilesCmd(m.appState.JJService, commits[idx].ChangeID)
+			}
 		}
-		return m, cmd
+		return m, nil
 	case descedittab.DescriptionSavedMsg:
 		cmd := descedittab.HandleDescriptionSavedMsg(msg, &m.appState)
 		m.desceditModal.Hide()

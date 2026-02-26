@@ -96,7 +96,7 @@ func BuildRequestContextFromApp(app *state.AppState, m *GraphModel) *RequestCont
 	if app == nil || app.Repository == nil {
 		return nil
 	}
-	githubAvailable := app.GitHubService != nil
+	githubAvailable := app.GitHubService != nil || app.DemoMode
 	return BuildRequestContext(&ContextInput{
 		JJService:            app.JJService,
 		Repository:           app.Repository,

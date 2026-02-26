@@ -39,17 +39,21 @@ Down
 Sleep 1.5s
 
 # === SCENE 2: Create a new commit from current changes ===
-# Press 'e' to create new commit
+# Press 'e' to edit different commit
 Type "e"
-Sleep 1s
+Sleep 2s
+Up
+Sleep 500ms
+Up
+Sleep 500ms
 Tab
-Sleep 1s
+Sleep 2s
 Type "]"
-Sleep 1s
+Sleep 2s
 Tab
 Sleep 1s
 Up
-Sleep 1s
+Sleep 2s
 
 # === SCENE 3: Describe the commit ===
 # Press 'd' to describe
@@ -64,19 +68,19 @@ Sleep 1.5s
 
 # === SCENE 4: Rebase on main ===
 Type "r"
-Sleep 1s
+Sleep 500ms
 Down
-Sleep 1s
+Sleep 500ms
 Down
-Sleep 1s
+Sleep 500ms
 Down
-Sleep 1s
+Sleep 500ms
 Down
-Sleep 1s
+Sleep 500ms
 Down
-Sleep 1s
+Sleep 500ms
 Enter
-Sleep 1.5s
+Sleep 2s
 
 # === SCENE 5: Find a ticket to work on ===
 # Navigate to Tickets tab
@@ -96,10 +100,21 @@ Enter
 Sleep 2s
 
 # === SCENE 6: Create a PR ===
+Up
+Sleep 500ms
+Up
+Sleep 500ms
+Up
+Sleep 500ms
+Up
+Sleep 500ms
+Up
+Sleep 500ms
 Type "c"
 Sleep 1s
 Tab
 Type "Created new utility function for this"
+Sleep 1s
 Ctrl+S
 Sleep 2s
 
@@ -120,7 +135,7 @@ Sleep 1.5s
 
 # Change ticket status
 Type "c"
-Sleep 1s
+Sleep 2s
 Type "D"
 Sleep 2s
 
