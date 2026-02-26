@@ -9,6 +9,7 @@ import (
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 )
 
@@ -48,13 +49,17 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	// Handle request messages (main forwards these to us)
 	switch msg.(type) {
 	case SaveRequestedMsg:
-		return m, PerformSaveCmd(m.editingCommitID, m.descriptionInput.Value())
+		return m, state.NavigateTarget{
+			Kind:           state.NavigateSaveDescription,
+			SaveCommitID:   m.editingCommitID,
+			SaveDescription: m.descriptionInput.Value(),
+		}.Cmd()
 	case CancelRequestedMsg:
 		m.shown = false
 		m.editingCommitID = ""
 		m.commitShortID = ""
 		m.descriptionInput.SetValue("")
-		return m, PerformCancelCmd()
+		return m, state.NavigateTarget{Kind: state.NavigateBackToGraph, StatusMessage: "Description edit cancelled"}.Cmd()
 	}
 	switch msg := msg.(type) {
 	case zone.MsgZoneInBounds:

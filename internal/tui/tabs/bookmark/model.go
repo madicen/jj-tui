@@ -13,6 +13,7 @@ import (
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 )
 
@@ -68,9 +69,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case CancelRequestedMsg:
 		m.shown = false
 		m.nameInput.SetValue("")
-		return m, PerformCancelCmd()
+		return m, state.NavigateTarget{Kind: state.NavigateBackToGraph, StatusMessage: "Bookmark creation cancelled"}.Cmd()
 	case SubmitRequestedMsg:
-		return m, PerformSubmitCmd()
+		return m, state.NavigateTarget{Kind: state.NavigateSubmitBookmark}.Cmd()
 	}
 	switch msg := msg.(type) {
 	case zone.MsgZoneInBounds:

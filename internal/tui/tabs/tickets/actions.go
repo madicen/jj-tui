@@ -8,6 +8,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen/jj-tui/internal/config"
 	ticketdomain "github.com/madicen/jj-tui/internal/tickets"
+	"github.com/madicen/jj-tui/internal/tui/state"
+	"github.com/madicen/jj-tui/internal/tui/util"
 )
 
 // LoadTicketsCmd returns a command that fetches tickets and sends TicketsLoadedMsg or LoadErrorMsg.
@@ -143,11 +145,13 @@ func ExecuteRequest(r Request, ctx *RequestContext) (statusMsg string, cmd tea.C
 		if ctx.TicketService == nil || ctx.TransitionInProgress {
 			return "", nil
 		}
+		// When app is non-nil, caller (update) sets status and toggles mode; no cmd.
+		// When app is nil, return effect so main sets status and toggles.
 		status := "Ready"
 		if !ctx.IsStatusChangeMode {
 			status = "Change status (i/D/B/N)"
 		}
-		return "", ToggleModeEffectCmd(status)
+		return status, ToggleModeEffectCmd(status)
 	}
 	if r.StartBookmarkFromTicket {
 		if !ctx.SelectedTicketValid() || ctx.TicketService == nil {
@@ -157,10 +161,11 @@ func ExecuteRequest(r Request, ctx *RequestContext) (statusMsg string, cmd tea.C
 		if ticket == nil {
 			return "", nil
 		}
-		return "", OpenCreateBookmarkFromTicketEffect{
-			TicketKey:  ticket.Key,
-			Title:     ticket.Summary,
-			DisplayKey: ticket.DisplayKey,
+		return "", state.NavigateTarget{
+			Kind:            state.NavigateCreateBookmarkFromTicket,
+			TicketKey:       ticket.Key,
+			TicketTitle:     ticket.Summary,
+			TicketDisplayKey: ticket.DisplayKey,
 		}.Cmd()
 	}
 	if r.OpenInBrowser {
@@ -175,7 +180,7 @@ func ExecuteRequest(r Request, ctx *RequestContext) (statusMsg string, cmd tea.C
 		if url == "" {
 			return "", nil
 		}
-		return "", OpenURLEffectCmd(url)
+		return "", util.OpenURL(url)
 	}
 	if r.TransitionID != "" {
 		if ctx.TicketService == nil || ctx.TransitionInProgress {

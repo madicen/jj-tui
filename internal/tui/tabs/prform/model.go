@@ -10,6 +10,7 @@ import (
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 )
 
@@ -65,9 +66,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case CancelRequestedMsg:
 		m.shown = false
 		m.Reset()
-		return m, PerformCancelCmd()
+		return m, state.NavigateTarget{Kind: state.NavigateBackFromPRForm, StatusMessage: "PR creation cancelled"}.Cmd()
 	case SubmitRequestedMsg:
-		return m, PerformSubmitCmd()
+		return m, state.NavigateTarget{Kind: state.NavigateSubmitPR}.Cmd()
 	}
 	switch msg := msg.(type) {
 	case zone.MsgZoneInBounds:

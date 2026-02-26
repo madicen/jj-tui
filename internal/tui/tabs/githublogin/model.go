@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 	"github.com/madicen/jj-tui/internal/tui/util"
 )
@@ -39,7 +40,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "esc":
-			return m, PerformCancelCmd()
+			return m, state.NavigateTarget{Kind: state.NavigateGitHubLoginCancel, StatusMessage: "GitHub login cancelled"}.Cmd()
 		case "c":
 			if m.userCode != "" {
 				return m, util.CopyToClipboard(m.userCode)

@@ -9,6 +9,7 @@ import (
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 )
 
@@ -157,9 +158,13 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.shown = false
-		return m, PerformCancelCmd()
+		return m, state.NavigateTarget{Kind: state.NavigateBackToBranches, StatusMessage: "Conflict resolution cancelled"}.Cmd()
 	case "enter":
-		return m, PerformResolveCmd(m.bookmarkName, m.GetSelectedOption())
+		return m, state.NavigateTarget{
+			Kind:                 state.NavigateResolveConflict,
+			ConflictBookmarkName: m.bookmarkName,
+			ConflictResolution:  m.GetSelectedOption(),
+		}.Cmd()
 	case "j", "down":
 		if m.selectedOption < 1 {
 			m.selectedOption++
@@ -208,10 +213,14 @@ func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
 		m.selectedOption = 1
 		return m, nil
 	case mouse.ZoneConflictConfirm:
-		return m, PerformResolveCmd(m.bookmarkName, m.GetSelectedOption())
+		return m, state.NavigateTarget{
+			Kind:                 state.NavigateResolveConflict,
+			ConflictBookmarkName: m.bookmarkName,
+			ConflictResolution:  m.GetSelectedOption(),
+		}.Cmd()
 	case mouse.ZoneConflictCancel:
 		m.shown = false
-		return m, PerformCancelCmd()
+		return m, state.NavigateTarget{Kind: state.NavigateBackToBranches, StatusMessage: "Conflict resolution cancelled"}.Cmd()
 	}
 	return m, nil
 }

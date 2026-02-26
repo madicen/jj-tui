@@ -10,6 +10,7 @@ import (
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 )
 
@@ -138,11 +139,15 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.shown = false
-		return m, PerformCancelCmd()
+		return m, state.NavigateTarget{Kind: state.NavigateBackToGraph, StatusMessage: "Divergent commit resolution cancelled"}.Cmd()
 	case "enter":
 		keepCommitID := m.GetSelectedCommitID()
 		if keepCommitID != "" {
-			return m, PerformResolveCmd(m.changeID, keepCommitID)
+			return m, state.NavigateTarget{
+				Kind:                   state.NavigateResolveDivergent,
+				DivergentChangeID:     m.changeID,
+				DivergentKeepCommitID: keepCommitID,
+			}.Cmd()
 		}
 		return m, nil
 	case "j", "down":
@@ -203,13 +208,17 @@ func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
 	if zoneID == mouse.ZoneDivergentConfirm {
 		keepCommitID := m.GetSelectedCommitID()
 		if keepCommitID != "" {
-			return m, PerformResolveCmd(m.changeID, keepCommitID)
+			return m, state.NavigateTarget{
+				Kind:                   state.NavigateResolveDivergent,
+				DivergentChangeID:     m.changeID,
+				DivergentKeepCommitID: keepCommitID,
+			}.Cmd()
 		}
 		return m, nil
 	}
 	if zoneID == mouse.ZoneDivergentCancel {
 		m.shown = false
-		return m, PerformCancelCmd()
+		return m, state.NavigateTarget{Kind: state.NavigateBackToGraph, StatusMessage: "Divergent commit resolution cancelled"}.Cmd()
 	}
 	return m, nil
 }
