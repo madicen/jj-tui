@@ -141,6 +141,12 @@ func ExecuteRequest(r Request, ctx *RequestContext) (statusMsg string, cmd tea.C
 		return "", nil
 	}
 
+	if r.LoadTransitionsForSelection {
+		if ctx.TicketService != nil {
+			return "", LoadTransitionsCmd(ctx.TicketService, ctx.TicketList, ctx.SelectedTicket)
+		}
+		return "", nil
+	}
 	if r.ToggleStatusChangeMode {
 		if ctx.TicketService == nil || ctx.TransitionInProgress {
 			return "", nil
