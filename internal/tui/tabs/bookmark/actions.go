@@ -49,7 +49,20 @@ type SubmitInput struct {
 	SanitizeBookmarks         bool
 }
 
-// SubmitCmd validates and runs the appropriate command (CreateBookmarkCmd or CreateBranchFromMain).
+// IndexOfWorkingCopy returns the graph index of the working copy commit, or -1 if not found.
+func IndexOfWorkingCopy(repo *internal.Repository) int {
+	if repo == nil {
+		return -1
+	}
+	for i, c := range repo.Graph.Commits {
+		if c.IsWorking {
+			return i
+		}
+	}
+	return -1
+}
+
+// SubmitCmd validates and runs the appropriate command (CreateBookmarkCmd or CreateBookmarkFromTicketCmd).
 // Returns (cmd, ""); if validation fails returns (nil, validationError). Caller sets status from validationError.
 func SubmitCmd(input SubmitInput) (tea.Cmd, string) {
 	bookmarkName := strings.TrimSpace(input.BookmarkName)
@@ -60,7 +73,11 @@ func SubmitCmd(input SubmitInput) (tea.Cmd, string) {
 		return nil, err
 	}
 	if input.FromJira {
-		return CreateBranchFromMainCmd(input.JJService, bookmarkName, input.JiraKey), ""
+		// Create bookmark on current commit (commitID set from working copy in SubmitBookmark)
+		if input.CommitID == "" {
+			return nil, "No current commit (working copy not found)"
+		}
+		return CreateBookmarkFromTicketCmd(input.JJService, bookmarkName, input.CommitID, input.JiraKey), ""
 	}
 	return CreateBookmarkCmd(input.JJService, bookmarkName, input.CommitID), ""
 }
@@ -80,19 +97,40 @@ func OpenCreateBookmark(modal *Model, repo *internal.Repository, commitIdx int, 
 	return fmt.Sprintf("Create or move bookmark on %s", data.CommitShortID)
 }
 
-// OpenCreateBookmarkFromTicket prepares and shows the bookmark creation dialog to create a branch from main for the given ticket.
+// OpenCreateBookmarkFromTicket prepares and shows the bookmark creation dialog to create a branch (bookmark) on the current commit for the given ticket.
 // Caller sets view mode and status message from the returned value.
 func OpenCreateBookmarkFromTicket(modal *Model, repo *internal.Repository, ticketKey, title, displayKey string, conflictSources []string, sanitize bool, width int) string {
-	modal.Show(-1, nil)
+	workingCopyIdx := IndexOfWorkingCopy(repo)
+	if workingCopyIdx < 0 {
+		modal.Show(-1, nil)
+		modal.SetFromJira(ticketKey, title, displayKey)
+		modal.UpdateRepository(repo)
+		modal.SetNameConflictSources(conflictSources)
+		modal.UpdateNameExistsFromInput(sanitize)
+		ni := modal.GetNameInput()
+		ni.SetValue("")
+		ni.Focus()
+		ni.Width = width
+		return fmt.Sprintf("Create branch for ticket %s (no working copy)", ticketKey)
+	}
+	existingBookmarks := GetExistingBookmarks(repo, workingCopyIdx)
+	modal.Show(workingCopyIdx, existingBookmarks)
 	modal.SetFromJira(ticketKey, title, displayKey)
-	modal.SetBookmarkName(ticketKey)
+	defaultName := strings.TrimSpace(title)
+	if defaultName == "" {
+		defaultName = ticketKey
+	}
+	if sanitize {
+		defaultName = jj.SanitizeBookmarkName(defaultName)
+	}
+	modal.SetBookmarkName(defaultName)
 	modal.UpdateRepository(repo)
 	modal.SetNameConflictSources(conflictSources)
 	modal.UpdateNameExistsFromInput(sanitize)
 	ni := modal.GetNameInput()
 	ni.Focus()
 	ni.Width = width
-	return fmt.Sprintf("Create branch from main for ticket %s", ticketKey)
+	return fmt.Sprintf("Create branch for ticket %s on current commit", ticketKey)
 }
 
 // SubmitBookmark builds submit input from modal state and repo/config, handles Jira side effects, and runs the submit command.
@@ -102,6 +140,12 @@ func SubmitBookmark(modal *Model, repo *internal.Repository, cfg *config.Config,
 	var commitID string
 	if repo != nil && commitIdx >= 0 && commitIdx < len(repo.Graph.Commits) {
 		commitID = repo.Graph.Commits[commitIdx].ChangeID
+	}
+	// When FromJira we set commitIdx to working copy in OpenCreateBookmarkFromTicket; if that failed, commitID may be empty
+	if modal.IsFromJira() && commitID == "" && repo != nil {
+		if wcIdx := IndexOfWorkingCopy(repo); wcIdx >= 0 && wcIdx < len(repo.Graph.Commits) {
+			commitID = repo.Graph.Commits[wcIdx].ChangeID
+		}
 	}
 	if modal.GetSelectedBookmarkIdx() >= 0 {
 		return nil, "Moving existing bookmark not yet supported"
@@ -155,7 +199,7 @@ func SubmitBookmark(modal *Model, repo *internal.Repository, cfg *config.Config,
 		return nil, errStr
 	}
 	if input.FromJira {
-		return cmd, fmt.Sprintf("Creating branch '%s' from main...", strings.TrimSpace(input.BookmarkName))
+		return cmd, fmt.Sprintf("Creating bookmark '%s' on current commit...", strings.TrimSpace(input.BookmarkName))
 	}
 	return cmd, fmt.Sprintf("Creating bookmark '%s'...", strings.TrimSpace(input.BookmarkName))
 }
@@ -216,6 +260,16 @@ func MoveBookmarkCmd(svc *jj.Service, bookmarkName, commitID string) tea.Cmd {
 			return util.ErrorMsg{Err: fmt.Errorf("failed to move bookmark: %w", err)}
 		}
 		return BookmarkCreatedMsg{BookmarkName: bookmarkName, CommitID: commitID, WasMoved: true}
+	}
+}
+
+// CreateBookmarkFromTicketCmd creates a bookmark on the given commit (current commit) for a ticket and returns BookmarkCreatedMsg with TicketKey for optional Jira transition.
+func CreateBookmarkFromTicketCmd(svc *jj.Service, bookmarkName, commitID, ticketKey string) tea.Cmd {
+	return func() tea.Msg {
+		if err := svc.CreateBookmarkOnCommit(context.Background(), bookmarkName, commitID); err != nil {
+			return util.ErrorMsg{Err: fmt.Errorf("failed to create bookmark: %w", err)}
+		}
+		return BookmarkCreatedMsg{BookmarkName: bookmarkName, CommitID: commitID, WasMoved: false, TicketKey: ticketKey}
 	}
 }
 

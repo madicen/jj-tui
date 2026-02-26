@@ -6,6 +6,7 @@ import (
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/state"
 )
 
 // Model represents the warning modal (e.g., for empty commit descriptions)
@@ -40,7 +41,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	if req, ok := msg.(EditCommitRequestedMsg); ok {
 		m.shown = false
 		m.commits = nil
-		return m, PerformEditCommitCmd(req.Commit)
+		return m, state.NavigateTarget{Kind: state.NavigateEditDescription, Commit: req.Commit}.Cmd()
 	}
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
@@ -90,10 +91,10 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "esc":
 		m.shown = false
 		m.commits = nil
-		return m, PerformCancelCmd()
+		return m, state.NavigateTarget{Kind: state.NavigateWarningCancel, StatusMessage: "Cancelled"}.Cmd()
 	case "enter":
 		if len(m.commits) > 0 && m.selectedIdx < len(m.commits) {
-			return m, EditCommitRequestedCmd(m.commits[m.selectedIdx])
+			return m, state.NavigateTarget{Kind: state.NavigateEditDescription, Commit: m.commits[m.selectedIdx]}.Cmd()
 		}
 		return m, nil
 	case "j", "down":
@@ -137,7 +138,7 @@ func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
 			commit := m.commits[m.selectedIdx]
 			m.shown = false
 			m.commits = nil
-			return m, PerformEditCommitCmd(commit)
+			return m, state.NavigateTarget{Kind: state.NavigateEditDescription, Commit: commit}.Cmd()
 		}
 		m.shown = false
 		m.commits = nil
@@ -145,7 +146,7 @@ func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
 	case mouse.ZoneWarningDismiss:
 		m.shown = false
 		m.commits = nil
-		return m, PerformCancelCmd()
+		return m, state.NavigateTarget{Kind: state.NavigateWarningCancel, StatusMessage: "Cancelled"}.Cmd()
 	}
 	return m, nil
 }

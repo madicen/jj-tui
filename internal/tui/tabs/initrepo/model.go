@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 )
 
@@ -49,9 +50,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
-		return m, RequestDismissCmd()
+		return m, state.NavigateTarget{Kind: state.NavigateDismissInit, StatusMessage: "Dismissed"}.Cmd()
 	case "i":
-		return m, RequestInitCmd()
+		return m, state.NavigateTarget{Kind: state.NavigateRunInit}.Cmd()
 	case "ctrl+q", "ctrl+c":
 		return m, tea.Quit
 	}
@@ -71,7 +72,7 @@ func (m Model) resolveClickedZone(msg zone.MsgZoneInBounds) string {
 
 func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
 	if zoneID == mouse.ZoneActionJJInit {
-		return m, RequestInitCmd()
+		return m, state.NavigateTarget{Kind: state.NavigateRunInit}.Cmd()
 	}
 	return m, nil
 }

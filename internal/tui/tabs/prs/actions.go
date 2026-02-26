@@ -145,7 +145,7 @@ func ExecuteRequest(r Request, ctx *RequestContext) (statusMsg string, cmd tea.C
 		if ctx.DemoMode {
 			return fmt.Sprintf("PR #%d: %s (demo mode - browser disabled)", pr.Number, pr.URL), nil
 		}
-		return fmt.Sprintf("Opening PR #%d...", pr.Number), OpenPRURLEffectCmd(pr.URL)
+		return fmt.Sprintf("Opening PR #%d...", pr.Number), util.OpenURL(pr.URL)
 	}
 	if r.MergePR {
 		if pr.State != "open" {

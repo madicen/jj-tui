@@ -5,6 +5,7 @@ import (
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/state"
 )
 
 // Model represents the error modal (generic errors only; "not a jj repo" is handled by initrepo tab).
@@ -62,9 +63,9 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "ctrl+q", "ctrl+c":
 		return m, tea.Quit
 	case "ctrl+r":
-		return m, RequestRefreshCmd()
+		return m, state.NavigateTarget{Kind: state.NavigateDismissErrorAndRefresh}.Cmd()
 	case "esc":
-		return m, RequestDismissCmd()
+		return m, state.NavigateTarget{Kind: state.NavigateDismissError, StatusMessage: "Error dismissed"}.Cmd()
 	case "c":
 		return m, RequestCopyCmd()
 	}
@@ -97,9 +98,9 @@ func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
 	case mouse.ZoneActionCopyError:
 		return m, RequestCopyCmd()
 	case mouse.ZoneActionDismissError:
-		return m, RequestDismissCmd()
+		return m, state.NavigateTarget{Kind: state.NavigateDismissError, StatusMessage: "Error dismissed"}.Cmd()
 	case mouse.ZoneActionRetry:
-		return m, RequestRefreshCmd()
+		return m, state.NavigateTarget{Kind: state.NavigateDismissErrorAndRefresh}.Cmd()
 	case mouse.ZoneActionQuit:
 		return m, tea.Quit
 	}

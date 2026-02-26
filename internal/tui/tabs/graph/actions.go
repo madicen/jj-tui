@@ -14,11 +14,15 @@ import (
 	"github.com/madicen/jj-tui/internal/tui/util"
 	bookmarktab "github.com/madicen/jj-tui/internal/tui/tabs/bookmark"
 	descedittab "github.com/madicen/jj-tui/internal/tui/tabs/descedit"
+	prstab "github.com/madicen/jj-tui/internal/tui/tabs/prs"
 )
 
 // HandleRequest runs the requested graph action using the given context.
 func HandleRequest(r Request, ctx *RequestContext) Result {
 	if ctx == nil {
+		if r.Checkout {
+			return Result{Status: "Cannot edit: repository not loaded"}
+		}
 		return Result{}
 	}
 	if r.LoadChangedFiles != nil {
@@ -33,6 +37,9 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 		return Result{FollowUp: FollowUpLoadChangedFiles, ChangeID: commit.ChangeID, CommitIndex: idx}
 	}
 	if ctx.JJService == nil && !r.StartEditDescription && !r.StartRebaseMode && r.ResolveDivergent == nil {
+		if r.Checkout {
+			return Result{Status: "Cannot edit: not in a jj repository"}
+		}
 		return Result{}
 	}
 	if r.Checkout {
@@ -177,7 +184,13 @@ func executeCheckout(ctx *RequestContext) (tea.Cmd, string) {
 	if !ctx.IsSelectedCommitValid() {
 		return nil, ""
 	}
+	if ctx.JJService == nil {
+		return nil, "Cannot edit: not in a jj repository"
+	}
 	commit := ctx.Repository.Graph.Commits[ctx.SelectedCommit]
+	if commit.IsWorking {
+		return nil, "Already editing this commit"
+	}
 	if commit.Immutable {
 		return nil, "Cannot edit: commit is immutable"
 	}
@@ -304,6 +317,8 @@ func CreateBookmarkCmd(jjService *jj.Service, bookmarkName, commitID string) tea
 }
 
 // ApplyResult applies the result: updates the graph model, mutates app state, and returns the Cmd to run.
+// For follow-ups that require main to open a modal (edit description, create bookmark, warning, create PR),
+// it returns a state.NavigateMsg cmd. For load/update PR it sets app status and returns the cmd directly.
 func ApplyResult(res Result, graphModel *GraphModel, ctx *RequestContext, app *state.AppState) tea.Cmd {
 	if res.Status != "" {
 		app.StatusMessage = res.Status
@@ -314,17 +329,18 @@ func ApplyResult(res Result, graphModel *GraphModel, ctx *RequestContext, app *s
 			graphModel.SelectCommit(res.CommitIndex)
 		}
 		if ctx != nil && ctx.JJService != nil {
-			return LoadChangedFilesEffectCmd(LoadChangedFilesCmd(ctx.JJService, res.ChangeID))
+			return LoadChangedFilesCmd(ctx.JJService, res.ChangeID)
 		}
 		return nil
 	case FollowUpResolveDivergent:
 		if ctx != nil && ctx.JJService != nil {
-			return LoadDivergentEffectCmd("Loading divergent commit info...", LoadDivergentCommitInfoCmd(ctx.JJService, res.ChangeID))
+			app.StatusMessage = "Loading divergent commit info..."
+			return LoadDivergentCommitInfoCmd(ctx.JJService, res.ChangeID)
 		}
 		return nil
 	case FollowUpStartEditDescription:
 		if ctx != nil && ctx.Repository != nil && res.CommitIndex >= 0 && res.CommitIndex < len(ctx.Repository.Graph.Commits) {
-			return StartEditDescriptionCmd(ctx.Repository.Graph.Commits[res.CommitIndex])
+			return state.NavigateTarget{Kind: state.NavigateEditDescription, Commit: ctx.Repository.Graph.Commits[res.CommitIndex]}.Cmd()
 		}
 		return nil
 	case FollowUpStartRebaseMode:
@@ -334,11 +350,16 @@ func ApplyResult(res Result, graphModel *GraphModel, ctx *RequestContext, app *s
 		}
 		return nil
 	case FollowUpCreateBookmark:
-		return CreateBookmarkEffectCmd()
+		return state.NavigateTarget{Kind: state.NavigateCreateBookmark}.Cmd()
 	case FollowUpShowEmptyDescWarning:
-		return ShowEmptyDescWarningCmd(res.WarningTitle, res.WarningMessage, res.WarningCommits)
+		return state.NavigateTarget{
+			Kind:          state.NavigateWarning,
+			WarningTitle:  res.WarningTitle,
+			WarningMessage: res.WarningMessage,
+			WarningCommits: res.WarningCommits,
+		}.Cmd()
 	case FollowUpCreatePR:
-		return StartCreatePRCmd()
+		return state.NavigateTarget{Kind: state.NavigateCreatePR}.Cmd()
 	case FollowUpUpdatePR:
 		if ctx == nil || ctx.Repository == nil || !ctx.IsSelectedCommitValid() {
 			return nil
@@ -350,7 +371,12 @@ func ApplyResult(res Result, graphModel *GraphModel, ctx *RequestContext, app *s
 		}
 		commit := ctx.Repository.Graph.Commits[ctx.SelectedCommit]
 		needsMoveBookmark := !slices.Contains(commit.Branches, prBranch)
-		return UpdatePREffectCmd(prBranch, commit.ChangeID, needsMoveBookmark)
+		if needsMoveBookmark {
+			app.StatusMessage = fmt.Sprintf("Moving %s and pushing...", prBranch)
+		} else {
+			app.StatusMessage = fmt.Sprintf("Pushing %s...", prBranch)
+		}
+		return prstab.PushToPRCmd(ctx.JJService, prBranch, commit.ChangeID, needsMoveBookmark)
 	}
 	if res.Cmd != nil {
 		if res.PerformRebase {
@@ -532,6 +558,8 @@ type FileRevertedInput struct {
 }
 
 // HandleFileMoveCompletedMsg mutates app and returns the Cmd to run.
+// Caller (main model) should run LoadChangedFiles for the currently selected commit after updating the graph;
+// we do not run LoadRepository here to avoid RepositoryLoadedMsg re-entering and overwriting graph/selection state.
 func HandleFileMoveCompletedMsg(input FileMoveInput, app *state.AppState) tea.Cmd {
 	var oldPRs []internal.GitHubPR
 	if app.Repository != nil {
@@ -546,15 +574,11 @@ func HandleFileMoveCompletedMsg(input FileMoveInput, app *state.AppState) tea.Cm
 		directionText = "new child commit"
 	}
 	app.StatusMessage = fmt.Sprintf("Moved %s to %s", input.FilePath, directionText)
-	var cmds []tea.Cmd
-	cmds = append(cmds, data.LoadRepository(app.JJService))
-	if input.ChangedFilesCommitID != "" {
-		cmds = append(cmds, LoadChangedFilesCmd(app.JJService, input.ChangedFilesCommitID))
-	}
-	return tea.Batch(cmds...)
+	return nil
 }
 
 // HandleFileRevertedMsg mutates app and returns the Cmd to run.
+// Caller (main model) should run LoadChangedFiles for the currently selected commit after updating the graph.
 func HandleFileRevertedMsg(input FileRevertedInput, app *state.AppState) tea.Cmd {
 	var oldPRs []internal.GitHubPR
 	if app.Repository != nil {
@@ -565,12 +589,7 @@ func HandleFileRevertedMsg(input FileRevertedInput, app *state.AppState) tea.Cmd
 		app.Repository.PRs = oldPRs
 	}
 	app.StatusMessage = fmt.Sprintf("Reverted changes to %s", input.FilePath)
-	var cmds []tea.Cmd
-	cmds = append(cmds, data.LoadRepository(app.JJService))
-	if input.ChangedFilesCommitID != "" {
-		cmds = append(cmds, LoadChangedFilesCmd(app.JJService, input.ChangedFilesCommitID))
-	}
-	return tea.Batch(cmds...)
+	return nil
 }
 
 // UndoErrorInfo is returned when undo completed with an error.
@@ -588,7 +607,8 @@ func HandleUndoCompletedMsg(msg UndoCompletedMsg, app *state.AppState) (tea.Cmd,
 	return data.LoadRepository(app.JJService), nil
 }
 
-// Effect types used by ApplyResult.
+// Effect types used by ApplyResult (only for FollowUps that require main; others set app and return cmd).
+// These are still sent when app is nil (e.g. tests). NavigateTarget.Cmd() is used when app is non-nil.
 type SetStatusEffect struct{ Status string }
 type StartEditDescriptionEffect struct{ Commit internal.Commit }
 type StartRebaseModeEffect struct{ Status string }
@@ -608,12 +628,6 @@ type LoadChangedFilesEffect struct{ Cmd tea.Cmd }
 type LoadDivergentEffect struct {
 	Status string
 	Cmd    tea.Cmd
-}
-type RunCmdEffect struct {
-	Cmd             tea.Cmd
-	PerformRebase   bool
-	NewCommitStatus string
-	SuccessStatus   string
 }
 
 func StartEditDescriptionCmd(commit internal.Commit) tea.Cmd {
@@ -650,10 +664,4 @@ func SetStatusCmd(status string) tea.Cmd {
 
 func StartRebaseModeCmd(status string) tea.Cmd {
 	return func() tea.Msg { return StartRebaseModeEffect{Status: status} }
-}
-
-func RunCmdEffectCmd(cmd tea.Cmd, performRebase bool, newCommitStatus, successStatus string) tea.Cmd {
-	return func() tea.Msg {
-		return RunCmdEffect{Cmd: cmd, PerformRebase: performRebase, NewCommitStatus: newCommitStatus, SuccessStatus: successStatus}
-	}
 }

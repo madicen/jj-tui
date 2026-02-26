@@ -252,6 +252,119 @@ func (m *Model) handleNavigateToBranchesTab() (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// handleNavigate performs view changes that only main can do (it owns modals and cross-tab state).
+func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
+	switch t.Kind {
+	case state.NavigateEditDescription:
+		if m.appState.Repository != nil {
+			for i, c := range m.appState.Repository.Graph.Commits {
+				if c.ChangeID == t.Commit.ChangeID {
+					m.graphTabModel.SelectCommit(i)
+					break
+				}
+			}
+		}
+		return m.startEditingDescription(t.Commit)
+	case state.NavigateCreateBookmark:
+		m.startCreateBookmark()
+		return m, branchestab.LoadBranchesCmd(m.appState.JJService, m.settingsTabModel.GetSettingsBranchLimit())
+	case state.NavigateCreateBookmarkFromTicket:
+		m.appState.ViewMode = state.ViewCreateBookmark
+		m.appState.StatusMessage = bookmarktab.OpenCreateBookmarkFromTicket(&m.bookmarkModal, m.appState.Repository, t.TicketKey, t.TicketTitle, t.TicketDisplayKey, m.branchesTabModel.BuildBookmarkNameConflictSources(), m.appState.Config != nil && m.appState.Config.ShouldSanitizeBookmarkNames(), m.width-10)
+		return m, nil
+	case state.NavigateWarning:
+		m.warningModal.Show(t.WarningTitle, t.WarningMessage, t.WarningCommits)
+		return m, nil
+	case state.NavigateCreatePR:
+		m.startCreatePR()
+		return m, nil
+	case state.NavigateBackToGraph:
+		m.appState.ViewMode = state.ViewCommitGraph
+		if t.StatusMessage != "" {
+			m.appState.StatusMessage = t.StatusMessage
+		}
+		return m, nil
+	case state.NavigateBackToBranches:
+		m.appState.ViewMode = state.ViewBranches
+		if t.StatusMessage != "" {
+			m.appState.StatusMessage = t.StatusMessage
+		}
+		return m, nil
+	case state.NavigateBackToSettings:
+		m.appState.ViewMode = state.ViewSettings
+		if t.StatusMessage != "" {
+			m.appState.StatusMessage = t.StatusMessage
+		}
+		return m, nil
+	case state.NavigateDismissError:
+		m.errorModal.ClearError()
+		m.appState.ViewMode = state.ViewCommitGraph
+		if t.StatusMessage != "" {
+			m.appState.StatusMessage = t.StatusMessage
+		}
+		if t.RefreshAfterDismiss {
+			return m, m.refreshRepository()
+		}
+		return m, m.tickCmd()
+	case state.NavigateDismissInit:
+		m.initRepoModel.SetPath("")
+		m.appState.ViewMode = state.ViewCommitGraph
+		if t.StatusMessage != "" {
+			m.appState.StatusMessage = t.StatusMessage
+		}
+		return m, m.tickCmd()
+	case state.NavigateGitHubLoginCancel:
+		m.githubLoginModel.ClearFlow()
+		m.appState.ViewMode = state.ViewSettings
+		if t.StatusMessage != "" {
+			m.appState.StatusMessage = t.StatusMessage
+		}
+		return m, nil
+	case state.NavigateSaveDescription:
+		if t.SaveCommitID != "" && m.appState.JJService != nil {
+			return m, graphtab.SaveDescriptionCmd(m.appState.JJService, t.SaveCommitID, t.SaveDescription)
+		}
+		return m, nil
+	case state.NavigateSubmitBookmark:
+		if m.appState.JJService != nil {
+			return m, m.submitBookmark()
+		}
+		return m, nil
+	case state.NavigateSubmitPR:
+		if m.isGitHubAvailable() && m.appState.JJService != nil {
+			return m, m.submitPR()
+		}
+		return m, nil
+	case state.NavigateResolveConflict:
+		m.appState.StatusMessage = "Resolving bookmark conflict..."
+		return m, conflicttab.ResolveBookmarkConflictCmd(m.appState.JJService, t.ConflictBookmarkName, t.ConflictResolution)
+	case state.NavigateResolveDivergent:
+		m.appState.StatusMessage = "Resolving divergent commit..."
+		return m, divergenttab.ResolveDivergentCommitCmd(m.appState.JJService, t.DivergentChangeID, t.DivergentKeepCommitID)
+	case state.NavigateWarningCancel:
+		if t.StatusMessage != "" {
+			m.appState.StatusMessage = t.StatusMessage
+		}
+		return m, nil
+	case state.NavigateRunInit:
+		m.appState.StatusMessage = "Initializing repository..."
+		return m, data.RunJJInit()
+	case state.NavigateDismissErrorAndRefresh:
+		m.errorModal.ClearError()
+		m.appState.ViewMode = state.ViewCommitGraph
+		return m, m.refreshRepository()
+	case state.NavigateBackFromPRForm:
+		m.prFormModal.Hide()
+		m.appState.ViewMode = state.ViewCommitGraph
+		if t.StatusMessage != "" {
+			m.appState.StatusMessage = t.StatusMessage
+		}
+		return m, nil
+	default:
+		return m, nil
+	}
+}
+
 func (m *Model) handleUndo() (tea.Model, tea.Cmd) {
 	if m.appState.JJService != nil {
 		m.appState.StatusMessage = "Undoing..."
@@ -304,7 +417,8 @@ func (m *Model) startCreatePR() {
 		return
 	}
 	idx := m.GetSelectedCommit()
-	res := prformtab.OpenCreatePR(&m.prFormModal, m.appState.Repository, idx, m.bookmarkModal.GetJiraBookmarkTitles(), m.width-10, m.height)
+	contentHeight := m.estimatedContentHeight()
+	res := prformtab.OpenCreatePR(&m.prFormModal, m.appState.Repository, idx, m.bookmarkModal.GetJiraBookmarkTitles(), m.width-10, contentHeight)
 	if !res.Ok {
 		m.appState.StatusMessage = res.StatusMessage
 		return
@@ -383,10 +497,10 @@ func (m *Model) Init() tea.Cmd {
 }
 
 // Update implements tea.Model.
-// Flow: globals (SetStatus, WindowSize) → tab request messages (graphtab.Request, etc.) →
-// modal request messages (descedit/bookmark/prform/warning) → async result messages
-// (data.RepositoryLoadedMsg, graphtab.ChangedFilesLoadedMsg, etc.) → zone/key routing (keys.go, mouse.go).
-// Submodels own their state (error, warning, graph, branches, etc.); main forwards and applies results.
+// Message responsibility: see internal/tui/model/RESPONSIBILITY.md.
+// Flow: globals (SetStatus, WindowSize) → state.NavigateMsg (from submodels) →
+// modal request messages (descedit/bookmark/prform/warning forward to modals) →
+// async result messages (data.*, graphtab.*, prstab.*, etc.) → zone/key routing.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case SetStatusMsg:
@@ -412,6 +526,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.desceditModal.SetDimensions(inputWidth, max(m.height-12, 3))
 		m.prFormModal.GetBodyInput().SetWidth(inputWidth)
 		m.prFormModal.GetTitleInput().Width = inputWidth
+		// PR form body uses full content height when in create-PR view
+		contentHeight := m.estimatedContentHeight()
+		if m.appState.ViewMode == state.ViewCreatePR {
+			const fixedFormLines = 9
+			bodyH := contentHeight - fixedFormLines
+			if bodyH < 3 {
+				bodyH = 3
+			}
+			m.prFormModal.GetBodyInput().SetHeight(bodyH)
+		}
 		m.bookmarkModal.GetNameInput().Width = inputWidth
 
 		m.settingsTabModel.SetInputWidths(inputWidth - 10)
@@ -423,7 +547,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Propagate dimensions to tab models so they can render
 		cmds := util.PropagateUpdate(msg, &m.graphTabModel, &m.prsTabModel, &m.branchesTabModel, &m.ticketsTabModel, &m.settingsTabModel, &m.helpTabModel)
 		// Set content-area height on tabs so graph/files split fills the content area (not full window)
-		contentHeight := m.estimatedContentHeight()
 		m.graphTabModel.SetDimensions(m.width, contentHeight)
 		m.prsTabModel.SetDimensions(m.width, contentHeight)
 		m.branchesTabModel.SetDimensions(m.width, contentHeight)
@@ -440,9 +563,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.initRepoModel.Path() != "" || m.errorModal.GetError() != nil || m.warningModal.IsShown() {
 			return m.handleKeyMsg(msg)
 		}
-		// Esc in Settings: send effect so next Update applies viewMode + status (same as tab sending PerformCancelMsg).
+		// Esc in Settings: navigate back to graph (same as tab sending PerformCancelMsg).
 		if m.appState.ViewMode == state.ViewSettings && msg.String() == "esc" {
-			return m, settingstab.PerformCancelCmd()
+			return m.handleNavigate(state.NavigateTarget{Kind: state.NavigateBackToGraph, StatusMessage: "Settings cancelled"})
 		}
 		// Delegate to tab models for their specific views (tabs own selection state)
 		switch m.appState.ViewMode {
@@ -619,38 +742,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m.handleZoneClick(msg)
 
-	case graphtab.SetStatusEffect:
-		m.appState.StatusMessage = msg.Status
-		return m, nil
-	case graphtab.StartEditDescriptionEffect:
-		return m.startEditingDescription(msg.Commit)
-	case graphtab.CreateBookmarkEffect:
-		m.startCreateBookmark()
-		return m, branchestab.LoadBranchesCmd(m.appState.JJService, m.settingsTabModel.GetSettingsBranchLimit())
-	case graphtab.ShowEmptyDescWarningEffect:
-		m.warningModal.Show(msg.Title, msg.Message, msg.Commits)
-		return m, nil
-	case graphtab.StartCreatePREffect:
-		m.startCreatePR()
-		return m, nil
-	case graphtab.UpdatePREffect:
-		if msg.PrBranch != "" && msg.CommitID != "" {
-			if msg.NeedsMoveBookmark {
-				m.appState.StatusMessage = fmt.Sprintf("Moving %s and pushing...", msg.PrBranch)
-			} else {
-				m.appState.StatusMessage = fmt.Sprintf("Pushing %s...", msg.PrBranch)
-			}
-			return m, prstab.PushToPRCmd(m.appState.JJService, msg.PrBranch, msg.CommitID, msg.NeedsMoveBookmark)
-		}
-		return m, nil
-	case graphtab.LoadChangedFilesEffect:
-		return m, msg.Cmd
-	case graphtab.LoadDivergentEffect:
-		m.appState.StatusMessage = msg.Status
-		return m, msg.Cmd
-
-	case prstab.OpenPRURLEffect:
-		return m, util.OpenURL(msg.URL)
+	case state.NavigateMsg:
+		return m.handleNavigate(msg.Target)
 
 	case commandhistory.Request:
 		return m.handleHelpRequest(msg)
@@ -662,9 +755,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case settingstab.SaveSettingsLocalEffect:
 		return m, m.saveSettingsLocal()
 	case settingstab.PerformCancelMsg:
-		m.appState.ViewMode = state.ViewCommitGraph
-		m.appState.StatusMessage = "Settings cancelled"
-		return m, nil
+		return m.handleNavigate(state.NavigateTarget{Kind: state.NavigateBackToGraph, StatusMessage: "Settings cancelled"})
 
 	case ticketstab.OpenURLEffect:
 		return m, util.OpenURL(msg.URL)
@@ -674,22 +765,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.appState.StatusMessage = msg.Status
 		return m, nil
 	case ticketstab.OpenCreateBookmarkFromTicketEffect:
-		m.appState.ViewMode = state.ViewCreateBookmark
-		m.appState.StatusMessage = bookmarktab.OpenCreateBookmarkFromTicket(&m.bookmarkModal, m.appState.Repository, msg.TicketKey, msg.Title, msg.DisplayKey, m.branchesTabModel.BuildBookmarkNameConflictSources(), m.appState.Config != nil && m.appState.Config.ShouldSanitizeBookmarkNames(), m.width-10)
-		return m, nil
+		return m.handleNavigate(state.NavigateTarget{
+			Kind:            state.NavigateCreateBookmarkFromTicket,
+			TicketKey:       msg.TicketKey,
+			TicketTitle:     msg.Title,
+			TicketDisplayKey: msg.DisplayKey,
+		})
 
 	case descedittab.SaveRequestedMsg, descedittab.CancelRequestedMsg:
 		updated, cmd := m.desceditModal.Update(msg)
 		m.desceditModal = updated
 		return m, cmd
-
-	case descedittab.PerformSaveMsg:
-		return m, graphtab.SaveDescriptionCmd(m.appState.JJService, msg.CommitID, msg.Description)
-
-	case descedittab.PerformCancelMsg:
-		m.appState.ViewMode = state.ViewCommitGraph
-		m.appState.StatusMessage = "Description edit cancelled"
-		return m, nil
 
 	case bookmarktab.CancelRequestedMsg, bookmarktab.SubmitRequestedMsg:
 		updated, cmd := m.bookmarkModal.Update(msg)
@@ -697,49 +783,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.bookmarkModal.UpdateNameExistsFromInput(m.appState.Config != nil && m.appState.Config.ShouldSanitizeBookmarkNames())
 		return m, cmd
 
-	case bookmarktab.PerformCancelMsg:
-		m.appState.ViewMode = state.ViewCommitGraph
-		m.appState.StatusMessage = "Bookmark creation cancelled"
-		return m, nil
-
-	case bookmarktab.PerformSubmitMsg:
-		if m.appState.JJService != nil {
-			return m, m.submitBookmark()
-		}
-		return m, nil
-
 	case prformtab.CancelRequestedMsg, prformtab.SubmitRequestedMsg:
 		updated, cmd := m.prFormModal.Update(msg)
 		m.prFormModal = updated
 		return m, cmd
-
-	case prformtab.PerformCancelMsg:
-		m.appState.ViewMode = state.ViewCommitGraph
-		m.prFormModal.Hide()
-		m.appState.StatusMessage = "PR creation cancelled"
-		return m, nil
-
-	case prformtab.PerformSubmitMsg:
-		if m.isGitHubAvailable() && m.appState.JJService != nil {
-			return m, m.submitPR()
-		}
-		return m, nil
-
-	case conflicttab.PerformCancelMsg:
-		m.appState.ViewMode = state.ViewBranches
-		m.appState.StatusMessage = "Conflict resolution cancelled"
-		return m, nil
-	case conflicttab.PerformResolveMsg:
-		m.appState.StatusMessage = "Resolving bookmark conflict..."
-		return m, conflicttab.ResolveBookmarkConflictCmd(m.appState.JJService, msg.BookmarkName, msg.Resolution)
-
-	case divergenttab.PerformCancelMsg:
-		m.appState.ViewMode = state.ViewCommitGraph
-		m.appState.StatusMessage = "Divergent commit resolution cancelled"
-		return m, nil
-	case divergenttab.PerformResolveMsg:
-		m.appState.StatusMessage = "Resolving divergent commit..."
-		return m, divergenttab.ResolveDivergentCommitCmd(m.appState.JJService, msg.ChangeID, msg.KeepCommitID)
 
 	case settingstab.RequestConfirmCleanupMsg:
 		return m, m.confirmCleanup()
@@ -750,55 +797,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.appState.StatusMessage = msg.Status
 		return m, nil
 
-	case githublogintab.PerformCancelMsg:
-		m.githubLoginModel.ClearFlow()
-		m.appState.ViewMode = state.ViewSettings
-		m.appState.StatusMessage = "GitHub login cancelled"
-		return m, nil
-
-	case errortab.RequestDismissMsg:
-		m.errorModal.ClearError()
-		m.appState.ViewMode = state.ViewCommitGraph
-		m.appState.StatusMessage = "Error dismissed"
-		return m, m.tickCmd()
-	case errortab.RequestRefreshMsg:
-		m.errorModal.ClearError()
-		m.appState.ViewMode = state.ViewCommitGraph
-		return m, m.refreshRepository()
 	case errortab.RequestCopyMsg:
 		if m.errorModal.GetError() != nil {
 			m.errorModal.SetCopied(true)
 			return m, util.CopyToClipboard(m.errorModal.GetError().Error())
 		}
 		return m, nil
-	case initrepotab.RequestDismissMsg:
-		m.initRepoModel.SetPath("")
-		m.appState.ViewMode = state.ViewCommitGraph
-		m.appState.StatusMessage = "Dismissed"
-		return m, m.tickCmd()
-	case initrepotab.RequestInitMsg:
-		m.appState.StatusMessage = "Initializing repository..."
-		return m, data.RunJJInit()
-
-	case warningtab.PerformCancelMsg:
-		m.appState.StatusMessage = "Cancelled"
-		return m, nil
 
 	case warningtab.EditCommitRequestedMsg:
 		updated, cmd := m.warningModal.Update(msg)
 		m.warningModal = updated
 		return m, cmd
-
-	case warningtab.PerformEditCommitMsg:
-		if m.appState.Repository != nil {
-			for i, c := range m.appState.Repository.Graph.Commits {
-				if c.ChangeID == msg.Commit.ChangeID {
-					m.graphTabModel.SelectCommit(i)
-					return m.processGraphRequest(graphtab.Request{StartEditDescription: true})
-				}
-			}
-		}
-		return m, nil
 
 	case graphtab.EditCompletedMsg:
 		// Preserve PRs from previous repository
@@ -1053,7 +1062,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case divergenttab.DivergentCommitResolvedMsg:
 		return m, divergenttab.HandleDivergentCommitResolvedMsg(msg, &m.appState)
 	case graphtab.FileMoveCompletedMsg:
-		cmd := graphtab.HandleFileMoveCompletedMsg(graphtab.FileMoveInput{
+		graphtab.HandleFileMoveCompletedMsg(graphtab.FileMoveInput{
 			FileMoveCompletedMsg: msg,
 			ChangedFilesCommitID: m.graphTabModel.GetChangedFilesCommitID(),
 		}, &m.appState)
@@ -1065,10 +1074,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					break
 				}
 			}
+			// Load changed files for the currently selected commit so the files pane updates.
+			idx := m.graphTabModel.GetSelectedCommit()
+			commits := m.appState.Repository.Graph.Commits
+			if idx >= 0 && idx < len(commits) && m.appState.JJService != nil {
+				return m, graphtab.LoadChangedFilesCmd(m.appState.JJService, commits[idx].ChangeID)
+			}
 		}
-		return m, cmd
+		return m, nil
 	case graphtab.FileRevertedMsg:
-		cmd := graphtab.HandleFileRevertedMsg(graphtab.FileRevertedInput{
+		graphtab.HandleFileRevertedMsg(graphtab.FileRevertedInput{
 			FileRevertedMsg:      msg,
 			ChangedFilesCommitID: m.graphTabModel.GetChangedFilesCommitID(),
 		}, &m.appState)
@@ -1080,8 +1095,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					break
 				}
 			}
+			idx := m.graphTabModel.GetSelectedCommit()
+			commits := m.appState.Repository.Graph.Commits
+			if idx >= 0 && idx < len(commits) && m.appState.JJService != nil {
+				return m, graphtab.LoadChangedFilesCmd(m.appState.JJService, commits[idx].ChangeID)
+			}
 		}
-		return m, cmd
+		return m, nil
 	case descedittab.DescriptionSavedMsg:
 		cmd := descedittab.HandleDescriptionSavedMsg(msg, &m.appState)
 		m.desceditModal.Hide()

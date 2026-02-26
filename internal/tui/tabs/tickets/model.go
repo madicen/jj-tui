@@ -125,6 +125,16 @@ func (m Model) update(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
 	case tea.KeyMsg:
 		updated, req, cmd := m.handleKeyMsg(msg)
 		if req != nil && app != nil {
+			if req.ToggleStatusChangeMode {
+				newMode := !updated.IsStatusChangeMode()
+				updated.SetStatusChangeMode(newMode)
+				if newMode {
+					app.StatusMessage = "Change status (i/D/B/N)"
+				} else {
+					app.StatusMessage = "Ready"
+				}
+				return updated, nil
+			}
 			ctx := BuildRequestContextFromApp(app, &updated)
 			statusMsg, runCmd := ExecuteRequest(*req, ctx)
 			if statusMsg != "" {
@@ -136,12 +146,25 @@ func (m Model) update(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
 			return updated, runCmd
 		}
 		if req != nil {
-			return updated, req.Cmd()
+			ctx := BuildRequestContextFromApp(app, &updated)
+			statusMsg, runCmd := ExecuteRequest(*req, ctx)
+			_ = statusMsg
+			return updated, runCmd
 		}
 		return updated, cmd
 	case zone.MsgZoneInBounds:
 		updated, req, cmd := m.handleZoneClick(msg.Zone)
 		if req != nil && app != nil {
+			if req.ToggleStatusChangeMode {
+				newMode := !updated.IsStatusChangeMode()
+				updated.SetStatusChangeMode(newMode)
+				if newMode {
+					app.StatusMessage = "Change status (i/D/B/N)"
+				} else {
+					app.StatusMessage = "Ready"
+				}
+				return updated, nil
+			}
 			ctx := BuildRequestContextFromApp(app, &updated)
 			statusMsg, runCmd := ExecuteRequest(*req, ctx)
 			if statusMsg != "" {
@@ -153,7 +176,10 @@ func (m Model) update(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
 			return updated, runCmd
 		}
 		if req != nil {
-			return updated, req.Cmd()
+			ctx := BuildRequestContextFromApp(app, &updated)
+			statusMsg, runCmd := ExecuteRequest(*req, ctx)
+			_ = statusMsg
+			return updated, runCmd
 		}
 		return updated, cmd
 	case tea.MouseMsg:
