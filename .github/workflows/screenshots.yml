@@ -89,33 +89,32 @@ jobs:
       # Commit screenshots back to repo
       - name: Commit updated screenshots
         run: |
-          # Check if any screenshots were actually generated/changed
-          if git diff --quiet screenshots/ && git diff --cached --quiet screenshots/; then
-            echo "No changes to screenshots"
-            exit 0
-          fi
           # Move generated screenshots to a temp location to preserve them exactly as is
           # This avoids issues where git stash ignores files that match the current HEAD
           mkdir -p /tmp/screenshots_generated
           cp -r screenshots/* /tmp/screenshots_generated/
-          
+
           # Switch to main branch (releases run on tags)
           git fetch origin main
           git checkout main
           git reset --hard origin/main
+
           # Restore the screenshots from temp
           cp -r /tmp/screenshots_generated/* screenshots/
           rm -rf /tmp/screenshots_generated
-          
+
           # Stage and commit
           git add screenshots/
           if git diff --staged --quiet; then
-            echo "No changes to commit after restoring screenshots"
+            echo "No content changes to screenshots compared to main branch."
             exit 0
           fi
-          
-          git commit -m "chore: update screenshots [skip ci]"
-          
+
+          # Generate a detailed commit message
+          CHANGED_FILES=$(git diff --staged --name-only -- screenshots/)
+          COMMIT_MESSAGE=$(printf "chore: update screenshots [skip ci]\n\nThe following screenshots were updated:\n%s" "$CHANGED_FILES")
+          git commit -m "$COMMIT_MESSAGE"
+
           # Push with retry logic in case of concurrent updates
           for i in 1 2 3; do
             if git push origin main; then

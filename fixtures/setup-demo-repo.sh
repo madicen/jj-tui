@@ -165,9 +165,9 @@ echo "- User settings" >> README.md
 # Push main and some branches to origin to create remote tracking branches
 echo ""
 echo "Pushing to fake origin to create remote tracking branches..."
-jj git push --bookmark main --remote origin
-jj git push --bookmark feature/dark-mode --remote origin
-jj git push --bookmark fix/pagination --remote origin
+jj git push --bookmark main --remote origin --allow-new
+jj git push --bookmark feature/dark-mode --remote origin --allow-new
+jj git push --bookmark fix/pagination --remote origin --allow-new
 
 # Fetch to ensure jj knows about the remote branches
 jj git fetch --remote origin
