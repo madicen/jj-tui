@@ -149,7 +149,7 @@ type MockJJService struct {
 }
 
 // GetRepository returns a mock repository
-func (m *MockJJService) GetRepository(ctx context.Context) (*internal.Repository, error) {
+func (m *MockJJService) GetRepository(ctx context.Context, revset string) (*internal.Repository, error) {
 	if len(m.Commits) == 0 {
 		m.Commits = DefaultMockCommits()
 	}

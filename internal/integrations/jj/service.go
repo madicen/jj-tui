@@ -125,14 +125,16 @@ func (s *Service) addToHistory(entry CommandHistoryEntry) {
 	}
 }
 
-// GetRepository retrieves the current repository state
-func (s *Service) GetRepository(ctx context.Context) (*internal.Repository, error) {
+// GetRepository retrieves the current repository state.
+// revset: optional jj revset for the graph; if empty, a default is used that focuses on
+// your work (mutable ancestors of @), bookmarks, and main to reduce noise from others' merges.
+func (s *Service) GetRepository(ctx context.Context, revset string) (*internal.Repository, error) {
 	// Before loading the graph, do a quick cleanup of any orphaned empty commits
 	// This handles the case where jj auto-created them after a merge
 	_ = s.abandonOrphanedEmptyCommits(ctx)
 
 	// Get commit graph (includes working copy)
-	graph, err := s.getCommitGraph(ctx)
+	graph, err := s.getCommitGraph(ctx, revset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get commit graph: %w", err)
 	}
@@ -694,8 +696,9 @@ func (s *Service) abandonOrphanedEmptyCommits(ctx context.Context) error {
 	return nil
 }
 
-// getCommitGraph retrieves the commit graph with real jj data
-func (s *Service) getCommitGraph(ctx context.Context) (*internal.CommitGraph, error) {
+// getCommitGraph retrieves the commit graph with real jj data.
+// revset: if non-empty, used as the -r revset; if empty, a default is used.
+func (s *Service) getCommitGraph(ctx context.Context, revset string) (*internal.CommitGraph, error) {
 	// Use a custom template with a unique marker to separate graph prefix from data
 	// The marker "<<<COMMIT>>>" lets us identify where the graph ends and data begins
 	// Format after marker: change_id|commit_id|author|date|description|parents|bookmarks|is_working|has_conflict|immutable|divergent
@@ -716,15 +719,30 @@ func (s *Service) getCommitGraph(ctx context.Context) (*internal.CommitGraph, er
 	)`
 
 	// Run WITH the graph to get ASCII art (no --reversed, keep natural newest-first order)
-	// Revset: mutable commits (new work) and bookmarks (local and remote)
-	// Try with main@origin first (real repos), fall back without it for test/fresh repos
-	out, err := s.runJJOutput(ctx, "log", "-r", "mutable() | bookmarks() | main@origin", "-T", template)
+	// When revset is set (config), use it. Otherwise use a narrow default to reduce noise from
+	// others' merges: only mutable commits that are ancestors of @ (your work), plus bookmarks and main.
+	var revsetArg string
+	if revset != "" {
+		revsetArg = revset
+	} else {
+		revsetArg = "(mutable() & ancestors(@)) | bookmarks() | main@origin"
+	}
+	out, err := s.runJJOutput(ctx, "log", "-r", revsetArg, "-T", template)
 	if err != nil {
-		// main@origin doesn't exist (test repo or no remote), try without it
-		out, err = s.runJJOutput(ctx, "log", "-r", "mutable() | bookmarks()", "-T", template)
+		if revset != "" {
+			// Custom revset failed; try simple fallback so the app still loads
+			out, err = s.runJJOutput(ctx, "log", "-r", "mutable() | bookmarks()", "-T", template)
+		}
+		if err != nil && revset == "" {
+			// Default revset: maybe main@origin doesn't exist
+			revsetArg = "(mutable() & ancestors(@)) | bookmarks()"
+			out, err = s.runJJOutput(ctx, "log", "-r", revsetArg, "-T", template)
+		}
+		if err != nil && revset == "" {
+			out, err = s.runJJOutput(ctx, "log", "-r", "mutable() | bookmarks()", "-T", template)
+		}
 		if err != nil {
-			// If template fails, try simpler approach
-			return s.getCommitGraphSimple(ctx)
+			return s.getCommitGraphSimple(ctx, revset)
 		}
 	}
 
@@ -868,8 +886,12 @@ func (s *Service) getCommitGraph(ctx context.Context) (*internal.CommitGraph, er
 }
 
 // getCommitGraphSimple is a fallback that uses simpler parsing
-func (s *Service) getCommitGraphSimple(ctx context.Context) (*internal.CommitGraph, error) {
-	out, err := s.runJJOutput(ctx, "log", "-r", "mutable() | bookmarks()", "--no-graph")
+func (s *Service) getCommitGraphSimple(ctx context.Context, revset string) (*internal.CommitGraph, error) {
+	revsetArg := "mutable() | bookmarks()"
+	if revset != "" {
+		revsetArg = revset
+	}
+	out, err := s.runJJOutput(ctx, "log", "-r", revsetArg, "--no-graph")
 	if err != nil {
 		return nil, err
 	}

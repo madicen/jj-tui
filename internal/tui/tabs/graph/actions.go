@@ -399,7 +399,7 @@ func NewCommit(svc *jj.Service, parentCommitID string) tea.Cmd {
 		if err := svc.NewCommit(context.Background(), parentCommitID); err != nil {
 			return util.ErrorMsg{Err: fmt.Errorf("failed to create commit: %w", err)}
 		}
-		repo, err := svc.GetRepository(context.Background())
+		repo, err := svc.GetRepository(context.Background(), "")
 		if err != nil {
 			return util.ErrorMsg{Err: err}
 		}
@@ -413,7 +413,7 @@ func Checkout(svc *jj.Service, changeID string) tea.Cmd {
 		if err := svc.CheckoutCommit(context.Background(), changeID); err != nil {
 			return util.ErrorMsg{Err: fmt.Errorf("failed to checkout: %w", err)}
 		}
-		repo, err := svc.GetRepository(context.Background())
+		repo, err := svc.GetRepository(context.Background(), "")
 		if err != nil {
 			return util.ErrorMsg{Err: err}
 		}
@@ -427,7 +427,7 @@ func Squash(svc *jj.Service, changeID string) tea.Cmd {
 		if err := svc.SquashCommit(context.Background(), changeID); err != nil {
 			return util.ErrorMsg{Err: fmt.Errorf("failed to squash: %w", err)}
 		}
-		repo, err := svc.GetRepository(context.Background())
+		repo, err := svc.GetRepository(context.Background(), "")
 		if err != nil {
 			return util.ErrorMsg{Err: err}
 		}
@@ -441,7 +441,7 @@ func Abandon(svc *jj.Service, changeID string) tea.Cmd {
 		if err := svc.AbandonCommit(context.Background(), changeID); err != nil {
 			return util.ErrorMsg{Err: fmt.Errorf("failed to abandon: %w", err)}
 		}
-		repo, err := svc.GetRepository(context.Background())
+		repo, err := svc.GetRepository(context.Background(), "")
 		if err != nil {
 			return util.ErrorMsg{Err: err}
 		}
@@ -455,7 +455,7 @@ func Rebase(svc *jj.Service, sourceChangeID, destChangeID string) tea.Cmd {
 		if err := svc.RebaseCommit(context.Background(), sourceChangeID, destChangeID); err != nil {
 			return util.ErrorMsg{Err: fmt.Errorf("failed to rebase: %w", err)}
 		}
-		repo, err := svc.GetRepository(context.Background())
+		repo, err := svc.GetRepository(context.Background(), "")
 		if err != nil {
 			return util.ErrorMsg{Err: err}
 		}
@@ -469,7 +469,7 @@ func SplitFileToParent(svc *jj.Service, commitID, filePath string) tea.Cmd {
 		if err := svc.SplitFileToParent(context.Background(), commitID, filePath); err != nil {
 			return util.ErrorMsg{Err: fmt.Errorf("failed to move file to parent: %w", err)}
 		}
-		repo, err := svc.GetRepository(context.Background())
+		repo, err := svc.GetRepository(context.Background(), "")
 		if err != nil {
 			return util.ErrorMsg{Err: err}
 		}
@@ -483,7 +483,7 @@ func MoveFileToChild(svc *jj.Service, commitID, filePath string) tea.Cmd {
 		if err := svc.MoveFileToChild(context.Background(), commitID, filePath); err != nil {
 			return util.ErrorMsg{Err: fmt.Errorf("failed to move file to child: %w", err)}
 		}
-		repo, err := svc.GetRepository(context.Background())
+		repo, err := svc.GetRepository(context.Background(), "")
 		if err != nil {
 			return util.ErrorMsg{Err: err}
 		}
@@ -497,7 +497,7 @@ func RevertFile(svc *jj.Service, commitID, filePath string) tea.Cmd {
 		if err := svc.RevertFile(context.Background(), commitID, filePath); err != nil {
 			return util.ErrorMsg{Err: fmt.Errorf("failed to revert file: %w", err)}
 		}
-		repo, err := svc.GetRepository(context.Background())
+		repo, err := svc.GetRepository(context.Background(), "")
 		if err != nil {
 			return util.ErrorMsg{Err: err}
 		}

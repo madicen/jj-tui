@@ -373,9 +373,25 @@ jj-tui
   "codecks_token": "...",
   "codecks_project": "Project Name",
   "codecks_excluded_statuses": "done,resolved",
-  "github_issues_excluded_statuses": "closed"
+  "github_issues_excluded_statuses": "closed",
+  "graph_revset": ""
 }
 ```
+
+### Graph view revset
+
+The commit graph shows commits selected by a **jj revset**. By default jj-tui uses a narrow revset so you see **your work** (mutable ancestors of `@`), **bookmarks**, and **main**, and not every mutable commit in the repo (e.g. from other people’s merges).
+
+To use a custom revset, set `graph_revset` in your config. Examples:
+
+- **Main + your branch only** (minimal noise):  
+  `"graph_revset": "trunk() | (ancestors(@) - ancestors(trunk()))"`
+- **Only your commits** (author = you):  
+  `"graph_revset": "mine() | trunk()"`
+- **Classic “all mutable + bookmarks”** (previous default):  
+  `"graph_revset": "mutable() | bookmarks() | main@origin"`
+
+Leave `graph_revset` empty to use the built-in default. See [jj revset docs](https://jj-vcs.github.io/jj/latest/revsets) for more.
 
 ### Ticket Provider Options
 

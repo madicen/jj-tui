@@ -156,7 +156,7 @@ func TestJJServiceBasicOperations(t *testing.T) {
 	}
 
 	t.Run("GetRepository", func(t *testing.T) {
-		repository, err := service.GetRepository(ctx)
+		repository, err := service.GetRepository(ctx, "")
 		if err != nil {
 			t.Fatalf("Failed to get repository: %v", err)
 		}
@@ -181,7 +181,7 @@ func TestJJServiceBasicOperations(t *testing.T) {
 		}
 
 		// Verify the commit was created
-		repository, err := service.GetRepository(ctx)
+		repository, err := service.GetRepository(ctx, "")
 		if err != nil {
 			t.Fatalf("Failed to get repository after commit: %v", err)
 		}
@@ -238,7 +238,7 @@ func TestCommitGraphVisualization(t *testing.T) {
 	}
 
 	// Get repository state
-	repository, err := service.GetRepository(ctx)
+	repository, err := service.GetRepository(ctx, "")
 	if err != nil {
 		t.Fatalf("Failed to get repository: %v", err)
 	}
@@ -729,7 +729,7 @@ func BenchmarkRepositoryLoad(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_, err := service.GetRepository(ctx)
+		_, err := service.GetRepository(ctx, "")
 		if err != nil {
 			b.Fatalf("Failed to get repository: %v", err)
 		}
