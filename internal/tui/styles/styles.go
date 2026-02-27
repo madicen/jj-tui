@@ -4,7 +4,7 @@ import "github.com/charmbracelet/lipgloss"
 
 // Colors
 var (
-	ColorPrimary   = lipgloss.Color("#BD93F9")
+	ColorPrimary   = lipgloss.Color("#7E00AF")
 	ColorSecondary = lipgloss.Color("#50FA7B")
 	ColorMuted     = lipgloss.Color("#6272A4")
 )
@@ -72,7 +72,7 @@ var (
 			Padding(0, 2)
 
 	TabActiveStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#F9FAFB")).
+			Foreground(lipgloss.Color("#7E00AF")).
 			Background(ColorPrimary).
 			Padding(0, 2)
 
