@@ -72,7 +72,7 @@ var (
 			Padding(0, 2)
 
 	TabActiveStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#7E00AF")).
+			Foreground(lipgloss.Color("#F9FAFB")).
 			Background(ColorPrimary).
 			Padding(0, 2)
 
