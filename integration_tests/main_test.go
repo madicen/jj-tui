@@ -668,7 +668,7 @@ func TestSettingsGraphRevset(t *testing.T) {
 	}
 
 	// Save Local (ctrl+l): Request -> SaveSettingsLocalEffect -> save cmd -> SettingsSavedMsg
-	m = runPendingCmds(m, tea.KeyMsg{Type: tea.KeyCtrlL}, 5)
+	runPendingCmds(m, tea.KeyMsg{Type: tea.KeyCtrlL}, 5)
 
 	// Verify .jj-tui.json was written with graph_revset
 	configPath := filepath.Join(repo.Path, ".jj-tui.json")
