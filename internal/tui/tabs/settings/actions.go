@@ -42,6 +42,7 @@ type SettingsParams struct {
 	AutoInProgress               bool
 	BranchLimit                  int
 	SanitizeBookmarks            bool
+	GraphRevset                  string
 	GitHubOwner                  string
 	GitHubRepo                   string
 }
@@ -153,6 +154,7 @@ func BuildSettingsParams(m *Model, githubOwner, githubRepo string) SettingsParam
 		AutoInProgress:       tk.GetAutoInProgress(),
 		BranchLimit:          br.GetBranchLimit(),
 		SanitizeBookmarks:    adv.GetSanitizeBookmarks(),
+		GraphRevset:          strings.TrimSpace(adv.GetGraphRevset()),
 		GitHubOwner:          githubOwner,
 		GitHubRepo:           githubRepo,
 	}
@@ -236,6 +238,7 @@ func SaveSettingsCmd(params SettingsParams) tea.Cmd {
 		cfg.GitHubIssuesExcludedStatuses = params.GitHubIssuesExcludedStatuses
 		cfg.BranchStatsLimit = &params.BranchLimit
 		cfg.SanitizeBookmarkNames = &params.SanitizeBookmarks
+		cfg.GraphRevset = params.GraphRevset
 		_ = cfg.Save()
 		return buildSettingsSavedMsg(params, false)
 	}
@@ -255,6 +258,7 @@ func SaveSettingsLocalCmd(params SettingsParams) tea.Cmd {
 			TicketAutoInProgress:         &params.AutoInProgress,
 			BranchStatsLimit:             &params.BranchLimit,
 			SanitizeBookmarkNames:        &params.SanitizeBookmarks,
+			GraphRevset:                  params.GraphRevset,
 			JiraProject:                  params.JiraProject,
 			JiraJQL:                      params.JiraJQL,
 			JiraExcludedStatuses:         params.JiraExcludedStatuses,

@@ -11,6 +11,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen/jj-tui/internal"
+	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/integrations/github"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/testutil"
@@ -130,6 +131,18 @@ func updateModelWithCmd(m *tui.Model, msg tea.Msg) *tui.Model {
 	return m
 }
 
+// runPendingCmds runs Update with the given msg, then repeatedly runs any returned Cmd
+// and Updates with its result, up to maxRounds times. Use for multi-step flows (e.g. Save Local).
+func runPendingCmds(m *tui.Model, msg tea.Msg, maxRounds int) *tui.Model {
+	newModel, cmd := m.Update(msg)
+	m = newModel.(*tui.Model)
+	for i := 0; i < maxRounds && cmd != nil; i++ {
+		newModel, cmd = m.Update(cmd())
+		m = newModel.(*tui.Model)
+	}
+	return m
+}
+
 // containsString checks if s contains substr
 func containsString(s, substr string) bool {
 	return strings.Contains(s, substr)
@@ -156,7 +169,7 @@ func TestJJServiceBasicOperations(t *testing.T) {
 	}
 
 	t.Run("GetRepository", func(t *testing.T) {
-		repository, err := service.GetRepository(ctx)
+		repository, err := service.GetRepository(ctx, "")
 		if err != nil {
 			t.Fatalf("Failed to get repository: %v", err)
 		}
@@ -181,7 +194,7 @@ func TestJJServiceBasicOperations(t *testing.T) {
 		}
 
 		// Verify the commit was created
-		repository, err := service.GetRepository(ctx)
+		repository, err := service.GetRepository(ctx, "")
 		if err != nil {
 			t.Fatalf("Failed to get repository after commit: %v", err)
 		}
@@ -238,7 +251,7 @@ func TestCommitGraphVisualization(t *testing.T) {
 	}
 
 	// Get repository state
-	repository, err := service.GetRepository(ctx)
+	repository, err := service.GetRepository(ctx, "")
 	if err != nil {
 		t.Fatalf("Failed to get repository: %v", err)
 	}
@@ -578,6 +591,114 @@ func TestJourney_SettingsView(t *testing.T) {
 	}
 }
 
+// TestSettingsGraphRevset tests changing the default graph revset via Settings > Advanced and saving.
+// It verifies that the value is persisted to config and that LoadRepository would use it.
+func TestSettingsGraphRevset(t *testing.T) {
+	if _, err := exec.LookPath("jj"); err != nil {
+		t.Skip("jj command not available")
+	}
+
+	repo := NewTestRepository(t)
+	defer repo.Cleanup()
+
+	ctx := context.Background()
+	jjSvc, err := jj.NewService(repo.Path)
+	if err != nil {
+		t.Fatalf("Failed to create jj service: %v", err)
+	}
+
+	m := tui.NewWithServices(ctx, jjSvc, nil)
+	defer m.Close()
+	m.SetDimensions(100, 80)
+	m.SetLoading(false)
+	m.SetRepository(&internal.Repository{
+		Path: repo.Path,
+		Graph: internal.CommitGraph{
+			Commits:     []internal.Commit{{ID: "w", ShortID: "w", ChangeID: "w", Summary: "wc", IsWorking: true}},
+			Connections: map[string][]string{},
+		},
+	})
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 80})
+
+	// Run from repo dir so Save Local writes .jj-tui.json there
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	if err := os.Chdir(repo.Path); err != nil {
+		t.Fatalf("Chdir to repo: %v", err)
+	}
+	defer func() { _ = os.Chdir(cwd) }()
+
+	// Navigate to Settings (run EnterTab cmd so first panel gets focus)
+	m = updateModelWithCmd(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(",")})
+	if m.GetViewMode() != tui.ViewSettings {
+		t.Fatalf("Expected ViewSettings after ',' , got %v", m.GetViewMode())
+	}
+
+	// Go to Advanced tab: ctrl+j goes previous tab, so from 0 -> 5 in one key; run returned cmd so Focus() runs
+	m = updateModelWithCmd(m, tea.KeyMsg{Type: tea.KeyCtrlJ})
+	if m.GetSettingsTab() != 5 {
+		t.Fatalf("Expected settings tab 5 (Advanced) after ctrl+j, got %d", m.GetSettingsTab())
+	}
+
+	// Rendered view must include the revset input line: ">" prompt (like Jira/Codecks) and the label
+	view := m.View()
+	if !containsString(view, "Default revset") {
+		t.Errorf("Settings Advanced view should contain 'Default revset' label; view snippet: %q", truncateView(view, 400))
+	}
+	if !containsString(view, ">") {
+		t.Errorf("Settings Advanced view should contain '>' textinput prompt (like other sub-tabs); view snippet: %q", truncateView(view, 400))
+	}
+
+	// Clear any existing revset then type "trunk()" through key events (exercises real input path)
+	for i := 0; i < 60; i++ {
+		m = updateModel(m, tea.KeyMsg{Type: tea.KeyBackspace})
+	}
+	for _, r := range "trunk()" {
+		m = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	if got := m.GetSettingsGraphRevset(); got != "trunk()" {
+		t.Errorf("After typing trunk(): GetSettingsGraphRevset() = %q, want trunk()", got)
+	}
+	// Typed value must appear in the rendered view
+	view = m.View()
+	if !containsString(view, "trunk()") {
+		t.Errorf("Settings Advanced view should show typed revset 'trunk()' in view; view snippet: %q", truncateView(view, 400))
+	}
+
+	// Save Local (ctrl+l): Request -> SaveSettingsLocalEffect -> save cmd -> SettingsSavedMsg
+	runPendingCmds(m, tea.KeyMsg{Type: tea.KeyCtrlL}, 5)
+
+	// Verify .jj-tui.json was written with graph_revset
+	configPath := filepath.Join(repo.Path, ".jj-tui.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("Read .jj-tui.json: %v", err)
+	}
+	if !strings.Contains(string(data), `"graph_revset"`) {
+		t.Errorf(".jj-tui.json does not contain graph_revset key: %s", string(data))
+	}
+	if !strings.Contains(string(data), `trunk()`) {
+		t.Errorf(".jj-tui.json does not contain trunk(): %s", string(data))
+	}
+
+	// Verify config load returns the revset (simulates what LoadRepository does)
+	prevEnv := os.Getenv("JJ_TUI_CONFIG")
+	os.Setenv("JJ_TUI_CONFIG", configPath)
+	defer os.Setenv("JJ_TUI_CONFIG", prevEnv)
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Config Load after save: %v", err)
+	}
+	if cfg == nil {
+		t.Fatal("Config Load returned nil")
+	}
+	if got := cfg.GraphRevset; got != "trunk()" {
+		t.Errorf("Config GraphRevset = %q, want trunk()", got)
+	}
+}
+
 // TestJourney_HelpView tests the help view
 func TestJourney_HelpView(t *testing.T) {
 	m := newTestModel()
@@ -729,7 +850,7 @@ func BenchmarkRepositoryLoad(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_, err := service.GetRepository(ctx)
+		_, err := service.GetRepository(ctx, "")
 		if err != nil {
 			b.Fatalf("Failed to get repository: %v", err)
 		}

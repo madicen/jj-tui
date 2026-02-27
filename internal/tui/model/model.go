@@ -232,8 +232,7 @@ func (m *Model) handleNavigateToTicketsTab() (tea.Model, tea.Cmd) {
 func (m *Model) handleNavigateToSettingsTab() (tea.Model, tea.Cmd) {
 	m.appState.ViewMode = state.ViewSettings
 	m.settingsTabModel.SetViewOpts(m.buildSettingsViewOpts())
-	m.settingsTabModel.EnterTab()
-	return m, nil
+	return m, m.settingsTabModel.EnterTab()
 }
 
 func (m *Model) handleNavigateToHelpTab() (tea.Model, tea.Cmd) {

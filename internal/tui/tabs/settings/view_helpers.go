@@ -422,6 +422,21 @@ func (r renderCtx) renderBranches(data RenderData) []string {
 
 func (r renderCtx) renderAdvanced(data RenderData) []string {
 	var lines []string
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render("Graph View"), "")
+	focusStyle := func(i int) lipgloss.Style {
+		s := lipgloss.NewStyle()
+		if data.FocusedField == i {
+			return s.Bold(true).Foreground(styles.ColorPrimary)
+		}
+		return s
+	}
+	lines = append(lines, focusStyle(12).Render("  Default revset (jj):"))
+	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Which commits to show in the commit graph. Empty = use built-in default."), "")
+	if len(data.Inputs) > 12 {
+		lines = append(lines, "  "+r.mark(mouse.ZoneSettingsGraphRevset, data.Inputs[12].View)+" "+r.mark(mouse.ZoneSettingsGraphRevsetClear, clearButtonStyle.Render("[Clear]")))
+	}
+	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    e.g. trunk() | (ancestors(@) - ancestors(trunk())) for main + your branch only"), "", "")
+
 	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render("Bookmark Settings"), "")
 	toggleStr := "[ ]"
 	if data.SanitizeBookmarks {

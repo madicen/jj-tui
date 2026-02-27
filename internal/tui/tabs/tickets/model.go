@@ -250,11 +250,13 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, *Request, tea.Cmd) {
 	case "j", "down":
 		if m.selectedTicket < len(m.ticketList)-1 {
 			m.selectedTicket++
+			return m, &Request{LoadTransitionsForSelection: true}, nil
 		}
 		return m, nil, nil
 	case "k", "up":
 		if m.selectedTicket > 0 {
 			m.selectedTicket--
+			return m, &Request{LoadTransitionsForSelection: true}, nil
 		}
 		return m, nil, nil
 	case "esc":
@@ -319,7 +321,7 @@ func (m Model) handleZoneClick(z *zone.ZoneInfo) (Model, *Request, tea.Cmd) {
 		if m.zoneManager.Get(mouse.ZoneJiraTicket(i)) == z {
 			m.selectedTicket = i
 			m.scrollToSelectedTicket = true
-			return m, nil, nil
+			return m, &Request{LoadTransitionsForSelection: true}, nil
 		}
 	}
 	if m.zoneManager.Get(mouse.ZoneJiraCreateBranch) == z {
@@ -369,8 +371,18 @@ func (m *Model) GetTickets() []tickets.Ticket {
 // UpdateTickets updates the ticket list
 func (m *Model) UpdateTickets(ticketList []tickets.Ticket) {
 	m.ticketList = ticketList
-	if len(ticketList) > 0 && m.selectedTicket < 0 {
+	if len(ticketList) == 0 {
+		m.selectedTicket = -1
+		return
+	}
+	if m.selectedTicket < 0 {
 		m.selectedTicket = 0
+		return
+	}
+	// After a reload (e.g. ticket transitioned to done and filtered out), selection may be out of bounds
+	if m.selectedTicket >= len(ticketList) {
+		m.selectedTicket = len(ticketList) - 1
+		m.scrollToSelectedTicket = true
 	}
 }
 

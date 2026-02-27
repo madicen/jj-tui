@@ -24,8 +24,6 @@ type TabSelectedMsg struct {
 	Tab state.ViewMode
 }
 
-// NavigateMsg is sent by submodels when they need main to perform navigation (open a modal
-// or change view using state only main owns). Defined in state package as state.NavigateMsg.
 // ActionMsg is emitted when an action button is clicked
 type ActionMsg struct {
 	Action ActionType

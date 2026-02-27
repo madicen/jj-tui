@@ -122,6 +122,8 @@ const (
 	ZoneSettingsAdvancedAbandonOldCommits = "zone:settings:advanced:abandon_old_commits"
 	ZoneSettingsAdvancedConfirmYes        = "zone:settings:advanced:confirm_yes"
 	ZoneSettingsAdvancedConfirmNo         = "zone:settings:advanced:confirm_no"
+	ZoneSettingsGraphRevset               = "zone:settings:graph_revset"
+	ZoneSettingsGraphRevsetClear          = "zone:settings:graph_revset_clear"
 	ZoneSettingsAutoInProgress            = "zone:settings:auto_in_progress"
 	ZoneSettingsSanitizeBookmarks         = "zone:settings:sanitize_bookmarks"
 

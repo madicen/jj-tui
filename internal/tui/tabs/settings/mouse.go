@@ -239,6 +239,11 @@ func handleAdvancedZone(m *Model, zoneID string) (Model, tea.Cmd) {
 	case mouse.ZoneSettingsSanitizeBookmarks:
 		adv.SetSanitizeBookmarks(!adv.GetSanitizeBookmarks())
 		return *m, nil
+	case mouse.ZoneSettingsGraphRevset:
+		return *m, m.SetFocusedField(12)
+	case mouse.ZoneSettingsGraphRevsetClear:
+		adv.SetGraphRevset("")
+		return *m, m.SetFocusedField(12)
 	}
 	return *m, nil
 }
@@ -247,6 +252,9 @@ func handleAdvancedZone(m *Model, zoneID string) (Model, tea.Cmd) {
 func (m *Model) routeZoneToPanel(zoneID string) (Model, tea.Cmd) {
 	if tab, ok := resolveTabFromZone(zoneID); ok {
 		m.SetSettingsTab(tab)
+		if tab == 5 {
+			return *m, m.advancedModel.SetFocusedField(0)
+		}
 		return *m, nil
 	}
 	switch zoneID {

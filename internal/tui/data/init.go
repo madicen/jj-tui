@@ -29,7 +29,12 @@ func InitializeServices(demoMode bool) tea.Cmd {
 			return InitErrorMsg{Err: err, NotJJRepo: notJJRepo, CurrentPath: cwd}
 		}
 
-		repo, err := jjSvc.GetRepository(ctx)
+		cfg, _ := config.Load()
+		revset := ""
+		if cfg != nil {
+			revset = cfg.GraphRevset
+		}
+		repo, err := jjSvc.GetRepository(ctx, revset)
 		if err != nil {
 			return InitErrorMsg{Err: err}
 		}
