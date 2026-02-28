@@ -6,11 +6,12 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	zone "github.com/lrstanley/bubblezone"
 	"github.com/charmbracelet/lipgloss"
+	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 	"github.com/madicen/jj-tui/internal/tui/util"
+	"github.com/mattn/go-runewidth"
 )
 
 // Entry is one entry for the command history list (display format from jj service).
@@ -61,7 +62,6 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
-		m.height = msg.Height
 		return m, nil
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -69,11 +69,13 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			maxCmd := len(m.entries) - 1
 			if maxCmd >= 0 && m.selectedIdx < maxCmd {
 				m.selectedIdx++
+				m.ensureVisible()
 			}
 			return m, nil
 		case "k", "up":
 			if m.selectedIdx > 0 {
 				m.selectedIdx--
+				m.ensureVisible()
 			}
 			return m, nil
 		case "y":
@@ -113,11 +115,8 @@ func (m Model) resolveZone(msg zone.MsgZoneInBounds) string {
 	if msg.Zone == nil {
 		return ""
 	}
-	n := len(m.entries)
-	if n > 50 {
-		n = 50
-	}
-	for i := 0; i < n; i++ {
+	n := min(len(m.entries), 50)
+	for i := range n {
 		id := fmt.Sprintf("%s%d", mouse.ZoneHelpCommandCopy, i)
 		z := m.zoneManager.Get(id)
 		if z != nil && z.InBounds(msg.Event) {
@@ -128,8 +127,8 @@ func (m Model) resolveZone(msg zone.MsgZoneInBounds) string {
 }
 
 func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
-	if strings.HasPrefix(zoneID, mouse.ZoneHelpCommandCopy) {
-		s := strings.TrimPrefix(zoneID, mouse.ZoneHelpCommandCopy)
+	if after, ok := strings.CutPrefix(zoneID, mouse.ZoneHelpCommandCopy); ok {
+		s := after
 		i, err := strconv.Atoi(s)
 		if err == nil && i >= 0 && i < len(m.entries) {
 			return m, Request{CopyCommand: m.entries[i].Command}.Cmd()
@@ -138,9 +137,41 @@ func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m *Model) ensureVisible() {
+	if m.selectedIdx < 0 || m.height <= 0 {
+		return
+	}
+	const headerHeight = 5
+	visualIdx := headerHeight + m.selectedIdx
+
+	// Check if the selected item has an error displayed (adds 1 extra line)
+	itemHeight := 1
+	if m.selectedIdx < len(m.entries) {
+		entry := m.entries[m.selectedIdx]
+		if !entry.Success && entry.Error != "" {
+			itemHeight = 2
+		}
+	}
+
+	// Scroll up if top of item is above viewport
+	if visualIdx < m.yOffset {
+		m.yOffset = visualIdx
+	} else if visualIdx+itemHeight > m.yOffset+m.height {
+		// Scroll down if bottom of item is below viewport
+		m.yOffset = visualIdx + itemHeight - m.height
+	}
+}
+
 // View returns the full command history content as a string (parent applies scroll).
 func (m Model) View() string {
 	lines := m.lines()
+	if m.height > 0 {
+		totalLines := len(lines)
+		maxOffset := max(0, totalLines-m.height)
+		offset := min(m.yOffset, maxOffset)
+		end := min(offset+m.height, totalLines)
+		lines = lines[offset:end]
+	}
 	return strings.Join(lines, "\n")
 }
 
@@ -154,16 +185,15 @@ func (m Model) YOffset() int { return m.yOffset }
 
 // SetYOffset sets the scroll offset.
 func (m *Model) SetYOffset(y int) {
-	if y < 0 {
-		y = 0
-	}
-	m.yOffset = y
+	m.yOffset = max(y, 0)
 }
 
 // SetDimensions sets width and height.
 func (m *Model) SetDimensions(width, height int) {
 	m.width = width
-	m.height = height
+	// Account for parent Help tab header (sub-tabs) which consumes vertical space
+	// but isn't subtracted from the height passed down.
+	m.height = max(1, height-3)
 }
 
 // SetEntries sets the command history entries (called by parent when entering Help or refreshing).
@@ -189,11 +219,8 @@ func (m *Model) SetSelectedCommand(idx int) {
 // ZoneIDs returns zone IDs used by this sub-tab (for parent to resolve clicks).
 func (m Model) ZoneIDs() []string {
 	var ids []string
-	n := len(m.entries)
-	if n > 50 {
-		n = 50
-	}
-	for i := 0; i < n; i++ {
+	n := min(len(m.entries), 50)
+	for i := range n {
 		ids = append(ids, fmt.Sprintf("%s%d", mouse.ZoneHelpCommandCopy, i))
 	}
 	return ids
@@ -225,12 +252,9 @@ func (m Model) lines() []string {
 	cmdStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#8BE9FD"))
 	copyBtnStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFB86C")).Bold(true)
 
-	maxCommands := len(m.entries)
-	if maxCommands > 50 {
-		maxCommands = 50
-	}
+	maxCommands := min(len(m.entries), 50)
 
-	for i := 0; i < maxCommands; i++ {
+	for i := range maxCommands {
 		entry := m.entries[i]
 		var statusIcon string
 		var entryStyle lipgloss.Style
@@ -244,15 +268,22 @@ func (m Model) lines() []string {
 		prefix := "  "
 		if i == m.selectedIdx {
 			prefix = "> "
-			entryStyle = entryStyle.Bold(true).Background(lipgloss.Color("#44475A"))
+			entryStyle = entryStyle.Bold(true)
 		}
 		copyBtn := mark(fmt.Sprintf("%s%d", mouse.ZoneHelpCommandCopy, i), copyBtnStyle.Render("[copy]"))
+
+		// Clean up command text (remove tabs, newlines, excess spaces)
+		cmdText := strings.Join(strings.Fields(entry.Command), " ")
+		// Truncate to fit: width - fixed parts (approx 27 chars) - safety margin
+		availableWidth := max(10, m.width-32)
+		cmdText = runewidth.Truncate(cmdText, availableWidth, "...")
+
 		line := fmt.Sprintf("%s%s %s %s %s %s",
 			prefix,
 			timeStyle.Render(entry.Timestamp),
 			durationStyle.Render(entry.Duration),
 			statusIcon,
-			cmdStyle.Render(entry.Command),
+			cmdStyle.Render(cmdText),
 			copyBtn,
 		)
 		if i == m.selectedIdx {
@@ -260,7 +291,9 @@ func (m Model) lines() []string {
 		}
 		lines = append(lines, mark(fmt.Sprintf("%s%d", mouse.ZoneHelpCommand, i), line))
 		if !entry.Success && entry.Error != "" && i == m.selectedIdx {
-			lines = append(lines, fmt.Sprintf("    %s", failStyle.Render("Error: "+entry.Error)))
+			errText := strings.Join(strings.Fields(entry.Error), " ")
+			errText = runewidth.Truncate(errText, max(10, m.width-15), "...")
+			lines = append(lines, fmt.Sprintf("    %s", failStyle.Render("Error: "+errText)))
 		}
 	}
 

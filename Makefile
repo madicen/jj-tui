@@ -35,6 +35,7 @@ screenshots: build demo-repo
 	vhs vhs/branches.tape
 	vhs vhs/settings.tape
 	vhs vhs/help.tape
+	vhs vhs/command_history.tape
 	@echo "Screenshots saved to screenshots/"
 
 # Generate a demo GIF showing the TUI in action
@@ -62,6 +63,9 @@ screenshot-settings: build demo-repo
 
 screenshot-help: build demo-repo
 	vhs vhs/help.tape
+
+screenshot-command-history: build demo-repo
+	vhs vhs/command_history.tape
 
 # Run in demo mode (for manual testing)
 demo: build demo-repo

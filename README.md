@@ -22,6 +22,9 @@ A modern Terminal User Interface (TUI) for managing [Jujutsu](https://github.com
 ### Help
 ![Help](screenshots/help.png)
 
+### Command History
+![Command History](screenshots/command-history.png)
+
 ## Features
 
 - **Visual Commit Graph**: Navigate and visualize your commit history with tree structure
