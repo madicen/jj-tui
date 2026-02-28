@@ -40,8 +40,9 @@ type ChangedFilesLoadedMsg struct {
 
 // UndoCompletedMsg is sent when an undo/redo operation completes.
 type UndoCompletedMsg struct {
-	Message string
-	Err     error
+	Message  string
+	Err      error
+	RedoOpID string
 }
 
 // DivergentCommitInfoMsg is sent when divergent commit info has been loaded (or failed).
@@ -86,21 +87,21 @@ func UndoCmd(svc *jj.Service) tea.Cmd {
 		return nil
 	}
 	return func() tea.Msg {
-		err := svc.Undo(context.Background())
+		opID, err := svc.Undo(context.Background())
 		if err != nil {
 			return UndoCompletedMsg{Err: err}
 		}
-		return UndoCompletedMsg{Message: "Undo completed"}
+		return UndoCompletedMsg{Message: "Undo completed", RedoOpID: opID}
 	}
 }
 
 // RedoCmd returns a command that runs jj redo and sends UndoCompletedMsg.
-func RedoCmd(svc *jj.Service) tea.Cmd {
+func RedoCmd(svc *jj.Service, opID string) tea.Cmd {
 	if svc == nil {
 		return nil
 	}
 	return func() tea.Msg {
-		err := svc.Redo(context.Background())
+		err := svc.Redo(context.Background(), opID)
 		if err != nil {
 			return UndoCompletedMsg{Err: err}
 		}
@@ -110,24 +111,24 @@ func RedoCmd(svc *jj.Service) tea.Cmd {
 
 // Request is sent to the main model so it can run jj/git commands (main has jjService).
 type Request struct {
-	LoadChangedFiles      *string
-	SelectCommit          *int
-	Checkout              bool
-	Squash                bool
-	Abandon               bool
-	StartEditDescription  bool
-	NewCommit             bool
-	StartRebaseMode       bool
-	PerformRebase         bool
-	RebaseDestIndex       int
-	ResolveDivergent      *string
-	CreateBookmark        bool
-	DeleteBookmark        bool
-	CreatePR              bool
-	UpdatePR              bool
-	MoveFileUp            bool
-	MoveFileDown          bool
-	RevertFile            bool
+	LoadChangedFiles     *string
+	SelectCommit         *int
+	Checkout             bool
+	Squash               bool
+	Abandon              bool
+	StartEditDescription bool
+	NewCommit            bool
+	StartRebaseMode      bool
+	PerformRebase        bool
+	RebaseDestIndex      int
+	ResolveDivergent     *string
+	CreateBookmark       bool
+	DeleteBookmark       bool
+	CreatePR             bool
+	UpdatePR             bool
+	MoveFileUp           bool
+	MoveFileDown         bool
+	RevertFile           bool
 }
 
 // Cmd returns a tea.Cmd that sends this request to the program.

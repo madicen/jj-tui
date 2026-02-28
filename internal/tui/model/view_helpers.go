@@ -229,10 +229,14 @@ func (m *Model) renderStatusBar() string {
 	// Add keyboard shortcuts with ^ notation and | separators
 	// Start with undo/redo if in Graph view, then quit and refresh
 	if m.appState.ViewMode == state.ViewCommitGraph && m.appState.JJService != nil {
+		if m.redoOperationID != "" {
+			shortcuts = append(shortcuts,
+				m.zoneManager.Mark(mouse.ZoneActionRedo, "^y redo"),
+				" │ ",
+			)
+		}
 		shortcuts = append(shortcuts,
 			m.zoneManager.Mark(mouse.ZoneActionUndo, "^z undo"),
-			" │ ",
-			m.zoneManager.Mark(mouse.ZoneActionRedo, "^y redo"),
 			" │ ",
 		)
 	}
@@ -273,7 +277,7 @@ func (m *Model) renderStatusBar() string {
 	}
 
 	// Layout: status on left, shortcuts on right
-	padding := max(m.width - lipgloss.Width(status) - lipgloss.Width(scrollIndicator) - lipgloss.Width(shortcutsStr) - 2, 0)
+	padding := max(m.width-lipgloss.Width(status)-lipgloss.Width(scrollIndicator)-lipgloss.Width(shortcutsStr)-2, 0)
 
 	return styles.StatusBarStyle.Width(m.width).Render(
 		status + scrollIndicator + strings.Repeat(" ", padding) + shortcutsStr,
