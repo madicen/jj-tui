@@ -501,7 +501,7 @@ func (m *Model) confirmCleanup() tea.Cmd {
 func (m *Model) handleClipboardCopiedMsg(msg util.ClipboardCopiedMsg) (tea.Model, tea.Cmd) {
 	if msg.Success {
 		if m.appState.ViewMode == state.ViewGitHubLogin {
-			m.appState.StatusMessage = "Code copied to clipboard! Paste it in your browser."
+			m.appState.StatusMessage = "Code copied to clipboard and browser opened!"
 		} else if m.errorModal.GetError() != nil {
 			m.errorModal.SetCopied(true)
 			m.appState.StatusMessage = "Error copied to clipboard!"
@@ -535,7 +535,6 @@ func (m *Model) Init() tea.Cmd {
 }
 
 // Update implements tea.Model.
-// Message responsibility: see internal/tui/model/RESPONSIBILITY.md.
 // Flow: globals (SetStatus, WindowSize) → state.NavigateMsg (from submodels) →
 // modal request messages (descedit/bookmark/prform/warning forward to modals) →
 // async result messages (data.*, graphtab.*, prstab.*, etc.) → zone/key routing.
@@ -1049,10 +1048,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.githubLoginModel.SetDeviceFlow(msg.DeviceCode, msg.UserCode, msg.VerificationURL, msg.Interval)
 		m.appState.ViewMode = state.ViewGitHubLogin
 		m.appState.StatusMessage = "Waiting for GitHub authorization..."
-		return m, tea.Batch(
-			util.OpenURL(msg.VerificationURL),
-			settingstab.PollGitHubTokenCmd(m.githubLoginModel.GetDeviceCode()),
-		)
+		return m, settingstab.PollGitHubTokenCmd(m.githubLoginModel.GetDeviceCode())
 
 	case settingstab.GitHubLoginPollMsg:
 		if m.githubLoginModel.GetPolling() {
