@@ -39,7 +39,15 @@ func (m *Model) renderTickets() string {
 	}
 
 	if len(m.ticketList) == 0 {
-		return "No assigned tickets found.\n\nPress Ctrl+r to refresh."
+		emptyMsg := []string{
+			styles.TitleStyle.Render("Tickets"),
+			"",
+			"No tickets to show.",
+			lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("Your connection is working; there are no assigned tickets matching your filters."),
+			"",
+			"Change filters in Settings (,), or press Ctrl+r to refresh.",
+		}
+		return strings.Join(emptyMsg, "\n")
 	}
 
 	var headerLines []string

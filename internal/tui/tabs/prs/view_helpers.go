@@ -38,7 +38,15 @@ func (m *Model) renderPRs() string {
 	}
 
 	if m.repository == nil || len(m.repository.PRs) == 0 {
-		return "No pull requests found.\n\nPress Ctrl+r to refresh."
+		emptyMsg := []string{
+			styles.TitleStyle.Render("Pull Requests"),
+			"",
+			"No pull requests to show.",
+			lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("Your connection is working; there are no PRs matching your filters."),
+			"",
+			"Change filters in Settings (,), or press Ctrl+r to refresh.",
+		}
+		return strings.Join(emptyMsg, "\n")
 	}
 
 	var headerLines []string
