@@ -655,6 +655,10 @@ func TestHelpViewContent(t *testing.T) {
 	defer m.Close()
 
 	m.appState.ViewMode = state.ViewHelp
+	// Use a tall height so the scroll window includes the Navigation section (Quit) in the visible area
+	m.width = 100
+	m.height = 120
+	m.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
 
 	view := m.View()
 

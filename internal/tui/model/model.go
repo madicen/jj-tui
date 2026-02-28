@@ -598,6 +598,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(cmds) > 0 && cmds[0] != nil {
 				return m, cmds[0]
 			}
+			return m, nil
 		case state.ViewHelp:
 			cmds := util.PropagateUpdate(msg, &m.helpTabModel)
 			if len(cmds) > 0 && cmds[0] != nil {
