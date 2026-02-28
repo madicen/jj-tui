@@ -23,7 +23,7 @@ A modern Terminal User Interface (TUI) for managing [Jujutsu](https://github.com
 ![Help](screenshots/help.png)
 
 ### Command History
-![Command History](screenshots/command-history.png)
+![Command History](screenshots/command_history.png)
 
 ## Features
 
