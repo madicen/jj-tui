@@ -242,7 +242,6 @@ func (m *Model) handleNavigateToSettingsTab() (tea.Model, tea.Cmd) {
 func (m *Model) handleNavigateToHelpTab() (tea.Model, tea.Cmd) {
 	m.appState.ViewMode = state.ViewHelp
 	m.helpTabModel.SetCommandHistoryEntries(helptab.BuildCommandHistoryEntries(m.appState.JJService))
-	m.helpTabModel.SetHelpTab(0)
 	m.helpTabModel.SetSelectedCommand(0)
 	m.appState.StatusMessage = "Loaded Help"
 	return m, nil
