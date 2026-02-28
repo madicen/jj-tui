@@ -296,7 +296,14 @@ func (m *GraphModel) View() string {
 	m.filesViewport.Height = filesHeight
 	filesContent := graphResult.FilesContent
 	if filesContent == "" {
-		filesContent = lipgloss.NewStyle().Foreground(lipgloss.Color("#666666")).Render("  Loading changed files...")
+		// Already loaded for this commit and there are no changed files?
+		loadedForSelected := m.repository != nil && m.selectedCommit >= 0 && m.selectedCommit < len(m.repository.Graph.Commits) &&
+			m.changedFilesCommitID == m.repository.Graph.Commits[m.selectedCommit].ChangeID
+		if loadedForSelected && len(m.changedFiles) == 0 {
+			filesContent = lipgloss.NewStyle().Foreground(lipgloss.Color("#666666")).Render("  No changed files in this commit.")
+		} else {
+			filesContent = lipgloss.NewStyle().Foreground(lipgloss.Color("#666666")).Render("  Loading changed files...")
+		}
 	}
 	filesLines := strings.Split(filesContent, "\n")
 	totalFilesLines := len(filesLines)
@@ -570,7 +577,10 @@ func changedFileTreeOrderLess(a, b string) bool {
 func (m *GraphModel) SelectCommit(idx int) {
 	if m.repository != nil && idx >= 0 && idx < len(m.repository.Graph.Commits) {
 		m.selectedCommit = idx
-		m.changedFilesCommitID = m.repository.Graph.Commits[idx].ChangeID
+		// Clear changed-files state until LoadChangedFiles completes; otherwise we'd show "No changed files" before load
+		m.changedFilesCommitID = ""
+		m.changedFiles = nil
+		m.selectedFile = 0
 	}
 }
 

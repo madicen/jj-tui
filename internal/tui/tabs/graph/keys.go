@@ -17,9 +17,11 @@ func (m GraphModel) handleKeyMsg(msg tea.KeyMsg) (GraphModel, *Request, tea.Cmd)
 		} else {
 			if m.repository != nil && m.selectedCommit < len(m.repository.Graph.Commits)-1 {
 				m.selectedCommit++
-				m.changedFilesCommitID = m.repository.Graph.Commits[m.selectedCommit].ChangeID
+				m.changedFilesCommitID = ""
+				m.changedFiles = nil
 				m.scrollToSelectedCommit = true
-				return m, &Request{LoadChangedFiles: &m.changedFilesCommitID}, nil
+				commitID := m.repository.Graph.Commits[m.selectedCommit].ChangeID
+				return m, &Request{LoadChangedFiles: &commitID}, nil
 			}
 		}
 		return m, nil, nil
@@ -33,9 +35,11 @@ func (m GraphModel) handleKeyMsg(msg tea.KeyMsg) (GraphModel, *Request, tea.Cmd)
 		} else {
 			if m.selectedCommit > 0 {
 				m.selectedCommit--
-				m.changedFilesCommitID = m.repository.Graph.Commits[m.selectedCommit].ChangeID
+				m.changedFilesCommitID = ""
+				m.changedFiles = nil
 				m.scrollToSelectedCommit = true
-				return m, &Request{LoadChangedFiles: &m.changedFilesCommitID}, nil
+				commitID := m.repository.Graph.Commits[m.selectedCommit].ChangeID
+				return m, &Request{LoadChangedFiles: &commitID}, nil
 			}
 		}
 		return m, nil, nil

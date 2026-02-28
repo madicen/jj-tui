@@ -26,8 +26,10 @@ func (m GraphModel) handleZoneClick(msg zone.MsgZoneInBounds) (GraphModel, *Requ
 					return m, &Request{PerformRebase: true, RebaseDestIndex: commitIndex}, nil
 				}
 				m.selectedCommit = commitIndex
-				m.changedFilesCommitID = m.repository.Graph.Commits[commitIndex].ChangeID
-				return m, &Request{LoadChangedFiles: &m.changedFilesCommitID}, nil
+				m.changedFilesCommitID = ""
+				m.changedFiles = nil
+				commitID := m.repository.Graph.Commits[commitIndex].ChangeID
+				return m, &Request{LoadChangedFiles: &commitID}, nil
 			}
 		}
 	}
@@ -48,8 +50,10 @@ func (m GraphModel) handleZoneClick(msg zone.MsgZoneInBounds) (GraphModel, *Requ
 						return m, &Request{PerformRebase: true, RebaseDestIndex: commitIndex}, nil
 					}
 					m.selectedCommit = commitIndex
-					m.changedFilesCommitID = m.repository.Graph.Commits[commitIndex].ChangeID
-					return m, &Request{LoadChangedFiles: &m.changedFilesCommitID}, nil
+					m.changedFilesCommitID = ""
+					m.changedFiles = nil
+					commitID := m.repository.Graph.Commits[commitIndex].ChangeID
+					return m, &Request{LoadChangedFiles: &commitID}, nil
 				}
 			}
 		}
