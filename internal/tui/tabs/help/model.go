@@ -3,6 +3,7 @@ package help
 import (
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal"
@@ -55,7 +56,18 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		if msg.String() == "tab" {
+		switch msg.String() {
+		case "ctrl+j":
+			// Previous sub-tab (wrap: 0 -> 1)
+			m.activeTab = (m.activeTab - 1 + 2) % 2
+			m.commands.SetSelectedCommand(0)
+			return m, nil
+		case "ctrl+k":
+			// Next sub-tab
+			m.activeTab = (m.activeTab + 1) % 2
+			m.commands.SetSelectedCommand(0)
+			return m, nil
+		case "tab":
 			m.activeTab = (m.activeTab + 1) % 2
 			m.commands.SetSelectedCommand(0)
 			return m, nil
@@ -112,6 +124,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 // View renders the Help tab: tab bar + active sub-tab content with scroll.
 func (m Model) View() string {
 	tabBar := m.renderTabBar()
+	hint := lipgloss.NewStyle().Foreground(lipgloss.Color("#888888")).Italic(true).Render("^j/^k: switch tabs")
 	visibleHeight := max(1, m.height-3)
 
 	var lines []string
@@ -135,7 +148,7 @@ func (m Model) View() string {
 	if end > start {
 		content = strings.Join(lines[start:end], "\n")
 	}
-	return tabBar + "\n\n" + content
+	return tabBar + "\n" + hint + "\n\n" + content
 }
 
 // ZoneIDs returns the zone IDs this tab uses when rendering (same IDs passed to Mark). Used to resolve clicks.
