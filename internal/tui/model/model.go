@@ -13,7 +13,6 @@ import (
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tui/data"
 	"github.com/madicen/jj-tui/internal/tui/state"
-	"github.com/madicen/jj-tui/internal/tui/util"
 	bookmarktab "github.com/madicen/jj-tui/internal/tui/tabs/bookmark"
 	branchestab "github.com/madicen/jj-tui/internal/tui/tabs/branches"
 	conflicttab "github.com/madicen/jj-tui/internal/tui/tabs/conflict"
@@ -30,6 +29,7 @@ import (
 	settingstab "github.com/madicen/jj-tui/internal/tui/tabs/settings"
 	ticketstab "github.com/madicen/jj-tui/internal/tui/tabs/tickets"
 	warningtab "github.com/madicen/jj-tui/internal/tui/tabs/warning"
+	"github.com/madicen/jj-tui/internal/tui/util"
 )
 
 // Model is the main TUI model using bubblezone for mouse handling.
@@ -44,6 +44,7 @@ type Model struct {
 	width  int
 	height int
 	// Selection state lives in tab models: graph (commit/file), prs, tickets, branches
+	redoOperationID string
 
 	// Tab-specific models (own all tab/modal state; main model does not duplicate)
 	graphTabModel    graphtab.GraphModel
@@ -188,6 +189,9 @@ func (m *Model) createIsZoneClickedFuncWithEvent(event tea.MouseMsg) func(string
 
 // processGraphRequest runs a graph request via the graph tab; ApplyResult mutates app and returns cmd.
 func (m *Model) processGraphRequest(r graphtab.Request) (tea.Model, tea.Cmd) {
+	if r.Checkout || r.Squash || r.Abandon || r.NewCommit || r.PerformRebase || r.ResolveDivergent != nil || r.CreateBookmark || r.DeleteBookmark || r.CreatePR || r.UpdatePR || r.MoveFileUp || r.MoveFileDown || r.RevertFile {
+		m.redoOperationID = ""
+	}
 	ctx := graphtab.BuildRequestContextFrom(m)
 	res := graphtab.HandleRequest(r, ctx)
 	return m, graphtab.ApplyResult(res, &m.graphTabModel, ctx, &m.appState)
@@ -253,6 +257,9 @@ func (m *Model) handleNavigateToBranchesTab() (tea.Model, tea.Cmd) {
 
 // handleNavigate performs view changes that only main can do (it owns modals and cross-tab state).
 func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
+	if t.Kind == state.NavigateSaveDescription || t.Kind == state.NavigateSubmitBookmark || t.Kind == state.NavigateSubmitPR || t.Kind == state.NavigateResolveConflict || t.Kind == state.NavigateResolveDivergent || t.Kind == state.NavigateRunInit {
+		m.redoOperationID = ""
+	}
 	switch t.Kind {
 	case state.NavigateEditDescription:
 		if m.appState.Repository != nil {
@@ -373,9 +380,9 @@ func (m *Model) handleUndo() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleRedo() (tea.Model, tea.Cmd) {
-	if m.appState.JJService != nil {
+	if m.appState.JJService != nil && m.redoOperationID != "" {
 		m.appState.StatusMessage = "Redoing..."
-		return m, graphtab.RedoCmd(m.appState.JJService)
+		return m, graphtab.RedoCmd(m.appState.JJService, m.redoOperationID)
 	}
 	return m, nil
 }
@@ -766,9 +773,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case ticketstab.OpenCreateBookmarkFromTicketEffect:
 		return m.handleNavigate(state.NavigateTarget{
-			Kind:            state.NavigateCreateBookmarkFromTicket,
-			TicketKey:       msg.TicketKey,
-			TicketTitle:     msg.Title,
+			Kind:             state.NavigateCreateBookmarkFromTicket,
+			TicketKey:        msg.TicketKey,
+			TicketTitle:      msg.Title,
 			TicketDisplayKey: msg.DisplayKey,
 		})
 
@@ -1145,6 +1152,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if errInfo != nil {
 			m.errorModal.SetError(errInfo.Err, false, "")
 			return m, nil
+		}
+		if msg.Message == "Undo completed" {
+			m.redoOperationID = msg.RedoOpID
+		} else {
+			m.redoOperationID = ""
 		}
 		return m, cmd
 
