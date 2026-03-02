@@ -21,6 +21,7 @@ import (
 	prformtab "github.com/madicen/jj-tui/internal/tui/tabs/prform"
 	prstab "github.com/madicen/jj-tui/internal/tui/tabs/prs"
 	settingstab "github.com/madicen/jj-tui/internal/tui/tabs/settings"
+	ticketformtab "github.com/madicen/jj-tui/internal/tui/tabs/ticketform"
 	ticketstab "github.com/madicen/jj-tui/internal/tui/tabs/tickets"
 	warningtab "github.com/madicen/jj-tui/internal/tui/tabs/warning"
 )
@@ -56,6 +57,7 @@ func New(ctx context.Context) *Model {
 		divergentModal:   divergenttab.NewModel(zm),
 		bookmarkModal:    bookmarktab.NewModel(zm),
 		prFormModal:      prformtab.NewModel(zm),
+		ticketFormModal:  ticketformtab.NewModel(zm),
 		desceditModal:    descedittab.NewModel(zm),
 		githubLoginModel: githublogintab.NewModel(zm),
 	}

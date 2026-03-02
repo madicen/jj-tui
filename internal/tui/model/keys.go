@@ -44,6 +44,10 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		updated, cmd := m.prFormModal.Update(msg)
 		m.prFormModal = updated
 		return m, cmd
+	case state.ViewCreateTicket:
+		updated, cmd := m.ticketFormModal.Update(msg)
+		m.ticketFormModal = updated
+		return m, cmd
 	case state.ViewCreateBookmark:
 		updated, cmd := m.bookmarkModal.Update(msg)
 		m.bookmarkModal = updated

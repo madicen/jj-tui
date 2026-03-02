@@ -29,11 +29,12 @@ type LoadErrorMsg struct {
 
 // Request is sent to the main model to run ticket actions (main has ticketService, jjService, etc.).
 type Request struct {
-	OpenInBrowser            bool
-	ToggleStatusChangeMode   bool
-	StartBookmarkFromTicket  bool
-	TransitionID             string // When set, main runs transitionTicket(TransitionID)
-	LoadTransitionsForSelection bool // When set, main loads transitions for current selection (e.g. after j/k or click)
+	OpenInBrowser             bool
+	ToggleStatusChangeMode    bool
+	StartBookmarkFromTicket   bool
+	StartCreateTicket         bool // open Create Ticket modal when provider supports it
+	TransitionID               string
+	LoadTransitionsForSelection bool
 }
 
 // Cmd returns a tea.Cmd that sends this request.
@@ -84,6 +85,7 @@ type TicketsLoadedInput struct {
 	Tickets      []ticketdomain.Ticket
 	ProviderName string
 	HasService   bool
+	CanCreate    bool // true if the provider supports creating tickets from the TUI
 }
 
 // OpenURLEffect tells main to open a URL in the browser.

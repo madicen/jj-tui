@@ -25,6 +25,7 @@ type Model struct {
 	height               int
 	providerName         string // e.g. "Jira", "Codecks"
 	jiraService          bool   // whether a ticket service is connected
+	canCreateTicket      bool   // true when provider supports creating tickets (from TicketsLoadedInput)
 	// scrollToSelectedTicket: when true, next render will adjust listYOffset to keep selection in view (key/click only; mouse scroll can move selection off screen)
 	scrollToSelectedTicket bool
 	loadingTransitions     bool // true while loading available transitions for selected ticket
@@ -67,6 +68,7 @@ func (m Model) update(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
 	case TicketsLoadedInput:
 		m.UpdateTickets(msg.Tickets)
 		m.SetTicketServiceInfo(msg.ProviderName, msg.HasService)
+		m.canCreateTicket = msg.CanCreate
 		pName := "tickets"
 		if msg.HasService && msg.ProviderName != "" {
 			pName = msg.ProviderName + " tickets"
@@ -275,6 +277,11 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, *Request, tea.Cmd) {
 		return m, nil, nil
 	case "o":
 		return m, &Request{OpenInBrowser: true}, nil
+	case "n":
+		if m.canCreateTicket {
+			return m, &Request{StartCreateTicket: true}, nil
+		}
+		return m, nil, nil
 	case "enter", "e":
 		if m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
 			return m, &Request{StartBookmarkFromTicket: true}, nil
@@ -326,6 +333,9 @@ func (m Model) handleZoneClick(z *zone.ZoneInfo) (Model, *Request, tea.Cmd) {
 	}
 	if m.zoneManager.Get(mouse.ZoneJiraCreateBranch) == z {
 		return m, &Request{StartBookmarkFromTicket: true}, nil
+	}
+	if m.zoneManager.Get(mouse.ZoneTicketNew) == z {
+		return m, &Request{StartCreateTicket: true}, nil
 	}
 	if m.zoneManager.Get(mouse.ZoneJiraChangeStatus) == z {
 		return m, &Request{ToggleStatusChangeMode: true}, nil

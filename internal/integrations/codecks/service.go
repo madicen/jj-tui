@@ -19,11 +19,12 @@ import (
 
 // Service handles Codecks API interactions
 type Service struct {
-	subdomain     string
-	token         string
-	projectFilter string            // Optional: filter cards by project name
-	projectIDs    map[string]string // Map of project name -> project ID
-	client        *http.Client
+	subdomain      string
+	token          string
+	projectFilter  string            // Optional: filter cards by project name
+	projectIDs     map[string]string // Map of project name -> project ID
+	client         *http.Client
+	currentUserID  string            // Cached from account query for create-card API
 }
 
 // NewService creates a new Codecks service
@@ -53,7 +54,6 @@ func NewService() (*Service, error) {
 	if err := svc.loadProjects(context.Background()); err != nil {
 		return nil, fmt.Errorf("failed to connect to Codecks: %w", err)
 	}
-
 	return svc, nil
 }
 
@@ -206,6 +206,76 @@ func (s *Service) GetProjectFilter() string {
 	return s.projectFilter
 }
 
+// loadCurrentUserID is no longer used; we get current user from card owner when loading tickets.
+// Kept for reference in case the API adds a supported currentUser query later.
+func (s *Service) loadCurrentUserID(ctx context.Context) error {
+	return fmt.Errorf("use current user from card owner instead")
+}
+
+// tryLoadCurrentUserFromOneCard runs a minimal one-off query to fetch one card with "owner".
+// Used only when creating a card; does not change the main ticket list query.
+// If the API does not support "owner" this may return an error.
+func (s *Service) tryLoadCurrentUserFromOneCard(ctx context.Context) error {
+	if s.currentUserID != "" {
+		return nil
+	}
+	// Minimal query: one card with owner (same API as list; if owner breaks, we get error only for create)
+	query := map[string]any{
+		"query": map[string]any{
+			"_root": []any{
+				map[string]any{
+					"account": []any{
+						map[string]any{
+							`cards({"$limit": 1})`: []string{"id", "owner"},
+						},
+					},
+				},
+			},
+		},
+	}
+	respBody, err := s.doRequest(ctx, query)
+	if err != nil {
+		return err
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(respBody, &raw); err != nil {
+		return fmt.Errorf("parse response: %w", err)
+	}
+	cardsMap, _ := raw["card"].(map[string]any)
+	for _, cardData := range cardsMap {
+		cardMap, ok := cardData.(map[string]any)
+		if !ok {
+			continue
+		}
+		s.setCurrentUserFromCard(cardMap)
+		if s.currentUserID != "" {
+			return nil
+		}
+	}
+	return fmt.Errorf("no card with owner in response")
+}
+
+// setCurrentUserFromCard extracts owner id from a card map and sets s.currentUserID if still empty.
+// Owner may be a string id, a number, or an object with "id".
+func (s *Service) setCurrentUserFromCard(cardMap map[string]any) {
+	if s.currentUserID != "" {
+		return
+	}
+	if id := getString(cardMap, "owner"); id != "" {
+		s.currentUserID = id
+		return
+	}
+	if n := getInt(cardMap, "owner"); n != 0 {
+		s.currentUserID = fmt.Sprintf("%d", n)
+		return
+	}
+	if owner, ok := cardMap["owner"].(map[string]any); ok {
+		if id := getString(owner, "id"); id != "" {
+			s.currentUserID = id
+		}
+	}
+}
+
 // doRequest performs an authenticated request to the Codecks API
 func (s *Service) doRequest(ctx context.Context, body any) ([]byte, error) {
 	jsonBody, err := json.Marshal(body)
@@ -308,6 +378,8 @@ func (s *Service) getAllCards(ctx context.Context) ([]tickets.Ticket, error) {
 		if visibility == "archived" || visibility == "deleted" {
 			continue
 		}
+
+		s.setCurrentUserFromCard(cardMap)
 
 		status := getString(cardMap, "status")
 
@@ -416,6 +488,8 @@ func (s *Service) getCardsFromDeck(ctx context.Context, deckID string) ([]ticket
 		if visibility == "archived" || visibility == "deleted" {
 			continue
 		}
+
+		s.setCurrentUserFromCard(cardMap)
 
 		status := getString(cardMap, "status")
 
@@ -671,6 +745,117 @@ func (s *Service) TransitionTicket(ctx context.Context, ticketKey string, transi
 	}
 
 	return nil
+}
+
+// CanCreateTicket returns true when Codecks is configured; create may still fail with a clear error if current user cannot be resolved.
+func (s *Service) CanCreateTicket() bool {
+	return true
+}
+
+// CreateTicket creates a new card via the Codecks dispatch API (cards/create).
+// See https://manual.codecks.io/api/ — creates card on hand by default; optional deckId from CODECKS_PROJECT.
+// We omit userId when we cannot resolve it (owner/currentUser queries 500); the API may infer user from the auth token.
+func (s *Service) CreateTicket(ctx context.Context, input *tickets.CreateTicketInput) (*tickets.Ticket, error) {
+	if input == nil || strings.TrimSpace(input.Summary) == "" {
+		return nil, fmt.Errorf("summary is required")
+	}
+	title := strings.TrimSpace(input.Summary)
+	desc := strings.TrimSpace(input.Description)
+	content := title
+	if desc != "" {
+		content = title + "\n\n" + desc
+	}
+	payload := map[string]any{
+		"assigneeId":   nil,
+		"content":      content,
+		"putOnHand":    true,
+		"deckId":       nil,
+		"milestoneId":  nil,
+		"masterTags":   []any{},
+		"attachments":  []any{},
+		"effort":       0,
+		"priority":     "c",
+		"childCards":   []any{},
+	}
+	if s.currentUserID != "" {
+		payload["userId"] = s.currentUserID
+	}
+	// Optional: put card in first deck of CODECKS_PROJECT instead of hand
+	if s.projectFilter != "" {
+		if projectID := s.projectIDs[s.projectFilter]; projectID != "" {
+			if deckIDs := projectDecks[projectID]; len(deckIDs) > 0 {
+				payload["deckId"] = deckIDs[0]
+				payload["putOnHand"] = false
+			}
+		}
+	}
+	respBody, err := s.doDispatchRequest(ctx, "cards/create", payload)
+	if err != nil {
+		return nil, fmt.Errorf("create card: %w", err)
+	}
+	var result map[string]any
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("parse create response: %w", err)
+	}
+	if errData, ok := result["error"]; ok {
+		return nil, fmt.Errorf("codecks error: %v", errData)
+	}
+	cardID := extractCardIDFromCreateResponse(result)
+	if cardID == "" {
+		return nil, fmt.Errorf("create response missing card id")
+	}
+	return s.GetTicket(ctx, cardID)
+}
+
+// extractCardIDFromCreateResponse returns the created card id from a cards/create response.
+// Codecks may return id at top level, under "card", or as a number.
+func extractCardIDFromCreateResponse(result map[string]any) string {
+	if id, ok := result["id"].(string); ok && id != "" {
+		return id
+	}
+	if n, ok := result["id"].(float64); ok {
+		return fmt.Sprintf("%.0f", n)
+	}
+	if id, ok := result["cardId"].(string); ok && id != "" {
+		return id
+	}
+	if n, ok := result["cardId"].(float64); ok {
+		return fmt.Sprintf("%.0f", n)
+	}
+	if card, ok := result["card"].(map[string]any); ok {
+		if id, ok := card["id"].(string); ok && id != "" {
+			return id
+		}
+		if n, ok := card["id"].(float64); ok {
+			return fmt.Sprintf("%.0f", n)
+		}
+	}
+	if data, ok := result["data"].(map[string]any); ok {
+		if id, ok := data["id"].(string); ok && id != "" {
+			return id
+		}
+		if n, ok := data["id"].(float64); ok {
+			return fmt.Sprintf("%.0f", n)
+		}
+	}
+	// Normalized shape: {"card": {"<id>": {...}}} — use first key as id
+	if cardMap, ok := result["card"].(map[string]any); ok && len(cardMap) > 0 {
+		for id := range cardMap {
+			return id
+		}
+	}
+	// Any top-level object might be the card (e.g. {"createdCard": {"id": "..."}})
+	for _, v := range result {
+		if m, ok := v.(map[string]any); ok {
+			if id, ok := m["id"].(string); ok && id != "" {
+				return id
+			}
+			if n, ok := m["id"].(float64); ok {
+				return fmt.Sprintf("%.0f", n)
+			}
+		}
+	}
+	return ""
 }
 
 // doDispatchRequest performs a write operation to the Codecks dispatch API

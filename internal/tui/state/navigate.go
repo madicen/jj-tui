@@ -30,6 +30,9 @@ const (
 	NavigateRunInit
 	NavigateDismissErrorAndRefresh
 	NavigateBackFromPRForm // back to graph and hide PR form modal
+	NavigateCreateTicket   // open Create Ticket modal (from Tickets tab)
+	NavigateBackFromTicketForm
+	NavigateSubmitTicket // run create ticket and close modal
 )
 
 // NavigateTarget describes a navigation request. Only main can perform these

@@ -1,6 +1,7 @@
 package jira
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -394,7 +395,92 @@ func (s *Service) TransitionTicket(ctx context.Context, ticketKey string, transi
 	return nil
 }
 
-// IsConfigured returns true if Jira environment variables are set
+// createIssueRequest is the body for POST /rest/api/3/issue
+type createIssueRequest struct {
+	Fields struct {
+		Project     map[string]string `json:"project"`
+		Summary     string            `json:"summary"`
+		IssueType   map[string]string `json:"issuetype"`
+		Description *adfDocument      `json:"description,omitempty"`
+	} `json:"fields"`
+}
+
+// adfDocument is Atlassian Document Format for description
+type adfDocument struct {
+	Type    string     `json:"type"`
+	Version int        `json:"version"`
+	Content []adfBlock `json:"content"`
+}
+
+type adfBlock struct {
+	Type    string     `json:"type"`
+	Content []adfText  `json:"content,omitempty"`
+}
+
+type adfText struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
+// createIssueResponse is the response from POST /rest/api/3/issue
+type createIssueResponse struct {
+	Key string `json:"key"`
+	ID  string `json:"id"`
+}
+
+// CanCreateTicket returns true if Jira project is configured (JIRA_PROJECT or first project from API).
+func (s *Service) CanCreateTicket() bool {
+	project := os.Getenv("JIRA_PROJECT")
+	return project != ""
+}
+
+// CreateTicket creates a new Jira issue. Uses JIRA_PROJECT for project key and JIRA_ISSUE_TYPE for type (default "Task").
+func (s *Service) CreateTicket(ctx context.Context, input *tickets.CreateTicketInput) (*tickets.Ticket, error) {
+	if input == nil || strings.TrimSpace(input.Summary) == "" {
+		return nil, fmt.Errorf("summary is required")
+	}
+	projectKey := os.Getenv("JIRA_PROJECT")
+	if projectKey == "" {
+		return nil, fmt.Errorf("JIRA_PROJECT is required to create issues")
+	}
+	issueType := os.Getenv("JIRA_ISSUE_TYPE")
+	if issueType == "" {
+		issueType = "Task"
+	}
+	reqBody := createIssueRequest{}
+	reqBody.Fields.Project = map[string]string{"key": strings.TrimSpace(projectKey)}
+	reqBody.Fields.IssueType = map[string]string{"name": issueType}
+	reqBody.Fields.Summary = strings.TrimSpace(input.Summary)
+	if input.Description != "" {
+		reqBody.Fields.Description = &adfDocument{
+			Type:    "doc",
+			Version: 1,
+			Content: []adfBlock{{
+				Type: "paragraph",
+				Content: []adfText{{Type: "text", Text: strings.TrimSpace(input.Description)}},
+			}},
+		}
+	}
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	resp, err := s.doRequest(ctx, "POST", "/rest/api/3/issue", bytes.NewReader(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("create issue: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("jira API error (status %d): %s", resp.StatusCode, string(bodyBytes))
+	}
+	var created createIssueResponse
+	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+	// Fetch full ticket so we return consistent Ticket fields
+	return s.GetTicket(ctx, created.Key)
+}
 func IsConfigured() bool {
 	return os.Getenv("JIRA_URL") != "" &&
 		os.Getenv("JIRA_USER") != "" &&

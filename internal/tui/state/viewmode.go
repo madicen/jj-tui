@@ -11,6 +11,7 @@ const (
 	ViewSettings
 	ViewHelp
 	ViewCreatePR
+	ViewCreateTicket // Create Ticket modal (from Tickets tab)
 	ViewEditDescription
 	ViewCreateBookmark
 	ViewGitHubLogin      // GitHub Device Flow login
@@ -34,6 +35,8 @@ func (v ViewMode) String() string {
 		return "help"
 	case ViewCreatePR:
 		return "create_pr"
+	case ViewCreateTicket:
+		return "create_ticket"
 	case ViewEditDescription:
 		return "edit_description"
 	case ViewCreateBookmark:
