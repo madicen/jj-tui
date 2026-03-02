@@ -488,6 +488,13 @@ func (m *GraphModel) buildGraphData() GraphData {
 	}
 }
 
+// GetCreatePRBranch returns the branch name that would be used for Create PR for the
+// currently selected commit, or "" if not applicable. Used to block Create PR on main/master.
+func (m *GraphModel) GetCreatePRBranch() string {
+	data := m.buildGraphData()
+	return data.CommitBookmark[m.selectedCommit]
+}
+
 // UpdateRepository updates the graph model with new repository data.
 func (m *GraphModel) UpdateRepository(repo *internal.Repository) {
 	if repo == nil {

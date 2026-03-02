@@ -53,6 +53,40 @@ func FindCommitsWithEmptyDescriptions(repo *internal.Repository, selectedCommit 
 	return emptyDescCommits
 }
 
+// isFirstParentImmutable returns true if the selected commit's first parent is immutable
+// (or if the parent is not found in the list, to be safe). Used to hide Squash and Move to Parent
+// when they would target an immutable parent.
+func isFirstParentImmutable(commits []internal.Commit, selectedIndex int) bool {
+	if selectedIndex < 0 || selectedIndex >= len(commits) {
+		return true
+	}
+	commit := commits[selectedIndex]
+	if len(commit.Parents) == 0 {
+		return true // root commit, no parent
+	}
+	parentID := commit.Parents[0]
+	idToIndex := make(map[string]int)
+	for i, c := range commits {
+		idToIndex[c.ID] = i
+		idToIndex[c.ChangeID] = i
+	}
+	idx, ok := idToIndex[parentID]
+	if !ok {
+		return true
+	}
+	return commits[idx].Immutable
+}
+
+// isDefaultBranch returns true for branch names that are typically the repo default (main, master).
+// Creating a PR from these pushes directly to the branch instead of opening a PR.
+func isDefaultBranch(branch string) bool {
+	switch strings.ToLower(branch) {
+	case "main", "master":
+		return true
+	}
+	return false
+}
+
 // GraphResult contains the split rendering for commit graph view
 type GraphResult struct {
 	GraphContent        string
@@ -184,8 +218,12 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 			isMutable = !commit.Immutable
 		}
 		if isMutable {
+			if !isFirstParentImmutable(data.Repository.Graph.Commits, data.SelectedCommit) {
+				fileActionButtons = append(fileActionButtons,
+					m.zoneManager.Mark(mouse.ZoneActionMoveFileUp, styles.ButtonStyle.Render("Move to Parent ([)")),
+				)
+			}
 			fileActionButtons = append(fileActionButtons,
-				m.zoneManager.Mark(mouse.ZoneActionMoveFileUp, styles.ButtonStyle.Render("Move to Parent ([)")),
 				m.zoneManager.Mark(mouse.ZoneActionMoveFileDown, styles.ButtonStyle.Render("Move to Child (])")),
 				m.zoneManager.Mark(mouse.ZoneActionRevertFile, styles.ButtonStyle.Render("Revert Changes (v)")),
 			)
@@ -213,7 +251,13 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 				actionButtons = append(actionButtons,
 					m.zoneManager.Mark(mouse.ZoneActionCheckout, styles.ButtonStyle.Render("Edit (e)")),
 					m.zoneManager.Mark(mouse.ZoneActionDescribe, styles.ButtonStyle.Render("Describe (d)")),
-					m.zoneManager.Mark(mouse.ZoneActionSquash, styles.ButtonStyle.Render("Squash (s)")),
+				)
+				if !isFirstParentImmutable(data.Repository.Graph.Commits, data.SelectedCommit) {
+					actionButtons = append(actionButtons,
+						m.zoneManager.Mark(mouse.ZoneActionSquash, styles.ButtonStyle.Render("Squash (s)")),
+					)
+				}
+				actionButtons = append(actionButtons,
 					m.zoneManager.Mark(mouse.ZoneActionRebase, styles.ButtonStyle.Render("Rebase (r)")),
 					m.zoneManager.Mark(mouse.ZoneActionAbandon, styles.ButtonStyle.Render("Abandon (a)")),
 					m.zoneManager.Mark(mouse.ZoneActionBookmark, styles.ButtonStyle.Render("Bookmark (m)")),
@@ -246,7 +290,7 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 					if data.CommitBookmark != nil {
 						createPRBranch = data.CommitBookmark[data.SelectedCommit]
 					}
-					if createPRBranch != "" {
+					if createPRBranch != "" && !isDefaultBranch(createPRBranch) {
 						buttonLabel := "Create PR (c)"
 						if len(commit.Branches) == 0 {
 							buttonLabel = fmt.Sprintf("Create PR [%s] (c)", createPRBranch)

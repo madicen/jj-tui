@@ -145,6 +145,9 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 		if !ctx.IsSelectedCommitValid() || ctx.JJService == nil {
 			return Result{}
 		}
+		if ctx.CreatePRBranch != "" && isDefaultBranch(ctx.CreatePRBranch) {
+			return Result{Status: "Create PR is not available for main/master; use a feature branch"}
+		}
 		emptyDescCommits := FindCommitsWithEmptyDescriptions(ctx.Repository, ctx.SelectedCommit)
 		if len(emptyDescCommits) > 0 {
 			return Result{
@@ -205,6 +208,9 @@ func executeSquash(ctx *RequestContext) (tea.Cmd, string) {
 	if commit.Immutable {
 		return nil, "Cannot squash: commit is immutable"
 	}
+	if isFirstParentImmutable(ctx.Repository.Graph.Commits, ctx.SelectedCommit) {
+		return nil, "Cannot squash: parent commit is immutable"
+	}
 	return Squash(ctx.JJService, commit.ChangeID), ""
 }
 
@@ -260,6 +266,9 @@ func executeMoveFileUp(ctx *RequestContext) (tea.Cmd, string) {
 	commit := ctx.Repository.Graph.Commits[ctx.SelectedCommit]
 	if commit.Immutable {
 		return nil, "Cannot move file: commit is immutable"
+	}
+	if isFirstParentImmutable(ctx.Repository.Graph.Commits, ctx.SelectedCommit) {
+		return nil, "Cannot move file to parent: parent commit is immutable"
 	}
 	return SplitFileToParent(ctx.JJService, commit.ChangeID, ctx.ChangedFiles[ctx.SelectedFile].Path), ""
 }
