@@ -206,55 +206,6 @@ func (s *Service) GetProjectFilter() string {
 	return s.projectFilter
 }
 
-// loadCurrentUserID is no longer used; we get current user from card owner when loading tickets.
-// Kept for reference in case the API adds a supported currentUser query later.
-func (s *Service) loadCurrentUserID(ctx context.Context) error {
-	return fmt.Errorf("use current user from card owner instead")
-}
-
-// tryLoadCurrentUserFromOneCard runs a minimal one-off query to fetch one card with "owner".
-// Used only when creating a card; does not change the main ticket list query.
-// If the API does not support "owner" this may return an error.
-func (s *Service) tryLoadCurrentUserFromOneCard(ctx context.Context) error {
-	if s.currentUserID != "" {
-		return nil
-	}
-	// Minimal query: one card with owner (same API as list; if owner breaks, we get error only for create)
-	query := map[string]any{
-		"query": map[string]any{
-			"_root": []any{
-				map[string]any{
-					"account": []any{
-						map[string]any{
-							`cards({"$limit": 1})`: []string{"id", "owner"},
-						},
-					},
-				},
-			},
-		},
-	}
-	respBody, err := s.doRequest(ctx, query)
-	if err != nil {
-		return err
-	}
-	var raw map[string]any
-	if err := json.Unmarshal(respBody, &raw); err != nil {
-		return fmt.Errorf("parse response: %w", err)
-	}
-	cardsMap, _ := raw["card"].(map[string]any)
-	for _, cardData := range cardsMap {
-		cardMap, ok := cardData.(map[string]any)
-		if !ok {
-			continue
-		}
-		s.setCurrentUserFromCard(cardMap)
-		if s.currentUserID != "" {
-			return nil
-		}
-	}
-	return fmt.Errorf("no card with owner in response")
-}
-
 // setCurrentUserFromCard extracts owner id from a card map and sets s.currentUserID if still empty.
 // Owner may be a string id, a number, or an object with "id".
 func (s *Service) setCurrentUserFromCard(cardMap map[string]any) {
