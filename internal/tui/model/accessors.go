@@ -88,6 +88,11 @@ func (m *Model) IsGitHubAvailable() bool {
 	return m.isGitHubAvailable()
 }
 
+// GetCreatePRBranch returns the branch that would be used for Create PR for the selected commit (for graph ContextProvider).
+func (m *Model) GetCreatePRBranch() string {
+	return m.graphTabModel.GetCreatePRBranch()
+}
+
 // IsDemoMode returns whether the app is in demo mode (for tab context providers).
 func (m *Model) IsDemoMode() bool {
 	return m.appState.DemoMode

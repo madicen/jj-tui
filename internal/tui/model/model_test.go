@@ -30,8 +30,8 @@ func newTestModel() *Model {
 		Graph: internal.CommitGraph{
 			Commits: []internal.Commit{
 				{ID: "abc123456789", ShortID: "abc1", ChangeID: "abc1", Summary: "First commit"},
-				{ID: "def456789012", ShortID: "def4", ChangeID: "def4", Summary: "Second commit"},
-				{ID: "ghi789012345", ShortID: "ghi7", ChangeID: "ghi7", Summary: "Third commit", IsWorking: true},
+				{ID: "def456789012", ShortID: "def4", ChangeID: "def4", Summary: "Second commit", Parents: []string{"abc123456789"}},
+				{ID: "ghi789012345", ShortID: "ghi7", ChangeID: "ghi7", Summary: "Third commit", IsWorking: true, Parents: []string{"def456789012"}},
 			},
 		},
 		PRs: []internal.GitHubPR{
@@ -637,7 +637,8 @@ func TestViewShowsActionsWhenCommitSelected(t *testing.T) {
 	m := newTestModel()
 	defer m.Close()
 
-	m.graphTabModel.SelectCommit(0)
+	// Select commit 1 (has mutable parent 0) so Squash is available
+	m.graphTabModel.SelectCommit(1)
 
 	view := m.View()
 
@@ -645,7 +646,7 @@ func TestViewShowsActionsWhenCommitSelected(t *testing.T) {
 		t.Error("View should contain 'Edit' button when commit selected")
 	}
 	if !containsString(view, "Squash") {
-		t.Error("View should contain 'Squash' button when commit selected")
+		t.Error("View should contain 'Squash' button when commit selected (with mutable parent)")
 	}
 }
 
@@ -917,8 +918,10 @@ func TestActionButtonsInCommitGraph(t *testing.T) {
 		m := newTestModel()
 		defer m.Close()
 
-		m.graphTabModel.SelectCommit(0)
+		// Select commit 1 (has mutable parent 0) so Squash is available
+		m.graphTabModel.SelectCommit(1)
 		m.appState.Repository.Graph.Commits[0].Immutable = false
+		m.appState.Repository.Graph.Commits[1].Immutable = false
 
 		view := m.View()
 

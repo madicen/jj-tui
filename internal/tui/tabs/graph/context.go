@@ -17,6 +17,7 @@ type ContextProvider interface {
 	GetSelectedFile() int
 	IsGraphFocused() bool
 	IsGitHubAvailable() bool
+	GetCreatePRBranch() string
 }
 
 // BuildRequestContextFrom builds RequestContext from a provider (e.g. main model).
@@ -34,6 +35,7 @@ func BuildRequestContextFrom(p ContextProvider) *RequestContext {
 		SelectedFile:         p.GetSelectedFile(),
 		GraphFocused:         p.IsGraphFocused(),
 		GitHubAvailable:      p.IsGitHubAvailable(),
+		CreatePRBranch:       p.GetCreatePRBranch(),
 	})
 }
 
@@ -49,6 +51,7 @@ type RequestContext struct {
 	SelectedFile         int
 	GraphFocused         bool
 	GitHubAvailable      bool
+	CreatePRBranch       string // branch that would be used for Create PR for selected commit (to block main/master)
 }
 
 // ContextInput is the data needed to build a RequestContext. Main passes this from its state.
@@ -62,6 +65,7 @@ type ContextInput struct {
 	SelectedFile         int
 	GraphFocused         bool
 	GitHubAvailable      bool
+	CreatePRBranch       string
 }
 
 // BuildRequestContext builds RequestContext from input. The graph package owns what context it needs.
@@ -79,6 +83,7 @@ func BuildRequestContext(input *ContextInput) *RequestContext {
 		SelectedFile:         input.SelectedFile,
 		GraphFocused:         input.GraphFocused,
 		GitHubAvailable:      input.GitHubAvailable,
+		CreatePRBranch:      input.CreatePRBranch,
 	}
 }
 
@@ -107,5 +112,6 @@ func BuildRequestContextFromApp(app *state.AppState, m *GraphModel) *RequestCont
 		SelectedFile:         m.GetSelectedFile(),
 		GraphFocused:         m.IsGraphFocused(),
 		GitHubAvailable:      githubAvailable,
+		CreatePRBranch:       m.GetCreatePRBranch(),
 	})
 }
