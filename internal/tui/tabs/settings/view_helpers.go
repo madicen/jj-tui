@@ -308,12 +308,17 @@ func (r renderCtx) renderJira(data RenderData) []string {
 	addField("  Email:", 2, mouse.ZoneSettingsJiraUser, mouse.ZoneSettingsJiraUserClear)
 	addField("  API Token:", 3, mouse.ZoneSettingsJiraToken, mouse.ZoneSettingsJiraTokenClear)
 	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Get from: https://id.atlassian.com/manage-profile/security/api-tokens"), "")
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("  Creating issues:"))
+	addField("  Project for new issues:", 4, mouse.ZoneSettingsJiraProject, mouse.ZoneSettingsJiraProjectClear)
+	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Project key when creating issues (e.g., PROJ)"), "")
+	addField("  Default issue type:", 6, mouse.ZoneSettingsJiraIssueType, mouse.ZoneSettingsJiraIssueTypeClear)
+	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Type when creating issues (e.g., Task, Bug, Story). Empty = Task"), "")
 	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("  Ticket Filters:"))
-	addField("  Project(s):", 4, mouse.ZoneSettingsJiraProject, mouse.ZoneSettingsJiraProjectClear)
-	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Project key(s) to filter (e.g., PROJ or PROJ,TEAM)"), "")
-	addField("  Custom JQL:", 5, mouse.ZoneSettingsJiraJQL, mouse.ZoneSettingsJiraJQLClear)
+	addField("  Project filter(s):", 5, mouse.ZoneSettingsJiraProjectFilter, mouse.ZoneSettingsJiraProjectFilterClear)
+	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Optional: filter ticket list by project(s) (e.g., PROJ or PROJ,TEAM)"), "")
+	addField("  Custom JQL:", 7, mouse.ZoneSettingsJiraJQL, mouse.ZoneSettingsJiraJQLClear)
 	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Additional JQL filter (e.g., sprint in openSprints())"), "")
-	addField("  Exclude Statuses:", 6, mouse.ZoneSettingsJiraExcluded, mouse.ZoneSettingsJiraExcludedClear)
+	addField("  Exclude Statuses:", 8, mouse.ZoneSettingsJiraExcluded, mouse.ZoneSettingsJiraExcludedClear)
 	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Comma-separated list (e.g., Done, Won't Do, Cancelled)"))
 	return lines
 }
@@ -336,14 +341,14 @@ func (r renderCtx) renderCodecks(data RenderData) []string {
 			lines = append(lines, "  "+r.mark(zoneID, data.Inputs[idx].View)+" "+r.mark(clearZone, clearButtonStyle.Render("[Clear]")))
 		}
 	}
-	addField("  Subdomain:", 7, mouse.ZoneSettingsCodecksSubdomain, mouse.ZoneSettingsCodecksSubdomainClear)
+	addField("  Subdomain:", 9, mouse.ZoneSettingsCodecksSubdomain, mouse.ZoneSettingsCodecksSubdomainClear)
 	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Your team name (e.g., 'myteam' from myteam.codecks.io)"), "")
-	addField("  Auth Token:", 8, mouse.ZoneSettingsCodecksToken, mouse.ZoneSettingsCodecksTokenClear)
+	addField("  Auth Token:", 10, mouse.ZoneSettingsCodecksToken, mouse.ZoneSettingsCodecksTokenClear)
 	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Extract 'at' cookie from browser DevTools"), "")
 	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("  Card Filters:"))
-	addField("  Project Filter:", 9, mouse.ZoneSettingsCodecksProject, mouse.ZoneSettingsCodecksProjectClear)
+	addField("  Project Filter:", 11, mouse.ZoneSettingsCodecksProject, mouse.ZoneSettingsCodecksProjectClear)
 	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Optional: Only show cards from this project"), "")
-	addField("  Exclude Statuses:", 10, mouse.ZoneSettingsCodecksExcluded, mouse.ZoneSettingsCodecksExcludedClear)
+	addField("  Exclude Statuses:", 12, mouse.ZoneSettingsCodecksExcluded, mouse.ZoneSettingsCodecksExcludedClear)
 	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Comma-separated list (e.g., done, archived)"))
 	return lines
 }
@@ -395,12 +400,12 @@ func (r renderCtx) renderTickets(data RenderData) []string {
 	if data.TicketProvider == "github_issues" {
 		lines = append(lines, "", lipgloss.NewStyle().Bold(true).Render("  GitHub Issues Filters:"))
 		s := lipgloss.NewStyle()
-		if data.FocusedField == 11 {
+		if data.FocusedField == 13 {
 			s = s.Bold(true).Foreground(styles.ColorPrimary)
 		}
 		lines = append(lines, s.Render("  Exclude Statuses:"))
-		if len(data.Inputs) > 11 {
-			lines = append(lines, "  "+r.mark(mouse.ZoneSettingsGitHubIssuesExcluded, data.Inputs[11].View)+" "+r.mark(mouse.ZoneSettingsGitHubIssuesExcludedClear, clearButtonStyle.Render("[Clear]")))
+		if len(data.Inputs) > 13 {
+			lines = append(lines, "  "+r.mark(mouse.ZoneSettingsGitHubIssuesExcluded, data.Inputs[13].View)+" "+r.mark(mouse.ZoneSettingsGitHubIssuesExcludedClear, clearButtonStyle.Render("[Clear]")))
 		}
 		lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Comma-separated list (e.g., closed)"))
 	}
@@ -430,10 +435,10 @@ func (r renderCtx) renderAdvanced(data RenderData) []string {
 		}
 		return s
 	}
-	lines = append(lines, focusStyle(12).Render("  Default revset (jj):"))
+	lines = append(lines, focusStyle(14).Render("  Default revset (jj):"))
 	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Which commits to show in the commit graph. Empty = use built-in default."), "")
-	if len(data.Inputs) > 12 {
-		lines = append(lines, "  "+r.mark(mouse.ZoneSettingsGraphRevset, data.Inputs[12].View)+" "+r.mark(mouse.ZoneSettingsGraphRevsetClear, clearButtonStyle.Render("[Clear]")))
+	if len(data.Inputs) > 14 {
+		lines = append(lines, "  "+r.mark(mouse.ZoneSettingsGraphRevset, data.Inputs[14].View)+" "+r.mark(mouse.ZoneSettingsGraphRevsetClear, clearButtonStyle.Render("[Clear]")))
 	}
 	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    e.g. trunk() | (ancestors(@) - ancestors(trunk())) for main + your branch only"), "", "")
 

@@ -89,7 +89,7 @@ func handleJiraZone(m *Model, zoneID string) (Model, tea.Cmd) {
 	jr := m.GetJiraModel()
 	clearZones := []string{
 		mouse.ZoneSettingsJiraURLClear, mouse.ZoneSettingsJiraUserClear, mouse.ZoneSettingsJiraTokenClear,
-		mouse.ZoneSettingsJiraProjectClear, mouse.ZoneSettingsJiraJQLClear, mouse.ZoneSettingsJiraExcludedClear,
+		mouse.ZoneSettingsJiraProjectClear, mouse.ZoneSettingsJiraProjectFilterClear, mouse.ZoneSettingsJiraIssueTypeClear, mouse.ZoneSettingsJiraJQLClear, mouse.ZoneSettingsJiraExcludedClear,
 	}
 	for i, zid := range clearZones {
 		if zoneID == zid {
@@ -103,8 +103,12 @@ func handleJiraZone(m *Model, zoneID string) (Model, tea.Cmd) {
 			case 3:
 				jr.SetProject("")
 			case 4:
-				jr.SetJQL("")
+				jr.SetProjectFilter("")
 			case 5:
+				jr.SetIssueType("")
+			case 6:
+				jr.SetJQL("")
+			case 7:
 				jr.SetExcludedStatuses("")
 			}
 			m.SetFocusedField(i + 1)
@@ -113,7 +117,7 @@ func handleJiraZone(m *Model, zoneID string) (Model, tea.Cmd) {
 	}
 	settingsZones := []string{
 		mouse.ZoneSettingsJiraURL, mouse.ZoneSettingsJiraUser, mouse.ZoneSettingsJiraToken,
-		mouse.ZoneSettingsJiraProject, mouse.ZoneSettingsJiraJQL, mouse.ZoneSettingsJiraExcluded,
+		mouse.ZoneSettingsJiraProject, mouse.ZoneSettingsJiraProjectFilter, mouse.ZoneSettingsJiraIssueType, mouse.ZoneSettingsJiraJQL, mouse.ZoneSettingsJiraExcluded,
 	}
 	for i, zid := range settingsZones {
 		if zoneID == zid {
@@ -131,7 +135,7 @@ func handleCodecksZone(m *Model, zoneID string) (Model, tea.Cmd) {
 		mouse.ZoneSettingsCodecksSubdomainClear, mouse.ZoneSettingsCodecksTokenClear,
 		mouse.ZoneSettingsCodecksProjectClear, mouse.ZoneSettingsCodecksExcludedClear,
 	}
-	indices := []int{7, 8, 9, 10}
+	indices := []int{9, 10, 11, 12}
 	for i, zid := range clearZones {
 		if zoneID == zid {
 			switch i {
@@ -185,7 +189,7 @@ func handleTicketsZone(m *Model, zoneID string) (Model, tea.Cmd) {
 		tk.SetFocusedField(0)
 		return *m, nil
 	case mouse.ZoneSettingsGitHubIssuesExcluded:
-		m.SetFocusedField(11)
+		m.SetFocusedField(13)
 		return *m, nil
 	}
 	return *m, nil
@@ -240,10 +244,10 @@ func handleAdvancedZone(m *Model, zoneID string) (Model, tea.Cmd) {
 		adv.SetSanitizeBookmarks(!adv.GetSanitizeBookmarks())
 		return *m, nil
 	case mouse.ZoneSettingsGraphRevset:
-		return *m, m.SetFocusedField(12)
+		return *m, m.SetFocusedField(14)
 	case mouse.ZoneSettingsGraphRevsetClear:
 		adv.SetGraphRevset("")
-		return *m, m.SetFocusedField(12)
+		return *m, m.SetFocusedField(14)
 	}
 	return *m, nil
 }

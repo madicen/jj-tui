@@ -39,7 +39,9 @@ type Config struct {
 	JiraURL              string `json:"jira_url,omitempty"`
 	JiraUser             string `json:"jira_user,omitempty"`
 	JiraToken            string `json:"jira_token,omitempty"`
-	JiraProject          string `json:"jira_project,omitempty"`           // Optional: filter by project key(s), comma-separated (e.g., "PROJ" or "PROJ,TEAM")
+	JiraProject          string `json:"jira_project,omitempty"`           // Project key for creating new issues (e.g., "PROJ")
+	JiraProjectFilter    string `json:"jira_project_filter,omitempty"`    // Optional: project key(s) to filter ticket list (e.g., "PROJ" or "PROJ,TEAM")
+	JiraIssueType        string `json:"jira_issue_type,omitempty"`     // Default issue type when creating issues (e.g., "Task", "Bug", "Story")
 	JiraJQL              string `json:"jira_jql,omitempty"`               // Optional: custom JQL to append to query (e.g., "sprint in openSprints()")
 	JiraExcludedStatuses string `json:"jira_excluded_statuses,omitempty"` // Comma-separated statuses to hide
 
@@ -151,6 +153,12 @@ func mergeConfig(dest, source *Config) {
 	}
 	if source.JiraProject != "" {
 		dest.JiraProject = source.JiraProject
+	}
+	if source.JiraProjectFilter != "" {
+		dest.JiraProjectFilter = source.JiraProjectFilter
+	}
+	if source.JiraIssueType != "" {
+		dest.JiraIssueType = source.JiraIssueType
 	}
 	if source.JiraJQL != "" {
 		dest.JiraJQL = source.JiraJQL
@@ -316,6 +324,12 @@ func (c *Config) ApplyToEnvironment() {
 	if c.JiraProject != "" && os.Getenv("JIRA_PROJECT") == "" {
 		os.Setenv("JIRA_PROJECT", c.JiraProject)
 	}
+	if c.JiraProjectFilter != "" && os.Getenv("JIRA_PROJECT_FILTER") == "" {
+		os.Setenv("JIRA_PROJECT_FILTER", c.JiraProjectFilter)
+	}
+	if c.JiraIssueType != "" && os.Getenv("JIRA_ISSUE_TYPE") == "" {
+		os.Setenv("JIRA_ISSUE_TYPE", c.JiraIssueType)
+	}
 	if c.JiraJQL != "" && os.Getenv("JIRA_JQL") == "" {
 		os.Setenv("JIRA_JQL", c.JiraJQL)
 	}
@@ -346,6 +360,12 @@ func (c *Config) UpdateFromEnvironment() {
 	}
 	if project := os.Getenv("JIRA_PROJECT"); project != "" {
 		c.JiraProject = project
+	}
+	if filter := os.Getenv("JIRA_PROJECT_FILTER"); filter != "" {
+		c.JiraProjectFilter = filter
+	}
+	if issueType := os.Getenv("JIRA_ISSUE_TYPE"); issueType != "" {
+		c.JiraIssueType = issueType
 	}
 	if jql := os.Getenv("JIRA_JQL"); jql != "" {
 		c.JiraJQL = jql
