@@ -27,6 +27,7 @@ import (
 	prformtab "github.com/madicen/jj-tui/internal/tui/tabs/prform"
 	prstab "github.com/madicen/jj-tui/internal/tui/tabs/prs"
 	settingstab "github.com/madicen/jj-tui/internal/tui/tabs/settings"
+	ticketformtab "github.com/madicen/jj-tui/internal/tui/tabs/ticketform"
 	ticketstab "github.com/madicen/jj-tui/internal/tui/tabs/tickets"
 	warningtab "github.com/madicen/jj-tui/internal/tui/tabs/warning"
 	"github.com/madicen/jj-tui/internal/tui/util"
@@ -62,6 +63,7 @@ type Model struct {
 	divergentModal   divergenttab.Model
 	bookmarkModal    bookmarktab.Model
 	prFormModal      prformtab.Model
+	ticketFormModal  ticketformtab.Model
 	desceditModal    descedittab.Model
 	githubLoginModel githublogintab.Model
 }
@@ -256,7 +258,7 @@ func (m *Model) handleNavigateToBranchesTab() (tea.Model, tea.Cmd) {
 
 // handleNavigate performs view changes that only main can do (it owns modals and cross-tab state).
 func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
-	if t.Kind == state.NavigateSaveDescription || t.Kind == state.NavigateSubmitBookmark || t.Kind == state.NavigateSubmitPR || t.Kind == state.NavigateResolveConflict || t.Kind == state.NavigateResolveDivergent || t.Kind == state.NavigateRunInit {
+	if t.Kind == state.NavigateSaveDescription || t.Kind == state.NavigateSubmitBookmark || t.Kind == state.NavigateSubmitPR || t.Kind == state.NavigateSubmitTicket || t.Kind == state.NavigateResolveConflict || t.Kind == state.NavigateResolveDivergent || t.Kind == state.NavigateRunInit {
 		m.redoOperationID = ""
 	}
 	switch t.Kind {
@@ -365,6 +367,18 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 			m.appState.StatusMessage = t.StatusMessage
 		}
 		return m, nil
+	case state.NavigateCreateTicket:
+		m.startCreateTicket()
+		return m, nil
+	case state.NavigateBackFromTicketForm:
+		m.ticketFormModal.Hide()
+		m.appState.ViewMode = state.ViewTickets
+		if t.StatusMessage != "" {
+			m.appState.StatusMessage = t.StatusMessage
+		}
+		return m, nil
+	case state.NavigateSubmitTicket:
+		return m, m.submitTicket()
 	default:
 		return m, nil
 	}
@@ -435,6 +449,25 @@ func (m *Model) startCreatePR() {
 // submitPR runs the PR creation command.
 func (m *Model) submitPR() tea.Cmd {
 	res := prformtab.SubmitPR(&m.prFormModal, m.appState.Repository, m.appState.JJService, m.appState.GitHubService, m.appState.DemoMode)
+	m.appState.StatusMessage = res.StatusMessage
+	return res.Cmd
+}
+
+// startCreateTicket opens the Create Ticket dialog when the provider supports it.
+func (m *Model) startCreateTicket() {
+	contentHeight := m.estimatedContentHeight()
+	res := ticketformtab.OpenCreateTicket(&m.ticketFormModal, m.appState.TicketService, m.width-10, contentHeight)
+	if !res.Ok {
+		m.appState.StatusMessage = res.StatusMessage
+		return
+	}
+	m.appState.ViewMode = state.ViewCreateTicket
+	m.appState.StatusMessage = res.StatusMessage
+}
+
+// submitTicket runs the create-ticket command and closes the modal on success.
+func (m *Model) submitTicket() tea.Cmd {
+	res := ticketformtab.SubmitTicket(&m.ticketFormModal, m.appState.TicketService, m.appState.DemoMode)
 	m.appState.StatusMessage = res.StatusMessage
 	return res.Cmd
 }
@@ -531,6 +564,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.desceditModal.SetDimensions(inputWidth, max(m.height-12, 3))
 		m.prFormModal.GetBodyInput().SetWidth(inputWidth)
 		m.prFormModal.GetTitleInput().Width = inputWidth
+		m.ticketFormModal.GetBodyInput().SetWidth(inputWidth)
+		m.ticketFormModal.GetTitleInput().Width = inputWidth
 		// PR form body uses full content height when in create-PR view
 		contentHeight := m.estimatedContentHeight()
 		if m.appState.ViewMode == state.ViewCreatePR {
@@ -540,6 +575,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				bodyH = 3
 			}
 			m.prFormModal.GetBodyInput().SetHeight(bodyH)
+		}
+		if m.appState.ViewMode == state.ViewCreateTicket {
+			const fixedFormLines = 10
+			bodyH := contentHeight - fixedFormLines
+			if bodyH < 3 {
+				bodyH = 3
+			}
+			m.ticketFormModal.GetBodyInput().SetHeight(bodyH)
 		}
 		m.bookmarkModal.GetNameInput().Width = inputWidth
 
@@ -619,7 +662,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.MouseMsg:
 		// Modal views: run zone check on release first so form clicks aren't consumed by the delegate switch.
-		if (m.appState.ViewMode == state.ViewCreatePR || m.appState.ViewMode == state.ViewEditDescription || m.appState.ViewMode == state.ViewCreateBookmark) &&
+		if (m.appState.ViewMode == state.ViewCreatePR || m.appState.ViewMode == state.ViewCreateTicket || m.appState.ViewMode == state.ViewEditDescription || m.appState.ViewMode == state.ViewCreateBookmark) &&
 			msg.Action == tea.MouseActionRelease {
 			return m.zoneManager.AnyInBoundsAndUpdate(m, msg)
 		}
@@ -794,6 +837,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.prFormModal = updated
 		return m, cmd
 
+	case ticketformtab.CancelRequestedMsg, ticketformtab.SubmitRequestedMsg:
+		updated, cmd := m.ticketFormModal.Update(msg)
+		m.ticketFormModal = updated
+		return m, cmd
+
 	case settingstab.RequestConfirmCleanupMsg:
 		return m, m.confirmCleanup()
 	case settingstab.RequestCancelCleanupMsg:
@@ -933,6 +981,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			Tickets:      msg.Tickets,
 			ProviderName: "",
 			HasService:   m.appState.TicketService != nil,
+			CanCreate:    m.appState.TicketService != nil && m.appState.TicketService.CanCreateTicket(),
 		}
 		if m.appState.TicketService != nil {
 			input.ProviderName = m.appState.TicketService.GetProviderName()
@@ -1043,6 +1092,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case prformtab.PRCreatedMsg:
 		return m, prformtab.HandlePRCreatedMsg(prformtab.PRCreatedInput{PRCreatedMsg: msg, DemoMode: m.appState.DemoMode}, &m.appState)
+	case ticketformtab.TicketCreatedMsg:
+		m.ticketFormModal.Hide()
+		m.appState.ViewMode = state.ViewTickets
+		if msg.Ticket != nil {
+			m.appState.StatusMessage = fmt.Sprintf("Created %s: %s", msg.Ticket.DisplayKey, msg.Ticket.Summary)
+			cmd := ticketformtab.HandleTicketCreatedMsg(msg.Ticket, m.appState.TicketService, m.appState.DemoMode)
+			if cmd != nil {
+				return m, tea.Batch(cmd, ticketstab.LoadTicketsCmd(m.appState.TicketService, m.appState.DemoMode))
+			}
+			return m, ticketstab.LoadTicketsCmd(m.appState.TicketService, m.appState.DemoMode)
+		}
+		return m, ticketstab.LoadTicketsCmd(m.appState.TicketService, m.appState.DemoMode)
 	case prstab.BranchPushedMsg:
 		return m, branchestab.HandleBranchPushedMsg(msg, &m.appState)
 	case bookmarktab.BookmarkCreatedMsg:

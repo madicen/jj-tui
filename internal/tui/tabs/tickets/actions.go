@@ -174,6 +174,12 @@ func ExecuteRequest(r Request, ctx *RequestContext) (statusMsg string, cmd tea.C
 			TicketDisplayKey: ticket.DisplayKey,
 		}.Cmd()
 	}
+	if r.StartCreateTicket {
+		if ctx.TicketService == nil || !ctx.TicketService.CanCreateTicket() {
+			return "", nil
+		}
+		return "", state.NavigateTarget{Kind: state.NavigateCreateTicket}.Cmd()
+	}
 	if r.OpenInBrowser {
 		if ctx.TicketService == nil || !ctx.SelectedTicketValid() {
 			return "", nil

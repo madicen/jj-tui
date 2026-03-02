@@ -21,6 +21,13 @@ type Transition struct {
 	Name string // Human-readable name (e.g., "In Progress", "Done")
 }
 
+// CreateTicketInput is the generic input for creating a ticket across providers.
+// Summary is required; Description is optional. Backends may use config/env for project/type.
+type CreateTicketInput struct {
+	Summary     string
+	Description string
+}
+
 // Service is the interface that all ticket providers must implement
 type Service interface {
 	// GetAssignedTickets returns tickets assigned to the current user
@@ -43,6 +50,14 @@ type Service interface {
 	// For Jira: transitionID is the transition ID
 	// For Codecks: transitionID is the target status value (e.g., "started", "done")
 	TransitionTicket(ctx context.Context, ticketKey string, transitionID string) error
+
+	// CanCreateTicket returns true if this provider supports creating tickets from the TUI.
+	CanCreateTicket() bool
+
+	// CreateTicket creates a new ticket. Returns the created ticket or an error.
+	// Only called when CanCreateTicket() is true; providers that do not support create
+	// should return false from CanCreateTicket and may return an error from CreateTicket.
+	CreateTicket(ctx context.Context, input *CreateTicketInput) (*Ticket, error)
 }
 
 // Provider represents a ticket provider type

@@ -75,6 +75,8 @@ func (m *Model) View() string {
 		content = m.desceditModal.View()
 	case state.ViewCreatePR:
 		content = m.prFormModal.View()
+	case state.ViewCreateTicket:
+		content = m.ticketFormModal.View()
 	case state.ViewCreateBookmark:
 		content = m.bookmarkModal.View()
 	case state.ViewBookmarkConflict:

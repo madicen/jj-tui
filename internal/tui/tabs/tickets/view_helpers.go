@@ -47,6 +47,9 @@ func (m *Model) renderTickets() string {
 			"",
 			"Change filters in Settings (,), or press Ctrl+r to refresh.",
 		}
+		if m.jiraService && m.canCreateTicket {
+			emptyMsg = append(emptyMsg, "", "Press 'n' to create a new ticket.")
+		}
 		return strings.Join(emptyMsg, "\n")
 	}
 
@@ -98,6 +101,11 @@ func (m *Model) renderTickets() string {
 			mark(m.zoneManager, mouse.ZoneJiraCreateBranch, styles.ButtonStyle.Render("Create Branch (Enter)")),
 			mark(m.zoneManager, mouse.ZoneJiraOpenBrowser, styles.ButtonStyle.Render("Open in Browser (o)")),
 		)
+		if m.canCreateTicket {
+			actionButtons = append(actionButtons,
+				mark(m.zoneManager, mouse.ZoneTicketNew, styles.ButtonStyle.Render("New Ticket (n)")),
+			)
+		}
 
 		if len(m.availableTransitions) > 0 && !m.transitionInProgress {
 			if m.statusChangeMode {

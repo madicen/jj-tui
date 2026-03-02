@@ -176,6 +176,32 @@ func (s *IssuesService) TransitionTicket(ctx context.Context, ticketKey string, 
 	return nil
 }
 
+// CanCreateTicket returns true; GitHub Issues supports creating issues.
+func (s *IssuesService) CanCreateTicket() bool {
+	return true
+}
+
+// CreateTicket creates a new GitHub issue.
+func (s *IssuesService) CreateTicket(ctx context.Context, input *tickets.CreateTicketInput) (*tickets.Ticket, error) {
+	if input == nil || strings.TrimSpace(input.Summary) == "" {
+		return nil, fmt.Errorf("title is required")
+	}
+	title := strings.TrimSpace(input.Summary)
+	body := strings.TrimSpace(input.Description)
+	issueReq := &github.IssueRequest{
+		Title: github.String(title),
+	}
+	if body != "" {
+		issueReq.Body = github.String(body)
+	}
+	issue, _, err := s.client.Issues.Create(ctx, s.owner, s.repo, issueReq)
+	if err != nil {
+		return nil, fmt.Errorf("create issue: %w", err)
+	}
+	ticket := s.issueToTicket(issue)
+	return &ticket, nil
+}
+
 // issueToTicket converts a GitHub issue to a tickets.Ticket
 func (s *IssuesService) issueToTicket(issue *github.Issue) tickets.Ticket {
 	// Capitalize status: "open" -> "Open", "closed" -> "Closed"

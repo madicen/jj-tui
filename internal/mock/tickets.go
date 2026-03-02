@@ -3,6 +3,7 @@ package mock
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/madicen/jj-tui/internal/tickets"
 )
@@ -122,6 +123,41 @@ func (s *TicketService) TransitionTicket(ctx context.Context, ticketKey string, 
 		}
 	}
 	return nil
+}
+
+// CanCreateTicket returns true for demo mode.
+func (s *TicketService) CanCreateTicket() bool {
+	return true
+}
+
+// CreateTicket adds a new demo ticket and returns it.
+func (s *TicketService) CreateTicket(ctx context.Context, input *tickets.CreateTicketInput) (*tickets.Ticket, error) {
+	if input == nil || input.Summary == "" {
+		return nil, fmt.Errorf("summary is required")
+	}
+	key := "DEMO-NEW"
+	displayKey := "#new"
+	switch s.provider {
+	case "jira":
+		key = "PROJ-999"
+		displayKey = "PROJ-999"
+	case "codecks":
+		key = "card-demo-new"
+		displayKey = "$new"
+	case "github_issues":
+		key = "#999"
+		displayKey = "#999"
+	}
+	t := tickets.Ticket{
+		Key:         key,
+		DisplayKey:  displayKey,
+		Summary:     input.Summary,
+		Description: input.Description,
+		Status:      "To Do",
+		Type:        "Task",
+	}
+	s.tickets = append([]tickets.Ticket{t}, s.tickets...)
+	return &t, nil
 }
 
 // jiraTickets returns demo Jira-style tickets

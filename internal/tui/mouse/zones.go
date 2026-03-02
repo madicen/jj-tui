@@ -72,6 +72,7 @@ const (
 
 	// Jira/Ticket action zones
 	ZoneJiraCreateBranch  = "zone:jira:createbranch"
+	ZoneTicketNew         = "zone:ticket:new"
 	ZoneTicketOpenBrowser = "zone:jira:openbrowser"
 	ZoneJiraSetInProgress = "zone:jira:setinprogress"
 	ZoneJiraSetDone       = "zone:jira:setdone"
@@ -178,6 +179,12 @@ const (
 	ZoneActionResolveDivergent = "zone:action:resolve_divergent"
 
 	ZoneJiraOpenBrowser = "zone:jira:openbrowser"
+
+	// Create ticket form zones
+	ZoneTicketFormTitle  = "zone:ticketform:title"
+	ZoneTicketFormBody   = "zone:ticketform:body"
+	ZoneTicketFormSubmit = "zone:ticketform:submit"
+	ZoneTicketFormCancel = "zone:ticketform:cancel"
 
 	// Push action zone
 	ZoneActionPush = "zone:action:push"

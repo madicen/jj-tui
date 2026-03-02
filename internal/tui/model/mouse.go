@@ -96,6 +96,10 @@ func (m *Model) handleZoneClick(msg zone.MsgZoneInBounds) (tea.Model, tea.Cmd) {
 		updated, cmd := m.prFormModal.Update(msg)
 		m.prFormModal = updated
 		return m, cmd
+	case state.ViewCreateTicket:
+		updated, cmd := m.ticketFormModal.Update(msg)
+		m.ticketFormModal = updated
+		return m, cmd
 	case state.ViewPullRequests:
 		updated, cmd := m.prsTabModel.Update(msg)
 		m.prsTabModel = updated

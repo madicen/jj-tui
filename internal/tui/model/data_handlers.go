@@ -102,7 +102,7 @@ func (m *Model) handleTickMsg() (tea.Model, tea.Cmd) {
 			}
 		}
 	}
-	if !m.appState.Loading && m.appState.JJService != nil && m.appState.ViewMode != state.ViewEditDescription && m.appState.ViewMode != state.ViewCreatePR && m.appState.ViewMode != state.ViewCreateBookmark && !m.graphTabModel.IsInRebaseMode() {
+	if !m.appState.Loading && m.appState.JJService != nil && m.appState.ViewMode != state.ViewEditDescription && m.appState.ViewMode != state.ViewCreatePR && m.appState.ViewMode != state.ViewCreateTicket && m.appState.ViewMode != state.ViewCreateBookmark && !m.graphTabModel.IsInRebaseMode() {
 		cmds = append(cmds, data.LoadRepositorySilent(m.appState.JJService))
 	}
 	prInput := prstab.PrTickInput{

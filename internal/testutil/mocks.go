@@ -3,6 +3,7 @@ package testutil
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/tickets"
@@ -104,6 +105,28 @@ func (m *MockTicketService) GetAvailableTransitions(ctx context.Context, ticketK
 func (m *MockTicketService) TransitionTicket(ctx context.Context, ticketKey string, transitionID string) error {
 	// Mock successful transition
 	return nil
+}
+
+// CanCreateTicket returns true for testing create-ticket flows
+func (m *MockTicketService) CanCreateTicket() bool {
+	return true
+}
+
+// CreateTicket adds a mock ticket and returns it
+func (m *MockTicketService) CreateTicket(ctx context.Context, input *tickets.CreateTicketInput) (*tickets.Ticket, error) {
+	if input == nil || input.Summary == "" {
+		return nil, fmt.Errorf("summary is required")
+	}
+	t := tickets.Ticket{
+		Key:         "MOCK-NEW",
+		DisplayKey:  "MOCK-NEW",
+		Summary:     input.Summary,
+		Description: input.Description,
+		Status:      "To Do",
+		Type:        "Task",
+	}
+	m.Tickets = append([]tickets.Ticket{t}, m.Tickets...)
+	return &t, nil
 }
 
 // NewMockJiraService creates a mock Jira service with sample data
