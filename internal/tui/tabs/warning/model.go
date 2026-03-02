@@ -67,7 +67,7 @@ func (m Model) View() string {
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("3")).
 		Padding(1, 2).
-		MaxWidth(70)
+		Width(70)
 
 	content := m.title + "\n\n" + m.message
 	if len(m.commits) > 0 {

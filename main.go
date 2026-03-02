@@ -60,7 +60,12 @@ func main() {
 	)
 
 	// Run the program
-	if _, err := p.Run(); err != nil {
+	_, err = p.Run()
+
+	// Disable xterm mouse tracking so the shell doesn't echo a mouse report (e.g. "35;270;24M") after exit.
+	termenv.DefaultOutput().DisableMouseAllMotion()
+
+	if err != nil {
 		fmt.Printf("Error running TUI: %v\n", err)
 		os.Exit(1)
 	}
