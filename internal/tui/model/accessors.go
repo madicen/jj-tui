@@ -23,6 +23,11 @@ func (m *Model) GetSelectedCommit() int {
 	return m.graphTabModel.GetSelectedCommit()
 }
 
+// SetSelectedCommit sets the selected commit index (for testing).
+func (m *Model) SetSelectedCommit(idx int) {
+	m.graphTabModel.SelectCommit(idx)
+}
+
 // GetStatusMessage returns the status message
 func (m *Model) GetStatusMessage() string {
 	return m.appState.StatusMessage
@@ -192,6 +197,16 @@ func (m *Model) GetSettingsJiraProject() string {
 // GetSettingsJiraProjectFilter returns the Jira "project filter" from the settings panel (for testing).
 func (m *Model) GetSettingsJiraProjectFilter() string {
 	return m.settingsTabModel.GetJiraModel().GetProjectFilter()
+}
+
+// GetPRFormTitle returns the current PR form title (for testing the ticket display key in default title).
+func (m *Model) GetPRFormTitle() string {
+	return m.prFormModal.GetTitle()
+}
+
+// SetJiraBookmarkTitlesForTest sets the bookmark modal's Jira title map (for testing PR default title).
+func (m *Model) SetJiraBookmarkTitlesForTest(titles map[string]string) {
+	m.bookmarkModal.SetJiraBookmarkTitles(titles)
 }
 
 // GetError returns the current error
