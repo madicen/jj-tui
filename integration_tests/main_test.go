@@ -15,7 +15,11 @@ import (
 	"github.com/madicen/jj-tui/internal/integrations/github"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/testutil"
+	"github.com/madicen/jj-tui/internal/tickets"
 	"github.com/madicen/jj-tui/internal/tui"
+	"github.com/madicen/jj-tui/internal/tui/data"
+	"github.com/madicen/jj-tui/internal/tui/state"
+	bookmarktab "github.com/madicen/jj-tui/internal/tui/tabs/bookmark"
 )
 
 // =============================================================================
@@ -66,6 +70,14 @@ func (r *TestRepository) runCommand(name string, args ...string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// runCommandOutput runs a command in the repository directory and returns combined stdout+stderr.
+func (r *TestRepository) runCommandOutput(name string, args ...string) (string, error) {
+	cmd := exec.Command(name, args...)
+	cmd.Dir = r.Path
+	out, err := cmd.CombinedOutput()
+	return string(out), err
 }
 
 // writeFile writes content to a file in the repository
@@ -861,6 +873,131 @@ func TestSettingsJiraProjectFields(t *testing.T) {
 	}
 	if got := m.GetSettingsJiraProjectFilter(); got != "PROJ,TEAM" {
 		t.Errorf("After typing PROJ,TEAM in Project filter: GetSettingsJiraProjectFilter() = %q, want PROJ,TEAM", got)
+	}
+}
+
+// TestPRTitleFromTicketDisplayKey verifies that when the user creates a branch from a ticket
+// (Create Bookmark from Ticket flow) and then opens Create PR, the default PR title includes
+// the ticket display key (e.g. "PROJ-123 - Implement auth"). It uses the full flow: Tickets tab,
+// Enter on ticket -> Create Bookmark from Ticket modal -> submit -> then Create PR.
+func TestPRTitleFromTicketDisplayKey(t *testing.T) {
+	if _, err := exec.LookPath("jj"); err != nil {
+		t.Skip("jj command not available")
+	}
+
+	repo := NewTestRepository(t)
+	defer repo.Cleanup()
+
+	ctx := context.Background()
+	jjSvc, err := jj.NewService(repo.Path)
+	if err != nil {
+		t.Fatalf("Failed to create jj service: %v", err)
+	}
+
+	m := tui.NewWithServices(ctx, jjSvc, nil)
+	defer m.Close()
+	m.SetDimensions(100, 80)
+	m.SetLoading(false)
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 80})
+
+	// Load real repo from jj
+	loadCmd := data.LoadRepository(jjSvc)
+	if loadCmd != nil {
+		m = updateModel(m, loadCmd())
+	}
+	if m.GetRepository() == nil || len(m.GetRepository().Graph.Commits) == 0 {
+		t.Fatal("Expected repo with at least one commit after LoadRepository")
+	}
+	// Set working copy description
+	if err := repo.runCommand("jj", "describe", "-m", "wip"); err != nil {
+		t.Logf("jj describe (optional): %v", err)
+	}
+	// Reload repo so the model has the updated description
+	if loadCmd != nil {
+		m = updateModel(m, loadCmd())
+	}
+
+	// Jira-style ticket with DisplayKey set (same as Key) — same as real user
+	mockSvc := &testutil.MockTicketService{
+		ProviderName: "Jira",
+		Tickets: []tickets.Ticket{
+			{Key: "PROJ-123", DisplayKey: "PROJ-123", Summary: "Implement auth", Status: "To Do", Type: "Story", Priority: "High"},
+		},
+	}
+	m.SetTicketService(mockSvc)
+	m.SetTicketList(mockSvc.Tickets)
+	m.SetViewMode(tui.ViewJira)
+	m.SetSelectedTicket(0)
+
+	// User presses Enter on ticket -> opens Create Bookmark from Ticket modal
+	m = updateModelWithCmd(m, tea.KeyMsg{Type: tea.KeyEnter})
+	if m.GetViewMode() != tui.ViewCreateBookmark {
+		t.Fatalf("Expected ViewCreateBookmark after Enter on ticket, got %v", m.GetViewMode())
+	}
+
+	// User submits the bookmark (Enter) — runs SubmitBookmark, then CreateBookmarkFromTicketCmd, then BookmarkCreatedMsg, then LoadRepository
+	const maxRounds = 15
+	m = runPendingCmds(m, bookmarktab.SubmitRequestedMsg{}, maxRounds)
+	if m.GetViewMode() != tui.ViewCommitGraph {
+		t.Fatalf("Expected ViewCommitGraph after bookmark created, got %v (status: %q)", m.GetViewMode(), m.GetStatusMessage())
+	}
+
+	// Force a fresh LoadRepository so the graph includes the new bookmark.
+	// The LoadRepository returned from HandleBookmarkCreatedMsg may use a config revset that omits it; reloading here ensures we see it.
+	if loadCmd := data.LoadRepository(jjSvc); loadCmd != nil {
+		m = updateModel(m, loadCmd())
+	}
+	repoAfter := m.GetRepository()
+	if repoAfter == nil {
+		t.Fatal("Repo is nil after bookmark created")
+	}
+	wcIdx := -1
+	for i, c := range repoAfter.Graph.Commits {
+		if c.IsWorking {
+			wcIdx = i
+			break
+		}
+	}
+	if wcIdx < 0 {
+		t.Fatal("No working copy commit found after LoadRepository")
+	}
+
+	// Debug: ensure the WC commit has the bookmark we created (name = ticket summary sanitized: "Implement auth" -> "Implement-auth")
+	wcCommit := repoAfter.Graph.Commits[wcIdx]
+	expectedBookmark := "Implement-auth" // SanitizeBookmarkName("Implement auth") replaces space with hyphen, does not lowercase
+	hasBookmark := false
+	for _, b := range wcCommit.Branches {
+		if b == expectedBookmark {
+			hasBookmark = true
+			break
+		}
+	}
+	if !hasBookmark {
+		t.Logf("DEBUG: After Create Bookmark from Ticket flow, WC commit does not have bookmark %q.", expectedBookmark)
+		t.Logf("DEBUG: WC commit index=%d, branches=%v, changeId=%s", wcIdx, wcCommit.Branches, wcCommit.ChangeID)
+		for i, c := range repoAfter.Graph.Commits {
+			t.Logf("DEBUG:   commit[%d] isWorking=%v branches=%v changeId=%s", i, c.IsWorking, c.Branches, c.ChangeID)
+		}
+		if out, err := repo.runCommandOutput("jj", "bookmark", "list"); err == nil {
+			t.Logf("DEBUG: jj bookmark list (on disk): %s", strings.TrimSpace(out))
+		} else {
+			t.Logf("DEBUG: jj bookmark list failed: %v", err)
+		}
+		t.Fatalf("WC commit should have bookmark %q (Create Bookmark from Ticket should create it). Got branches: %v", expectedBookmark, wcCommit.Branches)
+	}
+
+	m.SetSelectedCommit(wcIdx)
+	m.SetGitHubService(&github.Service{})
+
+	// Open Create PR (same as user pressing 'c' on graph)
+	m = updateModel(m, state.NavigateMsg{Target: state.NavigateTarget{Kind: state.NavigateCreatePR}})
+	if m.GetViewMode() != tui.ViewCreatePR {
+		t.Fatalf("Expected ViewCreatePR after opening Create PR, got %v (status: %q)", m.GetViewMode(), m.GetStatusMessage())
+	}
+	got := m.GetPRFormTitle()
+	want := "PROJ-123 - Implement auth"
+	if got != want {
+		t.Errorf("PR form default title = %q, want %q (ticket display key should be prepended to summary)", got, want)
 	}
 }
 
