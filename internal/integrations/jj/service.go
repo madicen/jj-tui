@@ -129,10 +129,6 @@ func (s *Service) addToHistory(entry CommandHistoryEntry) {
 // revset: optional jj revset for the graph; if empty, a default is used that focuses on
 // your work (mutable ancestors of @), bookmarks, and main to reduce noise from others' merges.
 func (s *Service) GetRepository(ctx context.Context, revset string) (*internal.Repository, error) {
-	// Before loading the graph, do a quick cleanup of any orphaned empty commits
-	// This handles the case where jj auto-created them after a merge
-	_ = s.abandonOrphanedEmptyCommits(ctx)
-
 	// Get commit graph (includes working copy)
 	graph, err := s.getCommitGraph(ctx, revset)
 	if err != nil {
@@ -673,7 +669,6 @@ func (s *Service) FetchFromGit(ctx context.Context) (string, error) {
 
 // cleanupAfterFetch handles post-fetch cleanup:
 // 1. Moves working copy if it's on an immutable commit
-// 2. Abandons orphaned empty commits that don't have bookmarks or content
 func (s *Service) cleanupAfterFetch(ctx context.Context) error {
 	// First, move working copy if it's immutable
 	isImmutable, _ := s.runJJOutput(ctx, "log", "-r", "@", "--no-graph", "-T", "if(immutable, \"true\", \"false\")")
@@ -681,31 +676,6 @@ func (s *Service) cleanupAfterFetch(ctx context.Context) error {
 		// Working copy is immutable (e.g., after a merge). Create a new mutable descendant.
 		_ = s.runJJ(ctx, "new", "@")
 	}
-
-	// Then abandon empty commits that are orphaned (have no bookmarks, no content, and are not working copy)
-	// These are commits created by jj when keeping the graph valid after merges
-	return s.abandonOrphanedEmptyCommits(ctx)
-}
-
-// abandonOrphanedEmptyCommits removes empty commits that have no bookmarks
-// These are commits auto-created by jj to keep the working copy valid
-func (s *Service) abandonOrphanedEmptyCommits(ctx context.Context) error {
-	// Find empty, mutable commits with no bookmarks
-	// Exclude: the working copy (@), commits on bookmarks, divergent commits (can't abandon directly)
-	orphans, _ := s.runJJOutput(ctx, "log", "-r", "empty() & mutable() & ~bookmarks() & ~@ & ~divergent()", "--no-graph", "-T", "change_id")
-	if strings.TrimSpace(orphans) == "" {
-		return nil
-	}
-
-	// Abandon each orphaned empty commit
-	for _, changeID := range strings.Split(strings.TrimSpace(orphans), "\n") {
-		changeID = strings.TrimSpace(changeID)
-		if changeID != "" {
-			// Silently ignore errors (e.g., if commit became divergent between query and abandon)
-			_ = s.runJJ(ctx, "abandon", changeID)
-		}
-	}
-
 	return nil
 }
 
