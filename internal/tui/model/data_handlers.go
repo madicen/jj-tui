@@ -88,8 +88,15 @@ func (m *Model) handleDataSilentRepositoryLoadedMsg(msg data.SilentRepositoryLoa
 
 // handleTickMsg runs auto-refresh and ensures changed files for selected commit; forwards PR tick to PRs tab.
 func (m *Model) handleTickMsg() (tea.Model, tea.Cmd) {
-	if m.errorModal.GetError() != nil {
-		return m, nil
+	// Don't run background refresh/updates if a modal is showing or we're in a blocking flow
+	isBlockingView := m.appState.ViewMode == state.ViewEditDescription ||
+		m.appState.ViewMode == state.ViewCreatePR ||
+		m.appState.ViewMode == state.ViewCreateBookmark ||
+		m.appState.ViewMode == state.ViewGitHubLogin ||
+		m.graphTabModel.IsInRebaseMode()
+
+	if m.errorModal.GetError() != nil || isBlockingView {
+		return m, m.tickCmd()
 	}
 	var cmds []tea.Cmd
 	if m.appState.ViewMode == state.ViewCommitGraph && m.appState.Repository != nil && m.appState.JJService != nil {

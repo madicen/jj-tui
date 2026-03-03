@@ -41,9 +41,12 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		switch msg.String() {
 		case "esc":
 			return m, state.NavigateTarget{Kind: state.NavigateGitHubLoginCancel, StatusMessage: "GitHub login cancelled"}.Cmd()
-		case "c":
+		case "enter":
 			if m.userCode != "" {
-				return m, util.CopyToClipboard(m.userCode)
+				return m, tea.Batch(
+					util.CopyToClipboard(m.userCode),
+					util.OpenURL(m.verificationURL),
+				)
 			}
 			return m, nil
 		}
@@ -85,11 +88,13 @@ func (m Model) View() string {
 		lines = append(lines, codeStyle.Render(m.userCode))
 		lines = append(lines, "")
 
-		copyButton := styles.ButtonStyle.Render("Copy Code (c)")
+		copyButton := styles.ButtonStyle.Render("Copy Code & Open Browser (Enter)")
+		cancelButton := styles.ButtonStyle.Render("Cancel (Esc)")
 		if m.zoneManager != nil {
-			copyButton = m.zoneManager.Mark(mouse.ZoneGitHubLoginCopyCode, copyButton)
+			copyButton = m.zoneManager.Mark(mouse.ZoneGitHubLoginCopyAndOpen, copyButton)
+			cancelButton = m.zoneManager.Mark(mouse.ZoneGitHubLoginCancel, cancelButton)
 		}
-		lines = append(lines, "   "+copyButton)
+		lines = append(lines, "   "+lipgloss.JoinHorizontal(lipgloss.Left, copyButton, "  ", cancelButton))
 		lines = append(lines, "")
 
 		if m.polling {
@@ -108,7 +113,7 @@ func (m Model) View() string {
 
 // ZoneIDs returns the zone IDs this view uses when rendering.
 func (m Model) ZoneIDs() []string {
-	return []string{mouse.ZoneGitHubLoginCopyCode}
+	return []string{mouse.ZoneGitHubLoginCopyAndOpen, mouse.ZoneGitHubLoginCancel}
 }
 
 func (m Model) resolveClickedZone(msg zone.MsgZoneInBounds) string {
@@ -125,8 +130,14 @@ func (m Model) resolveClickedZone(msg zone.MsgZoneInBounds) string {
 }
 
 func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
-	if zoneID == mouse.ZoneGitHubLoginCopyCode && m.userCode != "" {
-		return m, util.CopyToClipboard(m.userCode)
+	if zoneID == mouse.ZoneGitHubLoginCopyAndOpen && m.userCode != "" {
+		return m, tea.Batch(
+			util.CopyToClipboard(m.userCode),
+			util.OpenURL(m.verificationURL),
+		)
+	}
+	if zoneID == mouse.ZoneGitHubLoginCancel {
+		return m, state.NavigateTarget{Kind: state.NavigateGitHubLoginCancel, StatusMessage: "GitHub login cancelled"}.Cmd()
 	}
 	return m, nil
 }

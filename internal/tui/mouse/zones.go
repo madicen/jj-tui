@@ -129,7 +129,8 @@ const (
 	ZoneSettingsSanitizeBookmarks         = "zone:settings:sanitize_bookmarks"
 
 	// GitHub login zones
-	ZoneGitHubLoginCopyCode = "zone:github_login:copy_code"
+	ZoneGitHubLoginCopyAndOpen = "zone:github_login:copy_and_open"
+	ZoneGitHubLoginCancel      = "zone:github_login:cancel"
 
 	// Settings zones
 	ZoneSettingsGitHubToken           = "zone:settings:github_token"
