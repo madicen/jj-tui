@@ -184,6 +184,16 @@ func (m *Model) SetSettingsGraphRevset(revset string) {
 	m.settingsTabModel.GetAdvancedModel().SetGraphRevset(revset)
 }
 
+// GetSettingsJiraProject returns the Jira "project for new issues" from the settings panel (for testing).
+func (m *Model) GetSettingsJiraProject() string {
+	return m.settingsTabModel.GetJiraModel().GetProject()
+}
+
+// GetSettingsJiraProjectFilter returns the Jira "project filter" from the settings panel (for testing).
+func (m *Model) GetSettingsJiraProjectFilter() string {
+	return m.settingsTabModel.GetJiraModel().GetProjectFilter()
+}
+
 // GetError returns the current error
 func (m *Model) GetError() error {
 	return m.errorModal.GetError()

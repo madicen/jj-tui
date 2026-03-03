@@ -791,6 +791,79 @@ func TestHelpTabCommandHistory(t *testing.T) {
 	}
 }
 
+// TestSettingsJiraProjectFields tests typing into the Jira "Project for new issues" and "Project filter(s)" fields.
+// It ensures key events reach the focused input when on the Jira settings tab.
+func TestSettingsJiraProjectFields(t *testing.T) {
+	if _, err := exec.LookPath("jj"); err != nil {
+		t.Skip("jj command not available")
+	}
+
+	repo := NewTestRepository(t)
+	defer repo.Cleanup()
+
+	ctx := context.Background()
+	jjSvc, err := jj.NewService(repo.Path)
+	if err != nil {
+		t.Fatalf("Failed to create jj service: %v", err)
+	}
+
+	m := tui.NewWithServices(ctx, jjSvc, nil)
+	defer m.Close()
+	m.SetDimensions(100, 80)
+	m.SetLoading(false)
+	m.SetRepository(&internal.Repository{
+		Path: repo.Path,
+		Graph: internal.CommitGraph{
+			Commits:     []internal.Commit{{ID: "w", ShortID: "w", ChangeID: "w", Summary: "wc", IsWorking: true}},
+			Connections: map[string][]string{},
+		},
+	})
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 80})
+
+	// Navigate to Settings
+	m = updateModelWithCmd(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(",")})
+	if m.GetViewMode() != tui.ViewSettings {
+		t.Fatalf("Expected ViewSettings after ',', got %v", m.GetViewMode())
+	}
+
+	// Switch to Jira tab (ctrl+k from GitHub tab 0 -> tab 1 = Jira)
+	m = updateModelWithCmd(m, tea.KeyMsg{Type: tea.KeyCtrlK})
+	if m.GetSettingsTab() != 1 {
+		t.Fatalf("Expected settings tab 1 (Jira) after ctrl+k, got %d", m.GetSettingsTab())
+	}
+
+	// Move focus to "Project for new issues" (Jira field index 3): press Tab 3 times
+	for i := 0; i < 3; i++ {
+		m = updateModel(m, tea.KeyMsg{Type: tea.KeyTab})
+	}
+	// Global focused field for Jira field 3 is 1+3 = 4
+	if m.GetSettingsFocusedField() != 4 {
+		t.Fatalf("Expected focused field 4 (Project for new issues) after 3 tabs, got %d", m.GetSettingsFocusedField())
+	}
+
+	// Type "PROJ" into Project for new issues
+	for _, r := range "PROJ" {
+		m = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	if got := m.GetSettingsJiraProject(); got != "PROJ" {
+		t.Errorf("After typing PROJ in Project for new issues: GetSettingsJiraProject() = %q, want PROJ", got)
+	}
+
+	// Move focus to "Project filter(s)" (one more Tab)
+	m = updateModel(m, tea.KeyMsg{Type: tea.KeyTab})
+	if m.GetSettingsFocusedField() != 5 {
+		t.Fatalf("Expected focused field 5 (Project filter) after tab, got %d", m.GetSettingsFocusedField())
+	}
+
+	// Type "PROJ,TEAM" into Project filter(s)
+	for _, r := range "PROJ,TEAM" {
+		m = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	if got := m.GetSettingsJiraProjectFilter(); got != "PROJ,TEAM" {
+		t.Errorf("After typing PROJ,TEAM in Project filter: GetSettingsJiraProjectFilter() = %q, want PROJ,TEAM", got)
+	}
+}
+
 // truncateView returns a short snippet of the view for error messages
 func truncateView(s string, maxLen int) string {
 	if len(s) <= maxLen {

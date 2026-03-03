@@ -26,6 +26,8 @@ type SettingsParams struct {
 	JiraUser                     string
 	JiraToken                    string
 	JiraProject                  string
+	JiraProjectFilter            string
+	JiraIssueType                string
 	JiraJQL                      string
 	JiraExcludedStatuses         string
 	CodecksSubdomain             string
@@ -163,6 +165,8 @@ func BuildSettingsParams(m *Model, githubOwner, githubRepo string) SettingsParam
 	params.JiraUser = strings.TrimSpace(jr.GetUser())
 	params.JiraToken = strings.TrimSpace(jr.GetToken())
 	params.JiraProject = strings.TrimSpace(jr.GetProject())
+	params.JiraProjectFilter = strings.TrimSpace(jr.GetProjectFilter())
+	params.JiraIssueType = strings.TrimSpace(jr.GetIssueType())
 	params.JiraJQL = strings.TrimSpace(jr.GetJQL())
 	params.JiraExcludedStatuses = strings.TrimSpace(jr.GetExcludedStatuses())
 	params.CodecksSubdomain = strings.TrimSpace(cc.GetSubdomain())
@@ -229,6 +233,8 @@ func SaveSettingsCmd(params SettingsParams) tea.Cmd {
 		cfg.JiraUser = params.JiraUser
 		cfg.JiraToken = params.JiraToken
 		cfg.JiraProject = params.JiraProject
+		cfg.JiraProjectFilter = params.JiraProjectFilter
+		cfg.JiraIssueType = params.JiraIssueType
 		cfg.JiraJQL = params.JiraJQL
 		cfg.JiraExcludedStatuses = params.JiraExcludedStatuses
 		cfg.CodecksSubdomain = params.CodecksSubdomain
@@ -260,6 +266,8 @@ func SaveSettingsLocalCmd(params SettingsParams) tea.Cmd {
 			SanitizeBookmarkNames:        &params.SanitizeBookmarks,
 			GraphRevset:                  params.GraphRevset,
 			JiraProject:                  params.JiraProject,
+			JiraProjectFilter:            params.JiraProjectFilter,
+			JiraIssueType:                params.JiraIssueType,
 			JiraJQL:                      params.JiraJQL,
 			JiraExcludedStatuses:         params.JiraExcludedStatuses,
 			CodecksProject:               params.CodecksProject,
@@ -288,6 +296,16 @@ func setEnvParams(params SettingsParams) {
 		os.Setenv("JIRA_PROJECT", params.JiraProject)
 	} else {
 		os.Unsetenv("JIRA_PROJECT")
+	}
+	if params.JiraProjectFilter != "" {
+		os.Setenv("JIRA_PROJECT_FILTER", params.JiraProjectFilter)
+	} else {
+		os.Unsetenv("JIRA_PROJECT_FILTER")
+	}
+	if params.JiraIssueType != "" {
+		os.Setenv("JIRA_ISSUE_TYPE", params.JiraIssueType)
+	} else {
+		os.Unsetenv("JIRA_ISSUE_TYPE")
 	}
 	if params.JiraJQL != "" {
 		os.Setenv("JIRA_JQL", params.JiraJQL)
@@ -393,7 +411,7 @@ func AbandonOldCommitsCmd(jjSvc *jj.Service, repo *internal.Repository) tea.Cmd 
 
 // NewInputs creates and initializes all settings input fields from config and env.
 func NewInputs(cfg *config.Config) []textinput.Model {
-	inputs := make([]textinput.Model, 12)
+	inputs := make([]textinput.Model, 15)
 
 	inputs[0] = textinput.New()
 	inputs[0].Placeholder = "GitHub Personal Access Token"
@@ -428,7 +446,7 @@ func NewInputs(cfg *config.Config) []textinput.Model {
 	inputs[3].SetValue(os.Getenv("JIRA_TOKEN"))
 
 	inputs[4] = textinput.New()
-	inputs[4].Placeholder = "PROJ or PROJ,TEAM (comma-separated, optional)"
+	inputs[4].Placeholder = "PROJ (required for creating issues)"
 	inputs[4].CharLimit = 200
 	inputs[4].Width = 50
 	jiraProject := os.Getenv("JIRA_PROJECT")
@@ -438,57 +456,77 @@ func NewInputs(cfg *config.Config) []textinput.Model {
 	inputs[4].SetValue(jiraProject)
 
 	inputs[5] = textinput.New()
-	inputs[5].Placeholder = "sprint in openSprints() (optional custom JQL)"
-	inputs[5].CharLimit = 500
+	inputs[5].Placeholder = "PROJ or PROJ,TEAM (optional; filters ticket list)"
+	inputs[5].CharLimit = 200
 	inputs[5].Width = 50
+	jiraProjectFilter := os.Getenv("JIRA_PROJECT_FILTER")
+	if jiraProjectFilter == "" && cfg != nil {
+		jiraProjectFilter = cfg.JiraProjectFilter
+	}
+	inputs[5].SetValue(jiraProjectFilter)
+
+	inputs[6] = textinput.New()
+	inputs[6].Placeholder = "Task (optional; default when creating issues)"
+	inputs[6].CharLimit = 64
+	inputs[6].Width = 50
+	jiraIssueType := os.Getenv("JIRA_ISSUE_TYPE")
+	if jiraIssueType == "" && cfg != nil {
+		jiraIssueType = cfg.JiraIssueType
+	}
+	inputs[6].SetValue(jiraIssueType)
+
+	inputs[7] = textinput.New()
+	inputs[7].Placeholder = "sprint in openSprints() (optional custom JQL)"
+	inputs[7].CharLimit = 500
+	inputs[7].Width = 50
 	jiraJQL := os.Getenv("JIRA_JQL")
 	if jiraJQL == "" && cfg != nil {
 		jiraJQL = cfg.JiraJQL
 	}
-	inputs[5].SetValue(jiraJQL)
-
-	inputs[6] = textinput.New()
-	inputs[6].Placeholder = "Done, Won't Do, Cancelled (comma-separated)"
-	inputs[6].CharLimit = 200
-	inputs[6].Width = 50
-	if cfg != nil {
-		inputs[6].SetValue(cfg.JiraExcludedStatuses)
-	}
-
-	inputs[7] = textinput.New()
-	inputs[7].Placeholder = "your-team (from your-team.codecks.io)"
-	inputs[7].CharLimit = 100
-	inputs[7].Width = 50
-	inputs[7].SetValue(os.Getenv("CODECKS_SUBDOMAIN"))
+	inputs[7].SetValue(jiraJQL)
 
 	inputs[8] = textinput.New()
-	inputs[8].Placeholder = "Codecks API Token (from browser cookie 'at')"
-	inputs[8].CharLimit = 256
+	inputs[8].Placeholder = "Done, Won't Do, Cancelled (comma-separated)"
+	inputs[8].CharLimit = 200
 	inputs[8].Width = 50
-	inputs[8].EchoMode = textinput.EchoPassword
-	inputs[8].EchoCharacter = '•'
-	inputs[8].SetValue(os.Getenv("CODECKS_TOKEN"))
-
-	inputs[9] = textinput.New()
-	inputs[9].Placeholder = "Project name (optional, filters cards)"
-	inputs[9].CharLimit = 100
-	inputs[9].Width = 50
-	inputs[9].SetValue(os.Getenv("CODECKS_PROJECT"))
-
-	inputs[10] = textinput.New()
-	inputs[10].Placeholder = "done, archived (comma-separated)"
-	inputs[10].CharLimit = 200
-	inputs[10].Width = 50
 	if cfg != nil {
-		inputs[10].SetValue(cfg.CodecksExcludedStatuses)
+		inputs[8].SetValue(cfg.JiraExcludedStatuses)
 	}
 
+	inputs[9] = textinput.New()
+	inputs[9].Placeholder = "your-team (from your-team.codecks.io)"
+	inputs[9].CharLimit = 100
+	inputs[9].Width = 50
+	inputs[9].SetValue(os.Getenv("CODECKS_SUBDOMAIN"))
+
+	inputs[10] = textinput.New()
+	inputs[10].Placeholder = "Codecks API Token (from browser cookie 'at')"
+	inputs[10].CharLimit = 256
+	inputs[10].Width = 50
+	inputs[10].EchoMode = textinput.EchoPassword
+	inputs[10].EchoCharacter = '•'
+	inputs[10].SetValue(os.Getenv("CODECKS_TOKEN"))
+
 	inputs[11] = textinput.New()
-	inputs[11].Placeholder = "closed (comma-separated)"
-	inputs[11].CharLimit = 200
+	inputs[11].Placeholder = "Project name (optional, filters cards)"
+	inputs[11].CharLimit = 100
 	inputs[11].Width = 50
+	inputs[11].SetValue(os.Getenv("CODECKS_PROJECT"))
+
+	inputs[12] = textinput.New()
+	inputs[12].Placeholder = "done, archived (comma-separated)"
+	inputs[12].CharLimit = 200
+	inputs[12].Width = 50
 	if cfg != nil {
-		inputs[11].SetValue(cfg.GitHubIssuesExcludedStatuses)
+		inputs[12].SetValue(cfg.CodecksExcludedStatuses)
+	}
+
+	inputs[13] = textinput.New()
+	inputs[13].Placeholder = "closed (comma-separated)"
+	inputs[13].CharLimit = 200
+	inputs[13].Width = 50
+	if cfg != nil {
+		inputs[13].SetValue(cfg.GitHubIssuesExcludedStatuses)
 	}
 
 	return inputs

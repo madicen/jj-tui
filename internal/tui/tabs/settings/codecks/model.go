@@ -73,7 +73,11 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		return m.handleKeyMsg(msg)
+		// Only handle nav keys here; all other keys go to the focused input below
+		switch msg.String() {
+		case "j", "down", "k", "up":
+			return m.handleKeyMsg(msg)
+		}
 	}
 
 	var cmd tea.Cmd

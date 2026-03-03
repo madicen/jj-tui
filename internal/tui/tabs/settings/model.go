@@ -159,7 +159,7 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 			case 0:
 				lastField = m.githubModel.GetFocusedField() >= 0
 			case 1:
-				lastField = m.jiraModel.GetFocusedField() >= 5
+				lastField = m.jiraModel.GetFocusedField() >= 7
 			case 2:
 				lastField = m.codecksModel.GetFocusedField() >= 3
 			case 3:
@@ -184,14 +184,9 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.forwardKeyToActiveSubmodel(msg)
 			return m, nil
 		}
-	case "j", "k":
-		if m.settingsTab != 5 {
-			m.forwardKeyToActiveSubmodel(msg)
-			return m, nil
-		}
 	}
 
-	// Forward to active sub-model (including tab/down/up/j/k when on Advanced so they can be typed)
+	// Forward all other keys (including letters like j/k) to the focused input
 	return m.forwardKeyToActiveSubmodelReturn(msg)
 }
 
@@ -213,11 +208,11 @@ func (m *Model) ZoneIDs() []string {
 		mouse.ZoneSettingsGitHubRefreshDecrease, mouse.ZoneSettingsGitHubRefreshIncrease, mouse.ZoneSettingsGitHubRefreshToggle,
 		mouse.ZoneSettingsBranchLimitDecrease, mouse.ZoneSettingsBranchLimitIncrease,
 		mouse.ZoneSettingsGitHubTokenClear, mouse.ZoneSettingsJiraURLClear, mouse.ZoneSettingsJiraUserClear,
-		mouse.ZoneSettingsJiraTokenClear, mouse.ZoneSettingsJiraProjectClear, mouse.ZoneSettingsJiraJQLClear,
+		mouse.ZoneSettingsJiraTokenClear, mouse.ZoneSettingsJiraProjectClear, mouse.ZoneSettingsJiraProjectFilterClear, mouse.ZoneSettingsJiraIssueTypeClear, mouse.ZoneSettingsJiraJQLClear,
 		mouse.ZoneSettingsJiraExcludedClear, mouse.ZoneSettingsCodecksSubdomainClear, mouse.ZoneSettingsCodecksTokenClear,
 		mouse.ZoneSettingsCodecksProjectClear, mouse.ZoneSettingsCodecksExcludedClear, mouse.ZoneSettingsGitHubIssuesExcludedClear,
 		mouse.ZoneSettingsGitHubToken, mouse.ZoneSettingsJiraURL, mouse.ZoneSettingsJiraUser,
-		mouse.ZoneSettingsJiraToken, mouse.ZoneSettingsJiraProject, mouse.ZoneSettingsJiraJQL,
+		mouse.ZoneSettingsJiraToken, mouse.ZoneSettingsJiraProject, mouse.ZoneSettingsJiraProjectFilter, mouse.ZoneSettingsJiraIssueType, mouse.ZoneSettingsJiraJQL,
 		mouse.ZoneSettingsJiraExcluded, mouse.ZoneSettingsCodecksSubdomain, mouse.ZoneSettingsCodecksToken,
 		mouse.ZoneSettingsCodecksProject, mouse.ZoneSettingsCodecksExcluded, mouse.ZoneSettingsGitHubIssuesExcluded,
 		mouse.ZoneSettingsSave, mouse.ZoneSettingsSaveLocal, mouse.ZoneSettingsCancel,
@@ -270,7 +265,7 @@ func (m *Model) forwardKeyToActiveSubmodel(msg tea.KeyMsg) {
 		jr := m.GetJiraModel()
 		switch msg.String() {
 		case "tab", "down", "j":
-			if jr.GetFocusedField() < 5 {
+			if jr.GetFocusedField() < 7 {
 				jr.SetFocusedField(jr.GetFocusedField() + 1)
 			}
 		case "shift+tab", "up", "k":
@@ -385,7 +380,7 @@ func (m *Model) SetSettingsTab(tab int) {
 	m.settingsTab = tab % 6
 }
 
-// GetFocusedField returns the currently focused input field (global index 0-12 for BuildRenderData).
+// GetFocusedField returns the currently focused input field (global index 0-14 for BuildRenderData).
 func (m *Model) GetFocusedField() int {
 	switch m.settingsTab {
 	case 0:
@@ -393,38 +388,38 @@ func (m *Model) GetFocusedField() int {
 	case 1:
 		return 1 + m.jiraModel.GetFocusedField()
 	case 2:
-		return 7 + m.codecksModel.GetFocusedField()
+		return 9 + m.codecksModel.GetFocusedField()
 	case 3:
 		if m.ticketsModel.GetTicketProvider() == "github_issues" {
-			return 11
+			return 13
 		}
 		return 0
 	case 5:
-		return 12 + m.advancedModel.GetFocusedField()
+		return 14 + m.advancedModel.GetFocusedField()
 	}
 	return 0
 }
 
 // SetFocusedField sets the focused input field (global index); used by zone handlers to focus an input.
-// Returns a tea.Cmd when focusing the Advanced revset input (index 12) so the cursor is shown.
+// Returns a tea.Cmd when focusing the Advanced revset input (index 14) so the cursor is shown.
 func (m *Model) SetFocusedField(idx int) tea.Cmd {
 	if idx < 1 {
 		m.githubModel.SetFocusedField(0)
 		return nil
 	}
-	if idx < 7 {
+	if idx < 9 {
 		m.jiraModel.SetFocusedField(idx - 1)
 		return nil
 	}
-	if idx < 11 {
-		m.codecksModel.SetFocusedField(idx - 7)
+	if idx < 13 {
+		m.codecksModel.SetFocusedField(idx - 9)
 		return nil
 	}
-	if idx < 12 {
+	if idx < 14 {
 		m.ticketsModel.SetFocusedField(0)
 		return nil
 	}
-	return m.advancedModel.SetFocusedField(idx - 12)
+	return m.advancedModel.SetFocusedField(idx - 14)
 }
 
 // EnterTab prepares the tab when main navigates to Settings (focus first field of active panel).
@@ -446,7 +441,7 @@ func (m *Model) EnterTab() tea.Cmd {
 }
 
 // GetSettingsInputs returns a slice of textinput views for BuildRenderData (built from sub-models).
-// The layout is fixed so that the Advanced revset input is always at index 12 (needed for renderAdvanced).
+// The layout is fixed so that the Advanced revset input is always at index 14 (needed for renderAdvanced).
 func (m *Model) GetSettingsInputs() []struct{ View string } {
 	var out []struct{ View string }
 	for _, v := range m.githubModel.GetInputViews() {
@@ -461,12 +456,16 @@ func (m *Model) GetSettingsInputs() []struct{ View string } {
 	for _, v := range m.ticketsModel.GetInputViews() {
 		out = append(out, struct{ View string }{v})
 	}
-	// Pad so Advanced revset is always at index 12 (Tickets returns 0 when provider != github_issues).
-	for len(out) < 12 {
+	// Pad so Advanced revset is always at index 14 (Tickets returns 0 when provider != github_issues).
+	for len(out) < 14 {
 		out = append(out, struct{ View string }{""})
 	}
 	for _, v := range m.advancedModel.GetInputViews() {
 		out = append(out, struct{ View string }{v})
+	}
+	// Ensure exactly 15 elements so views can safely use data.Inputs[0..14].
+	for len(out) < 15 {
+		out = append(out, struct{ View string }{""})
 	}
 	return out
 }

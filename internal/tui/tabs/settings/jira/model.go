@@ -11,13 +11,15 @@ import (
 
 // Model represents the Jira settings sub-tab
 type Model struct {
-	urlInput      textinput.Model
-	userInput     textinput.Model
-	tokenInput   textinput.Model
-	projectInput textinput.Model
-	jqlInput     textinput.Model
-	excludedInput textinput.Model
-	focusedField int
+	urlInput         textinput.Model
+	userInput        textinput.Model
+	tokenInput       textinput.Model
+	projectInput     textinput.Model   // project for creating new issues
+	projectFilterInput textinput.Model // project(s) for filtering ticket list
+	issueTypeInput   textinput.Model
+	jqlInput         textinput.Model
+	excludedInput    textinput.Model
+	focusedField     int
 }
 
 // NewModel creates a new Jira settings model
@@ -41,9 +43,19 @@ func NewModel() Model {
 	tokenInput.EchoCharacter = '•'
 
 	projectInput := textinput.New()
-	projectInput.Placeholder = "PROJ or PROJ,TEAM (comma-separated, optional)"
+	projectInput.Placeholder = "PROJ (required for creating issues)"
 	projectInput.CharLimit = 200
 	projectInput.Width = 50
+
+	projectFilterInput := textinput.New()
+	projectFilterInput.Placeholder = "PROJ or PROJ,TEAM (optional; filters ticket list)"
+	projectFilterInput.CharLimit = 200
+	projectFilterInput.Width = 50
+
+	issueTypeInput := textinput.New()
+	issueTypeInput.Placeholder = "Task (optional; default when creating issues)"
+	issueTypeInput.CharLimit = 64
+	issueTypeInput.Width = 50
 
 	jqlInput := textinput.New()
 	jqlInput.Placeholder = "sprint in openSprints() (optional custom JQL)"
@@ -56,13 +68,15 @@ func NewModel() Model {
 	excludedInput.Width = 50
 
 	return Model{
-		urlInput:      urlInput,
-		userInput:     userInput,
-		tokenInput:    tokenInput,
-		projectInput:  projectInput,
-		jqlInput:      jqlInput,
-		excludedInput: excludedInput,
-		focusedField:  0,
+		urlInput:          urlInput,
+		userInput:         userInput,
+		tokenInput:        tokenInput,
+		projectInput:      projectInput,
+		projectFilterInput: projectFilterInput,
+		issueTypeInput:    issueTypeInput,
+		jqlInput:          jqlInput,
+		excludedInput:     excludedInput,
+		focusedField:      0,
 	}
 }
 
@@ -77,6 +91,16 @@ func NewModelFromConfig(cfg *config.Config) Model {
 		jiraProject = cfg.JiraProject
 	}
 	m.projectInput.SetValue(jiraProject)
+	jiraProjectFilter := os.Getenv("JIRA_PROJECT_FILTER")
+	if jiraProjectFilter == "" && cfg != nil {
+		jiraProjectFilter = cfg.JiraProjectFilter
+	}
+	m.projectFilterInput.SetValue(jiraProjectFilter)
+	jiraIssueType := os.Getenv("JIRA_ISSUE_TYPE")
+	if jiraIssueType == "" && cfg != nil && cfg.JiraIssueType != "" {
+		jiraIssueType = cfg.JiraIssueType
+	}
+	m.issueTypeInput.SetValue(jiraIssueType)
 	jiraJQL := os.Getenv("JIRA_JQL")
 	if jiraJQL == "" && cfg != nil {
 		jiraJQL = cfg.JiraJQL
@@ -97,7 +121,11 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		return m.handleKeyMsg(msg)
+		// Only handle nav keys here; all other keys go to the focused input below
+		switch msg.String() {
+		case "j", "down", "k", "up":
+			return m.handleKeyMsg(msg)
+		}
 	}
 
 	var cmd tea.Cmd
@@ -111,8 +139,12 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case 3:
 		m.projectInput, cmd = m.projectInput.Update(msg)
 	case 4:
-		m.jqlInput, cmd = m.jqlInput.Update(msg)
+		m.projectFilterInput, cmd = m.projectFilterInput.Update(msg)
 	case 5:
+		m.issueTypeInput, cmd = m.issueTypeInput.Update(msg)
+	case 6:
+		m.jqlInput, cmd = m.jqlInput.Update(msg)
+	case 7:
 		m.excludedInput, cmd = m.excludedInput.Update(msg)
 	}
 	return m, cmd
@@ -127,7 +159,7 @@ func (m Model) View() string {
 func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.String() {
 	case "j", "down":
-		if m.focusedField < 5 {
+		if m.focusedField < 7 {
 			m.unfocus()
 			m.focusedField++
 			m.focus()
@@ -155,8 +187,12 @@ func (m *Model) focus() {
 	case 3:
 		m.projectInput.Focus()
 	case 4:
-		m.jqlInput.Focus()
+		m.projectFilterInput.Focus()
 	case 5:
+		m.issueTypeInput.Focus()
+	case 6:
+		m.jqlInput.Focus()
+	case 7:
 		m.excludedInput.Focus()
 	}
 }
@@ -166,6 +202,8 @@ func (m *Model) unfocus() {
 	m.userInput.Blur()
 	m.tokenInput.Blur()
 	m.projectInput.Blur()
+	m.projectFilterInput.Blur()
+	m.issueTypeInput.Blur()
 	m.jqlInput.Blur()
 	m.excludedInput.Blur()
 }
@@ -202,14 +240,34 @@ func (m *Model) SetToken(token string) {
 	m.tokenInput.SetValue(token)
 }
 
-// GetProject returns the Jira project filter
+// GetProject returns the Jira project for creating new issues
 func (m *Model) GetProject() string {
 	return m.projectInput.Value()
 }
 
-// SetProject sets the Jira project filter
+// SetProject sets the Jira project for creating new issues
 func (m *Model) SetProject(s string) {
 	m.projectInput.SetValue(s)
+}
+
+// GetProjectFilter returns the Jira project filter for the ticket list
+func (m *Model) GetProjectFilter() string {
+	return m.projectFilterInput.Value()
+}
+
+// SetProjectFilter sets the Jira project filter
+func (m *Model) SetProjectFilter(s string) {
+	m.projectFilterInput.SetValue(s)
+}
+
+// GetIssueType returns the default Jira issue type when creating issues
+func (m *Model) GetIssueType() string {
+	return m.issueTypeInput.Value()
+}
+
+// SetIssueType sets the default Jira issue type
+func (m *Model) SetIssueType(s string) {
+	m.issueTypeInput.SetValue(s)
 }
 
 // GetJQL returns the Jira JQL filter
@@ -232,30 +290,32 @@ func (m *Model) SetExcludedStatuses(s string) {
 	m.excludedInput.SetValue(s)
 }
 
-// GetInputViews returns the view strings for all 6 inputs
+// GetInputViews returns the view strings for all 8 inputs
 func (m *Model) GetInputViews() []string {
 	return []string{
 		m.urlInput.View(),
 		m.userInput.View(),
 		m.tokenInput.View(),
 		m.projectInput.View(),
+		m.projectFilterInput.View(),
+		m.issueTypeInput.View(),
 		m.jqlInput.View(),
 		m.excludedInput.View(),
 	}
 }
 
-// GetFocusedField returns the focused input index (0-5)
+// GetFocusedField returns the focused input index (0-7)
 func (m *Model) GetFocusedField() int {
 	return m.focusedField
 }
 
-// SetFocusedField sets the focused input index (0-5)
+// SetFocusedField sets the focused input index (0-7)
 func (m *Model) SetFocusedField(i int) {
 	if i < 0 {
 		i = 0
 	}
-	if i > 5 {
-		i = 5
+	if i > 7 {
+		i = 7
 	}
 	m.focusedField = i
 	m.unfocus()
@@ -268,6 +328,8 @@ func (m *Model) SetInputWidth(w int) {
 	m.userInput.Width = w
 	m.tokenInput.Width = w
 	m.projectInput.Width = w
+	m.projectFilterInput.Width = w
+	m.issueTypeInput.Width = w
 	m.jqlInput.Width = w
 	m.excludedInput.Width = w
 }

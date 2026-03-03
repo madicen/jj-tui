@@ -66,16 +66,20 @@ return nil
 
 // Update handles messages
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
-switch msg := msg.(type) {
-case tea.KeyMsg:
-return m.handleKeyMsg(msg)
-}
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		// Only handle nav and space (toggles) here; other keys go to token input when focused
+		switch msg.String() {
+		case "j", "down", "k", "up", " ":
+			return m.handleKeyMsg(msg)
+		}
+	}
 
-var cmd tea.Cmd
-if m.focusedField == 0 {
-m.tokenInput, cmd = m.tokenInput.Update(msg)
-}
-return m, cmd
+	var cmd tea.Cmd
+	if m.focusedField == 0 {
+		m.tokenInput, cmd = m.tokenInput.Update(msg)
+	}
+	return m, cmd
 }
 
 // View renders the model
