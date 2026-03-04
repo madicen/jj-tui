@@ -4,7 +4,10 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
+	"runtime/pprof"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -17,7 +20,49 @@ import (
 func main() {
 	// Parse command-line flags
 	demoMode := flag.Bool("demo", false, "Run in demo mode with mock services (for screenshots/testing)")
+	cpuProfile := flag.String("cpuprofile", "", "Write CPU profile to file (on exit)")
+	memProfile := flag.String("memprofile", "", "Write memory profile to file (on exit)")
+	pprofAddr := flag.String("pprof", "", "Serve pprof HTTP at address (e.g. :6060); use with -demo to profile live")
 	flag.Parse()
+
+	// Start CPU profiling if requested
+	if *cpuProfile != "" {
+		f, err := os.Create(*cpuProfile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "cpuprofile: %v\n", err)
+			os.Exit(1)
+		}
+		defer f.Close()
+		if err := pprof.StartCPUProfile(f); err != nil {
+			fmt.Fprintf(os.Stderr, "cpuprofile: %v\n", err)
+			os.Exit(1)
+		}
+		defer pprof.StopCPUProfile()
+	}
+
+	// Serve pprof HTTP for live profiling (e.g. go tool pprof http://localhost:6060/debug/pprof/heap)
+	if *pprofAddr != "" {
+		go func() {
+			if err := http.ListenAndServe(*pprofAddr, nil); err != nil {
+				fmt.Fprintf(os.Stderr, "pprof server: %v\n", err)
+			}
+		}()
+	}
+
+	// Write memory profile on exit if requested
+	if *memProfile != "" {
+		defer func() {
+			f, err := os.Create(*memProfile)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "memprofile: %v\n", err)
+				return
+			}
+			defer f.Close()
+			if err := pprof.WriteHeapProfile(f); err != nil {
+				fmt.Fprintf(os.Stderr, "memprofile: %v\n", err)
+			}
+		}()
+	}
 
 	// Force color output in demo mode (for VHS screenshots)
 	// This ensures colors render even when TTY detection fails

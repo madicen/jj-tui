@@ -92,7 +92,8 @@ func (m *Model) buildSettingsViewOpts() settingstab.ViewOpts {
 }
 
 // Auto-refresh interval for the repository view.
-const autoRefreshInterval = 2 * time.Second
+// Kept at 5s to limit CPU and allocation churn from repeated jj log + parse.
+const autoRefreshInterval = 5 * time.Second
 
 // tickCmd returns a command that sends a tick after the refresh interval.
 func (m *Model) tickCmd() tea.Cmd {
@@ -501,7 +502,7 @@ func (m *Model) confirmCleanup() tea.Cmd {
 func (m *Model) handleClipboardCopiedMsg(msg util.ClipboardCopiedMsg) (tea.Model, tea.Cmd) {
 	if msg.Success {
 		if m.appState.ViewMode == state.ViewGitHubLogin {
-			m.appState.StatusMessage = "Code copied to clipboard and browser opened!"
+			m.appState.StatusMessage = "Code copied to clipboard! Paste it in your browser."
 		} else if m.errorModal.GetError() != nil {
 			m.errorModal.SetCopied(true)
 			m.appState.StatusMessage = "Error copied to clipboard!"
@@ -535,6 +536,7 @@ func (m *Model) Init() tea.Cmd {
 }
 
 // Update implements tea.Model.
+// Message responsibility: see internal/tui/model/RESPONSIBILITY.md.
 // Flow: globals (SetStatus, WindowSize) → state.NavigateMsg (from submodels) →
 // modal request messages (descedit/bookmark/prform/warning forward to modals) →
 // async result messages (data.*, graphtab.*, prstab.*, etc.) → zone/key routing.
@@ -610,6 +612,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.initRepoModel.Path() != "" || m.errorModal.GetError() != nil || m.warningModal.IsShown() {
 			return m.handleKeyMsg(msg)
 		}
+		// View-specific modals (divergent, bookmark conflict): route keys to handleKeyMsg so the modal gets them.
+		if m.appState.ViewMode == state.ViewDivergentCommit || m.appState.ViewMode == state.ViewBookmarkConflict {
+			return m.handleKeyMsg(msg)
+		}
 		// Esc in Settings: navigate back to graph (same as tab sending PerformCancelMsg).
 		if m.appState.ViewMode == state.ViewSettings && msg.String() == "esc" {
 			return m.handleNavigate(state.NavigateTarget{Kind: state.NavigateBackToGraph, StatusMessage: "Settings cancelled"})
@@ -660,8 +666,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKeyMsg(msg)
 
 	case tea.MouseMsg:
-		// Modal views: run zone check on release first so form clicks aren't consumed by the delegate switch.
-		if (m.appState.ViewMode == state.ViewCreatePR || m.appState.ViewMode == state.ViewCreateTicket || m.appState.ViewMode == state.ViewEditDescription || m.appState.ViewMode == state.ViewCreateBookmark) &&
+		// Modal views: run zone check on release first so form/modal clicks aren't consumed by the delegate switch.
+		if (m.appState.ViewMode == state.ViewCreatePR || m.appState.ViewMode == state.ViewCreateTicket || m.appState.ViewMode == state.ViewEditDescription || m.appState.ViewMode == state.ViewCreateBookmark || m.appState.ViewMode == state.ViewDivergentCommit || m.appState.ViewMode == state.ViewBookmarkConflict) &&
 			msg.Action == tea.MouseActionRelease {
 			return m.zoneManager.AnyInBoundsAndUpdate(m, msg)
 		}
@@ -1048,7 +1054,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.githubLoginModel.SetDeviceFlow(msg.DeviceCode, msg.UserCode, msg.VerificationURL, msg.Interval)
 		m.appState.ViewMode = state.ViewGitHubLogin
 		m.appState.StatusMessage = "Waiting for GitHub authorization..."
-		return m, settingstab.PollGitHubTokenCmd(m.githubLoginModel.GetDeviceCode())
+		return m, tea.Batch(
+			util.OpenURL(msg.VerificationURL),
+			settingstab.PollGitHubTokenCmd(m.githubLoginModel.GetDeviceCode()),
+		)
 
 	case settingstab.GitHubLoginPollMsg:
 		if m.githubLoginModel.GetPolling() {

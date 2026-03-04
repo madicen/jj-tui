@@ -119,9 +119,10 @@ func (s *Service) addToHistory(entry CommandHistoryEntry) {
 
 	s.commandHistory = append(s.commandHistory, entry)
 
-	// Trim history if it exceeds the limit
+	// Trim history if it exceeds the limit; copy to new slice to release backing array
 	if len(s.commandHistory) > s.maxHistory {
-		s.commandHistory = s.commandHistory[len(s.commandHistory)-s.maxHistory:]
+		keep := s.commandHistory[len(s.commandHistory)-s.maxHistory:]
+		s.commandHistory = append([]CommandHistoryEntry(nil), keep...)
 	}
 }
 
