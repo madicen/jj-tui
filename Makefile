@@ -45,6 +45,16 @@ demo-gif: build demo-repo
 	vhs vhs/all.tape
 	@echo "Demo GIF saved to screenshots/demo.gif"
 
+# Generate demo GIF while recording CPU and memory profiles (profiles written on exit)
+demo-gif-profile: build demo-repo
+	@echo "Generating demo GIF with profiling..."
+	@mkdir -p screenshots
+	@rm -f screenshots/cpu.prof screenshots/mem.prof
+	vhs vhs/all-profile.tape
+	@echo "Demo GIF saved to screenshots/demo.gif"
+	@if [ -f screenshots/cpu.prof ]; then echo "CPU profile: screenshots/cpu.prof (go tool pprof screenshots/cpu.prof)"; fi
+	@if [ -f screenshots/mem.prof ]; then echo "Memory profile: screenshots/mem.prof (go tool pprof screenshots/mem.prof)"; fi
+
 # Generate individual screenshots
 screenshot-graph: build demo-repo
 	vhs vhs/graph.tape
@@ -84,6 +94,8 @@ help:
 	@echo "  clean        - Clean build artifacts"
 	@echo "  demo-repo    - Setup demo repository for screenshots"
 	@echo "  screenshots  - Generate all screenshots using VHS"
+	@echo "  demo-gif     - Generate demo GIF (vhs all.tape)"
+	@echo "  demo-gif-profile - Generate demo GIF with CPU/memory profiling"
 	@echo "  demo         - Run the app in demo mode"
 	@echo "  deps         - Install/tidy dependencies"
 	@echo "  help         - Show this help"
