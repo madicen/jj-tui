@@ -51,7 +51,7 @@ func If[T any](condition bool, trueVal, falseVal T) T {
 func PropagateUpdate(msg tea.Msg, updatables ...any) (results []tea.Cmd) {
 	for _, updatable := range updatables {
 		ptrValue := reflect.ValueOf(updatable)
-		if ptrValue.Kind() != reflect.Ptr {
+		if ptrValue.Kind() != reflect.Pointer {
 			panic("updatable must be a pointer")
 		}
 		method := ptrValue.MethodByName("Update")
@@ -70,7 +70,7 @@ func PropagateUpdate(msg tea.Msg, updatables ...any) (results []tea.Cmd) {
 		if !ok {
 			panic("second return value from Update must be tea.Cmd")
 		}
-		if updatedValue.Kind() == reflect.Ptr {
+		if updatedValue.Kind() == reflect.Pointer {
 			updatedValue = updatedValue.Elem()
 		}
 		ptrValue.Elem().Set(updatedValue)

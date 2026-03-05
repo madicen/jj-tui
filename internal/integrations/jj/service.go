@@ -37,8 +37,8 @@ type Service struct {
 // Replaces spaces with hyphens, removes invalid characters, etc.
 func SanitizeBookmarkName(name string) string {
 	// Replace common problematic characters
-	name = strings.ReplaceAll(name, " ", "-")
-	name = strings.ReplaceAll(name, "\t", "-")
+	name = strings.ReplaceAll(name, " ", "_")
+	name = strings.ReplaceAll(name, "\t", "_")
 	name = strings.ReplaceAll(name, "/", "-")
 	name = strings.ReplaceAll(name, "\\", "-")
 	name = strings.ReplaceAll(name, ":", "-")
@@ -49,10 +49,15 @@ func SanitizeBookmarkName(name string) string {
 	name = strings.ReplaceAll(name, "[", "-")
 	name = strings.ReplaceAll(name, "]", "-")
 	name = strings.ReplaceAll(name, "@", "-")
+	name = strings.ReplaceAll(name, "'", "")
 
 	// Collapse multiple hyphens into one
 	for strings.Contains(name, "--") {
 		name = strings.ReplaceAll(name, "--", "-")
+	}
+
+	for strings.Contains(name, "__") {
+		name = strings.ReplaceAll(name, "__", "_")
 	}
 
 	// Trim leading/trailing hyphens
