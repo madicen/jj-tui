@@ -962,9 +962,9 @@ func TestPRTitleFromTicketDisplayKey(t *testing.T) {
 		t.Fatal("No working copy commit found after LoadRepository")
 	}
 
-	// Debug: ensure the WC commit has the bookmark we created (name = ticket summary sanitized: "Implement auth" -> "Implement-auth")
+	// Debug: ensure the WC commit has the bookmark we created (name = ticket summary sanitized: "Implement auth" -> "Implement_auth")
 	wcCommit := repoAfter.Graph.Commits[wcIdx]
-	expectedBookmark := "Implement-auth" // SanitizeBookmarkName("Implement auth") replaces space with hyphen, does not lowercase
+	expectedBookmark := "Implement_auth" // SanitizeBookmarkName("Implement auth") replaces space with underscore
 	hasBookmark := false
 	for _, b := range wcCommit.Branches {
 		if b == expectedBookmark {
