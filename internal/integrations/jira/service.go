@@ -105,11 +105,8 @@ func (s *Service) buildJQL() string {
 	// Base condition: assigned to current user
 	conditions = append(conditions, fmt.Sprintf("assignee = \"%s\"", s.username))
 
-	// Optional: filter by project(s) — use JIRA_PROJECT_FILTER for list, fall back to JIRA_PROJECT
+	// Optional: filter by project(s) — use only JIRA_PROJECT_FILTER (not JIRA_PROJECT, which is for creating new issues)
 	projectFilter := os.Getenv("JIRA_PROJECT_FILTER")
-	if projectFilter == "" {
-		projectFilter = os.Getenv("JIRA_PROJECT")
-	}
 	if projectFilter != "" {
 		// Support comma-separated projects (e.g., "PROJ,TEAM")
 		projects := strings.Split(projectFilter, ",")
