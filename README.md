@@ -383,7 +383,7 @@ jj-tui
 
 ### Graph view revset
 
-The commit graph shows commits selected by a **jj revset**. By default jj-tui uses a narrow revset so you see **your work** (mutable ancestors of `@`), **bookmarks**, and **main**, and not every mutable commit in the repo (e.g. from other people’s merges).
+The commit graph shows commits selected by a **jj revset**. By default jj-tui uses a revset so you see **your local work** (mutable commits that are ancestors or descendants of `@`), **bookmarks**, and **main**. Including descendants of `@` ensures that “move to parent” / “move to child” split commits stay visible.
 
 To use a custom revset, set `graph_revset` in your config. Examples:
 
@@ -391,7 +391,9 @@ To use a custom revset, set `graph_revset` in your config. Examples:
   `"graph_revset": "trunk() | (ancestors(@) - ancestors(trunk()))"`
 - **Only your commits** (author = you):  
   `"graph_revset": "mine() | trunk()"`
-- **Classic “all mutable + bookmarks”** (previous default):  
+- **Ancestors of @ only** (stricter than default, may hide new split commits):  
+  `"graph_revset": "(mutable() & ancestors(@)) | bookmarks() | main@origin"`
+- **All mutable + bookmarks**:  
   `"graph_revset": "mutable() | bookmarks() | main@origin"`
 
 Leave `graph_revset` empty to use the built-in default. See [jj revset docs](https://jj-vcs.github.io/jj/latest/revsets) for more.

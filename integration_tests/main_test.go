@@ -228,6 +228,119 @@ func TestJJServiceBasicOperations(t *testing.T) {
 			t.Error("Could not find the created commit")
 		}
 	})
+
+	t.Run("MoveFileToChild", func(t *testing.T) {
+		// Create a commit that has a single file we will move to a child
+		const fileName = "moved.txt"
+		if err := repo.writeFile(fileName, "content to move"); err != nil {
+			t.Fatalf("Failed to write %s: %v", fileName, err)
+		}
+		if err := repo.runCommand("jj", "commit", "-m", "commit with file to move"); err != nil {
+			t.Fatalf("Failed to commit %s: %v", fileName, err)
+		}
+
+		// Get repo and find the commit that contains the file (non-working commit with this file)
+		repository, err := service.GetRepository(ctx, "")
+		if err != nil {
+			t.Fatalf("Failed to get repository: %v", err)
+		}
+
+		var sourceCommitID string
+		for _, c := range repository.Graph.Commits {
+			if c.IsWorking {
+				continue
+			}
+			if c.Summary != "commit with file to move" {
+				continue
+			}
+			files, err := service.GetChangedFiles(ctx, c.ChangeID)
+			if err != nil {
+				t.Fatalf("GetChangedFiles(%s): %v", c.ChangeID, err)
+			}
+			for _, f := range files {
+				if f.Path == fileName {
+					sourceCommitID = c.ChangeID
+					break
+				}
+			}
+			if sourceCommitID != "" {
+				break
+			}
+		}
+		if sourceCommitID == "" {
+			t.Fatal("Could not find commit containing moved.txt")
+		}
+
+		// Move the file to a new child commit
+		if err := service.MoveFileToChild(ctx, sourceCommitID, fileName); err != nil {
+			t.Fatalf("MoveFileToChild failed: %v", err)
+		}
+
+		// Reload repo and verify: (split) commit has the file, its parent does not
+		repository, err = service.GetRepository(ctx, "")
+		if err != nil {
+			t.Fatalf("Failed to get repository after move: %v", err)
+		}
+
+		// Find the "(split)" commit created by MoveFileToChild
+		var splitCommit *internal.Commit
+		commitByID := make(map[string]*internal.Commit)
+		for i := range repository.Graph.Commits {
+			c := &repository.Graph.Commits[i]
+			commitByID[c.ID] = c
+			if c.Summary == "(split)" {
+				splitCommit = c
+				break
+			}
+		}
+		if splitCommit == nil {
+			t.Fatal("After MoveFileToChild: no commit with description \"(split)\" found")
+		}
+
+		// The (split) commit must contain the moved file
+		splitFiles, err := service.GetChangedFiles(ctx, splitCommit.ChangeID)
+		if err != nil {
+			t.Fatalf("GetChangedFiles(split): %v", err)
+		}
+		var foundInSplit bool
+		for _, f := range splitFiles {
+			if f.Path == fileName {
+				foundInSplit = true
+				break
+			}
+		}
+		if !foundInSplit {
+			t.Errorf("MoveFileToChild: file %q not in (split) commit; changed files: %v", fileName, splitFiles)
+		}
+
+		// The parent of (split) must not contain the file (it was moved out)
+		if len(splitCommit.Parents) == 0 {
+			t.Fatal("(split) commit has no parent")
+		}
+		parentID := strings.TrimSpace(splitCommit.Parents[0])
+		parentCommit := commitByID[parentID]
+		if parentCommit == nil {
+			// Parents might be short ids; try to find by prefix
+			for id, c := range commitByID {
+				if id == parentID || strings.HasPrefix(id, parentID) || strings.HasPrefix(parentID, id) {
+					parentCommit = c
+					break
+				}
+			}
+		}
+		if parentCommit != nil {
+			parentFiles, err := service.GetChangedFiles(ctx, parentCommit.ChangeID)
+			if err != nil {
+				t.Fatalf("GetChangedFiles(parent of split): %v", err)
+			}
+			for _, f := range parentFiles {
+				if f.Path == fileName {
+					t.Errorf("MoveFileToChild: file %q should not be in parent of (split); parent still has changed files: %v", fileName, parentFiles)
+					break
+				}
+			}
+		}
+	})
 }
 
 // TestCommitGraphVisualization tests commit graph visualization

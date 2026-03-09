@@ -497,7 +497,7 @@ func (s *Service) SplitFileToParent(ctx context.Context, commitID, filePath stri
 
 	// Step 2: Move the file from the original commit to the new commit (now @)
 	// Using squash --from moves changes from the source to the current commit
-	if err := s.runJJ(ctx, "squash", "--from", commitID, "--", filePath); err != nil {
+	if err := s.runJJ(ctx, "squash", "--from", commitID, "-m", "(split)", "--", filePath); err != nil {
 		return fmt.Errorf("failed to move file to new parent: %w", err)
 	}
 
@@ -516,8 +516,8 @@ func (s *Service) MoveFileToChild(ctx context.Context, commitID, filePath string
 	}
 
 	// Step 2: Squash just the specified file from the parent commit to the new commit
-	// jj squash --from <parent> -- <file>
-	if err := s.runJJ(ctx, "squash", "--from", commitID, "--", filePath); err != nil {
+	// jj squash --from <parent> -m "(split)" -- <file> ( -m avoids opening editor )
+	if err := s.runJJ(ctx, "squash", "--from", commitID, "-m", "(split)", "--", filePath); err != nil {
 		return fmt.Errorf("failed to move file to new commit: %w", err)
 	}
 
@@ -708,13 +708,14 @@ func (s *Service) getCommitGraph(ctx context.Context, revset string) (*internal.
 	)`
 
 	// Run WITH the graph to get ASCII art (no --reversed, keep natural newest-first order)
-	// When revset is set (config), use it. Otherwise use a narrow default to reduce noise from
-	// others' merges: only mutable commits that are ancestors of @ (your work), plus bookmarks and main.
+	// When revset is set (config), use it. Otherwise use a default that shows your local work:
+	// mutable commits that are ancestors OR descendants of @ (so move-to-parent/move-to-child
+	// split commits are visible), plus bookmarks and main.
 	var revsetArg string
 	if revset != "" {
 		revsetArg = revset
 	} else {
-		revsetArg = "(mutable() & ancestors(@)) | bookmarks() | main@origin"
+		revsetArg = "(mutable() & (ancestors(@) | descendants(@))) | bookmarks() | main@origin"
 	}
 	out, err := s.runJJOutput(ctx, "log", "-r", revsetArg, "-T", template)
 	if err != nil {
@@ -724,7 +725,7 @@ func (s *Service) getCommitGraph(ctx context.Context, revset string) (*internal.
 		}
 		if err != nil && revset == "" {
 			// Default revset: maybe main@origin doesn't exist
-			revsetArg = "(mutable() & ancestors(@)) | bookmarks()"
+			revsetArg = "(mutable() & (ancestors(@) | descendants(@))) | bookmarks()"
 			out, err = s.runJJOutput(ctx, "log", "-r", revsetArg, "-T", template)
 		}
 		if err != nil && revset == "" {
