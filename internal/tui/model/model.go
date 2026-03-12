@@ -926,6 +926,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.initRepoModel.SetPath("")
 		m.errorModal.SetError(nil, false, "")
 		return m, initrepotab.HandleJJInitSuccess(msg, &m.appState)
+	case data.RepoReadyMsg:
+		return m.handleRepoReadyMsg(msg)
+	case data.AuxServicesReadyMsg:
+		return m.handleAuxServicesReadyMsg(msg)
 	case data.ServicesInitializedMsg:
 		return m.handleDataServicesInitializedMsg(msg)
 	case data.RepositoryLoadedMsg:
@@ -1210,6 +1214,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.graphTabModel = *g
 		}
 		return m, cmd
+	case loadChangedFilesTriggerMsg:
+		if m.appState.JJService != nil && m.appState.Repository != nil {
+			commits := m.appState.Repository.Graph.Commits
+			idx := m.graphTabModel.GetSelectedCommit()
+			if idx >= 0 && idx < len(commits) {
+				return m, graphtab.LoadChangedFilesCmd(m.appState.JJService, commits[idx].ChangeID)
+			}
+		}
+		return m, nil
 	case tickMsg:
 		return m.handleTickMsg()
 	case graphtab.UndoCompletedMsg:

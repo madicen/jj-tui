@@ -56,7 +56,8 @@ const (
 // tickMsg is sent on each timer tick for auto-refresh (jj repository)
 type tickMsg time.Time
 
-// ErrorMsgType is the error message type (exported for testing)
+// loadChangedFilesTriggerMsg is sent on the next frame after repo ready so the graph paints first, then we load changed files.
+type loadChangedFilesTriggerMsg struct{}
 type ErrorMsgType struct {
 	Err         error
 	NotJJRepo   bool   // true if the error is "not a jj repository"
