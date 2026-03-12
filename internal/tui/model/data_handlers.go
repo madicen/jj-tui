@@ -3,6 +3,7 @@ package model
 import (
 	"fmt"
 	"os"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen/jj-tui/internal"
@@ -52,6 +53,7 @@ func (m *Model) handleDataServicesInitializedMsg(msg data.ServicesInitializedMsg
 }
 
 // handleRepoReadyMsg shows the graph immediately and kicks off GitHub/ticket load in the background.
+// Changed files are loaded on the next frame (via loadChangedFilesTriggerMsg) so the graph paints first.
 func (m *Model) handleRepoReadyMsg(msg data.RepoReadyMsg) (tea.Model, tea.Cmd) {
 	m.appState.JJService = msg.JJService
 	m.appState.Repository = msg.Repository
@@ -72,9 +74,9 @@ func (m *Model) handleRepoReadyMsg(msg data.RepoReadyMsg) (tea.Model, tea.Cmd) {
 	cmds = append(cmds, m.tickCmd())
 	if m.graphTabModel.GetSelectedCommit() < 0 && len(msg.Repository.Graph.Commits) > 0 {
 		m.graphTabModel.SelectCommit(0)
-		commit := msg.Repository.Graph.Commits[0]
-		cmds = append(cmds, graphtab.LoadChangedFilesCmd(m.appState.JJService, commit.ChangeID))
 	}
+	// Load changed files on next frame so the graph is painted first; then we run jj diff --summary for the selected commit.
+	cmds = append(cmds, tea.Tick(0, func(time.Time) tea.Msg { return loadChangedFilesTriggerMsg{} }))
 	cmds = append(cmds, data.LoadAuxServicesCmd(msg.DemoMode, msg.Owner, msg.RepoName, msg.GitHubInfoFromURL))
 	return m, tea.Batch(cmds...)
 }
