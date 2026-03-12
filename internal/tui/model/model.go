@@ -926,6 +926,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.initRepoModel.SetPath("")
 		m.errorModal.SetError(nil, false, "")
 		return m, initrepotab.HandleJJInitSuccess(msg, &m.appState)
+	case data.RepoReadyMsg:
+		return m.handleRepoReadyMsg(msg)
+	case data.AuxServicesReadyMsg:
+		return m.handleAuxServicesReadyMsg(msg)
 	case data.ServicesInitializedMsg:
 		return m.handleDataServicesInitializedMsg(msg)
 	case data.RepositoryLoadedMsg:

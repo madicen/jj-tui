@@ -15,6 +15,7 @@ type InitErrorMsg struct {
 }
 
 // ServicesInitializedMsg is sent when jj, GitHub, and ticket services are initialized.
+// Deprecated: initialization is now two-phase (RepoReadyMsg then AuxServicesReadyMsg).
 type ServicesInitializedMsg struct {
 	JJService     *jj.Service
 	GitHubService *github.Service
@@ -23,6 +24,25 @@ type ServicesInitializedMsg struct {
 	Repository    *internal.Repository
 	GitHubInfo    string
 	DemoMode      bool
+}
+
+// RepoReadyMsg is sent as soon as jj service and repository are ready so the UI can show the graph.
+// A follow-up LoadAuxServicesCmd continues loading GitHub and ticket services in the background.
+type RepoReadyMsg struct {
+	JJService         *jj.Service
+	Repository        *internal.Repository
+	DemoMode          bool
+	Owner             string // for GitHub/ticket; may be empty
+	RepoName          string
+	GitHubInfoFromURL string // e.g. "repo=owner/name (no token)" or "no remote configured"
+}
+
+// AuxServicesReadyMsg is sent after GitHub and ticket services are ready (after RepoReadyMsg).
+type AuxServicesReadyMsg struct {
+	GitHubService *github.Service
+	TicketService tickets.Service
+	TicketError   error
+	GitHubInfo    string
 }
 
 // RepositoryLoadedMsg is sent when repository data is loaded (refresh).

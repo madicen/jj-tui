@@ -15,6 +15,7 @@ import (
 )
 
 // handleDataServicesInitializedMsg applies initialized services and repository; starts tick and PR load.
+// Kept for tests or code paths that still send the full message.
 func (m *Model) handleDataServicesInitializedMsg(msg data.ServicesInitializedMsg) (tea.Model, tea.Cmd) {
 	m.appState.JJService = msg.JJService
 	m.appState.GitHubService = msg.GitHubService
@@ -47,6 +48,62 @@ func (m *Model) handleDataServicesInitializedMsg(msg data.ServicesInitializedMsg
 		commit := msg.Repository.Graph.Commits[0]
 		cmds = append(cmds, graphtab.LoadChangedFilesCmd(m.appState.JJService, commit.ChangeID))
 	}
+	return m, tea.Batch(cmds...)
+}
+
+// handleRepoReadyMsg shows the graph immediately and kicks off GitHub/ticket load in the background.
+func (m *Model) handleRepoReadyMsg(msg data.RepoReadyMsg) (tea.Model, tea.Cmd) {
+	m.appState.JJService = msg.JJService
+	m.appState.Repository = msg.Repository
+	m.appState.DemoMode = msg.DemoMode
+	m.appState.Loading = false
+	m.appState.StatusMessage = fmt.Sprintf("Loaded %d commits", len(msg.Repository.Graph.Commits))
+	if m.appState.Repository != nil {
+		m.appState.Repository.PRs = nil
+	}
+	m.graphTabModel.UpdateRepository(m.appState.Repository)
+	m.prsTabModel.UpdateRepository(m.appState.Repository)
+	m.prsTabModel.SetGithubService(false)
+	m.branchesTabModel.UpdateRepository(m.appState.Repository)
+	m.ticketsTabModel.UpdateRepository(m.appState.Repository)
+	m.settingsTabModel.UpdateRepository(m.appState.Repository)
+	m.helpTabModel.UpdateRepository(m.appState.Repository)
+	var cmds []tea.Cmd
+	cmds = append(cmds, m.tickCmd())
+	if m.graphTabModel.GetSelectedCommit() < 0 && len(msg.Repository.Graph.Commits) > 0 {
+		m.graphTabModel.SelectCommit(0)
+		commit := msg.Repository.Graph.Commits[0]
+		cmds = append(cmds, graphtab.LoadChangedFilesCmd(m.appState.JJService, commit.ChangeID))
+	}
+	cmds = append(cmds, data.LoadAuxServicesCmd(msg.DemoMode, msg.Owner, msg.RepoName, msg.GitHubInfoFromURL))
+	return m, tea.Batch(cmds...)
+}
+
+// handleAuxServicesReadyMsg applies GitHub and ticket services after they load in the background.
+func (m *Model) handleAuxServicesReadyMsg(msg data.AuxServicesReadyMsg) (tea.Model, tea.Cmd) {
+	m.appState.GitHubService = msg.GitHubService
+	m.appState.TicketService = msg.TicketService
+	m.appState.GithubInfo = msg.GitHubInfo
+	// Append GitHub/ticket info to existing "Loaded N commits" status
+	if m.appState.DemoMode {
+		m.appState.StatusMessage += " (demo mode)"
+	} else if m.appState.GitHubService != nil {
+		m.appState.StatusMessage += " (GitHub connected)"
+	} else if msg.GitHubInfo != "" {
+		m.appState.StatusMessage += fmt.Sprintf(" (GitHub: %s)", msg.GitHubInfo)
+	}
+	if m.appState.TicketService != nil {
+		m.appState.StatusMessage += fmt.Sprintf(" (%s connected)", m.appState.TicketService.GetProviderName())
+	} else if msg.TicketError != nil {
+		m.appState.StatusMessage += fmt.Sprintf(" (Tickets error: %v)", msg.TicketError)
+	}
+	var cmds []tea.Cmd
+	cmds = append(cmds, m.tickCmd())
+	if m.isGitHubAvailable() {
+		cmds = append(cmds, prstab.LoadPRsCmd(m.appState.GitHubService, m.appState.GithubInfo, m.appState.DemoMode, 0))
+		cmds = append(cmds, prstab.PrTickCmd())
+	}
+	m.prsTabModel.SetGithubService(m.isGitHubAvailable())
 	return m, tea.Batch(cmds...)
 }
 

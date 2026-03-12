@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/integrations/codecks"
 	"github.com/madicen/jj-tui/internal/integrations/github"
@@ -16,8 +18,10 @@ import (
 	"github.com/madicen/jj-tui/internal/tickets"
 )
 
-// InitializeServices sets up the jj service, GitHub service, and loads initial data.
-// demoMode uses mock services for GitHub and tickets. Returns a cmd that sends ServicesInitializedMsg or InitErrorMsg.
+// InitializeServices sets up the jj service and loads repository data first (RepoReadyMsg),
+// so the UI can show the graph immediately. The model then runs LoadAuxServicesCmd to load
+// GitHub and ticket services in the background (AuxServicesReadyMsg).
+// Returns a cmd that sends RepoReadyMsg or InitErrorMsg.
 func InitializeServices(demoMode bool) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
@@ -34,72 +38,101 @@ func InitializeServices(demoMode bool) tea.Cmd {
 		if cfg != nil {
 			revset = cfg.GraphRevset
 		}
-		repo, err := jjSvc.GetRepository(ctx, revset)
-		if err != nil {
-			return InitErrorMsg{Err: err}
+
+		// Run the two slow jj operations in parallel so we can show the UI as soon as both complete.
+		var repo *internal.Repository
+		var repoErr error
+		var remoteURL string
+		var remoteErr error
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			repo, repoErr = jjSvc.GetRepository(ctx, revset)
+		}()
+		go func() {
+			defer wg.Done()
+			remoteURL, remoteErr = jjSvc.GetGitRemoteURL(ctx)
+		}()
+		wg.Wait()
+
+		if repoErr != nil {
+			return InitErrorMsg{Err: repoErr}
 		}
 
+		owner, repoName := "", ""
+		githubInfoFromURL := "no remote configured"
+		if remoteErr == nil && remoteURL != "" {
+			owner, repoName, err = github.ParseGitHubURL(remoteURL)
+			if err == nil {
+				githubInfoFromURL = fmt.Sprintf("repo=%s/%s", owner, repoName)
+			} else {
+				githubInfoFromURL = fmt.Sprintf("remote=%s (not GitHub)", remoteURL)
+			}
+		}
+
+		return RepoReadyMsg{
+			JJService:         jjSvc,
+			Repository:        repo,
+			DemoMode:          demoMode,
+			Owner:             owner,
+			RepoName:          repoName,
+			GitHubInfoFromURL: githubInfoFromURL,
+		}
+	}
+}
+
+// LoadAuxServicesCmd returns a cmd that loads GitHub and ticket services (after RepoReadyMsg).
+// Run this after handling RepoReadyMsg so the graph is already visible; GitHub/ticket load in the background.
+func LoadAuxServicesCmd(demoMode bool, owner, repoName, githubInfoFromURL string) tea.Cmd {
+	return func() tea.Msg {
 		if demoMode {
 			cfg, _ := config.Load()
 			ticketProvider := "jira"
 			if cfg != nil && cfg.TicketProvider != "" {
 				ticketProvider = cfg.TicketProvider
 			}
-			return ServicesInitializedMsg{
-				JJService:     jjSvc,
+			return AuxServicesReadyMsg{
 				GitHubService: nil,
 				TicketService: mock.NewTicketService(ticketProvider),
 				TicketError:   nil,
-				Repository:    repo,
 				GitHubInfo:    "demo mode (mock services)",
-				DemoMode:      true,
 			}
 		}
 
 		var ghSvc *github.Service
-		var githubInfo string
-		var owner, repoName string
-		remoteURL, err := jjSvc.GetGitRemoteURL(ctx)
-		if err == nil {
-			owner, repoName, err = github.ParseGitHubURL(remoteURL)
-			if err == nil {
-				tokenSource := ""
-				token := os.Getenv("GITHUB_TOKEN")
-				if token != "" {
-					tokenSource = "env:GITHUB_TOKEN"
-				}
-				if token == "" {
-					cfg, _ := config.Load()
-					if cfg != nil && cfg.GitHubToken != "" {
-						token = cfg.GitHubToken
-						if cfg.LoadedFrom() != "" {
-							tokenSource = fmt.Sprintf("config:%s", cfg.LoadedFrom())
-						} else {
-							tokenSource = "config"
-						}
+		githubInfo := githubInfoFromURL
+		if owner != "" && repoName != "" {
+			tokenSource := ""
+			token := os.Getenv("GITHUB_TOKEN")
+			if token != "" {
+				tokenSource = "env:GITHUB_TOKEN"
+			}
+			if token == "" {
+				cfg, _ := config.Load()
+				if cfg != nil && cfg.GitHubToken != "" {
+					token = cfg.GitHubToken
+					if cfg.LoadedFrom() != "" {
+						tokenSource = fmt.Sprintf("config:%s", cfg.LoadedFrom())
+					} else {
+						tokenSource = "config"
 					}
 				}
-				if token != "" {
-					tokenPreview := token[:min(8, len(token))] + "..."
-					githubInfo = fmt.Sprintf("repo=%s/%s token=%s(%s)", owner, repoName, tokenPreview, tokenSource)
-					ghSvc, _ = github.NewServiceWithToken(owner, repoName, token)
-				} else {
-					githubInfo = fmt.Sprintf("repo=%s/%s (no token)", owner, repoName)
-				}
-			} else {
-				githubInfo = fmt.Sprintf("remote=%s (not GitHub)", remoteURL)
 			}
-		} else {
-			githubInfo = "no remote configured"
+			if token != "" {
+				tokenPreview := token[:min(8, len(token))] + "..."
+				githubInfo = fmt.Sprintf("repo=%s/%s token=%s(%s)", owner, repoName, tokenPreview, tokenSource)
+				ghSvc, _ = github.NewServiceWithToken(owner, repoName, token)
+			} else {
+				githubInfo = fmt.Sprintf("repo=%s/%s (no token)", owner, repoName)
+			}
 		}
 
 		ticketSvc, ticketErr := CreateTicketService(owner, repoName)
-		return ServicesInitializedMsg{
-			JJService:     jjSvc,
+		return AuxServicesReadyMsg{
 			GitHubService: ghSvc,
 			TicketService: ticketSvc,
 			TicketError:   ticketErr,
-			Repository:    repo,
 			GitHubInfo:    githubInfo,
 		}
 	}
