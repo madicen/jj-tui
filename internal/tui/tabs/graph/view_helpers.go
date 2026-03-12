@@ -270,7 +270,7 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 				if commit.Divergent {
 					divergentBtnStyle := styles.ButtonStyle.Background(lipgloss.Color("#FF79C6"))
 					actionButtons = append(actionButtons,
-						m.zoneManager.Mark(mouse.ZoneActionResolveDivergent, divergentBtnStyle.Render("Resolve Divergent (a)")),
+						m.zoneManager.Mark(mouse.ZoneActionResolveDivergent, divergentBtnStyle.Render("Resolve Divergent (d)")),
 					)
 				}
 				prBranch := ""

@@ -666,9 +666,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKeyMsg(msg)
 
 	case tea.MouseMsg:
-		// Modal views: run zone check on release first so form/modal clicks aren't consumed by the delegate switch.
-		if (m.appState.ViewMode == state.ViewCreatePR || m.appState.ViewMode == state.ViewCreateTicket || m.appState.ViewMode == state.ViewEditDescription || m.appState.ViewMode == state.ViewCreateBookmark || m.appState.ViewMode == state.ViewDivergentCommit || m.appState.ViewMode == state.ViewBookmarkConflict) &&
-			msg.Action == tea.MouseActionRelease {
+		// Blocking overlays and modal views: run zone check on release first so clicks reach the modal, not the tab.
+		if msg.Action == tea.MouseActionRelease &&
+			(m.initRepoModel.Path() != "" || m.errorModal.GetError() != nil || m.warningModal.IsShown() ||
+				m.appState.ViewMode == state.ViewCreatePR || m.appState.ViewMode == state.ViewCreateTicket || m.appState.ViewMode == state.ViewEditDescription || m.appState.ViewMode == state.ViewCreateBookmark || m.appState.ViewMode == state.ViewDivergentCommit || m.appState.ViewMode == state.ViewBookmarkConflict) {
 			return m.zoneManager.AnyInBoundsAndUpdate(m, msg)
 		}
 		// Handle wheel: IsWheel() covers standard encodings; also accept raw X11 4/5
@@ -765,6 +766,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case zone.MsgZoneInBounds:
+		// Blocking overlays (init, error, warning) get zone clicks first so tabs don't consume them
+		if m.initRepoModel.Path() != "" || m.errorModal.GetError() != nil || m.warningModal.IsShown() {
+			return m.handleZoneClick(msg)
+		}
+		// View modals (divergent, conflict) get zone clicks so they're not consumed by the tab
+		if m.appState.ViewMode == state.ViewDivergentCommit {
+			updated, cmd := m.divergentModal.Update(msg)
+			m.divergentModal = updated
+			return m, cmd
+		}
+		if m.appState.ViewMode == state.ViewBookmarkConflict {
+			updated, cmd := m.conflictModal.Update(msg)
+			m.conflictModal = updated
+			return m, cmd
+		}
 		// Delegate to tab when in that view so it can return requests
 		if m.appState.ViewMode == state.ViewCommitGraph {
 			updated, cmd := m.graphTabModel.UpdateWithApp(msg, &m.appState)

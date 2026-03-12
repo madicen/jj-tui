@@ -1,0 +1,71 @@
+name: Generate Screenshots
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Install VHS and dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg ttyd
+          VHS_VERSION=$(curl -s https://api.github.com/repos/charmbracelet/vhs/releases/latest | jq -r '.tag_name')
+          curl -LsSf "https://github.com/charmbracelet/vhs/releases/download/${VHS_VERSION}/vhs_${VHS_VERSION#v}_Linux_x86_64.tar.gz" -o /tmp/vhs.tar.gz
+          mkdir -p /tmp/vhs-extract
+          tar xzf /tmp/vhs.tar.gz -C /tmp/vhs-extract
+          sudo mv $(find /tmp/vhs-extract -name 'vhs' -type f | head -1) /usr/local/bin/
+          rm -rf /tmp/vhs.tar.gz /tmp/vhs-extract
+          vhs --version
+
+      - name: Generate screenshots
+        run: |
+          mkdir -p screenshots
+          vhs vhs/simple.tape
+          vhs vhs/swatch.tape
+          vhs vhs/modal.tape
+
+      - name: List generated files
+        run: ls -la screenshots/
+
+      - name: Upload screenshots as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: screenshots/
+          retention-days: 7
+
+      - name: Commit updated screenshots to main
+        run: |
+          mkdir -p /tmp/screenshots_generated
+          cp -r screenshots/* /tmp/screenshots_generated/ 2>/dev/null || true
+          git fetch origin main || { echo "No main branch; skipping commit"; exit 0; }
+          git checkout main || { echo "Could not checkout main; skipping commit"; exit 0; }
+          git reset --hard origin/main
+          cp -r /tmp/screenshots_generated/* screenshots/ 2>/dev/null || true
+          rm -rf /tmp/screenshots_generated
+          git add screenshots/
+          if git diff --staged --quiet; then
+            echo "No screenshot changes."
+            exit 0
+          fi
+          git commit -m "chore: update screenshots [skip ci]"
+          for i in 1 2 3; do
+            if git push origin main; then echo "Pushed screenshots"; exit 0; fi
+            git pull --rebase origin main
+          done
+          echo "Push failed; screenshots are in the artifact."
+          exit 0

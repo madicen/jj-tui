@@ -64,7 +64,7 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, tea.Quit
 	case "ctrl+r":
 		return m, state.NavigateTarget{Kind: state.NavigateDismissErrorAndRefresh}.Cmd()
-	case "esc":
+	case "esc", "enter", " ":
 		return m, state.NavigateTarget{Kind: state.NavigateDismissError, StatusMessage: "Error dismissed"}.Cmd()
 	case "c":
 		return m, RequestCopyCmd()
