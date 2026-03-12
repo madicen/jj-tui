@@ -14,6 +14,6 @@ Set Theme "Builtin Dark"
 # Setup: Run the demo repo setup first, then navigate to it
 Type "cd fixtures/demo-repo && ../../jj-tui --demo"
 Enter
-Sleep 4s
+Sleep 5s
 
 Screenshot "screenshots/graph.png"
