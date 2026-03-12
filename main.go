@@ -104,12 +104,15 @@ func main() {
 		tea.WithMouseAllMotion(),   // Mouse click, release, wheel, and motion without button press
 	)
 
+	// Ensure we always disable xterm mouse tracking on exit so the shell doesn't echo
+	// mouse reports (e.g. "35;269;21M"). Defer runs on normal return and panic; we must
+	// also call explicitly before os.Exit(1) since defer does not run then.
+	defer termenv.DefaultOutput().DisableMouseAllMotion()
+
 	// Run the program
 	_, err = p.Run()
 
-	// Disable xterm mouse tracking so the shell doesn't echo a mouse report (e.g. "35;270;24M") after exit.
 	termenv.DefaultOutput().DisableMouseAllMotion()
-
 	if err != nil {
 		fmt.Printf("Error running TUI: %v\n", err)
 		os.Exit(1)
