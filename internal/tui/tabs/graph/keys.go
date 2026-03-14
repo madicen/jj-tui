@@ -87,6 +87,11 @@ func (m GraphModel) handleKeyMsg(msg tea.KeyMsg) (GraphModel, *Request, tea.Cmd)
 		}
 	case "d":
 		if m.repository != nil && m.selectedCommit >= 0 && m.selectedCommit < len(m.repository.Graph.Commits) {
+			c := m.repository.Graph.Commits[m.selectedCommit]
+			if c.Divergent {
+				changeID := c.ChangeID
+				return m, &Request{ResolveDivergent: &changeID}, nil
+			}
 			return m, &Request{StartEditDescription: true}, nil
 		}
 	case "s":
@@ -95,11 +100,6 @@ func (m GraphModel) handleKeyMsg(msg tea.KeyMsg) (GraphModel, *Request, tea.Cmd)
 		}
 	case "a":
 		if m.repository != nil && m.selectedCommit >= 0 && m.selectedCommit < len(m.repository.Graph.Commits) {
-			c := m.repository.Graph.Commits[m.selectedCommit]
-			if c.Divergent {
-				changeID := c.ChangeID
-				return m, &Request{ResolveDivergent: &changeID}, nil
-			}
 			return m, &Request{Abandon: true}, nil
 		}
 	case "m":
