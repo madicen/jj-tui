@@ -9,10 +9,11 @@ import (
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/styles"
+	"github.com/madicen/jj-tui/internal/tui/tabs/settings/theme"
 	"github.com/madicen/jj-tui/internal/version"
 )
 
-// ActiveTab is the active settings sub-tab (0=GitHub, 1=Jira, 2=Codecks, 3=Tickets, 4=Branches, 5=Advanced)
+// ActiveTab is the active settings sub-tab (0=GitHub, 1=Jira, 2=Codecks, 3=Tickets, 4=Branches, 5=Theme, 6=Advanced)
 type ActiveTab int
 
 const (
@@ -21,6 +22,7 @@ const (
 	TabCodecks
 	TabTickets
 	TabBranches
+	TabTheme
 	TabAdvanced
 )
 
@@ -48,8 +50,11 @@ type RenderData struct {
 	SanitizeBookmarks      bool
 	ConfirmingCleanup      string
 
+	// ThemeModel is set by BuildRenderData for rendering the Theme tab (swatches + bounds).
+	ThemeModel *theme.Model
+
 	// Scroll: when ContentHeight > 0, only lines [YOffset : YOffset+ContentHeight] are shown
-	YOffset      int
+	YOffset       int
 	ContentHeight int
 }
 
@@ -81,6 +86,7 @@ func BuildRenderData(sm *Model, opts ViewOpts) RenderData {
 		ConfirmingCleanup:      sm.GetConfirmingCleanup(),
 		YOffset:                sm.GetSettingsYOffset(),
 		ContentHeight:          opts.ContentHeight,
+		ThemeModel:             sm.GetThemeModel(),
 	}
 	data.Inputs = sm.GetSettingsInputs()
 	data.HasLocalConfig = config.HasLocalConfig()
@@ -145,6 +151,9 @@ func Render(zm *zone.Manager, data RenderData) string {
 		lines = append(lines, r.renderTickets(data)...)
 	case TabBranches:
 		lines = append(lines, r.renderBranches(data)...)
+	case TabTheme:
+		themeStartRow := len(lines)
+		lines = append(lines, r.renderTheme(data, themeStartRow)...)
 	case TabAdvanced:
 		lines = append(lines, r.renderAdvanced(data)...)
 	}
@@ -201,6 +210,7 @@ func (r renderCtx) renderTabs(active ActiveTab) string {
 	codecksStyle := settingsTabStyle
 	ticketsStyle := settingsTabStyle
 	branchesStyle := settingsTabStyle
+	themeStyle := settingsTabStyle
 	advancedStyle := settingsTabStyle
 	switch active {
 	case TabGitHub:
@@ -213,6 +223,8 @@ func (r renderCtx) renderTabs(active ActiveTab) string {
 		ticketsStyle = settingsTabActive
 	case TabBranches:
 		branchesStyle = settingsTabActive
+	case TabTheme:
+		themeStyle = settingsTabActive
 	case TabAdvanced:
 		advancedStyle = settingsTabActive
 	}
@@ -221,8 +233,9 @@ func (r renderCtx) renderTabs(active ActiveTab) string {
 	codecksTab := r.mark(mouse.ZoneSettingsTabCodecks, codecksStyle.Render("Codecks"))
 	ticketsTab := r.mark(mouse.ZoneSettingsTabTickets, ticketsStyle.Render("Tickets"))
 	branchesTab := r.mark(mouse.ZoneSettingsTabBranches, branchesStyle.Render("Branches"))
+	themeTab := r.mark(mouse.ZoneSettingsTabTheme, themeStyle.Render("Theme"))
 	advancedTab := r.mark(mouse.ZoneSettingsTabAdvanced, advancedStyle.Render("Advanced"))
-	return lipgloss.JoinHorizontal(lipgloss.Left, githubTab, " │ ", jiraTab, " │ ", codecksTab, " │ ", ticketsTab, " │ ", branchesTab, " │ ", advancedTab)
+	return lipgloss.JoinHorizontal(lipgloss.Left, githubTab, " │ ", jiraTab, " │ ", codecksTab, " │ ", ticketsTab, " │ ", branchesTab, " │ ", themeTab, " │ ", advancedTab)
 }
 
 func (r renderCtx) renderToggle(label string, enabled bool, zoneID string) string {
@@ -422,6 +435,35 @@ func (r renderCtx) renderBranches(data RenderData) []string {
 		r.mark(mouse.ZoneSettingsBranchLimitIncrease, lipgloss.NewStyle().Foreground(styles.ColorPrimary).Render("[+]")))
 	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Total branches to show (0 = all)"))
 	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Local always included, remote filtered by recency"))
+	return lines
+}
+
+// themeLabelWidth is the fixed width for theme labels so swatches align in the same column.
+const themeLabelWidth = 12
+
+func (r renderCtx) renderTheme(data RenderData, startRow int) []string {
+	var lines []string
+	if data.ThemeModel == nil {
+		return lines
+	}
+	tm := data.ThemeModel
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render("Theme Colors"))
+	lines = append(lines, "", lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("Click a swatch to change the color. Save (^s or ^l) to persist."), "")
+
+	sw, sh := tm.Swatch(0).Size()
+	const labelPrefix = "  "
+	// Pad labels to themeLabelWidth so all swatches start at the same column
+	primaryLabel := fmt.Sprintf("%-*s", themeLabelWidth, "Primary:")
+	secondaryLabel := fmt.Sprintf("%-*s", themeLabelWidth, "Secondary:")
+	mutedLabel := fmt.Sprintf("%-*s", themeLabelWidth, "Muted:")
+	swatchCol := len(labelPrefix) + themeLabelWidth
+	tm.SetBounds(0, startRow+2, swatchCol, sw, sh)
+	tm.SetBounds(1, startRow+3, swatchCol, sw, sh)
+	tm.SetBounds(2, startRow+4, swatchCol, sw, sh)
+
+	lines = append(lines, labelPrefix+r.mark(mouse.ZoneSettingsThemePrimary, primaryLabel+tm.Swatch(0).SwatchView())+" "+r.mark(mouse.ZoneSettingsThemePrimaryDefault, clearButtonStyle.Render("[Default]")))
+	lines = append(lines, labelPrefix+r.mark(mouse.ZoneSettingsThemeSecondary, secondaryLabel+tm.Swatch(1).SwatchView())+" "+r.mark(mouse.ZoneSettingsThemeSecondaryDefault, clearButtonStyle.Render("[Default]")))
+	lines = append(lines, labelPrefix+r.mark(mouse.ZoneSettingsThemeMuted, mutedLabel+tm.Swatch(2).SwatchView())+" "+r.mark(mouse.ZoneSettingsThemeMutedDefault, clearButtonStyle.Render("[Default]")))
 	return lines
 }
 

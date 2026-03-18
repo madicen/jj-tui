@@ -761,10 +761,10 @@ func TestSettingsGraphRevset(t *testing.T) {
 		t.Fatalf("Expected ViewSettings after ',' , got %v", m.GetViewMode())
 	}
 
-	// Go to Advanced tab: ctrl+j goes previous tab, so from 0 -> 5 in one key; run returned cmd so Focus() runs
+	// Go to Advanced tab: ctrl+j goes previous tab, so from 0 -> last (6) in one key; run returned cmd so Focus() runs
 	m = updateModelWithCmd(m, tea.KeyMsg{Type: tea.KeyCtrlJ})
-	if m.GetSettingsTab() != 5 {
-		t.Fatalf("Expected settings tab 5 (Advanced) after ctrl+j, got %d", m.GetSettingsTab())
+	if m.GetSettingsTab() != 6 {
+		t.Fatalf("Expected settings tab 6 (Advanced) after ctrl+j, got %d", m.GetSettingsTab())
 	}
 
 	// Rendered view must include the revset input line: ">" prompt (like Jira/Codecks) and the label
@@ -776,10 +776,8 @@ func TestSettingsGraphRevset(t *testing.T) {
 		t.Errorf("Settings Advanced view should contain '>' textinput prompt (like other sub-tabs); view snippet: %q", truncateView(view, 400))
 	}
 
-	// Clear any existing revset then type "trunk()" through key events (exercises real input path)
-	for i := 0; i < 60; i++ {
-		m = updateModel(m, tea.KeyMsg{Type: tea.KeyBackspace})
-	}
+	// Start from empty revset (config may have pre-filled it), then type "trunk()" through key events (exercises real input path)
+	m.SetSettingsGraphRevset("")
 	for _, r := range "trunk()" {
 		m = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 	}

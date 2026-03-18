@@ -65,6 +65,11 @@ type Config struct {
 	// Example: "trunk() | (ancestors(@) - ancestors(trunk()))" for main + your branch only.
 	GraphRevset string `json:"graph_revset,omitempty"`
 
+	// Theme colors (hex, e.g. "#7E00AF"). Empty = use built-in defaults.
+	ThemePrimary   string `json:"theme_primary,omitempty"`
+	ThemeSecondary string `json:"theme_secondary,omitempty"`
+	ThemeMuted     string `json:"theme_muted,omitempty"`
+
 	// Internal: tracks where the config was loaded from
 	loadedFrom string `json:"-"`
 }
@@ -192,6 +197,15 @@ func mergeConfig(dest, source *Config) {
 	}
 	if source.GraphRevset != "" {
 		dest.GraphRevset = source.GraphRevset
+	}
+	if source.ThemePrimary != "" {
+		dest.ThemePrimary = source.ThemePrimary
+	}
+	if source.ThemeSecondary != "" {
+		dest.ThemeSecondary = source.ThemeSecondary
+	}
+	if source.ThemeMuted != "" {
+		dest.ThemeMuted = source.ThemeMuted
 	}
 }
 
@@ -501,5 +515,29 @@ func (c *Config) GetTicketProvider() string {
 // (requires GitHub to be configured)
 func (c *Config) HasGitHubIssues() bool {
 	return c.HasGitHub()
+}
+
+// GetThemePrimary returns the primary theme color (hex). Defaults to "#7E00AF" if not set.
+func (c *Config) GetThemePrimary() string {
+	if c == nil || c.ThemePrimary == "" {
+		return "#7E00AF"
+	}
+	return c.ThemePrimary
+}
+
+// GetThemeSecondary returns the secondary theme color (hex). Defaults to "#50FA7B" if not set.
+func (c *Config) GetThemeSecondary() string {
+	if c == nil || c.ThemeSecondary == "" {
+		return "#50FA7B"
+	}
+	return c.ThemeSecondary
+}
+
+// GetThemeMuted returns the muted theme color (hex). Defaults to "#6272A4" if not set.
+func (c *Config) GetThemeMuted() string {
+	if c == nil || c.ThemeMuted == "" {
+		return "#6272A4"
+	}
+	return c.ThemeMuted
 }
 

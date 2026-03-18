@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
+	"github.com/madicen/bubble-color-picker"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
@@ -1262,6 +1263,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.Tab == state.ViewHelp {
 			m.helpTabModel.SetCommandHistoryEntries(helptab.BuildCommandHistoryEntries(m.appState.JJService))
+		}
+		return m, nil
+
+	// Theme color picker: close picker and update color when user confirms or cancels
+	case bubblepicker.ColorChosenMsg, bubblepicker.ColorCanceledMsg:
+		if m.appState.ViewMode == state.ViewSettings {
+			cmds := util.PropagateUpdate(msg, &m.settingsTabModel)
+			if len(cmds) > 0 && cmds[0] != nil {
+				return m, cmds[0]
+			}
 		}
 		return m, nil
 
