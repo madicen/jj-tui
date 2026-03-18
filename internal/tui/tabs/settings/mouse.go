@@ -5,7 +5,7 @@ import (
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 )
 
-// resolveTabFromZone returns the settings tab index (0–5) if zoneID is a tab zone.
+// resolveTabFromZone returns the settings tab index (0–6) if zoneID is a tab zone.
 func resolveTabFromZone(zoneID string) (tab int, ok bool) {
 	switch zoneID {
 	case mouse.ZoneSettingsTabGitHub:
@@ -18,8 +18,10 @@ func resolveTabFromZone(zoneID string) (tab int, ok bool) {
 		return 3, true
 	case mouse.ZoneSettingsTabBranches:
 		return 4, true
-	case mouse.ZoneSettingsTabAdvanced:
+	case mouse.ZoneSettingsTabTheme:
 		return 5, true
+	case mouse.ZoneSettingsTabAdvanced:
+		return 6, true
 	}
 	return 0, false
 }
@@ -219,7 +221,22 @@ func handleBranchesZone(m *Model, zoneID string) (Model, tea.Cmd) {
 	return *m, nil
 }
 
-// handleAdvancedZone handles zone clicks for the Advanced panel (tab 5).
+// handleThemeZone handles zone clicks for the Theme panel (tab 5): [Default] buttons or forward to the clicked swatch.
+func handleThemeZone(m *Model, zoneID string, event tea.MouseMsg) (Model, tea.Cmd) {
+	if idx := ThemeDefaultZoneIndex(zoneID); idx >= 0 {
+		m.themeModel.SetSwatchToDefault(idx)
+		return *m, nil
+	}
+	idx := ThemeSwatchIndex(zoneID)
+	if idx < 0 {
+		return *m, nil
+	}
+	updated, cmd := m.themeModel.UpdateSwatch(idx, event)
+	m.themeModel = updated
+	return *m, cmd
+}
+
+// handleAdvancedZone handles zone clicks for the Advanced panel (tab 6).
 func handleAdvancedZone(m *Model, zoneID string) (Model, tea.Cmd) {
 	adv := m.GetAdvancedModel()
 	if adv.GetConfirmingCleanup() != "" {
@@ -253,10 +270,11 @@ func handleAdvancedZone(m *Model, zoneID string) (Model, tea.Cmd) {
 }
 
 // routeZoneToPanel routes a zone click to the active panel or tab switch or save/cancel.
-func (m *Model) routeZoneToPanel(zoneID string) (Model, tea.Cmd) {
+// zoneEvent is the mouse event that triggered the zone hit (needed for theme swatch clicks).
+func (m *Model) routeZoneToPanel(zoneID string, zoneEvent tea.MouseMsg) (Model, tea.Cmd) {
 	if tab, ok := resolveTabFromZone(zoneID); ok {
 		m.SetSettingsTab(tab)
-		if tab == 5 {
+		if tab == 6 {
 			return *m, m.advancedModel.SetFocusedField(0)
 		}
 		return *m, nil
@@ -281,6 +299,8 @@ func (m *Model) routeZoneToPanel(zoneID string) (Model, tea.Cmd) {
 	case 4:
 		return handleBranchesZone(m, zoneID)
 	case 5:
+		return handleThemeZone(m, zoneID, zoneEvent)
+	case 6:
 		return handleAdvancedZone(m, zoneID)
 	}
 	return *m, nil

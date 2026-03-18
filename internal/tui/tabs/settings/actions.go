@@ -17,6 +17,7 @@ import (
 	"github.com/madicen/jj-tui/internal/tickets"
 	"github.com/madicen/jj-tui/internal/tui/data"
 	"github.com/madicen/jj-tui/internal/tui/state"
+	"github.com/madicen/jj-tui/internal/tui/styles"
 )
 
 // SettingsParams contains all settings values.
@@ -47,6 +48,9 @@ type SettingsParams struct {
 	GraphRevset                  string
 	GitHubOwner                  string
 	GitHubRepo                   string
+	ThemePrimary                 string
+	ThemeSecondary               string
+	ThemeMuted                   string
 }
 
 // Status messages for cleanup flows.
@@ -80,6 +84,9 @@ func HandleSettingsSavedMsg(msg SettingsSavedMsg, app *state.AppState) (tea.Cmd,
 	app.TicketService = msg.TicketService
 	cfg, _ := config.Load()
 	app.Config = cfg
+	if cfg != nil {
+		styles.SetTheme(cfg.GetThemePrimary(), cfg.GetThemeSecondary(), cfg.GetThemeMuted())
+	}
 	if msg.Err != nil {
 		app.StatusMessage = fmt.Sprintf("Error saving settings: %v", msg.Err)
 		return nil, &SettingsSavedErrorInfo{Err: msg.Err}
@@ -174,6 +181,12 @@ func BuildSettingsParams(m *Model, githubOwner, githubRepo string) SettingsParam
 	params.CodecksProject = strings.TrimSpace(cc.GetProject())
 	params.CodecksExcludedStatuses = strings.TrimSpace(cc.GetExcludedStatuses())
 	params.GitHubIssuesExcludedStatuses = strings.TrimSpace(tk.GetGitHubIssuesExcludedStatuses())
+	th := m.GetThemeModel()
+	if th != nil {
+		params.ThemePrimary = th.Primary()
+		params.ThemeSecondary = th.Secondary()
+		params.ThemeMuted = th.Muted()
+	}
 	return params
 }
 
@@ -245,6 +258,9 @@ func SaveSettingsCmd(params SettingsParams) tea.Cmd {
 		cfg.BranchStatsLimit = &params.BranchLimit
 		cfg.SanitizeBookmarkNames = &params.SanitizeBookmarks
 		cfg.GraphRevset = params.GraphRevset
+		cfg.ThemePrimary = params.ThemePrimary
+		cfg.ThemeSecondary = params.ThemeSecondary
+		cfg.ThemeMuted = params.ThemeMuted
 		_ = cfg.Save()
 		return buildSettingsSavedMsg(params, false)
 	}
@@ -265,6 +281,9 @@ func SaveSettingsLocalCmd(params SettingsParams) tea.Cmd {
 			BranchStatsLimit:             &params.BranchLimit,
 			SanitizeBookmarkNames:        &params.SanitizeBookmarks,
 			GraphRevset:                  params.GraphRevset,
+			ThemePrimary:                 params.ThemePrimary,
+			ThemeSecondary:               params.ThemeSecondary,
+			ThemeMuted:                   params.ThemeMuted,
 			JiraProject:                  params.JiraProject,
 			JiraProjectFilter:            params.JiraProjectFilter,
 			JiraIssueType:                params.JiraIssueType,

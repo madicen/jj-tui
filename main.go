@@ -14,6 +14,7 @@ import (
 	"github.com/muesli/termenv"
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/tui"
+	"github.com/madicen/jj-tui/internal/tui/styles"
 	"github.com/madicen/jj-tui/internal/version"
 )
 
@@ -79,6 +80,9 @@ func main() {
 
 	// Apply saved config to environment (env vars take precedence)
 	cfg.ApplyToEnvironment()
+
+	// Apply theme colors from config so the TUI uses saved preferences
+	styles.SetTheme(cfg.GetThemePrimary(), cfg.GetThemeSecondary(), cfg.GetThemeMuted())
 
 	// Initialize the TUI application
 	ctx := context.Background()

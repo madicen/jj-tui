@@ -99,7 +99,16 @@ const (
 	ZoneSettingsTabCodecks  = "zone:settings:tab:codecks"
 	ZoneSettingsTabTickets  = "zone:settings:tab:tickets"
 	ZoneSettingsTabBranches = "zone:settings:tab:branches"
+	ZoneSettingsTabTheme    = "zone:settings:tab:theme"
 	ZoneSettingsTabAdvanced = "zone:settings:tab:advanced"
+
+	// Theme color swatches
+	ZoneSettingsThemePrimary   = "zone:settings:theme:primary"
+	ZoneSettingsThemeSecondary = "zone:settings:theme:secondary"
+	ZoneSettingsThemeMuted     = "zone:settings:theme:muted"
+	ZoneSettingsThemePrimaryDefault   = "zone:settings:theme:primary_default"
+	ZoneSettingsThemeSecondaryDefault = "zone:settings:theme:secondary_default"
+	ZoneSettingsThemeMutedDefault     = "zone:settings:theme:muted_default"
 
 	// Help sub-tab zones
 	ZoneHelpTabShortcuts = "zone:help:tab:shortcuts"

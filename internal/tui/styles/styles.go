@@ -2,14 +2,50 @@ package styles
 
 import "github.com/charmbracelet/lipgloss"
 
-// Colors
+// Colors (updated by SetTheme when config or theme picker changes)
 var (
 	ColorPrimary   = lipgloss.Color("#7E00AF")
 	ColorSecondary = lipgloss.Color("#50FA7B")
 	ColorMuted     = lipgloss.Color("#6272A4")
 )
 
-// Styles
+// SetTheme updates the global theme colors and rebuilds styles that use them.
+// Pass hex strings (e.g. "#7E00AF"). Empty strings are ignored (keep current).
+func SetTheme(primary, secondary, muted string) {
+	if primary != "" {
+		ColorPrimary = lipgloss.Color(primary)
+	}
+	if secondary != "" {
+		ColorSecondary = lipgloss.Color(secondary)
+	}
+	if muted != "" {
+		ColorMuted = lipgloss.Color(muted)
+	}
+	rebuildThemeStyles()
+}
+
+func rebuildThemeStyles() {
+	TitleStyle = lipgloss.NewStyle().
+		Bold(true).
+		Foreground(ColorPrimary)
+	CommitIDStyle = lipgloss.NewStyle().
+		Foreground(ColorPrimary).
+		Bold(true)
+	HelpKeyStyle = lipgloss.NewStyle().
+		Foreground(ColorPrimary).
+		Bold(true)
+	GraphStyle = lipgloss.NewStyle().Foreground(ColorMuted)
+	TabActiveStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#F9FAFB")).
+		Background(ColorPrimary).
+		Padding(0, 2)
+	StatusBarStyle = lipgloss.NewStyle().
+		Background(lipgloss.Color("#1F2937")).
+		Foreground(ColorMuted).
+		Padding(0, 1)
+}
+
+// Styles (TitleStyle, CommitIDStyle, HelpKeyStyle, GraphStyle, TabActiveStyle, StatusBarStyle rebuilt in rebuildThemeStyles)
 var (
 	TitleStyle = lipgloss.NewStyle().
 			Bold(true).
@@ -45,7 +81,6 @@ var (
 	HelpDescStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#F8F8F2"))
 
-	// Style for graph lines (muted color)
 	GraphStyle = lipgloss.NewStyle().Foreground(ColorMuted)
 
 	// Special styles for rebase mode
@@ -84,6 +119,10 @@ var (
 			Foreground(ColorMuted).
 			Padding(0, 1)
 )
+
+func init() {
+	rebuildThemeStyles()
+}
 
 // GetStatusStyle returns the style and character for a file status
 func GetStatusStyle(status string) (lipgloss.Style, string) {

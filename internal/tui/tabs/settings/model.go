@@ -11,6 +11,8 @@ import (
 	"github.com/madicen/jj-tui/internal/tui/tabs/settings/codecks"
 	"github.com/madicen/jj-tui/internal/tui/tabs/settings/github"
 	"github.com/madicen/jj-tui/internal/tui/tabs/settings/jira"
+	"github.com/madicen/bubble-color-picker"
+	"github.com/madicen/jj-tui/internal/tui/tabs/settings/theme"
 	"github.com/madicen/jj-tui/internal/tui/tabs/settings/tickets"
 )
 
@@ -18,7 +20,7 @@ import (
 type Model struct {
 	settingsTab   int
 	zoneManager   *zone.Manager
-	panelYOffset  [6]int
+	panelYOffset  [7]int
 	width         int
 	height        int
 	viewOpts      *ViewOpts
@@ -28,6 +30,7 @@ type Model struct {
 	codecksModel  codecks.Model
 	ticketsModel  tickets.Model
 	branchesModel branches.Model
+	themeModel    theme.Model
 	advancedModel advanced.Model
 }
 
@@ -40,6 +43,7 @@ func NewModel() Model {
 		codecksModel:  codecks.NewModel(),
 		ticketsModel:  tickets.NewModel(),
 		branchesModel: branches.NewModel(),
+		themeModel:    theme.NewModel(),
 		advancedModel: advanced.NewModel(),
 	}
 }
@@ -53,6 +57,7 @@ func NewModelWithConfig(cfg *config.Config) Model {
 		codecksModel:  codecks.NewModelFromConfig(cfg),
 		ticketsModel:  tickets.NewModelFromConfig(cfg),
 		branchesModel: branches.NewModelFromConfig(cfg),
+		themeModel:    theme.NewModelFromConfig(cfg),
 		advancedModel: advanced.NewModelFromConfig(cfg),
 	}
 }
@@ -69,13 +74,47 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		return m, nil
+	}
+	// When Theme tab is active and a color picker is open, forward all input to the theme model.
+	if m.settingsTab == 5 && m.themeModel.AnyOpen() {
+		updated, cmd := m.themeModel.Update(msg)
+		m.themeModel = updated
+		return m, cmd
+	}
+	// When Theme tab is active and we get picker result messages, forward to theme model so the swatch closes
+	if m.settingsTab == 5 {
+		switch msg.(type) {
+		case bubblepicker.ColorChosenMsg, bubblepicker.ColorCanceledMsg:
+			updated, cmd := m.themeModel.Update(msg)
+			m.themeModel = updated
+			return m, cmd
+		}
+	}
+	// When Theme tab is active, forward left mouse press to theme swatch if click is in a swatch zone
+	// (bubblezone sends MsgZoneInBounds on release, but the swatch opens on press—so we must handle press here)
+	if m.settingsTab == 5 && m.zoneManager != nil {
+		if mouseMsg, ok := msg.(tea.MouseMsg); ok && mouseMsg.Action == tea.MouseActionPress && mouseMsg.Button == tea.MouseButtonLeft {
+			for _, zoneID := range []string{mouse.ZoneSettingsThemePrimary, mouse.ZoneSettingsThemeSecondary, mouse.ZoneSettingsThemeMuted} {
+				z := m.zoneManager.Get(zoneID)
+				if z != nil && z.InBounds(mouseMsg) {
+					idx := ThemeSwatchIndex(zoneID)
+					if idx >= 0 {
+						updated, cmd := m.themeModel.UpdateSwatch(idx, mouseMsg)
+						m.themeModel = updated
+						return m, cmd
+					}
+				}
+			}
+		}
+	}
+	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		return m.handleKeyMsg(msg)
 	case zone.MsgZoneInBounds:
 		if m.zoneManager != nil {
 			zoneID := m.resolveClickedZone(msg)
 			if zoneID != "" {
-				return m.routeZoneToPanel(zoneID)
+				return m.routeZoneToPanel(zoneID, msg.Event)
 			}
 		}
 		return m, nil
@@ -106,7 +145,11 @@ func (m Model) View() string {
 	if m.viewOpts == nil {
 		return ""
 	}
-	return RenderWithState(m.zoneManager, &m, *m.viewOpts)
+	out := RenderWithState(m.zoneManager, &m, *m.viewOpts)
+	if m.settingsTab == 5 && m.themeModel.AnyOpen() {
+		out = m.themeModel.ViewWithOverlay(out, m.width, m.height)
+	}
+	return out
 }
 
 // SetViewOpts sets the options used by View() to render (called by main when entering settings or on resize).
@@ -134,21 +177,21 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "ctrl+j":
 		tab := m.settingsTab - 1
 		if tab < 0 {
-			tab = 5
+			tab = 6
 		}
-		m.settingsTab = tab % 6
-		if m.settingsTab == 5 {
+		m.settingsTab = tab % 7
+		if m.settingsTab == 6 {
 			return m, m.advancedModel.SetFocusedField(0)
 		}
 		return m, nil
 	case "ctrl+k":
-		m.settingsTab = (m.settingsTab + 1) % 6
-		if m.settingsTab == 5 {
+		m.settingsTab = (m.settingsTab + 1) % 7
+		if m.settingsTab == 6 {
 			return m, m.advancedModel.SetFocusedField(0)
 		}
 		return m, nil
 	case "ctrl+s", "enter":
-		if m.settingsTab == 5 {
+		if m.settingsTab == 6 {
 			// Advanced tab: forward enter to revset input
 			return m.forwardKeyToActiveSubmodelReturn(msg)
 		}
@@ -164,6 +207,8 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 				lastField = m.codecksModel.GetFocusedField() >= 3
 			case 3:
 				lastField = m.ticketsModel.GetTicketProvider() != "github_issues" || m.ticketsModel.GetFocusedField() >= 0
+			case 5:
+				lastField = true // Theme tab: Enter saves
 			}
 			if !lastField {
 				var cmd tea.Cmd
@@ -175,18 +220,18 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "ctrl+l":
 		return m, Request{SaveSettingsLocal: true}.Cmd()
 	case "tab", "down":
-		if m.settingsTab != 5 {
+		if m.settingsTab != 6 {
 			m.forwardKeyToActiveSubmodel(msg)
 			return m, nil
 		}
 	case "shift+tab", "up":
-		if m.settingsTab != 5 {
+		if m.settingsTab != 6 {
 			m.forwardKeyToActiveSubmodel(msg)
 			return m, nil
 		}
 	}
 
-	// Forward all other keys (including letters like j/k) to the focused input
+	// Forward all other keys (including letters like j/k) to the focused input (Theme tab has no inputs)
 	return m.forwardKeyToActiveSubmodelReturn(msg)
 }
 
@@ -194,7 +239,9 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 func (m *Model) ZoneIDs() []string {
 	return []string{
 		mouse.ZoneSettingsTabGitHub, mouse.ZoneSettingsTabJira, mouse.ZoneSettingsTabCodecks,
-		mouse.ZoneSettingsTabTickets, mouse.ZoneSettingsTabBranches, mouse.ZoneSettingsTabAdvanced,
+		mouse.ZoneSettingsTabTickets, mouse.ZoneSettingsTabBranches, mouse.ZoneSettingsTabTheme, mouse.ZoneSettingsTabAdvanced,
+		mouse.ZoneSettingsThemePrimary, mouse.ZoneSettingsThemeSecondary, mouse.ZoneSettingsThemeMuted,
+		mouse.ZoneSettingsThemePrimaryDefault, mouse.ZoneSettingsThemeSecondaryDefault, mouse.ZoneSettingsThemeMutedDefault,
 		mouse.ZoneSettingsTicketProviderNone, mouse.ZoneSettingsTicketProviderJira,
 		mouse.ZoneSettingsTicketProviderCodecks, mouse.ZoneSettingsTicketProviderGitHubIssues,
 		mouse.ZoneSettingsAutoInProgress,
@@ -235,15 +282,17 @@ func (m *Model) resolveClickedZone(msg zone.MsgZoneInBounds) string {
 // SetZoneManager sets the zone manager used to resolve clicks (main's manager; zones are created in settingstab.Render).
 func (m *Model) SetZoneManager(zm *zone.Manager) {
 	m.zoneManager = zm
+	m.themeModel.SetZoneManager(zm)
 }
 
 // Sub-model getters (return pointers so zone handlers and BuildSettingsParams can mutate)
 
-func (m *Model) GetGitHubModel() *github.Model   { return &m.githubModel }
-func (m *Model) GetJiraModel() *jira.Model       { return &m.jiraModel }
-func (m *Model) GetCodecksModel() *codecks.Model { return &m.codecksModel }
-func (m *Model) GetTicketsModel() *tickets.Model { return &m.ticketsModel }
+func (m *Model) GetGitHubModel() *github.Model    { return &m.githubModel }
+func (m *Model) GetJiraModel() *jira.Model        { return &m.jiraModel }
+func (m *Model) GetCodecksModel() *codecks.Model  { return &m.codecksModel }
+func (m *Model) GetTicketsModel() *tickets.Model  { return &m.ticketsModel }
 func (m *Model) GetBranchesModel() *branches.Model { return &m.branchesModel }
+func (m *Model) GetThemeModel() *theme.Model      { return &m.themeModel }
 func (m *Model) GetAdvancedModel() *advanced.Model { return &m.advancedModel }
 
 // forwardKeyToActiveSubmodel updates focus/state for tab/up/down within the active panel (mutates m in place).
@@ -296,6 +345,8 @@ func (m *Model) forwardKeyToActiveSubmodel(msg tea.KeyMsg) {
 			}
 		}
 	case 5:
+		// Theme tab: no fields to focus
+	case 6:
 		adv := m.GetAdvancedModel()
 		switch msg.String() {
 		case "tab", "down", "j":
@@ -330,6 +381,9 @@ func (m Model) forwardKeyToActiveSubmodelReturn(msg tea.KeyMsg) (Model, tea.Cmd)
 		m.ticketsModel = updated
 		return m, cmd
 	case 5:
+		// Theme tab has no text inputs
+		return m, nil
+	case 6:
 		updated, cmd := m.advancedModel.Update(msg)
 		m.advancedModel = updated
 		return m, cmd
@@ -358,6 +412,9 @@ func (m Model) forwardToActiveSubmodel(msg tea.Msg) (Model, tea.Cmd) {
 		m.ticketsModel = updated
 		return m, cmd
 	case 5:
+		// Theme tab: no inputs
+		return m, nil
+	case 6:
 		updated, cmd := m.advancedModel.Update(msg)
 		m.advancedModel = updated
 		return m, cmd
@@ -395,6 +452,8 @@ func (m *Model) GetFocusedField() int {
 		}
 		return 0
 	case 5:
+		return 0 // Theme tab has no inputs
+	case 6:
 		return 14 + m.advancedModel.GetFocusedField()
 	}
 	return 0
@@ -422,6 +481,32 @@ func (m *Model) SetFocusedField(idx int) tea.Cmd {
 	return m.advancedModel.SetFocusedField(idx - 14)
 }
 
+// ThemeSwatchIndex returns the theme swatch index (0–2) for the given zone ID, or -1.
+func ThemeSwatchIndex(zoneID string) int {
+	switch zoneID {
+	case mouse.ZoneSettingsThemePrimary:
+		return 0
+	case mouse.ZoneSettingsThemeSecondary:
+		return 1
+	case mouse.ZoneSettingsThemeMuted:
+		return 2
+	}
+	return -1
+}
+
+// ThemeDefaultZoneIndex returns the theme swatch index (0–2) for a [Default] button zone ID, or -1.
+func ThemeDefaultZoneIndex(zoneID string) int {
+	switch zoneID {
+	case mouse.ZoneSettingsThemePrimaryDefault:
+		return 0
+	case mouse.ZoneSettingsThemeSecondaryDefault:
+		return 1
+	case mouse.ZoneSettingsThemeMutedDefault:
+		return 2
+	}
+	return -1
+}
+
 // EnterTab prepares the tab when main navigates to Settings (focus first field of active panel).
 // Returns a tea.Cmd when focusing the Advanced revset input so the cursor is shown.
 func (m *Model) EnterTab() tea.Cmd {
@@ -435,6 +520,8 @@ func (m *Model) EnterTab() tea.Cmd {
 	case 3:
 		m.ticketsModel.SetFocusedField(0)
 	case 5:
+		// Theme tab: nothing to focus
+	case 6:
 		return m.advancedModel.SetFocusedField(0)
 	}
 	return nil
@@ -490,7 +577,7 @@ func (m *Model) SetDimensions(width, height int) {
 
 // GetSettingsYOffset returns the current scroll offset for the active settings panel.
 func (m *Model) GetSettingsYOffset() int {
-	if m.settingsTab < 0 || m.settingsTab >= 6 {
+	if m.settingsTab < 0 || m.settingsTab >= 7 {
 		return 0
 	}
 	return m.panelYOffset[m.settingsTab]
