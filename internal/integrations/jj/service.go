@@ -50,6 +50,7 @@ func SanitizeBookmarkName(name string) string {
 	name = strings.ReplaceAll(name, "]", "-")
 	name = strings.ReplaceAll(name, "@", "-")
 	name = strings.ReplaceAll(name, "'", "")
+	name = strings.ReplaceAll(name, ".", "-")
 
 	// Collapse multiple hyphens into one
 	for strings.Contains(name, "--") {

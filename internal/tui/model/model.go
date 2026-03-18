@@ -1075,10 +1075,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.githubLoginModel.SetDeviceFlow(msg.DeviceCode, msg.UserCode, msg.VerificationURL, msg.Interval)
 		m.appState.ViewMode = state.ViewGitHubLogin
 		m.appState.StatusMessage = "Waiting for GitHub authorization..."
-		return m, tea.Batch(
-			util.OpenURL(msg.VerificationURL),
-			settingstab.PollGitHubTokenCmd(m.githubLoginModel.GetDeviceCode()),
-		)
+		// Do not auto-open the browser; user can press Enter or click "Copy Code & Open Browser" on the login screen.
+		return m, settingstab.PollGitHubTokenCmd(m.githubLoginModel.GetDeviceCode())
 
 	case settingstab.GitHubLoginPollMsg:
 		if m.githubLoginModel.GetPolling() {
