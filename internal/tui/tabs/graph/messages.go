@@ -164,7 +164,7 @@ type Result struct {
 	WarningTitle    string
 	WarningMessage  string
 	WarningCommits  []internal.Commit
-	PerformRebase   bool
+	PerformRebase bool
 }
 
 // FocusMessage returns the status bar message for graph vs files pane focus.

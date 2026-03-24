@@ -84,20 +84,23 @@ func SubmitPRCmd(input SubmitPRInput) (tea.Cmd, string) {
 		if commitIDs == nil {
 			commitIDs = []string{}
 		}
-		return func() tea.Msg {
-			return PRCreatedMsg{PR: &internal.GitHubPR{
-				Number:       999,
-				Title:        title,
-				Body:         body,
-				State:        "open",
-				HeadBranch:   input.HeadBranch,
-				BaseBranch:   input.BaseBranch,
-				URL:          "https://github.com/example/repo/pull/999",
-				CommitIDs:    commitIDs,
-				CheckStatus:  internal.CheckStatusPending,
-				ReviewStatus: internal.ReviewStatusNone,
-			}}
-		}, ""
+		demoPR := &internal.GitHubPR{
+			Number:       999,
+			Title:        title,
+			Body:         body,
+			State:        "open",
+			HeadBranch:   input.HeadBranch,
+			BaseBranch:   input.BaseBranch,
+			URL:          "https://github.com/example/repo/pull/999",
+			CommitIDs:    commitIDs,
+			CheckStatus:  internal.CheckStatusPending,
+			ReviewStatus: internal.ReviewStatusNone,
+		}
+		// Delay so demo/VHS shows the same loading overlay as real create (push + GitHub API).
+		const demoPRCreateDelay = 2 * time.Second
+		return tea.Tick(demoPRCreateDelay, func(time.Time) tea.Msg {
+			return PRCreatedMsg{PR: demoPR}
+		}), ""
 	}
 	return CreatePRCmd(input.JJService, input.GitHubService, PRCreateParams{
 		Title:             title,
@@ -241,6 +244,7 @@ func SubmitPR(modal *Model, repo *internal.Repository, jjService *jj.Service, gi
 
 // HandlePRCreatedMsg mutates app (ViewMode, StatusMessage, Repository in demo) and returns the Cmd to run.
 func HandlePRCreatedMsg(input PRCreatedInput, app *state.AppState) tea.Cmd {
+	app.Loading = false
 	app.ViewMode = state.ViewCommitGraph
 	app.StatusMessage = fmt.Sprintf("PR #%d created: %s", input.PR.Number, input.PR.Title)
 	if input.DemoMode {

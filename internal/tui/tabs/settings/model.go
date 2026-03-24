@@ -429,12 +429,12 @@ func (m *Model) GetSettingsTab() int {
 	return m.settingsTab
 }
 
-// SetSettingsTab sets the settings sub-tab (0=GitHub, 1=Jira, 2=Codecks, 3=Tickets, 4=Branches, 5=Advanced)
+// SetSettingsTab sets the settings sub-tab (0=GitHub, 1=Jira, 2=Codecks, 3=Tickets, 4=Branches, 5=Theme, 6=Advanced)
 func (m *Model) SetSettingsTab(tab int) {
 	if tab < 0 {
 		tab = 0
 	}
-	m.settingsTab = tab % 6
+	m.settingsTab = tab % 7
 }
 
 // GetFocusedField returns the currently focused input field (global index 0-14 for BuildRenderData).
@@ -451,6 +451,8 @@ func (m *Model) GetFocusedField() int {
 			return 13
 		}
 		return 0
+	case 4:
+		return 0 // Branches settings: no text inputs
 	case 5:
 		return 0 // Theme tab has no inputs
 	case 6:

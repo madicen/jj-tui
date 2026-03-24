@@ -39,10 +39,11 @@ func New(ctx context.Context) *Model {
 	m := &Model{
 		ctx:              ctx,
 		zoneManager:      zm,
+		busySpinner:      newBusySpinner(),
 		appState: state.AppState{
 			ViewMode:      state.ViewCommitGraph,
 			StatusMessage: "Initializing...",
-			Loading:       true,
+			Loading:       false,
 		},
 		graphTabModel:    graphTabModel,
 		prsTabModel:      prstab.NewModel(zm),

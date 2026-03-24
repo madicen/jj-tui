@@ -22,9 +22,16 @@ type AppState struct {
 	// UI/routing state (submodels can read and set these)
 	ViewMode      ViewMode
 	StatusMessage string
-	Loading       bool
+	Loading       bool // Busy overlay (spinner): first PR/tickets fetch, create PR, fetch-all, etc.
 	DemoMode      bool
 	GithubInfo    string
+
+	// PRsLoadedOnce is set after the first GitHub PR list load completes (success or error).
+	PRsLoadedOnce bool
+	// TicketsLoadedOnce is set after the first ticket list load completes (success or error).
+	TicketsLoadedOnce bool
+	// BranchRemoteFetchPending: branches tab started "fetch all remotes"; main batches spinner with the cmd.
+	BranchRemoteFetchPending bool
 }
 
 // HasRepository returns true if repository data is loaded.

@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/bubble-color-picker"
@@ -67,6 +68,8 @@ type Model struct {
 	ticketFormModal  ticketformtab.Model
 	desceditModal    descedittab.Model
 	githubLoginModel githublogintab.Model
+
+	busySpinner spinner.Model
 }
 
 // doPollMsg is a message used to trigger a GitHub token poll.
@@ -143,7 +146,7 @@ func (m *Model) applyRepositoryLoaded(repo *internal.Repository) (*Model, tea.Cm
 		if m.appState.Repository != nil {
 			existing = len(m.appState.Repository.PRs)
 		}
-		cmds = append(cmds, prstab.LoadPRsCmd(m.appState.GitHubService, m.appState.GithubInfo, m.appState.DemoMode, existing))
+		cmds = append(cmds, m.wrapFirstPRLoadCmd(prstab.LoadPRsCmd(m.appState.GitHubService, m.appState.GithubInfo, m.appState.DemoMode, existing)))
 	}
 	commits := repo.Graph.Commits
 	if len(commits) > 0 {
@@ -160,7 +163,6 @@ func (m *Model) applyRepositoryLoaded(repo *internal.Repository) (*Model, tea.Cm
 // refreshRepository starts a refresh of the repository data.
 func (m *Model) refreshRepository() tea.Cmd {
 	m.appState.StatusMessage = "Refreshing..."
-	m.appState.Loading = true
 	var cmds []tea.Cmd
 	if m.appState.JJService == nil {
 		cmds = append(cmds, data.InitializeServices(m.appState.DemoMode))
@@ -172,7 +174,7 @@ func (m *Model) refreshRepository() tea.Cmd {
 		if m.appState.Repository != nil {
 			existing = len(m.appState.Repository.PRs)
 		}
-		cmds = append(cmds, prstab.LoadPRsCmd(m.appState.GitHubService, m.appState.GithubInfo, m.appState.DemoMode, existing))
+		cmds = append(cmds, m.wrapFirstPRLoadCmd(prstab.LoadPRsCmd(m.appState.GitHubService, m.appState.GithubInfo, m.appState.DemoMode, existing)))
 	}
 	svc := m.appState.TicketService
 	if svc != nil && !util.IsNilInterface(svc) {
@@ -198,7 +200,8 @@ func (m *Model) processGraphRequest(r graphtab.Request) (tea.Model, tea.Cmd) {
 	}
 	ctx := graphtab.BuildRequestContextFrom(m)
 	res := graphtab.HandleRequest(r, ctx)
-	return m, graphtab.ApplyResult(res, &m.graphTabModel, ctx, &m.appState)
+	cmd := graphtab.ApplyResult(res, &m.graphTabModel, ctx, &m.appState)
+	return m, cmd
 }
 
 func (m *Model) handleHelpRequest(r commandhistory.Request) (tea.Model, tea.Cmd) {
@@ -227,6 +230,9 @@ func (m *Model) handleNavigateToPRTab() (tea.Model, tea.Cmd) {
 	m.appState.ViewMode = state.ViewPullRequests
 	status, cmd := prstab.EnterTab(m)
 	m.appState.StatusMessage = status
+	if cmd != nil {
+		cmd = m.wrapFirstPRLoadCmd(cmd)
+	}
 	return m, cmd
 }
 
@@ -234,6 +240,11 @@ func (m *Model) handleNavigateToTicketsTab() (tea.Model, tea.Cmd) {
 	m.appState.ViewMode = state.ViewTickets
 	status, cmd := ticketstab.EnterTab(m)
 	m.appState.StatusMessage = status
+	if cmd != nil && !m.appState.TicketsLoadedOnce {
+		m.appState.Loading = true
+		m.appState.StatusMessage = "Loading tickets…"
+		return m, tea.Batch(cmd, m.startBusySpinnerCmd())
+	}
 	return m, cmd
 }
 
@@ -452,7 +463,11 @@ func (m *Model) startCreatePR() {
 func (m *Model) submitPR() tea.Cmd {
 	res := prformtab.SubmitPR(&m.prFormModal, m.appState.Repository, m.appState.JJService, m.appState.GitHubService, m.appState.DemoMode)
 	m.appState.StatusMessage = res.StatusMessage
-	return res.Cmd
+	if res.Cmd == nil {
+		return nil
+	}
+	m.appState.Loading = true
+	return tea.Batch(res.Cmd, m.startBusySpinnerCmd())
 }
 
 // startCreateTicket opens the Create Ticket dialog when the provider supports it.
@@ -547,6 +562,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.appState.StatusMessage = msg.Status
 		return m, nil
 
+	case spinner.TickMsg:
+		if !m.appState.Loading {
+			return m, nil
+		}
+		var spinCmd tea.Cmd
+		m.busySpinner, spinCmd = m.busySpinner.Update(msg)
+		return m, spinCmd
+
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -640,7 +663,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			updated, cmd := m.branchesTabModel.UpdateWithApp(msg, &m.appState)
 			m.branchesTabModel = updated
 			if cmd != nil {
-				return m, cmd
+				return m, m.wrapBranchFetchCmd(cmd)
 			}
 		case state.ViewTickets:
 			updated, cmd := m.ticketsTabModel.UpdateWithApp(msg, &m.appState)
@@ -742,7 +765,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			updated, cmd := m.branchesTabModel.UpdateWithApp(msg, &m.appState)
 			m.branchesTabModel = updated
 			if cmd != nil {
-				return m, cmd
+				return m, m.wrapBranchFetchCmd(cmd)
 			}
 		case state.ViewTickets:
 			m.ticketsTabModel.SetDimensions(m.width, contentHeight)
@@ -801,7 +824,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			updated, cmd := m.branchesTabModel.UpdateWithApp(msg, &m.appState)
 			m.branchesTabModel = updated
 			if cmd != nil {
-				return m, cmd
+				return m, m.wrapBranchFetchCmd(cmd)
 			}
 		}
 		if m.appState.ViewMode == state.ViewTickets {
@@ -893,20 +916,32 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.appState.Repository = msg.Repository
 		m.appState.Repository.PRs = oldPRs // Restore PRs temporarily
-		m.appState.Loading = false
+		// Push fresh graph into tab models before clearing loading so the overlay stays up until
+		// the UI can render the new @ / tree (appState alone does not update GraphModel).
+		m.graphTabModel.UpdateRepository(m.appState.Repository)
+		m.prsTabModel.UpdateRepository(m.appState.Repository)
+		m.prsTabModel.SetGithubService(m.isGitHubAvailable())
+		m.branchesTabModel.UpdateRepository(m.appState.Repository)
+		m.ticketsTabModel.UpdateRepository(m.appState.Repository)
+		m.settingsTabModel.UpdateRepository(m.appState.Repository)
+		m.helpTabModel.UpdateRepository(m.appState.Repository)
 		// Don't clear error modal here - let errors persist until dismissed
-		// Find and select the working copy commit (graph tab owns selection)
+		var workingChangeID string
 		for i, commit := range msg.Repository.Graph.Commits {
 			if commit.IsWorking {
 				m.graphTabModel.SelectCommit(i)
+				workingChangeID = commit.ChangeID
 				break
 			}
 		}
+		m.appState.Loading = false
 		m.appState.StatusMessage = "Now editing working copy"
 
-		// Build commands to run
 		var cmds []tea.Cmd
 		cmds = append(cmds, m.tickCmd())
+		if workingChangeID != "" && m.appState.JJService != nil {
+			cmds = append(cmds, graphtab.LoadChangedFilesCmd(m.appState.JJService, workingChangeID))
+		}
 
 		// Also refresh PRs when GitHub is connected (needed for Update PR button)
 		if m.appState.GitHubService != nil {
@@ -914,7 +949,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.appState.Repository != nil {
 				existingPRs = len(m.appState.Repository.PRs)
 			}
-			cmds = append(cmds, prstab.LoadPRsCmd(m.appState.GitHubService, m.appState.GithubInfo, m.appState.DemoMode, existingPRs))
+			cmds = append(cmds, m.wrapFirstPRLoadCmd(prstab.LoadPRsCmd(m.appState.GitHubService, m.appState.GithubInfo, m.appState.DemoMode, existingPRs)))
 		}
 
 		return m, tea.Batch(cmds...)
@@ -957,6 +992,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleDataSilentRepositoryLoadedMsg(msg)
 
 	case prstab.PrsLoadedMsg:
+		m.appState.PRsLoadedOnce = true
+		m.appState.Loading = false
 		updated, cmd := m.prsTabModel.UpdateWithApp(msg, &m.appState)
 		m.prsTabModel = updated
 		m.prsTabModel.UpdateRepository(m.appState.Repository)
@@ -977,6 +1014,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, cmd
 	case prstab.LoadErrorMsg:
+		m.appState.PRsLoadedOnce = true
+		m.appState.Loading = false
 		updated, _ := m.prsTabModel.UpdateWithApp(msg, &m.appState)
 		m.prsTabModel = updated
 		m.errorModal.SetError(msg.Err, false, "")
@@ -1003,6 +1042,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case ticketstab.TicketsLoadedMsg:
+		m.appState.TicketsLoadedOnce = true
+		m.appState.Loading = false
 		input := ticketstab.TicketsLoadedInput{
 			Tickets:      msg.Tickets,
 			ProviderName: "",
@@ -1028,6 +1069,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, cmd
 	case ticketstab.LoadErrorMsg:
+		m.appState.TicketsLoadedOnce = true
+		m.appState.Loading = false
 		updated, _ := m.ticketsTabModel.UpdateWithApp(msg, &m.appState)
 		m.ticketsTabModel = updated
 		m.errorModal.SetError(msg.Err, false, "")
@@ -1050,6 +1093,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case branchestab.BranchActionMsg:
 		updated, _ := m.branchesTabModel.UpdateWithApp(msg, &m.appState)
 		m.branchesTabModel = updated
+		if msg.Action == "fetch" {
+			m.appState.BranchRemoteFetchPending = false
+			if msg.Err != nil {
+				m.appState.Loading = false
+			}
+		}
 		if msg.Err != nil {
 			m.errorModal.SetError(msg.Err, false, "")
 			return m, nil

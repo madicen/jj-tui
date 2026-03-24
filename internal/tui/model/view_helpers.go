@@ -18,37 +18,43 @@ func (m *Model) View() string {
 		return "Loading..."
 	}
 
-	// Init-repo screen (standalone view with header) or error modal (centered)
 	if m.initRepoModel.Path() != "" {
 		return m.renderWithHeader(m.initRepoModel.View())
 	}
-	if errorContent := m.errorModal.View(); errorContent != "" {
-		return m.centerModal(errorContent)
+
+	// Full-screen centered modals (no header/tabs behind)
+	if m.appState.ViewMode == state.ViewDivergentCommit {
+		if divergentContent := m.divergentModal.View(); divergentContent != "" {
+			return m.centerModal(divergentContent)
+		}
+	}
+	if m.appState.ViewMode == state.ViewBookmarkConflict {
+		if conflictContent := m.conflictModal.View(); conflictContent != "" {
+			return m.centerModal(conflictContent)
+		}
 	}
 
-	// Handle warning modal model
+	v := m.renderMainLayoutView()
+
 	if warningContent := m.warningModal.View(); warningContent != "" {
-		return m.centerModal(warningContent)
+		v = applyBubbleOverlayCentered(v, warningContent, m.width, m.height)
+	}
+	if errorContent := m.errorModal.View(); errorContent != "" {
+		v = applyBubbleOverlayCentered(v, errorContent, m.width, m.height)
 	}
 
-	// Handle divergent commit modal
-	if divergentContent := m.divergentModal.View(); divergentContent != "" {
-		return m.centerModal(divergentContent)
-	}
+	v = m.applyLoadingOverlay(v)
+	return m.zoneManager.Scan(v)
+}
 
-	// Handle conflict modal
-	if conflictContent := m.conflictModal.View(); conflictContent != "" {
-		return m.centerModal(conflictContent)
-	}
-
-	// Normal UI: header and footer are owned by the main model; inner content from tab/modal View()
+// renderMainLayoutView builds header + tab content + status (no error/warning/divergent full-screen branches).
+func (m *Model) renderMainLayoutView() string {
 	header := m.renderHeader()
 	statusBar := m.renderStatusBar()
 	headerHeight := strings.Count(header, "\n") + 1
 	statusHeight := strings.Count(statusBar, "\n") + 1
-	contentHeight := max(m.height-headerHeight-statusHeight-2, 1) // -2 for blank lines after header and before status
+	contentHeight := max(m.height-headerHeight-statusHeight-2, 1)
 
-	// Set dimensions for all tabs before View() so they know the actual content area height for scrolling
 	m.graphTabModel.SetDimensions(m.width, contentHeight)
 	m.prsTabModel.SetDimensions(m.width, contentHeight)
 	m.branchesTabModel.SetDimensions(m.width, contentHeight)
@@ -56,7 +62,6 @@ func (m *Model) View() string {
 	m.settingsTabModel.SetDimensions(m.width, contentHeight)
 	m.helpTabModel.SetDimensions(m.width, contentHeight)
 
-	// Delegate to tab models for their views
 	var content string
 	switch m.appState.ViewMode {
 	case state.ViewCommitGraph:
@@ -89,7 +94,6 @@ func (m *Model) View() string {
 		content = m.graphTabModel.View()
 	}
 
-	// Pin footer to bottom: pad content to fixed height (avoid lipgloss on content to preserve zone markup)
 	contentLines := strings.Split(content, "\n")
 	for len(contentLines) < contentHeight {
 		contentLines = append(contentLines, "")
@@ -99,8 +103,7 @@ func (m *Model) View() string {
 	}
 	contentPadded := strings.Join(contentLines, "\n")
 
-	// One blank line after header and one before status bar (use single space so the line is visible)
-	v := lipgloss.JoinVertical(
+	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		header,
 		" ",
@@ -108,8 +111,6 @@ func (m *Model) View() string {
 		" ",
 		statusBar,
 	)
-
-	return m.zoneManager.Scan(v)
 }
 
 // centerModal centers a modal on the screen
@@ -160,6 +161,7 @@ func (m *Model) renderWithHeader(content string) string {
 		" ",
 		statusBar,
 	)
+	v = m.applyLoadingOverlay(v)
 	return m.zoneManager.Scan(v)
 }
 
@@ -215,9 +217,6 @@ func (m *Model) renderTab(label string, active bool) string {
 // renderStatusBar renders the status bar with global shortcuts (always single line).
 func (m *Model) renderStatusBar() string {
 	status := m.appState.StatusMessage
-	if m.appState.Loading {
-		status = "⏳ " + status
-	}
 
 	// Sanitize status message: remove literal newlines
 	status = strings.ReplaceAll(status, "\n", " ")
