@@ -531,12 +531,16 @@ const followUpOnOriginMessage = "Follow-up (local changes on top of origin)"
 
 // MoveBookmarkDeltaOntoOrigin places bookmark@origin as the parent of new work without rewriting the
 // revision Git already has: it fetches, creates a new commit on top of bookmark@origin with the same
-// tree as localRev, moves the bookmark to that commit, and abandons the old local revision.
-// This enables a normal jj git push after amending a pushed branch. Requires a tracked remote
-// bookmark (bookmark@origin). localRev is typically the selected mutable commit (often @).
-func (s *Service) MoveBookmarkDeltaOntoOrigin(ctx context.Context, bookmarkName, localRev string) error {
-	if strings.TrimSpace(bookmarkName) == "" || strings.TrimSpace(localRev) == "" {
+// tree as the bookmark tip, moves the bookmark there, and abandons the old tip.
+// localChangeID is the selected revision’s change ID (for diff). localCommitID is the git commit id
+// (short or full) for revsets where the change ID may be divergent; pass commit.ID from the graph.
+func (s *Service) MoveBookmarkDeltaOntoOrigin(ctx context.Context, bookmarkName, localChangeID, localCommitID string) error {
+	if strings.TrimSpace(bookmarkName) == "" || strings.TrimSpace(localChangeID) == "" {
 		return fmt.Errorf("bookmark name and local revision are required")
+	}
+	revForSel := strings.TrimSpace(localCommitID)
+	if revForSel == "" {
+		revForSel = localChangeID
 	}
 	remoteRef := bookmarkName + "@origin"
 	if _, err := s.FetchFromGit(ctx); err != nil {
@@ -545,7 +549,20 @@ func (s *Service) MoveBookmarkDeltaOntoOrigin(ctx context.Context, bookmarkName,
 	if _, err := s.runJJOutput(ctx, "log", "-r", remoteRef, "--no-graph", "-T", "commit_id", "--limit", "1"); err != nil {
 		return fmt.Errorf("no revision %s (track the bookmark or run jj git fetch)", remoteRef)
 	}
-	childrenRev := fmt.Sprintf("children(%s) ~ @", localRev)
+	tipCommitID, err := s.runJJOutputNoHistory(ctx, "log", "-r", bookmarkName, "--no-graph", "-T", "commit_id", "--limit", "1")
+	if err != nil {
+		return fmt.Errorf("bookmark %q: %w", bookmarkName, err)
+	}
+	tipCommitID = strings.TrimSpace(tipCommitID)
+	selCommitID, err := s.runJJOutputNoHistory(ctx, "log", "-r", revForSel, "--no-graph", "-T", "commit_id", "--limit", "1")
+	if err != nil {
+		return fmt.Errorf("selected revision: %w", err)
+	}
+	selCommitID = strings.TrimSpace(selCommitID)
+	if tipCommitID != selCommitID {
+		return fmt.Errorf("select the bookmark tip (%s) to align with origin", bookmarkName)
+	}
+	childrenRev := fmt.Sprintf("children(%s) ~ @", tipCommitID)
 	childLines, err := s.runJJOutput(ctx, "log", "-r", childrenRev, "--no-graph", "-T", "change_id", "--limit", "20")
 	if err != nil {
 		return fmt.Errorf("check descendants: %w", err)
@@ -555,7 +572,7 @@ func (s *Service) MoveBookmarkDeltaOntoOrigin(ctx context.Context, bookmarkName,
 			return fmt.Errorf("commit has descendant commits (excluding working copy); rebase or squash the stack first")
 		}
 	}
-	diffOut, err := s.runJJOutput(ctx, "diff", "--from", remoteRef, "--to", localRev, "--summary")
+	diffOut, err := s.runJJOutput(ctx, "diff", "--from", remoteRef, "--to", localChangeID, "--summary")
 	if err != nil {
 		return fmt.Errorf("diff vs origin: %w", err)
 	}
@@ -565,13 +582,13 @@ func (s *Service) MoveBookmarkDeltaOntoOrigin(ctx context.Context, bookmarkName,
 	if err := s.runJJ(ctx, "new", remoteRef, "-m", followUpOnOriginMessage); err != nil {
 		return fmt.Errorf("jj new: %w", err)
 	}
-	if err := s.runJJ(ctx, "restore", "--into", "@", "--from", localRev); err != nil {
+	if err := s.runJJ(ctx, "restore", "--into", "@", "--from", tipCommitID); err != nil {
 		return fmt.Errorf("jj restore: %w", err)
 	}
-	if err := s.runJJ(ctx, "bookmark", "set", bookmarkName, "-r", "@"); err != nil {
+	if err := s.runJJ(ctx, "bookmark", "set", bookmarkName, "-r", "@", "--allow-backwards"); err != nil {
 		return fmt.Errorf("jj bookmark set: %w", err)
 	}
-	_ = s.runJJ(ctx, "abandon", localRev)
+	_ = s.runJJ(ctx, "abandon", tipCommitID)
 	return nil
 }
 
@@ -861,10 +878,8 @@ func (s *Service) getCommitGraph(ctx context.Context, revset string) (*internal.
 				for strings.HasSuffix(b, "?") {
 					b = strings.TrimSuffix(b, "?")
 				}
-				// Remove @remote suffix if present (e.g., "feature@origin" -> "feature")
-				if idx := strings.Index(b, "@"); idx > 0 {
-					b = b[:idx]
-				}
+				// Keep @remote suffixes (e.g. feature@origin) so the graph can distinguish
+				// local bookmark tips from remote-tracking positions on different commits.
 				// Avoid duplicates
 				found := false
 				for _, existing := range branches {
@@ -920,10 +935,110 @@ func (s *Service) getCommitGraph(ctx context.Context, revset string) (*internal.
 		commits[len(commits)-1].GraphLines = pendingGraphLines
 	}
 
+	s.enrichCommitsDeltaVsOrigin(ctx, commits)
+
 	return &internal.CommitGraph{
 		Commits:     commits,
 		Connections: connections,
 	}, nil
+}
+
+// eligibleBookmarkForOriginDelta returns the first non–default-branch bookmark name on a commit, for comparing to *@origin.
+func eligibleBookmarkForOriginDelta(branches []string) string {
+	for _, b := range branches {
+		b = strings.TrimSpace(b)
+		if b == "" {
+			continue
+		}
+		local := internal.LocalBookmarkName(b)
+		switch strings.ToLower(local) {
+		case "main", "master":
+			continue
+		}
+		return local
+	}
+	return ""
+}
+
+func (s *Service) enrichCommitsDeltaVsOrigin(ctx context.Context, commits []internal.Commit) {
+	originShortByBookmark := make(map[string]string)
+	for i := range commits {
+		c := &commits[i]
+		if c.Immutable {
+			continue
+		}
+		bn := eligibleBookmarkForOriginDelta(c.Branches)
+		if bn == "" {
+			continue
+		}
+		originShort, cached := originShortByBookmark[bn]
+		if !cached {
+			var err error
+			originShort, err = s.bookmarkOriginCommitIDShort(ctx, bn)
+			if err != nil {
+				originShort = ""
+			}
+			originShortByBookmark[bn] = originShort
+		}
+		// Already stacked on origin: tree can still differ from remote until push, but no restack needed.
+		if originShort != "" && parentListContainsCommitIDShort(c.Parents, originShort) {
+			c.HasDeltaVsBookmarkOrigin = false
+			continue
+		}
+		ok, err := s.revisionDiffSummaryNonEmptyNoHistory(ctx, bn+"@origin", c.ChangeID)
+		if err != nil || !ok {
+			c.HasDeltaVsBookmarkOrigin = false
+			continue
+		}
+		c.HasDeltaVsBookmarkOrigin = true
+	}
+}
+
+func (s *Service) bookmarkOriginCommitIDShort(ctx context.Context, bookmarkName string) (string, error) {
+	out, err := s.runJJOutputNoHistory(ctx, "log", "-r", bookmarkName+"@origin", "--no-graph", "-T", "commit_id.short(8)", "--limit", "1")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
+func parentListContainsCommitIDShort(parents []string, originShort string) bool {
+	if originShort == "" {
+		return false
+	}
+	for _, p := range parents {
+		p = strings.TrimSpace(p)
+		if p == originShort {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Service) revisionDiffSummaryNonEmptyNoHistory(ctx context.Context, fromRef, toRev string) (bool, error) {
+	out, err := s.runJJOutputNoHistory(ctx, "diff", "--from", fromRef, "--to", toRev, "--summary")
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(out) != "", nil
+}
+
+// runJJOutputNoHistory runs jj without recording command history (used for graph enrichment).
+func (s *Service) runJJOutputNoHistory(ctx context.Context, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, "jj", args...)
+	cmd.Dir = s.RepoPath
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	if err != nil {
+		errOut := stderr.String()
+		if errOut == "" {
+			errOut = stdout.String()
+		}
+		return "", fmt.Errorf("%w: %s", err, strings.TrimSpace(errOut))
+	}
+	return stdout.String(), nil
 }
 
 // getCommitGraphSimple is a fallback that uses simpler parsing
@@ -990,6 +1105,8 @@ func (s *Service) getCommitGraphSimple(ctx context.Context, revset string) (*int
 	if currentCommit != nil {
 		commits = append(commits, *currentCommit)
 	}
+
+	s.enrichCommitsDeltaVsOrigin(ctx, commits)
 
 	return &internal.CommitGraph{
 		Commits:     commits,

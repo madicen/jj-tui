@@ -10,6 +10,21 @@ import (
 	"github.com/madicen/jj-tui/internal/tui/styles"
 )
 
+// Rows to shift the busy overlay upward when showing graph "Update PR" push status
+// (slightly above vertical center so it sits clearer above the graph/actions area).
+const loadingOverlayRaiseUpdatePRRows = 4
+
+func isUpdatePRPushLoadingStatus(msg string) bool {
+	msg = strings.TrimSpace(msg)
+	if msg == "" {
+		return false
+	}
+	if strings.Contains(msg, "and pushing...") {
+		return true
+	}
+	return strings.HasPrefix(msg, "Pushing ") && strings.HasSuffix(msg, "...") && !strings.Contains(msg, "creating PR")
+}
+
 func newBusySpinner() spinner.Model {
 	return spinner.New(
 		spinner.WithSpinner(spinner.MiniDot),
@@ -21,6 +36,20 @@ func (m *Model) startBusySpinnerCmd() tea.Cmd {
 	return func() tea.Msg {
 		return m.busySpinner.Tick()
 	}
+}
+
+// wrapGraphTabCmd batches the graph tab's follow-up with a spinner tick when Loading was set
+// (e.g. ApplyResult for Update PR). UpdateWithApp never goes through processGraphRequest, so main
+// must attach the spinner here. Tick is scheduled before cmd so one frame can render before a
+// synchronous push runs.
+func (m *Model) wrapGraphTabCmd(cmd tea.Cmd) tea.Cmd {
+	if cmd == nil {
+		return nil
+	}
+	if m.appState.Loading {
+		return tea.Batch(m.startBusySpinnerCmd(), cmd)
+	}
+	return cmd
 }
 
 // applyLoadingOverlay composites a centered busy box over the full main layout when Loading.
@@ -54,6 +83,9 @@ func (m *Model) applyLoadingOverlay(fullView string) string {
 		}
 	}
 	top := max((m.height-modalH)/2, 0)
+	if isUpdatePRPushLoadingStatus(msg) {
+		top = max(top-loadingOverlayRaiseUpdatePRRows, 0)
+	}
 	left := max((m.width-modalW)/2, 0)
 	return overlay.OverlayView(fullView, box, m.width, m.height, top, left)
 }

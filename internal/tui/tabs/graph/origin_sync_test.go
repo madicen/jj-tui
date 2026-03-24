@@ -13,4 +13,10 @@ func TestBookmarkNameForOriginSplit(t *testing.T) {
 	if got := bookmarkNameForOriginSplit([]string{"fix", "other"}); got != "fix" {
 		t.Fatalf("got %q, want fix", got)
 	}
+	if got := bookmarkNameForOriginSplit([]string{"main@origin", "feat-x"}); got != "feat-x" {
+		t.Fatalf("main@origin + feat: got %q, want feat-x", got)
+	}
+	if got := bookmarkNameForOriginSplit([]string{"feat-x@origin"}); got != "feat-x" {
+		t.Fatalf("feat-x@origin only: got %q, want feat-x", got)
+	}
 }

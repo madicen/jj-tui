@@ -1,6 +1,6 @@
 # jj-tui Makefile
 
-.PHONY: build test clean screenshots demo-repo help
+.PHONY: build test clean screenshots demo-repo after-origin-vhs-repo after-origin-gif help
 
 # Default target
 all: build
@@ -16,7 +16,7 @@ test:
 # Clean build artifacts
 clean:
 	rm -f jj-tui
-	rm -rf fixtures/demo-repo
+	rm -rf fixtures/demo-repo fixtures/after-origin-vhs-repo fixtures/after-origin-fake-origin.git
 
 # Setup the demo repository for screenshots
 demo-repo:
@@ -53,6 +53,15 @@ demo-gif-profile: build demo-repo
 	vhs vhs/all-profile.tape
 	@echo "Demo GIF saved to screenshots/demo.gif"
 	@if [ -f screenshots/cpu.prof ]; then echo "CPU profile: screenshots/cpu.prof (go tool pprof screenshots/cpu.prof)"; fi
+
+# Dedicated GIF for graph: Forgot New Commit? (f) + Update PR (u) (see vhs/after-origin.tape)
+after-origin-vhs-repo:
+	bash fixtures/setup-after-origin-vhs-repo.sh
+
+after-origin-gif: build after-origin-vhs-repo
+	@mkdir -p screenshots
+	vhs vhs/after-origin.tape
+	@echo "GIF saved to screenshots/after-origin.gif"
 	@if [ -f screenshots/mem.prof ]; then echo "Memory profile: screenshots/mem.prof (go tool pprof screenshots/mem.prof)"; fi
 
 # Generate individual screenshots
@@ -96,6 +105,7 @@ help:
 	@echo "  screenshots  - Generate all screenshots using VHS"
 	@echo "  demo-gif     - Generate demo GIF (vhs all.tape)"
 	@echo "  demo-gif-profile - Generate demo GIF with CPU/memory profiling"
+	@echo "  after-origin-gif - Generate after-origin GIF: (f) restack + (u) update PR (vhs/after-origin.tape)"
 	@echo "  demo         - Run the app in demo mode"
 	@echo "  deps         - Install/tidy dependencies"
 	@echo "  help         - Show this help"

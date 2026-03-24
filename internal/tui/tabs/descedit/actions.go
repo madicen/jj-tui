@@ -72,6 +72,10 @@ func SuggestDescriptionForLoad(input DescriptionLoadedInput) string {
 			foundShortID = shortID
 			break
 		}
+		if shortID, ok := input.TicketKeys[internal.LocalBookmarkName(branch)]; ok {
+			foundShortID = shortID
+			break
+		}
 	}
 	if foundShortID == "" && input.FindBookmarkFn != nil {
 		ancestorBookmark := input.FindBookmarkFn(input.Repository, input.CommitIdx)

@@ -118,9 +118,12 @@ func (m GraphModel) handleKeyMsg(msg tea.KeyMsg) (GraphModel, *Request, tea.Cmd)
 		if m.repository != nil {
 			return m, &Request{CreatePR: true}, nil
 		}
-	case "G":
+	case "f":
 		if m.graphFocused && m.repository != nil && m.selectedCommit >= 0 && m.selectedCommit < len(m.repository.Graph.Commits) {
-			return m, &Request{MoveDeltaOntoOrigin: true}, nil
+			c := m.repository.Graph.Commits[m.selectedCommit]
+			if c.HasDeltaVsBookmarkOrigin && len(c.ConflictedBranches) == 0 {
+				return m, &Request{MoveDeltaOntoOrigin: true}, nil
+			}
 		}
 	case "[":
 		if !m.graphFocused {

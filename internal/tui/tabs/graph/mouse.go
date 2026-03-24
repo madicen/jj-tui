@@ -32,6 +32,15 @@ func (m GraphModel) handleZoneClick(msg zone.MsgZoneInBounds) (GraphModel, *Requ
 				return m, &Request{LoadChangedFiles: &commitID}, nil
 			}
 		}
+		for commitIndex := range m.repository.Graph.Commits {
+			if m.zoneManager.Get(mouse.ZoneActionMoveOntoOriginAt(commitIndex)) == z {
+				m.graphFocused = true
+				m.selectedCommit = commitIndex
+				m.changedFilesCommitID = ""
+				m.changedFiles = nil
+				return m, &Request{MoveDeltaOntoOrigin: true}, nil
+			}
+		}
 	}
 	for i := range m.changedFiles {
 		if m.zoneManager.Get(mouse.ZoneChangedFile(i)) == z {
@@ -54,6 +63,15 @@ func (m GraphModel) handleZoneClick(msg zone.MsgZoneInBounds) (GraphModel, *Requ
 					m.changedFiles = nil
 					commitID := m.repository.Graph.Commits[commitIndex].ChangeID
 					return m, &Request{LoadChangedFiles: &commitID}, nil
+				}
+			}
+			for commitIndex := range m.repository.Graph.Commits {
+				if inBounds(mouse.ZoneActionMoveOntoOriginAt(commitIndex)) {
+					m.graphFocused = true
+					m.selectedCommit = commitIndex
+					m.changedFilesCommitID = ""
+					m.changedFiles = nil
+					return m, &Request{MoveDeltaOntoOrigin: true}, nil
 				}
 			}
 		}
@@ -93,9 +111,6 @@ func (m GraphModel) handleZoneClick(msg zone.MsgZoneInBounds) (GraphModel, *Requ
 	}
 	if inBounds(mouse.ZoneActionAbandon) {
 		return m, &Request{Abandon: true}, nil
-	}
-	if inBounds(mouse.ZoneActionMoveOntoOrigin) {
-		return m, &Request{MoveDeltaOntoOrigin: true}, nil
 	}
 	if inBounds(mouse.ZoneActionBookmark) {
 		return m, &Request{CreateBookmark: true}, nil

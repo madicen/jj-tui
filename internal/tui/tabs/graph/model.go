@@ -396,8 +396,9 @@ func (m *GraphModel) buildGraphData() GraphData {
 			commitIDToIndex[commit.ChangeID] = i
 			// Check if this commit has a PR bookmark
 			for _, branch := range commit.Branches {
-				if openPRBranches[branch] {
-					commitPRBranch[i] = branch
+				local := internal.LocalBookmarkName(branch)
+				if openPRBranches[branch] || openPRBranches[local] {
+					commitPRBranch[i] = local
 					break
 				}
 			}
@@ -436,8 +437,9 @@ func (m *GraphModel) buildGraphData() GraphData {
 			commitIDToIndex[commit.ChangeID] = i
 			// Check if this commit has a bookmark without an open PR
 			for _, branch := range commit.Branches {
-				if !openPRBranches[branch] {
-					commitBookmark[i] = branch
+				local := internal.LocalBookmarkName(branch)
+				if !openPRBranches[branch] && !openPRBranches[local] {
+					commitBookmark[i] = local
 					break
 				}
 			}

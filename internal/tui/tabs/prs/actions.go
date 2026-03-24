@@ -106,13 +106,16 @@ func PrTickCmd() tea.Cmd {
 }
 
 // PushToPRCmd pushes updates to a PR branch (optionally moving the bookmark first).
-func PushToPRCmd(svc *jj.Service, branch, commitID string, moveBookmark bool) tea.Cmd {
+func PushToPRCmd(svc *jj.Service, branch, commitID string, moveBookmark bool, demoMode bool) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
 		if moveBookmark {
 			if err := svc.MoveBookmark(ctx, branch, commitID); err != nil {
 				return util.ErrorMsg{Err: fmt.Errorf("failed to move bookmark %s: %w", branch, err)}
 			}
+		}
+		if demoMode {
+			time.Sleep(1 * time.Second)
 		}
 		pushOutput, err := svc.PushToGit(ctx, branch)
 		if err != nil {

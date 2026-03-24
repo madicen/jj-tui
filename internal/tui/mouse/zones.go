@@ -32,7 +32,6 @@ const (
 	ZoneActionSquash   = "zone:action:squash"
 	ZoneActionRebase   = "zone:action:rebase"
 	ZoneActionAbandon  = "zone:action:abandon"
-	ZoneActionMoveOntoOrigin = "zone:action:move_onto_origin"
 
 	// Description editor zones
 	ZoneDescSave   = "zone:desc:save"
@@ -216,6 +215,11 @@ func ZoneExistingBookmark(index int) string {
 // ZoneCommit returns the zone ID for a commit at the given index
 func ZoneCommit(index int) string {
 	return fmt.Sprintf("zone:commit:%d", index)
+}
+
+// ZoneActionMoveOntoOriginAt returns the zone ID for the inline "Forgot New Commit?" control on a commit row.
+func ZoneActionMoveOntoOriginAt(index int) string {
+	return fmt.Sprintf("zone:action:move_onto_origin:%d", index)
 }
 
 // ZonePR returns the zone ID for a PR at the given index

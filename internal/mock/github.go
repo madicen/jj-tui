@@ -271,6 +271,20 @@ func demoPullRequests() []*github.PullRequest {
 // This is used by the TUI's loadPRs function in demo mode
 func DemoPullRequests() []internal.GitHubPR {
 	return []internal.GitHubPR{
+		// Matches fixtures/setup-after-origin-vhs-repo.sh bookmark vhs/feature so --demo + VHS tape
+		// can use Update PR (u) after a relaunch (in-memory PR #999 from the tape is not persisted).
+		{
+			Number:       901,
+			Title:        "VHS: application entry (fixture branch)",
+			Body:         "Demo open PR for bookmark vhs/feature (after-origin VHS / local jj fixture).",
+			URL:          "https://github.com/demo-org/awesome-project/pull/901",
+			State:        "open",
+			BaseBranch:   "main",
+			HeadBranch:   "vhs/feature",
+			CommitIDs:    []string{},
+			CheckStatus:  internal.CheckStatusPending,
+			ReviewStatus: internal.ReviewStatusNone,
+		},
 		{
 			Number:       142,
 			Title:        "Add dark mode support to dashboard",

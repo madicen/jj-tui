@@ -183,15 +183,28 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 			branchStr = " " + lipgloss.NewStyle().Foreground(styles.ColorSecondary).Render("["+strings.Join(branchParts, ", ")+"]")
 		}
 
-		commitLine := fmt.Sprintf("%s%s%s %s%s%s",
+		beforeStatus := fmt.Sprintf("%s%s%s %s%s",
 			selectionPrefix,
 			graphPrefix,
 			CommitIDStyle.Render(commit.ShortID),
 			commit.Summary,
 			branchStr,
-			statusIndicator,
 		)
-		graphLines = append(graphLines, m.zoneManager.Mark(mouse.ZoneCommit(i), style.Render(commitLine)))
+		afterStatus := statusIndicator
+		var commitRow string
+		if !data.InRebaseMode && commit.HasDeltaVsBookmarkOrigin && len(commit.ConflictedBranches) == 0 {
+			muted := lipgloss.NewStyle().Foreground(styles.ColorMuted)
+			btn := m.zoneManager.Mark(mouse.ZoneActionMoveOntoOriginAt(i), muted.Render("Forgot New Commit? (f)"))
+			commitRow = lipgloss.JoinHorizontal(lipgloss.Bottom,
+				m.zoneManager.Mark(mouse.ZoneCommit(i), style.Render(beforeStatus)),
+				muted.Render("  "),
+				btn,
+				style.Render(afterStatus),
+			)
+		} else {
+			commitRow = m.zoneManager.Mark(mouse.ZoneCommit(i), style.Render(beforeStatus+afterStatus))
+		}
+		graphLines = append(graphLines, commitRow)
 
 		for _, graphLine := range commit.GraphLines {
 			paddedLine := "  " + GraphStyle.Render(graphLine)
@@ -265,11 +278,6 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 				if len(commit.Branches) > 0 {
 					actionButtons = append(actionButtons,
 						m.zoneManager.Mark(mouse.ZoneActionDelBookmark, styles.ButtonStyle.Render("Del Bookmark (x)")),
-					)
-				}
-				if bn := bookmarkNameForOriginSplit(commit.Branches); bn != "" && !commit.Divergent && len(commit.ConflictedBranches) == 0 {
-					actionButtons = append(actionButtons,
-						m.zoneManager.Mark(mouse.ZoneActionMoveOntoOrigin, styles.ButtonStyle.Render("After origin (G)")),
 					)
 				}
 				if commit.Divergent {

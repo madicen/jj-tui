@@ -244,6 +244,7 @@ func ExecuteRequest(r Request, ctx *RequestContext) (statusMsg string, cmd tea.C
 
 // HandleBranchPushedMsg mutates app (StatusMessage) and returns the Cmd to run.
 func HandleBranchPushedMsg(msg prs.BranchPushedMsg, app *state.AppState) tea.Cmd {
+	app.Loading = false
 	app.StatusMessage = fmt.Sprintf("Pushed %s to remote", msg.Branch)
 	existing := 0
 	if app.Repository != nil {
