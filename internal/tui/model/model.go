@@ -575,6 +575,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 
 		m.errorModal.SetWidth(m.width)
+		m.errorModal.SetHeight(m.height)
 
 		// Resize text areas to fit new window width
 		inputWidth := min(
