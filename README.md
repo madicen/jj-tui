@@ -159,6 +159,7 @@ The graph view has two panes: the commit graph (left) and changed files (right).
 - `x`: Delete bookmark from selected commit
 - `c`: Create PR from selected commit (if bookmark exists)
 - `u`: Push/update PR (pushes to existing PR branch)
+- `G` (graph pane focused): **After origin** — fetch, then create a new commit on top of `bookmark@origin` with the same tree as the selected commit, move the bookmark there, and abandon the old revision. Use when you amended after a push so you can `jj git push` without `--force`.
 
 **File pane (focus files with Tab first):**
 - `[`: Move selected file to new parent commit (split out)

@@ -267,6 +267,11 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 						m.zoneManager.Mark(mouse.ZoneActionDelBookmark, styles.ButtonStyle.Render("Del Bookmark (x)")),
 					)
 				}
+				if bn := bookmarkNameForOriginSplit(commit.Branches); bn != "" && !commit.Divergent && len(commit.ConflictedBranches) == 0 {
+					actionButtons = append(actionButtons,
+						m.zoneManager.Mark(mouse.ZoneActionMoveOntoOrigin, styles.ButtonStyle.Render("After origin (G)")),
+					)
+				}
 				if commit.Divergent {
 					divergentBtnStyle := styles.ButtonStyle.Background(lipgloss.Color("#FF79C6"))
 					actionButtons = append(actionButtons,

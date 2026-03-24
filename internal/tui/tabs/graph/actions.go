@@ -40,6 +40,9 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 		if r.Checkout {
 			return Result{Status: "Cannot edit: not in a jj repository"}
 		}
+		if r.MoveDeltaOntoOrigin {
+			return Result{Status: "Cannot align: not in a jj repository"}
+		}
 		return Result{}
 	}
 	if r.Checkout {
@@ -88,6 +91,21 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 	if r.RevertFile {
 		cmd, status := executeRevertFile(ctx)
 		return Result{Cmd: cmd, Status: status}
+	}
+	if r.MoveDeltaOntoOrigin {
+		cmd, status := executeMoveDeltaOntoOrigin(ctx)
+		if status != "" {
+			return Result{Status: status}
+		}
+		if cmd != nil && ctx.IsSelectedCommitValid() && ctx.Repository != nil {
+			commit := ctx.Repository.Graph.Commits[ctx.SelectedCommit]
+			bn := bookmarkNameForOriginSplit(commit.Branches)
+			return Result{
+				Cmd:           cmd,
+				SuccessStatus: fmt.Sprintf("Placing changes after %s@origin…", bn),
+			}
+		}
+		return Result{Cmd: cmd}
 	}
 	if r.NewCommit {
 		cmd, _ := executeNewCommit(ctx)
@@ -315,6 +333,38 @@ func executeNewCommit(ctx *RequestContext) (tea.Cmd, string) {
 	return NewCommit(ctx.JJService, parentCommitID), ""
 }
 
+// bookmarkNameForOriginSplit returns a non–default-branch bookmark on the commit for origin sync.
+func bookmarkNameForOriginSplit(branches []string) string {
+	for _, b := range branches {
+		if b == "" || isDefaultBranch(b) {
+			continue
+		}
+		return b
+	}
+	return ""
+}
+
+func executeMoveDeltaOntoOrigin(ctx *RequestContext) (tea.Cmd, string) {
+	if !ctx.IsSelectedCommitValid() || ctx.JJService == nil {
+		return nil, ""
+	}
+	commit := ctx.Repository.Graph.Commits[ctx.SelectedCommit]
+	if commit.Immutable {
+		return nil, "Cannot align with origin: commit is immutable"
+	}
+	if commit.Divergent {
+		return nil, "Resolve divergent commit first (d)"
+	}
+	if len(commit.ConflictedBranches) > 0 {
+		return nil, "Resolve bookmark conflict first (Branches tab)"
+	}
+	name := bookmarkNameForOriginSplit(commit.Branches)
+	if name == "" {
+		return nil, "Need a feature bookmark on this commit (main/master alone is not supported)"
+	}
+	return MoveBookmarkDeltaOntoOriginCmd(ctx.JJService, name, commit.ChangeID), ""
+}
+
 // SaveDescriptionCmd returns a command to save the description for the given commit.
 func SaveDescriptionCmd(jjService *jj.Service, commitID, body string) tea.Cmd {
 	return descedittab.SaveDescriptionCmd(jjService, commitID, strings.TrimSpace(body))
@@ -407,6 +457,23 @@ func NewCommit(svc *jj.Service, parentCommitID string) tea.Cmd {
 	return func() tea.Msg {
 		if err := svc.NewCommit(context.Background(), parentCommitID); err != nil {
 			return util.ErrorMsg{Err: fmt.Errorf("failed to create commit: %w", err)}
+		}
+		repo, err := svc.GetRepository(context.Background(), "")
+		if err != nil {
+			return util.ErrorMsg{Err: err}
+		}
+		return RepositoryLoadedMsg{Repository: repo}
+	}
+}
+
+// MoveBookmarkDeltaOntoOriginCmd runs jj fetch + new/restore/bookmark dance; see jj.Service.MoveBookmarkDeltaOntoOrigin.
+func MoveBookmarkDeltaOntoOriginCmd(svc *jj.Service, bookmarkName, localChangeID string) tea.Cmd {
+	if svc == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		if err := svc.MoveBookmarkDeltaOntoOrigin(context.Background(), bookmarkName, localChangeID); err != nil {
+			return util.ErrorMsg{Err: fmt.Errorf("align with origin: %w", err)}
 		}
 		repo, err := svc.GetRepository(context.Background(), "")
 		if err != nil {

@@ -129,6 +129,8 @@ type Request struct {
 	MoveFileUp           bool
 	MoveFileDown         bool
 	RevertFile           bool
+	// MoveDeltaOntoOrigin: new commit on bookmark@origin with same tree as selection; avoids force-push after amending a pushed branch.
+	MoveDeltaOntoOrigin bool
 }
 
 // Cmd returns a tea.Cmd that sends this request to the program.

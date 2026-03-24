@@ -92,6 +92,7 @@ func (m Model) lines() []string {
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(10).Render("x"), styles.HelpDescStyle.Render("Delete bookmark from commit")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(10).Render("c"), styles.HelpDescStyle.Render("Create new PR from commit chain")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(10).Render("u"), styles.HelpDescStyle.Render("Update existing PR with new commits")))
+	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(10).Render("G"), styles.HelpDescStyle.Render("Put local changes in a new commit after bookmark@origin (avoid force-push)")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(10).Render("^z"), styles.HelpDescStyle.Render("Undo last jj operation")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(10).Render("^y"), styles.HelpDescStyle.Render("Redo jj operation")))
 	lines = append(lines, "")

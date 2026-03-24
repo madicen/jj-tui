@@ -525,6 +525,56 @@ func (s *Service) MoveFileToChild(ctx context.Context, commitID, filePath string
 	return nil
 }
 
+// followUpOnOriginMessage is the default description for the new commit created by
+// MoveBookmarkDeltaOntoOrigin (user can jj describe afterward).
+const followUpOnOriginMessage = "Follow-up (local changes on top of origin)"
+
+// MoveBookmarkDeltaOntoOrigin places bookmark@origin as the parent of new work without rewriting the
+// revision Git already has: it fetches, creates a new commit on top of bookmark@origin with the same
+// tree as localRev, moves the bookmark to that commit, and abandons the old local revision.
+// This enables a normal jj git push after amending a pushed branch. Requires a tracked remote
+// bookmark (bookmark@origin). localRev is typically the selected mutable commit (often @).
+func (s *Service) MoveBookmarkDeltaOntoOrigin(ctx context.Context, bookmarkName, localRev string) error {
+	if strings.TrimSpace(bookmarkName) == "" || strings.TrimSpace(localRev) == "" {
+		return fmt.Errorf("bookmark name and local revision are required")
+	}
+	remoteRef := bookmarkName + "@origin"
+	if _, err := s.FetchFromGit(ctx); err != nil {
+		return fmt.Errorf("fetch before comparing to origin: %w", err)
+	}
+	if _, err := s.runJJOutput(ctx, "log", "-r", remoteRef, "--no-graph", "-T", "commit_id", "--limit", "1"); err != nil {
+		return fmt.Errorf("no revision %s (track the bookmark or run jj git fetch)", remoteRef)
+	}
+	childrenRev := fmt.Sprintf("children(%s) ~ @", localRev)
+	childLines, err := s.runJJOutput(ctx, "log", "-r", childrenRev, "--no-graph", "-T", "change_id", "--limit", "20")
+	if err != nil {
+		return fmt.Errorf("check descendants: %w", err)
+	}
+	for _, line := range strings.Split(childLines, "\n") {
+		if strings.TrimSpace(line) != "" {
+			return fmt.Errorf("commit has descendant commits (excluding working copy); rebase or squash the stack first")
+		}
+	}
+	diffOut, err := s.runJJOutput(ctx, "diff", "--from", remoteRef, "--to", localRev, "--summary")
+	if err != nil {
+		return fmt.Errorf("diff vs origin: %w", err)
+	}
+	if strings.TrimSpace(diffOut) == "" {
+		return fmt.Errorf("tree already matches %s; nothing to move", remoteRef)
+	}
+	if err := s.runJJ(ctx, "new", remoteRef, "-m", followUpOnOriginMessage); err != nil {
+		return fmt.Errorf("jj new: %w", err)
+	}
+	if err := s.runJJ(ctx, "restore", "--into", "@", "--from", localRev); err != nil {
+		return fmt.Errorf("jj restore: %w", err)
+	}
+	if err := s.runJJ(ctx, "bookmark", "set", bookmarkName, "-r", "@"); err != nil {
+		return fmt.Errorf("jj bookmark set: %w", err)
+	}
+	_ = s.runJJ(ctx, "abandon", localRev)
+	return nil
+}
+
 // RevertFile reverts the changes to a file in a given commit,
 // restoring it from the commit's parent.
 func (s *Service) RevertFile(ctx context.Context, commitID, filePath string) error {

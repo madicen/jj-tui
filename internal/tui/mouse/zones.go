@@ -32,6 +32,7 @@ const (
 	ZoneActionSquash   = "zone:action:squash"
 	ZoneActionRebase   = "zone:action:rebase"
 	ZoneActionAbandon  = "zone:action:abandon"
+	ZoneActionMoveOntoOrigin = "zone:action:move_onto_origin"
 
 	// Description editor zones
 	ZoneDescSave   = "zone:desc:save"

@@ -118,6 +118,10 @@ func (m GraphModel) handleKeyMsg(msg tea.KeyMsg) (GraphModel, *Request, tea.Cmd)
 		if m.repository != nil {
 			return m, &Request{CreatePR: true}, nil
 		}
+	case "G":
+		if m.graphFocused && m.repository != nil && m.selectedCommit >= 0 && m.selectedCommit < len(m.repository.Graph.Commits) {
+			return m, &Request{MoveDeltaOntoOrigin: true}, nil
+		}
 	case "[":
 		if !m.graphFocused {
 			return m, &Request{MoveFileUp: true}, nil

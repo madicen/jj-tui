@@ -94,6 +94,9 @@ func (m GraphModel) handleZoneClick(msg zone.MsgZoneInBounds) (GraphModel, *Requ
 	if inBounds(mouse.ZoneActionAbandon) {
 		return m, &Request{Abandon: true}, nil
 	}
+	if inBounds(mouse.ZoneActionMoveOntoOrigin) {
+		return m, &Request{MoveDeltaOntoOrigin: true}, nil
+	}
 	if inBounds(mouse.ZoneActionBookmark) {
 		return m, &Request{CreateBookmark: true}, nil
 	}
