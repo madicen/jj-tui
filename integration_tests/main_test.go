@@ -921,6 +921,15 @@ func TestSettingsJiraProjectFields(t *testing.T) {
 		t.Skip("jj command not available")
 	}
 
+	// Isolate from developer machine env/config so focused-field typing is deterministic.
+	t.Setenv("JIRA_URL", "")
+	t.Setenv("JIRA_USER", "")
+	t.Setenv("JIRA_TOKEN", "")
+	t.Setenv("JIRA_PROJECT", "")
+	t.Setenv("JIRA_PROJECT_FILTER", "")
+	t.Setenv("JIRA_ISSUE_TYPE", "")
+	t.Setenv("JIRA_JQL", "")
+
 	repo := NewTestRepository(t)
 	defer repo.Cleanup()
 
@@ -932,6 +941,7 @@ func TestSettingsJiraProjectFields(t *testing.T) {
 
 	m := tui.NewWithServices(ctx, jjSvc, nil)
 	defer m.Close()
+	m.ResetJiraFormForTest()
 	m.SetDimensions(100, 80)
 	m.SetLoading(false)
 	m.SetRepository(&internal.Repository{

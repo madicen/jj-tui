@@ -41,7 +41,7 @@ func (m *Model) handleDataServicesInitializedMsg(msg data.ServicesInitializedMsg
 	var cmds []tea.Cmd
 	cmds = append(cmds, m.tickCmd())
 	if m.isGitHubAvailable() {
-		cmds = append(cmds, prstab.LoadPRsCmd(m.appState.GitHubService, m.appState.GithubInfo, m.appState.DemoMode, 0))
+		cmds = append(cmds, m.wrapFirstPRLoadCmd(prstab.LoadPRsCmd(m.appState.GitHubService, m.appState.GithubInfo, m.appState.DemoMode, 0)))
 		cmds = append(cmds, prstab.PrTickCmd())
 	}
 	if m.graphTabModel.GetSelectedCommit() < 0 && len(msg.Repository.Graph.Commits) > 0 {
@@ -102,7 +102,7 @@ func (m *Model) handleAuxServicesReadyMsg(msg data.AuxServicesReadyMsg) (tea.Mod
 	var cmds []tea.Cmd
 	cmds = append(cmds, m.tickCmd())
 	if m.isGitHubAvailable() {
-		cmds = append(cmds, prstab.LoadPRsCmd(m.appState.GitHubService, m.appState.GithubInfo, m.appState.DemoMode, 0))
+		cmds = append(cmds, m.wrapFirstPRLoadCmd(prstab.LoadPRsCmd(m.appState.GitHubService, m.appState.GithubInfo, m.appState.DemoMode, 0)))
 		cmds = append(cmds, prstab.PrTickCmd())
 	}
 	m.prsTabModel.SetGithubService(m.isGitHubAvailable())
@@ -197,6 +197,7 @@ func (m *Model) handleTickMsg() (tea.Model, tea.Cmd) {
 
 // handleReauthNeededEffect applies PR tab's reauth request (clear GitHub, start login).
 func (m *Model) handleReauthNeededEffect(e prstab.ApplyReauthNeededEffect) (tea.Model, tea.Cmd) {
+	m.appState.Loading = false
 	m.appState.StatusMessage = e.Reason
 	cfg, _ := config.Load()
 	if cfg != nil {

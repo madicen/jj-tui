@@ -14,6 +14,7 @@ type Model struct {
 	copied      bool
 	zoneManager *zone.Manager
 	width       int
+	height      int
 }
 
 // NewModel creates a new Error model.
@@ -55,7 +56,7 @@ func (m Model) View() string {
 	if w < 50 {
 		w = 80
 	}
-	return renderModal(m.zoneManager, w, errStr, m.copied)
+	return renderModal(m.zoneManager, w, m.height, errStr, m.copied)
 }
 
 func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
@@ -115,6 +116,11 @@ func (m *Model) SetZoneManager(zm *zone.Manager) {
 // SetWidth sets the width for modal layout.
 func (m *Model) SetWidth(w int) {
 	m.width = w
+}
+
+// SetHeight sets the terminal height so the error body can be capped and buttons stay on-screen.
+func (m *Model) SetHeight(h int) {
+	m.height = h
 }
 
 // GetError returns the current error.

@@ -28,9 +28,13 @@ func CopyErrorCmd(errMsg string) tea.Cmd {
 	return util.CopyToClipboard(errMsg)
 }
 
+// fixedChromeLines is a conservative count of non-body lines in the bordered modal (title, gaps,
+// separator, button row, padding, and border). Used to cap the error body so the dialog fits the terminal.
+const fixedChromeLines = 15
+
 // renderModal renders the error dialog (title, message, dismiss/copy/retry/quit buttons).
 // Content is intended to be centered by the caller.
-func renderModal(zm *zone.Manager, width int, errStr string, copied bool) string {
+func renderModal(zm *zone.Manager, width, height int, errStr string, copied bool) string {
 	modalWidth := min(max(width-8, 50), 80)
 
 	titleStyle := lipgloss.NewStyle().
@@ -51,10 +55,32 @@ func renderModal(zm *zone.Manager, width int, errStr string, copied bool) string
 		Padding(0, 1).
 		Bold(true)
 
+	maxModalTotal := height - 2
+	if height <= 0 {
+		maxModalTotal = 256
+	}
+	if maxModalTotal < 10 {
+		maxModalTotal = 10
+	}
+	maxBodyLines := max(maxModalTotal-fixedChromeLines, 3)
+
+	wrapped := errorStyle.Render(errStr)
+	bodyLines := strings.Split(wrapped, "\n")
+	truncated := len(bodyLines) > maxBodyLines
+	if truncated {
+		avail := maxBodyLines - 1
+		if avail < 1 {
+			avail = 1
+		}
+		bodyLines = bodyLines[:min(avail, len(bodyLines))]
+		bodyLines = append(bodyLines, mutedStyle.Render("… truncated — press c to copy the full message"))
+	}
+	errBody := strings.Join(bodyLines, "\n")
+
 	var content strings.Builder
 	content.WriteString(titleStyle.Render("⚠ Error"))
 	content.WriteString("\n\n")
-	content.WriteString(errorStyle.Render(errStr))
+	content.WriteString(errBody)
 	content.WriteString("\n\n")
 	content.WriteString(mutedStyle.Render("─────────────────────────────────────"))
 	content.WriteString("\n\n")

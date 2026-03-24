@@ -189,6 +189,19 @@ func (m *Model) SetSettingsGraphRevset(revset string) {
 	m.settingsTabModel.GetAdvancedModel().SetGraphRevset(revset)
 }
 
+// ResetJiraFormForTest clears Jira settings inputs so integration tests are not affected by local config.
+func (m *Model) ResetJiraFormForTest() {
+	j := m.settingsTabModel.GetJiraModel()
+	j.SetURL("")
+	j.SetUser("")
+	j.SetToken("")
+	j.SetProject("")
+	j.SetProjectFilter("")
+	j.SetIssueType("")
+	j.SetJQL("")
+	j.SetExcludedStatuses("")
+}
+
 // GetSettingsJiraProject returns the Jira "project for new issues" from the settings panel (for testing).
 func (m *Model) GetSettingsJiraProject() string {
 	return m.settingsTabModel.GetJiraModel().GetProject()
