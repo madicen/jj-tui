@@ -157,6 +157,15 @@ func (m *Model) SetViewOpts(opts ViewOpts) {
 	m.viewOpts = &opts
 }
 
+// EscHandledInsideSettings is true when Esc should be handled by the settings tab (theme color
+// picker, advanced cleanup confirm) instead of closing settings and returning to the graph.
+func (m Model) EscHandledInsideSettings() bool {
+	if m.advancedModel.GetConfirmingCleanup() != "" {
+		return true
+	}
+	return m.settingsTab == 5 && m.themeModel.AnyOpen()
+}
+
 // handleKeyMsg handles all keyboard input for the Settings tab (cleanup confirm, nav, focus, save, inputs).
 func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	if m.advancedModel.GetConfirmingCleanup() != "" {

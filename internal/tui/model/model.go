@@ -302,6 +302,7 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		return m, nil
 	case state.NavigateBackToGraph:
 		m.appState.ViewMode = state.ViewCommitGraph
+		m.appState.Loading = false
 		if t.StatusMessage != "" {
 			m.appState.StatusMessage = t.StatusMessage
 		}
@@ -643,9 +644,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.appState.ViewMode == state.ViewDivergentCommit || m.appState.ViewMode == state.ViewBookmarkConflict {
 			return m.handleKeyMsg(msg)
 		}
-		// Esc in Settings: navigate back to graph (same as tab sending PerformCancelMsg).
+		// Esc in Settings: close in-tab overlays (theme picker, cleanup confirm) first; otherwise leave settings.
 		if m.appState.ViewMode == state.ViewSettings && msg.String() == "esc" {
-			return m.handleNavigate(state.NavigateTarget{Kind: state.NavigateBackToGraph, StatusMessage: "Settings cancelled"})
+			if !m.settingsTabModel.EscHandledInsideSettings() {
+				return m.handleNavigate(state.NavigateTarget{Kind: state.NavigateBackToGraph, StatusMessage: "Settings cancelled"})
+			}
 		}
 		// Delegate to tab models for their specific views (tabs own selection state)
 		switch m.appState.ViewMode {
