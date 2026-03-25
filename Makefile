@@ -36,7 +36,8 @@ screenshots: build demo-repo
 	vhs vhs/settings.tape
 	vhs vhs/help.tape
 	vhs vhs/command_history.tape
-	@echo "Screenshots saved to screenshots/"
+	vhs vhs/after-origin.tape
+	@echo "Screenshots saved to screenshots/ (including after-origin.gif)"
 
 # Generate a demo GIF showing the TUI in action
 demo-gif: build demo-repo
@@ -102,7 +103,7 @@ help:
 	@echo "  test         - Run tests"
 	@echo "  clean        - Clean build artifacts"
 	@echo "  demo-repo    - Setup demo repository for screenshots"
-	@echo "  screenshots  - Generate all screenshots using VHS"
+	@echo "  screenshots  - Generate PNG screenshots + after-origin.gif (see also demo-gif)"
 	@echo "  demo-gif     - Generate demo GIF (vhs all.tape)"
 	@echo "  demo-gif-profile - Generate demo GIF with CPU/memory profiling"
 	@echo "  after-origin-gif - Generate after-origin GIF: (f) restack + (u) update PR (vhs/after-origin.tape)"

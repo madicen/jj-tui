@@ -25,6 +25,12 @@ A modern Terminal User Interface (TUI) for managing [Jujutsu](https://github.com
 ### Command History
 ![Command History](screenshots/command_history.png)
 
+### Forgot new commit? and Update PR
+
+If you already pushed a feature bookmark but kept editing on the same jj revision (so your tree diverges from `bookmark@origin`), **Forgot new commit?** (`f`) restacks that work on the remote tip so you can push without `--force`. **Update PR** (`u`) pushes the bookmark and updates the open PR. The clip below walks through opening a PR, editing without a new commit, then `f` and `u`.
+
+![Forgot new commit? and Update PR](screenshots/after-origin.gif)
+
 ## Features
 
 - **Visual Commit Graph**: Navigate and visualize your commit history with tree structure
@@ -480,20 +486,17 @@ go build -o jj-tui .
 
 Screenshots are generated using [VHS](https://github.com/charmbracelet/vhs) with mock data for consistent, reproducible images.
 
-**Automatic (CI)**: Screenshots are automatically regenerated on:
-- Every release
-- Pushes to `main` that change TUI/mock/VHS files
-- Manual workflow dispatch
+**Automatic (CI)**: The [Generate Screenshots](.github/workflows/screenshots.yml) workflow produces `demo.gif`, `after-origin.gif`, and the PNG captures; it runs after releases (via release workflows) and can be triggered manually. Results are committed to `screenshots/` on `main` when they change.
 
 **Manual (Local)**:
 ```bash
-# Generate all screenshots
+# Generate all screenshots (PNG captures + after-origin.gif; demo GIF is separate)
 make screenshots
 
 # Generate demo GIF
 make demo-gif
 
-# GIF for graph action "Forgot New Commit?" (f)
+# Regenerate only the after-origin GIF (also included in `make screenshots`)
 make after-origin-gif
 
 # Or run individual tapes
