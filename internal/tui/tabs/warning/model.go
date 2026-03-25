@@ -94,7 +94,10 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, state.NavigateTarget{Kind: state.NavigateWarningCancel, StatusMessage: "Cancelled"}.Cmd()
 	case "enter":
 		if len(m.commits) > 0 && m.selectedIdx < len(m.commits) {
-			return m, state.NavigateTarget{Kind: state.NavigateEditDescription, Commit: m.commits[m.selectedIdx]}.Cmd()
+			commit := m.commits[m.selectedIdx]
+			m.shown = false
+			m.commits = nil
+			return m, state.NavigateTarget{Kind: state.NavigateEditDescription, Commit: commit}.Cmd()
 		}
 		return m, nil
 	case "j", "down":

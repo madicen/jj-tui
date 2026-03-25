@@ -276,6 +276,8 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 	}
 	switch t.Kind {
 	case state.NavigateEditDescription:
+		// If we're entering edit-description from the empty-description warning, ensure the warning is closed.
+		m.warningModal.Hide()
 		if m.appState.Repository != nil {
 			for i, c := range m.appState.Repository.Graph.Commits {
 				if c.ChangeID == t.Commit.ChangeID {
