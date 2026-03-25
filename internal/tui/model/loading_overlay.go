@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	overlay "github.com/madicen/bubble-overlay"
+	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 )
 
@@ -23,6 +24,19 @@ func isUpdatePRPushLoadingStatus(msg string) bool {
 		return true
 	}
 	return strings.HasPrefix(msg, "Pushing ") && strings.HasSuffix(msg, "...") && !strings.Contains(msg, "creating PR")
+}
+
+func shouldShowLoadingOverlay(viewMode state.ViewMode, msg string) bool {
+	trimmed := strings.TrimSpace(msg)
+	// Background PR polling can set Loading while user is not on PR tab.
+	if strings.HasPrefix(trimmed, "Loading pull requests") && viewMode != state.ViewPullRequests {
+		return false
+	}
+	// Ticket preload should not block other tabs.
+	if strings.HasPrefix(trimmed, "Loading tickets") && viewMode != state.ViewTickets {
+		return false
+	}
+	return true
 }
 
 func newBusySpinner() spinner.Model {
@@ -60,6 +74,9 @@ func (m *Model) applyLoadingOverlay(fullView string) string {
 	msg := m.appState.StatusMessage
 	if msg == "" {
 		msg = "Loading…"
+	}
+	if !shouldShowLoadingOverlay(m.appState.ViewMode, msg) {
+		return fullView
 	}
 	msg = strings.ReplaceAll(msg, "\n", " ")
 	line := lipgloss.JoinHorizontal(lipgloss.Center, m.busySpinner.View(), " ", msg)
