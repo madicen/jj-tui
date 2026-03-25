@@ -32,19 +32,3 @@ var (
 	// Style for graph lines (muted color)
 	GraphStyle = lipgloss.NewStyle().Foreground(styles.ColorMuted)
 )
-
-// getStatusStyle returns the style and character for a file status
-func GetStatusStyle(status string) (lipgloss.Style, string) {
-	switch status {
-	case "M":
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("#FFB86C")), "M" // Orange for modified
-	case "A":
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B")), "A" // Green for added
-	case "D":
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555")), "D" // Red for deleted
-	case "R":
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("#8BE9FD")), "R" // Cyan for renamed
-	default:
-		return lipgloss.NewStyle().Foreground(styles.ColorMuted), status
-	}
-}

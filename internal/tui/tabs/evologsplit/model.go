@@ -323,6 +323,12 @@ func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
 	return m, nil
 }
 
+func formatSplitModalFileLine(f jj.ChangedFile, pathMax int) string {
+	p := runewidth.Truncate(f.Path, max(8, pathMax), "…")
+	st, ch := styles.GetStatusStyle(f.Status)
+	return fmt.Sprintf("%s %s", st.Render(ch), p)
+}
+
 // buildEvologSplitRightColumn returns exactly vr+1 lines (title + vr body rows) so layout
 // matches the history column; the last body row is always used (overflow count or "—").
 func buildEvologSplitRightColumn(m Model, vr, rightW int, muted lipgloss.Style) []string {
@@ -348,9 +354,7 @@ func buildEvologSplitRightColumn(m Model, vr, rightW int, muted lipgloss.Style) 
 
 	if vr == 1 {
 		if len(m.diffFiles) == 1 {
-			f := m.diffFiles[0]
-			p := runewidth.Truncate(f.Path, max(8, rightW-6), "…")
-			body[0] = fmt.Sprintf("%s %s", lipgloss.NewStyle().Foreground(styles.ColorSecondary).Render(f.Status), p)
+			body[0] = formatSplitModalFileLine(m.diffFiles[0], rightW-4)
 		} else {
 			body[0] = muted.Render(fmt.Sprintf("… +%d files", len(m.diffFiles)))
 		}
@@ -358,11 +362,8 @@ func buildEvologSplitRightColumn(m Model, vr, rightW int, muted lipgloss.Style) 
 	}
 
 	fileSlots := vr - 1
-	sec := lipgloss.NewStyle().Foreground(styles.ColorSecondary)
 	for i := 0; i < fileSlots && i < len(m.diffFiles); i++ {
-		f := m.diffFiles[i]
-		p := runewidth.Truncate(f.Path, max(8, rightW-6), "…")
-		body[i] = fmt.Sprintf("%s %s", sec.Render(f.Status), p)
+		body[i] = formatSplitModalFileLine(m.diffFiles[i], rightW-4)
 	}
 	last := vr - 1
 	extra := len(m.diffFiles) - fileSlots
@@ -382,7 +383,7 @@ func (m Model) View() string {
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#8BE9FD"))
 	muted := lipgloss.NewStyle().Foreground(styles.ColorMuted)
 	var lines []string
-	lines = append(lines, titleStyle.Render("Split (experimental)"))
+	lines = append(lines, titleStyle.Render("Split"))
 	lines = append(lines, "")
 	if strings.TrimSpace(m.bookmarkName) != "" {
 		lines = append(lines, muted.Render(fmt.Sprintf("Bookmark: %s  ·  change: %s", m.bookmarkName, m.tipChangeID)))

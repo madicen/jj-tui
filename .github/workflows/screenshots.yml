@@ -64,7 +64,7 @@ jobs:
           rm -rf /tmp/vhs.tar.gz /tmp/vhs-extract
           vhs --version
 
-      # Generate screenshots using VHS directly
+      # Generate screenshots using VHS directly (see README "Updating Screenshots"; tapes set up their own jj fixtures where needed)
       - name: Generate screenshots
         run: |
           vhs vhs/graph.tape
@@ -73,6 +73,7 @@ jobs:
           vhs vhs/branches.tape
           vhs vhs/settings.tape
           vhs vhs/help.tape
+          vhs vhs/command_history.tape
           vhs vhs/all.tape
           vhs vhs/after-origin.tape
           vhs vhs/evolog-split.tape

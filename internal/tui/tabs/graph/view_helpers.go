@@ -424,7 +424,7 @@ func (m *GraphModel) renderTreeNodeWithLineIndex(node *fileTreeNode, indent stri
 			}
 			*lineIdx++
 			isSelected := !data.GraphFocused && node.fileIndex == data.SelectedFile
-			statusStyle, statusChar := GetStatusStyle(node.status)
+			statusStyle, statusChar := styles.GetStatusStyle(node.status)
 			var fileLine string
 			if isSelected {
 				selectedStyle := lipgloss.NewStyle().Background(lipgloss.Color("#3d4f5f")).Foreground(lipgloss.Color("#ffffff"))

@@ -28,9 +28,17 @@ Sleep 3s
 # Default row can be an intermediate evolution commit with an empty diff vs tip; move one step older (j).
 Type "j"
 Sleep 1s
+Type "j"
+Sleep 1s
 
-Type "Enter"
-Sleep 6s
+# Key Enter (not Type "Enter", which would type the word "Enter").
+Enter
+Sleep 4s
+
+Up
+Sleep 1s
+Up
+Sleep 2s
 
 Hide
 Ctrl+q
