@@ -192,9 +192,10 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 		)
 		afterStatus := statusIndicator
 		var commitRow string
-		showForgot := !data.InRebaseMode && commit.HasDeltaVsBookmarkOrigin && len(commit.ConflictedBranches) == 0
-		// Evolog split: with or without a feature bookmark; jj moves the selected change (bookmark optional).
-		showEvolog := !data.InRebaseMode && !commit.Immutable && !commit.Divergent && len(commit.ConflictedBranches) == 0
+		onSelectedRow := !data.InRebaseMode && i == data.SelectedCommit
+		showForgot := onSelectedRow && commit.HasDeltaVsBookmarkOrigin && len(commit.ConflictedBranches) == 0
+		// split (z): with or without a feature bookmark; only on the focused graph row.
+		showEvolog := onSelectedRow && !commit.Immutable && !commit.Divergent && len(commit.ConflictedBranches) == 0
 		if showForgot || showEvolog {
 			muted := lipgloss.NewStyle().Foreground(styles.ColorMuted)
 			mutedSp := muted.Render("  ")
