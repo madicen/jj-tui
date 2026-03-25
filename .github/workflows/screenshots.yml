@@ -74,6 +74,7 @@ jobs:
           vhs vhs/settings.tape
           vhs vhs/help.tape
           vhs vhs/all.tape
+          vhs vhs/after-origin.tape
 
       - name: List generated files
         run: ls -la screenshots/
