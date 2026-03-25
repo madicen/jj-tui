@@ -36,6 +36,7 @@ const (
 	// Description editor zones
 	ZoneDescSave   = "zone:desc:save"
 	ZoneDescCancel = "zone:desc:cancel"
+	ZoneDescClear  = "zone:desc:clear"
 
 	// PR creation zones
 	ZonePRTitle        = "zone:pr:title"

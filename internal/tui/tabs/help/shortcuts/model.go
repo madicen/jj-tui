@@ -86,6 +86,13 @@ func (m Model) lines() []string {
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(10).Render("s"), styles.HelpDescStyle.Render("Squash commit into parent")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(10).Render("r"), styles.HelpDescStyle.Render("Rebase commit (with descendants)")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(10).Render("d"), styles.HelpDescStyle.Render("Edit description; or resolve divergent when commit is divergent")))
+	lines = append(lines, "")
+	lines = append(lines, styles.TitleStyle.Render("Commit description editor"))
+	lines = append(lines, "")
+	const descEditKeyW = 18
+	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(descEditKeyW).Render("^s"), styles.HelpDescStyle.Render("Save description")))
+	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(descEditKeyW).Render("Esc"), styles.HelpDescStyle.Render("Cancel")))
+	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(descEditKeyW).Render("ctrl+shift+u"), styles.HelpDescStyle.Render("Clear description text")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(10).Render("a"), styles.HelpDescStyle.Render("Abandon commit")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(10).Render("n"), styles.HelpDescStyle.Render("Create new commit from selected")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(10).Render("b"), styles.HelpDescStyle.Render("Create/move bookmark on commit")))
