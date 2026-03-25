@@ -36,6 +36,7 @@ const (
 	// Description editor zones
 	ZoneDescSave   = "zone:desc:save"
 	ZoneDescCancel = "zone:desc:cancel"
+	ZoneDescClear  = "zone:desc:clear"
 
 	// PR creation zones
 	ZonePRTitle        = "zone:pr:title"
@@ -215,6 +216,11 @@ func ZoneExistingBookmark(index int) string {
 // ZoneCommit returns the zone ID for a commit at the given index
 func ZoneCommit(index int) string {
 	return fmt.Sprintf("zone:commit:%d", index)
+}
+
+// ZoneActionMoveOntoOriginAt returns the zone ID for the inline "Forgot New Commit?" control on a commit row.
+func ZoneActionMoveOntoOriginAt(index int) string {
+	return fmt.Sprintf("zone:action:move_onto_origin:%d", index)
 }
 
 // ZonePR returns the zone ID for a PR at the given index

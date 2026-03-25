@@ -40,6 +40,9 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 		if r.Checkout {
 			return Result{Status: "Cannot edit: not in a jj repository"}
 		}
+		if r.MoveDeltaOntoOrigin {
+			return Result{Status: "Cannot align: not in a jj repository"}
+		}
 		return Result{}
 	}
 	if r.Checkout {
@@ -88,6 +91,21 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 	if r.RevertFile {
 		cmd, status := executeRevertFile(ctx)
 		return Result{Cmd: cmd, Status: status}
+	}
+	if r.MoveDeltaOntoOrigin {
+		cmd, status := executeMoveDeltaOntoOrigin(ctx)
+		if status != "" {
+			return Result{Status: status}
+		}
+		if cmd != nil && ctx.IsSelectedCommitValid() && ctx.Repository != nil {
+			commit := ctx.Repository.Graph.Commits[ctx.SelectedCommit]
+			bn := bookmarkNameForOriginSplit(commit.Branches)
+			return Result{
+				Cmd:           cmd,
+				SuccessStatus: fmt.Sprintf("Placing changes after %s@origin…", bn),
+			}
+		}
+		return Result{Cmd: cmd}
 	}
 	if r.NewCommit {
 		cmd, _ := executeNewCommit(ctx)
@@ -247,10 +265,11 @@ func executeDeleteBookmark(ctx *RequestContext) (tea.Cmd, string) {
 		return nil, ""
 	}
 	commit := ctx.Repository.Graph.Commits[ctx.SelectedCommit]
-	if len(commit.Branches) == 0 {
+	name := internal.FirstOperableBookmarkName(commit.Branches)
+	if name == "" {
 		return nil, "No bookmark on this commit to delete"
 	}
-	return bookmarktab.DeleteBookmarkCmd(ctx.JJService, commit.Branches[0]), ""
+	return bookmarktab.DeleteBookmarkCmd(ctx.JJService, name), ""
 }
 
 func executeMoveFileUp(ctx *RequestContext) (tea.Cmd, string) {
@@ -313,6 +332,48 @@ func executeNewCommit(ctx *RequestContext) (tea.Cmd, string) {
 		parentCommitID = ctx.Repository.Graph.Commits[ctx.SelectedCommit].ChangeID
 	}
 	return NewCommit(ctx.JJService, parentCommitID), ""
+}
+
+// bookmarkNameForOriginSplit returns a non–default-branch bookmark on the commit for origin sync.
+func bookmarkNameForOriginSplit(branches []string) string {
+	for _, b := range branches {
+		if b == "" {
+			continue
+		}
+		local := internal.LocalBookmarkName(strings.TrimSpace(b))
+		if local == "" || isDefaultBranch(local) {
+			continue
+		}
+		return local
+	}
+	return ""
+}
+
+func commitHasBookmarkLocalName(branches []string, local string) bool {
+	return slices.ContainsFunc(branches, func(b string) bool {
+		return internal.LocalBookmarkName(b) == local
+	})
+}
+
+func executeMoveDeltaOntoOrigin(ctx *RequestContext) (tea.Cmd, string) {
+	if !ctx.IsSelectedCommitValid() || ctx.JJService == nil {
+		return nil, ""
+	}
+	commit := ctx.Repository.Graph.Commits[ctx.SelectedCommit]
+	if commit.Immutable {
+		return nil, "Cannot align with origin: commit is immutable"
+	}
+	if len(commit.ConflictedBranches) > 0 {
+		return nil, "Resolve bookmark conflict first (Branches tab)"
+	}
+	name := bookmarkNameForOriginSplit(commit.Branches)
+	if name == "" {
+		return nil, "Need a feature bookmark on this commit (main/master alone is not supported)"
+	}
+	if !commit.HasDeltaVsBookmarkOrigin {
+		return nil, "Nothing to align: tree already matches bookmark@origin (try jj git fetch)"
+	}
+	return MoveBookmarkDeltaOntoOriginCmd(ctx.JJService, name, commit.ChangeID, commit.ID), ""
 }
 
 // SaveDescriptionCmd returns a command to save the description for the given commit.
@@ -379,13 +440,14 @@ func ApplyResult(res Result, graphModel *GraphModel, ctx *RequestContext, app *s
 			return nil
 		}
 		commit := ctx.Repository.Graph.Commits[ctx.SelectedCommit]
-		needsMoveBookmark := !slices.Contains(commit.Branches, prBranch)
+		needsMoveBookmark := !commitHasBookmarkLocalName(commit.Branches, prBranch)
 		if needsMoveBookmark {
 			app.StatusMessage = fmt.Sprintf("Moving %s and pushing...", prBranch)
 		} else {
 			app.StatusMessage = fmt.Sprintf("Pushing %s...", prBranch)
 		}
-		return prstab.PushToPRCmd(ctx.JJService, prBranch, commit.ChangeID, needsMoveBookmark)
+		app.Loading = true
+		return prstab.PushToPRCmd(ctx.JJService, prBranch, commit.ChangeID, needsMoveBookmark, ctx.DemoMode)
 	}
 	if res.Cmd != nil {
 		if res.PerformRebase {
@@ -407,6 +469,23 @@ func NewCommit(svc *jj.Service, parentCommitID string) tea.Cmd {
 	return func() tea.Msg {
 		if err := svc.NewCommit(context.Background(), parentCommitID); err != nil {
 			return util.ErrorMsg{Err: fmt.Errorf("failed to create commit: %w", err)}
+		}
+		repo, err := svc.GetRepository(context.Background(), "")
+		if err != nil {
+			return util.ErrorMsg{Err: err}
+		}
+		return RepositoryLoadedMsg{Repository: repo}
+	}
+}
+
+// MoveBookmarkDeltaOntoOriginCmd runs jj fetch + new/restore/bookmark dance; see jj.Service.MoveBookmarkDeltaOntoOrigin.
+func MoveBookmarkDeltaOntoOriginCmd(svc *jj.Service, bookmarkName, localChangeID, localCommitID string) tea.Cmd {
+	if svc == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		if err := svc.MoveBookmarkDeltaOntoOrigin(context.Background(), bookmarkName, localChangeID, localCommitID); err != nil {
+			return util.ErrorMsg{Err: fmt.Errorf("align with origin: %w", err)}
 		}
 		repo, err := svc.GetRepository(context.Background(), "")
 		if err != nil {
@@ -541,8 +620,9 @@ func FindPRBranchForCommit(repo *internal.Repository, commitIndex int) string {
 		visited[idx] = true
 		commit := repo.Graph.Commits[idx]
 		for _, branch := range commit.Branches {
-			if openPRBranches[branch] {
-				return branch
+			local := internal.LocalBookmarkName(branch)
+			if openPRBranches[branch] || openPRBranches[local] {
+				return local
 			}
 		}
 		for _, parentID := range commit.Parents {

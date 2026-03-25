@@ -291,7 +291,12 @@ func (m *Model) BuildBookmarkNameConflictSources() []string {
 	}
 	if m.repository != nil {
 		for _, commit := range m.repository.Graph.Commits {
-			names = append(names, commit.Branches...)
+			for _, br := range commit.Branches {
+				names = append(names, br)
+				if loc := internal.LocalBookmarkName(br); loc != "" && loc != br {
+					names = append(names, loc)
+				}
+			}
 		}
 	}
 	return names

@@ -195,13 +195,13 @@ func (m *Model) createIsZoneClickedFuncWithEvent(event tea.MouseMsg) func(string
 
 // processGraphRequest runs a graph request via the graph tab; ApplyResult mutates app and returns cmd.
 func (m *Model) processGraphRequest(r graphtab.Request) (tea.Model, tea.Cmd) {
-	if r.Checkout || r.Squash || r.Abandon || r.NewCommit || r.PerformRebase || r.ResolveDivergent != nil || r.CreateBookmark || r.DeleteBookmark || r.CreatePR || r.UpdatePR || r.MoveFileUp || r.MoveFileDown || r.RevertFile {
+	if r.Checkout || r.Squash || r.Abandon || r.NewCommit || r.PerformRebase || r.ResolveDivergent != nil || r.CreateBookmark || r.DeleteBookmark || r.CreatePR || r.UpdatePR || r.MoveFileUp || r.MoveFileDown || r.RevertFile || r.MoveDeltaOntoOrigin {
 		m.redoOperationID = ""
 	}
 	ctx := graphtab.BuildRequestContextFrom(m)
 	res := graphtab.HandleRequest(r, ctx)
 	cmd := graphtab.ApplyResult(res, &m.graphTabModel, ctx, &m.appState)
-	return m, cmd
+	return m, m.wrapGraphTabCmd(cmd)
 }
 
 func (m *Model) handleHelpRequest(r commandhistory.Request) (tea.Model, tea.Cmd) {
@@ -651,7 +651,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			updated, cmd := m.graphTabModel.UpdateWithApp(msg, &m.appState)
 			m.graphTabModel = updated
 			if cmd != nil {
-				return m, cmd
+				return m, m.wrapGraphTabCmd(cmd)
 			}
 		case state.ViewPullRequests:
 			updated, cmd := m.prsTabModel.UpdateWithApp(msg, &m.appState)
@@ -707,7 +707,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				updated, cmd := m.graphTabModel.UpdateWithApp(msg, &m.appState)
 				m.graphTabModel = updated
 				if cmd != nil {
-					return m, cmd
+					return m, m.wrapGraphTabCmd(cmd)
 				}
 			case state.ViewPullRequests:
 				m.prsTabModel.SetDimensions(m.width, contentHeight)
@@ -752,7 +752,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			updated, cmd := m.graphTabModel.UpdateWithApp(msg, &m.appState)
 			m.graphTabModel = updated
 			if cmd != nil {
-				return m, cmd
+				return m, m.wrapGraphTabCmd(cmd)
 			}
 		case state.ViewPullRequests:
 			m.prsTabModel.SetDimensions(m.width, contentHeight)
@@ -811,7 +811,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			updated, cmd := m.graphTabModel.UpdateWithApp(msg, &m.appState)
 			m.graphTabModel = updated
 			if cmd != nil {
-				return m, tea.Batch(cmd)
+				return m, m.wrapGraphTabCmd(cmd)
 			}
 		}
 		if m.appState.ViewMode == state.ViewPullRequests {

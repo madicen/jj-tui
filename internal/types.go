@@ -23,6 +23,10 @@ type Commit struct {
 	Conflicts          bool      `json:"conflicts"`
 	Immutable          bool      `json:"immutable"`
 	Divergent          bool      `json:"divergent"`    // True if this change ID has multiple versions
+	// HasDeltaVsBookmarkOrigin is true when this bookmark tip should offer "Forgot New Commit?":
+	// tree differs from bookmark@origin but the tip is not already a direct child of bookmark@origin
+	// (after restacking, diff may stay non-empty until push, but the parent link is correct).
+	HasDeltaVsBookmarkOrigin bool `json:"has_delta_vs_bookmark_origin"`
 	GraphPrefix        string    `json:"graph_prefix"` // ASCII art graph prefix from jj (e.g., "│ ○  ")
 	GraphLines         []string  `json:"graph_lines"`  // Connector lines after this commit (e.g., ["│", "├─╯"])
 }

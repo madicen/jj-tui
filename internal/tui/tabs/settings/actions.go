@@ -386,7 +386,7 @@ func DeleteAllBookmarksCmd(jjSvc *jj.Service, repo *internal.Repository) tea.Cmd
 		bookmarkMap := make(map[string]bool)
 		for _, commit := range repo.Graph.Commits {
 			for _, branch := range commit.Branches {
-				bookmarkMap[branch] = true
+				bookmarkMap[internal.LocalBookmarkName(branch)] = true
 			}
 		}
 		if len(bookmarkMap) == 0 {

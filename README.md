@@ -159,6 +159,7 @@ The graph view has two panes: the commit graph (left) and changed files (right).
 - `x`: Delete bookmark from selected commit
 - `c`: Create PR from selected commit (if bookmark exists)
 - `u`: Push/update PR (pushes to existing PR branch)
+- `f` (graph pane focused): **Forgot New Commit?** — fetch, then create a new commit on top of `bookmark@origin` with the same tree as the selected commit, move the bookmark there, and abandon the old revision. Use when you amended after a push so you can `jj git push` without `--force`.
 
 **File pane (focus files with Tab first):**
 - `[`: Move selected file to new parent commit (split out)
@@ -455,12 +456,16 @@ jj-tui/
 │           └── githublogin/   # GitHub device flow
 ├── fixtures/                  # Demo repository for screenshots
 │   ├── setup-demo-repo.sh
-│   └── demo-repo/             # Created by setup script
+│   ├── setup-after-origin-vhs-repo.sh
+│   ├── after-origin-vhs-append-and-tui.sh
+│   ├── demo-repo/             # Created by setup-demo-repo.sh
+│   └── after-origin-vhs-repo/ # Created by setup-after-origin-vhs-repo.sh (optional GIF)
 ├── vhs/                       # VHS tapes for screenshot generation
-│   ├── all.tape               # Demo GIF
+│   ├── all.tape               # Main demo GIF
+│   ├── after-origin.tape      # Forgot New Commit? (f) workflow GIF
 │   ├── graph.tape
 │   └── ...
-├── screenshots/               # Generated (demo.gif, *.png)
+├── screenshots/               # Generated (demo.gif, after-origin.gif, *.png)
 └── README.md
 ```
 
@@ -487,6 +492,9 @@ make screenshots
 
 # Generate demo GIF
 make demo-gif
+
+# GIF for graph action "Forgot New Commit?" (f)
+make after-origin-gif
 
 # Or run individual tapes
 vhs vhs/graph.tape
