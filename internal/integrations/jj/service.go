@@ -715,30 +715,39 @@ func (s *Service) PushToGit(ctx context.Context, branch string) (string, error) 
 	return pushOut, nil
 }
 
-// FetchFromGit fetches updates from the remote git repository
+// FetchFromGit fetches updates from the remote git repository.
+// When jj git fetch fails (e.g. "Failed to update refs" with many remotes), we fall back to
+// git fetch origin so callers can still compare to bookmark@origin without a blocking error.
 func (s *Service) FetchFromGit(ctx context.Context) (string, error) {
-	// Use jj git fetch to update remote bookmarks
 	out, err := s.runJJOutput(ctx, "git", "fetch")
 	if err != nil {
+		gitOut, gitErr := s.runGitFetchOrigin(ctx)
+		if gitErr == nil {
+			_ = s.cleanupAfterFetch(ctx)
+			return out + string(gitOut), nil
+		}
 		return out, fmt.Errorf("fetch failed: %w", err)
 	}
 
-	// Also run git fetch directly to ensure we get latest remote refs
-	gitFetchCmd := exec.CommandContext(ctx, "git", "fetch", "origin")
-	gitFetchCmd.Dir = s.RepoPath
-	gitOut, gitErr := gitFetchCmd.CombinedOutput()
+	gitOut, gitErr := s.runGitFetchOrigin(ctx)
 	if gitErr != nil {
 		// Fetch failures are usually not fatal (e.g., no new changes)
-		// Only return error if it's a real network/permission issue
-		if !strings.Contains(string(gitOut), "Fetching from") && !strings.Contains(string(gitOut), "up-to-date") {
-			out += "\nGit fetch output: " + string(gitOut)
+		// Only append output if it's a real network/permission issue
+		sGit := string(gitOut)
+		if !strings.Contains(sGit, "Fetching from") && !strings.Contains(sGit, "up-to-date") {
+			out += "\nGit fetch output: " + sGit
 		}
 	}
 
-	// After fetch, clean up the working copy state and any orphaned empty commits
 	_ = s.cleanupAfterFetch(ctx)
 
 	return out, nil
+}
+
+func (s *Service) runGitFetchOrigin(ctx context.Context) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, "git", "fetch", "origin")
+	cmd.Dir = s.RepoPath
+	return cmd.CombinedOutput()
 }
 
 // cleanupAfterFetch handles post-fetch cleanup:
