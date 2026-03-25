@@ -41,6 +41,15 @@ func (m GraphModel) handleZoneClick(msg zone.MsgZoneInBounds) (GraphModel, *Requ
 				return m, &Request{MoveDeltaOntoOrigin: true}, nil
 			}
 		}
+		for commitIndex := range m.repository.Graph.Commits {
+			if m.zoneManager.Get(mouse.ZoneActionEvologSplitAt(commitIndex)) == z {
+				m.graphFocused = true
+				m.selectedCommit = commitIndex
+				m.changedFilesCommitID = ""
+				m.changedFiles = nil
+				return m, &Request{StartEvologSplit: true}, nil
+			}
+		}
 	}
 	for i := range m.changedFiles {
 		if m.zoneManager.Get(mouse.ZoneChangedFile(i)) == z {
@@ -72,6 +81,15 @@ func (m GraphModel) handleZoneClick(msg zone.MsgZoneInBounds) (GraphModel, *Requ
 					m.changedFilesCommitID = ""
 					m.changedFiles = nil
 					return m, &Request{MoveDeltaOntoOrigin: true}, nil
+				}
+			}
+			for commitIndex := range m.repository.Graph.Commits {
+				if inBounds(mouse.ZoneActionEvologSplitAt(commitIndex)) {
+					m.graphFocused = true
+					m.selectedCommit = commitIndex
+					m.changedFilesCommitID = ""
+					m.changedFiles = nil
+					return m, &Request{StartEvologSplit: true}, nil
 				}
 			}
 		}

@@ -75,6 +75,7 @@ jobs:
           vhs vhs/help.tape
           vhs vhs/all.tape
           vhs vhs/after-origin.tape
+          vhs vhs/evolog-split.tape
 
       - name: List generated files
         run: ls -la screenshots/

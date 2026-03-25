@@ -7,6 +7,7 @@ jj-tui
 # Generated demo repo and fake origin (created by make demo-repo)
 fixtures/demo-repo/
 fixtures/fake-origin.git/
+fixtures/evolog-split-vhs-repo/
 
 # VSCode Settings
 .vscode/

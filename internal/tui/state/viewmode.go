@@ -17,6 +17,7 @@ const (
 	ViewGitHubLogin      // GitHub Device Flow login
 	ViewBookmarkConflict // Bookmark conflict resolution dialog
 	ViewDivergentCommit  // Divergent commit resolution dialog
+	ViewEvologSplit      // Experimental evolog-driven stack split (FAQ-style)
 )
 
 func (v ViewMode) String() string {
@@ -47,6 +48,8 @@ func (v ViewMode) String() string {
 		return "bookmark_conflict"
 	case ViewDivergentCommit:
 		return "divergent_commit"
+	case ViewEvologSplit:
+		return "evolog_split"
 	default:
 		return "unknown"
 	}

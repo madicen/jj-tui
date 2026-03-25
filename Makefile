@@ -1,6 +1,6 @@
 # jj-tui Makefile
 
-.PHONY: build test clean screenshots demo-repo after-origin-vhs-repo after-origin-gif help
+.PHONY: build test clean screenshots demo-repo after-origin-vhs-repo after-origin-gif evolog-split-vhs-repo evolog-split-gif help
 
 # Default target
 all: build
@@ -16,7 +16,7 @@ test:
 # Clean build artifacts
 clean:
 	rm -f jj-tui
-	rm -rf fixtures/demo-repo fixtures/after-origin-vhs-repo fixtures/after-origin-fake-origin.git
+	rm -rf fixtures/demo-repo fixtures/after-origin-vhs-repo fixtures/after-origin-fake-origin.git fixtures/evolog-split-vhs-repo
 
 # Setup the demo repository for screenshots
 demo-repo:
@@ -37,7 +37,8 @@ screenshots: build demo-repo
 	vhs vhs/help.tape
 	vhs vhs/command_history.tape
 	vhs vhs/after-origin.tape
-	@echo "Screenshots saved to screenshots/ (including after-origin.gif)"
+	vhs vhs/evolog-split.tape
+	@echo "Screenshots saved to screenshots/ (including after-origin.gif, evolog-split.gif)"
 
 # Generate a demo GIF showing the TUI in action
 demo-gif: build demo-repo
@@ -64,6 +65,15 @@ after-origin-gif: build after-origin-vhs-repo
 	vhs vhs/after-origin.tape
 	@echo "GIF saved to screenshots/after-origin.gif"
 	@if [ -f screenshots/mem.prof ]; then echo "Memory profile: screenshots/mem.prof (go tool pprof screenshots/mem.prof)"; fi
+
+# Dedicated GIF for experimental Evolog split (z); see vhs/evolog-split.tape
+evolog-split-vhs-repo:
+	bash fixtures/setup-evolog-split-vhs-repo.sh
+
+evolog-split-gif: build evolog-split-vhs-repo
+	@mkdir -p screenshots
+	vhs vhs/evolog-split.tape
+	@echo "GIF saved to screenshots/evolog-split.gif"
 
 # Generate individual screenshots
 screenshot-graph: build demo-repo
@@ -107,6 +117,7 @@ help:
 	@echo "  demo-gif     - Generate demo GIF (vhs all.tape)"
 	@echo "  demo-gif-profile - Generate demo GIF with CPU/memory profiling"
 	@echo "  after-origin-gif - Generate after-origin GIF: (f) restack + (u) update PR (vhs/after-origin.tape)"
+	@echo "  evolog-split-gif - Generate evolog-split GIF: experimental (z) split (vhs/evolog-split.tape)"
 	@echo "  demo         - Run the app in demo mode"
 	@echo "  deps         - Install/tidy dependencies"
 	@echo "  help         - Show this help"

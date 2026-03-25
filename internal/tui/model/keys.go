@@ -61,6 +61,10 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		updated, cmd := m.divergentModal.Update(msg)
 		m.divergentModal = updated
 		return m, cmd
+	case state.ViewEvologSplit:
+		updated, cmd := m.evologSplitModal.Update(msg)
+		m.evologSplitModal = updated
+		return m, cmd
 	case state.ViewGitHubLogin:
 		updated, cmd := m.githubLoginModel.Update(msg)
 		m.githubLoginModel = updated

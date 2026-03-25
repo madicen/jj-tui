@@ -33,6 +33,8 @@ const (
 	NavigateCreateTicket   // open Create Ticket modal (from Tickets tab)
 	NavigateBackFromTicketForm
 	NavigateSubmitTicket // run create ticket and close modal
+	NavigateOpenEvologSplit    // experimental: show evolog picker for stack split
+	NavigatePerformEvologSplit // run jj new + restore (+ bookmark set if EvologBookmarkName set) after user picked base
 )
 
 // NavigateTarget describes a navigation request. Only main can perform these
@@ -63,6 +65,11 @@ type NavigateTarget struct {
 	DivergentKeepCommitID string
 	// Dismiss error and then run refresh
 	RefreshAfterDismiss bool
+	// Evolog split (experimental)
+	EvologBookmarkName  string
+	EvologTipChangeID   string
+	EvologTipCommitHint string
+	EvologBaseCommitID  string
 }
 
 // NavigateMsg is the only callback from submodels to main: they request a view change or

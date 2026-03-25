@@ -13,6 +13,7 @@ import (
 	conflicttab "github.com/madicen/jj-tui/internal/tui/tabs/conflict"
 	descedittab "github.com/madicen/jj-tui/internal/tui/tabs/descedit"
 	divergenttab "github.com/madicen/jj-tui/internal/tui/tabs/divergent"
+	evologsplittab "github.com/madicen/jj-tui/internal/tui/tabs/evologsplit"
 	errortab "github.com/madicen/jj-tui/internal/tui/tabs/error"
 	graphtab "github.com/madicen/jj-tui/internal/tui/tabs/graph"
 	githublogintab "github.com/madicen/jj-tui/internal/tui/tabs/githublogin"
@@ -56,6 +57,7 @@ func New(ctx context.Context) *Model {
 		warningModal:     warningtab.NewModel(),
 		conflictModal:    conflicttab.NewModel(zm),
 		divergentModal:   divergenttab.NewModel(zm),
+		evologSplitModal: evologsplittab.NewModel(zm),
 		bookmarkModal:    bookmarktab.NewModel(zm),
 		prFormModal:      prformtab.NewModel(zm),
 		ticketFormModal:  ticketformtab.NewModel(zm),

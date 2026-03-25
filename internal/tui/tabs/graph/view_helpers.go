@@ -192,13 +192,29 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 		)
 		afterStatus := statusIndicator
 		var commitRow string
-		if !data.InRebaseMode && commit.HasDeltaVsBookmarkOrigin && len(commit.ConflictedBranches) == 0 {
+		showForgot := !data.InRebaseMode && commit.HasDeltaVsBookmarkOrigin && len(commit.ConflictedBranches) == 0
+		// Evolog split: with or without a feature bookmark; jj moves the selected change (bookmark optional).
+		showEvolog := !data.InRebaseMode && !commit.Immutable && !commit.Divergent && len(commit.ConflictedBranches) == 0
+		if showForgot || showEvolog {
 			muted := lipgloss.NewStyle().Foreground(styles.ColorMuted)
-			btn := m.zoneManager.Mark(mouse.ZoneActionMoveOntoOriginAt(i), muted.Render("Forgot New Commit? (f)"))
+			mutedSp := muted.Render("  ")
+			var btnJoin string
+			switch {
+			case showForgot && showEvolog:
+				btnJoin = lipgloss.JoinHorizontal(lipgloss.Top,
+					m.zoneManager.Mark(mouse.ZoneActionMoveOntoOriginAt(i), muted.Render("Forgot New Commit? (f)")),
+					mutedSp,
+					m.zoneManager.Mark(mouse.ZoneActionEvologSplitAt(i), muted.Render("split (z)")),
+				)
+			case showForgot:
+				btnJoin = m.zoneManager.Mark(mouse.ZoneActionMoveOntoOriginAt(i), muted.Render("Forgot New Commit? (f)"))
+			default:
+				btnJoin = m.zoneManager.Mark(mouse.ZoneActionEvologSplitAt(i), muted.Render("split (z)"))
+			}
 			commitRow = lipgloss.JoinHorizontal(lipgloss.Bottom,
 				m.zoneManager.Mark(mouse.ZoneCommit(i), style.Render(beforeStatus)),
 				muted.Render("  "),
-				btn,
+				btnJoin,
 				style.Render(afterStatus),
 			)
 		} else {

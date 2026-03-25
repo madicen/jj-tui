@@ -100,6 +100,7 @@ func (m Model) lines() []string {
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(10).Render("c"), styles.HelpDescStyle.Render("Create new PR from commit chain")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(10).Render("u"), styles.HelpDescStyle.Render("Update existing PR with new commits")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(10).Render("f"), styles.HelpDescStyle.Render("Forgot new commit? Stack on bookmark@origin (avoid force-push)")))
+	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(10).Render("z"), styles.HelpDescStyle.Render("split (experimental): jj evolog parent + diff preview; moves change (and feature bookmark if present)")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(10).Render("^z"), styles.HelpDescStyle.Render("Undo last jj operation")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(10).Render("^y"), styles.HelpDescStyle.Render("Redo jj operation")))
 	lines = append(lines, "")
