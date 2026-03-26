@@ -628,7 +628,57 @@ func (s *Service) MoveBookmarkDeltaOntoOrigin(ctx context.Context, bookmarkName,
 			return fmt.Errorf("jj rebase (stack on new tip): %w", err)
 		}
 	}
-	_ = s.runJJ(ctx, "abandon", tipCommitID)
+	if err := s.runJJ(ctx, "abandon", tipCommitID); err != nil {
+		return fmt.Errorf("jj abandon old bookmark tip: %w", err)
+	}
+	// Rebasing children can leave two visible commits for the same change ID (temporary divergence,
+	// same situation as the jj FAQ “split work” flow). Keep the newest version on the path to @.
+	if err := s.abandonDivergentDuplicateCommitsOffWCPath(ctx); err != nil {
+		return err
+	}
+	return nil
+}
+
+// abandonDivergentDuplicateCommitsOffWCPath abandons mutable divergent duplicates, keeping the head
+// revision for each change on the ancestry of @ (jj log order: newest first, so limit 1 is @-side).
+func (s *Service) abandonDivergentDuplicateCommitsOffWCPath(ctx context.Context) error {
+	out, err := s.runJJOutputNoHistory(ctx, "log", "-r", "divergent() & mutable()", "--no-graph", "-T", "change_id ++ \"\\t\" ++ commit_id ++ \"\\n\"", "--limit", "200")
+	if err != nil || strings.TrimSpace(out) == "" {
+		return nil
+	}
+	byChange := make(map[string][]string)
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		parts := strings.SplitN(strings.TrimSpace(line), "\t", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		chID, commitID := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+		if chID == "" || commitID == "" {
+			continue
+		}
+		byChange[chID] = append(byChange[chID], commitID)
+	}
+	for chID, cids := range byChange {
+		if len(cids) < 2 {
+			continue
+		}
+		keepOut, err := s.runJJOutputNoHistory(ctx, "log", "-r", fmt.Sprintf("change_id(%s) & ::(@)", chID), "--no-graph", "-T", "commit_id", "--limit", "1")
+		if err != nil {
+			continue
+		}
+		keep := strings.TrimSpace(keepOut)
+		if keep == "" {
+			continue
+		}
+		for _, cid := range cids {
+			if commitIDsEquivalent(cid, keep) {
+				continue
+			}
+			if err := s.runJJ(ctx, "abandon", cid); err != nil {
+				return fmt.Errorf("jj abandon divergent duplicate after restack: %w", err)
+			}
+		}
+	}
 	return nil
 }
 
