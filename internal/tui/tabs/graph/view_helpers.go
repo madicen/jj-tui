@@ -194,8 +194,8 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 		var commitRow string
 		onSelectedRow := !data.InRebaseMode && i == data.SelectedCommit
 		showForgot := onSelectedRow && commit.HasDeltaVsBookmarkOrigin && len(commit.ConflictedBranches) == 0
-		// split (z): with or without a feature bookmark; only on the focused graph row.
-		showEvolog := onSelectedRow && !commit.Immutable && !commit.Divergent && len(commit.ConflictedBranches) == 0
+		// split (z): only when graph enrichment found a viable evolog split for this change.
+		showEvolog := onSelectedRow && commit.EvologSplitViable
 		if showForgot || showEvolog {
 			muted := lipgloss.NewStyle().Foreground(styles.ColorMuted)
 			var btnJoin string

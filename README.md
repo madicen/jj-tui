@@ -172,7 +172,7 @@ The graph view has two panes: the commit graph (left) and changed files (right).
 - `c`: Create PR from selected commit (if bookmark exists)
 - `u`: Push/update PR (pushes to existing PR branch)
 - `f` (graph pane focused): **Forgot New Commit?** — fetch, then create a new commit on top of `bookmark@origin` with the same tree as the selected commit, move the bookmark there, and abandon the old revision. Use when you amended after a push so you can `jj git push` without `--force`.
-- `z` (graph pane focused, experimental): **Split (evolog)** — open the evolog modal to choose a base revision and split the selected change (and move a feature bookmark when it points at the tip). See the clip under [Evolog split (experimental)](#evolog-split-experimental).
+- `z` (graph pane focused, experimental): **Split (evolog)** — same as the inline **split (z)** when it appears on the selected row: open the evolog modal only when the change has evolution history with a real tree diff vs an older revision (and no blocking descendants). See the clip under [Evolog split (experimental)](#evolog-split-experimental).
 
 **File pane (focus files with Tab first):**
 - `[`: Move selected file to new parent commit (split out)

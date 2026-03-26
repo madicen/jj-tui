@@ -383,6 +383,9 @@ func executeStartEvologSplit(ctx *RequestContext) string {
 	if len(commit.ConflictedBranches) > 0 {
 		return "Resolve bookmark conflict first (Branches tab)"
 	}
+	if !commit.EvologSplitViable {
+		return "Evolog split is not available for this commit (need evolution history with a diff vs an older revision)"
+	}
 	return ""
 }
 
