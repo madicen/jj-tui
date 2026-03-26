@@ -559,7 +559,8 @@ const followUpOnOriginMessage = "Follow-up (local changes on top of origin)"
 
 // MoveBookmarkDeltaOntoOrigin places bookmark@origin as the parent of new work without rewriting the
 // revision Git already has: it fetches, creates a new commit on top of bookmark@origin with the same
-// tree as the bookmark tip, moves the bookmark there, and abandons the old tip.
+// tree as the bookmark tip, moves the bookmark there, rebases any non–working-copy children of the
+// old tip onto the new bookmark tip (so local stacks stay intact), then abandons the old tip.
 // localChangeID is the selected revision’s change ID (for diff). localCommitID is the git commit id
 // (short or full) for revsets where the change ID may be divergent; pass commit.ID from the graph.
 func (s *Service) MoveBookmarkDeltaOntoOrigin(ctx context.Context, bookmarkName, localChangeID, localCommitID string) error {
@@ -591,13 +592,15 @@ func (s *Service) MoveBookmarkDeltaOntoOrigin(ctx context.Context, bookmarkName,
 		return fmt.Errorf("select the bookmark tip (%s) to align with origin", bookmarkName)
 	}
 	childrenRev := fmt.Sprintf("children(%s) ~ @", tipCommitID)
-	childLines, err := s.runJJOutput(ctx, "log", "-r", childrenRev, "--no-graph", "-T", "change_id", "--limit", "20")
+	childOut, err := s.runJJOutput(ctx, "log", "-r", childrenRev, "--no-graph", "-T", "commit_id", "--limit", "50")
 	if err != nil {
 		return fmt.Errorf("check descendants: %w", err)
 	}
-	for _, line := range strings.Split(childLines, "\n") {
-		if strings.TrimSpace(line) != "" {
-			return fmt.Errorf("commit has descendant commits (excluding working copy); rebase or squash the stack first")
+	var rebaseChildRoots []string
+	for _, line := range strings.Split(childOut, "\n") {
+		id := strings.TrimSpace(line)
+		if id != "" {
+			rebaseChildRoots = append(rebaseChildRoots, id)
 		}
 	}
 	diffOut, err := s.runJJOutput(ctx, "diff", "--from", remoteRef, "--to", localChangeID, "--summary")
@@ -615,6 +618,15 @@ func (s *Service) MoveBookmarkDeltaOntoOrigin(ctx context.Context, bookmarkName,
 	}
 	if err := s.runJJ(ctx, "bookmark", "set", bookmarkName, "-r", "@", "--allow-backwards"); err != nil {
 		return fmt.Errorf("jj bookmark set: %w", err)
+	}
+	if len(rebaseChildRoots) > 0 {
+		src := rebaseChildRoots[0]
+		if len(rebaseChildRoots) > 1 {
+			src = strings.Join(rebaseChildRoots, " | ")
+		}
+		if err := s.runJJ(ctx, "rebase", "-s", src, "-o", "@"); err != nil {
+			return fmt.Errorf("jj rebase (stack on new tip): %w", err)
+		}
 	}
 	_ = s.runJJ(ctx, "abandon", tipCommitID)
 	return nil
