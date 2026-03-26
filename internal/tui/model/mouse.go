@@ -92,6 +92,10 @@ func (m *Model) handleZoneClick(msg zone.MsgZoneInBounds) (tea.Model, tea.Cmd) {
 		updated, cmd := m.divergentModal.Update(msg)
 		m.divergentModal = updated
 		return m, cmd
+	case state.ViewEvologSplit:
+		updated, cmd := m.evologSplitModal.Update(msg)
+		m.evologSplitModal = updated
+		return m, cmd
 	case state.ViewCreatePR:
 		updated, cmd := m.prFormModal.Update(msg)
 		m.prFormModal = updated

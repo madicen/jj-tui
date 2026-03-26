@@ -31,6 +31,12 @@ If you already pushed a feature bookmark but kept editing on the same jj revisio
 
 ![Forgot new commit? and Update PR](screenshots/after-origin.gif)
 
+### Split
+
+**Split** (`z`) opens an **jj evolog** picker for the selected change: pick an older evolution revision as the parent, preview which files differ from the tip, then run the FAQ-style flow (`jj new`, `jj restore`, optional bookmark move, `jj abandon` old tip). The recording below uses a small fixture repo (`fixtures/setup-evolog-split-vhs-repo.sh`) so the modal shows a clear two-file rollout delta.
+
+![Split](screenshots/evolog-split.gif)
+
 ## Features
 
 - **Visual Commit Graph**: Navigate and visualize your commit history with tree structure
@@ -166,6 +172,7 @@ The graph view has two panes: the commit graph (left) and changed files (right).
 - `c`: Create PR from selected commit (if bookmark exists)
 - `u`: Push/update PR (pushes to existing PR branch)
 - `f` (graph pane focused): **Forgot New Commit?** — fetch, then create a new commit on top of `bookmark@origin` with the same tree as the selected commit, move the bookmark there, and abandon the old revision. Use when you amended after a push so you can `jj git push` without `--force`.
+- `z` (graph pane focused, experimental): **Split (evolog)** — open the evolog modal to choose a base revision and split the selected change (and move a feature bookmark when it points at the tip). See the clip under [Evolog split (experimental)](#evolog-split-experimental).
 
 **File pane (focus files with Tab first):**
 - `[`: Move selected file to new parent commit (split out)
@@ -463,15 +470,18 @@ jj-tui/
 ├── fixtures/                  # Demo repository for screenshots
 │   ├── setup-demo-repo.sh
 │   ├── setup-after-origin-vhs-repo.sh
+│   ├── setup-evolog-split-vhs-repo.sh
 │   ├── after-origin-vhs-append-and-tui.sh
 │   ├── demo-repo/             # Created by setup-demo-repo.sh
-│   └── after-origin-vhs-repo/ # Created by setup-after-origin-vhs-repo.sh (optional GIF)
+│   ├── after-origin-vhs-repo/ # Created by setup-after-origin-vhs-repo.sh (after-origin GIF)
+│   └── evolog-split-vhs-repo/ # Created by setup-evolog-split-vhs-repo.sh (evolog-split GIF)
 ├── vhs/                       # VHS tapes for screenshot generation
 │   ├── all.tape               # Main demo GIF
 │   ├── after-origin.tape      # Forgot New Commit? (f) workflow GIF
+│   ├── evolog-split.tape      # Evolog split (z) workflow GIF
 │   ├── graph.tape
 │   └── ...
-├── screenshots/               # Generated (demo.gif, after-origin.gif, *.png)
+├── screenshots/               # Generated (demo.gif, after-origin.gif, evolog-split.gif, *.png)
 └── README.md
 ```
 
@@ -486,11 +496,11 @@ go build -o jj-tui .
 
 Screenshots are generated using [VHS](https://github.com/charmbracelet/vhs) with mock data for consistent, reproducible images.
 
-**Automatic (CI)**: The [Generate Screenshots](.github/workflows/screenshots.yml) workflow produces `demo.gif`, `after-origin.gif`, and the PNG captures; it runs after releases (via release workflows) and can be triggered manually. Results are committed to `screenshots/` on `main` when they change.
+**Automatic (CI)**: The [Generate Screenshots](.github/workflows/screenshots.yml) workflow produces `demo.gif` (`all.tape`), `after-origin.gif`, `evolog-split.gif`, and the PNG captures; it runs after releases (via release workflows) and can be triggered manually. Results are committed to `screenshots/` on `main` when they change.
 
 **Manual (Local)**:
 ```bash
-# Generate all screenshots (PNG captures + after-origin.gif; demo GIF is separate)
+# Generate PNG captures + after-origin.gif + evolog-split.gif (demo GIF is separate; see make demo-gif)
 make screenshots
 
 # Generate demo GIF
@@ -499,8 +509,14 @@ make demo-gif
 # Regenerate only the after-origin GIF (also included in `make screenshots`)
 make after-origin-gif
 
-# Or run individual tapes
+# Regenerate only the evolog-split GIF (also included in `make screenshots`)
+make evolog-split-gif
+
+# Or run individual tapes (PNG/GIF outputs live under screenshots/)
 vhs vhs/graph.tape
+vhs vhs/command_history.tape
+vhs vhs/after-origin.tape
+vhs vhs/evolog-split.tape
 ```
 
 This creates a demo jj repository and runs the app in `--demo` mode, which uses mock ticket and PR data.

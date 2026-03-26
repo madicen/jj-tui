@@ -131,6 +131,8 @@ type Request struct {
 	RevertFile           bool
 	// MoveDeltaOntoOrigin: new commit on bookmark@origin with same tree as selection; avoids force-push after amending a pushed branch.
 	MoveDeltaOntoOrigin bool
+	// StartEvologSplit: experimental FAQ-style split using jj evolog to pick parent revision.
+	StartEvologSplit bool
 }
 
 // Cmd returns a tea.Cmd that sends this request to the program.
@@ -152,6 +154,7 @@ const (
 	FollowUpCancelRebase
 	FollowUpLoadChangedFiles
 	FollowUpShowEmptyDescWarning
+	FollowUpStartEvologSplit
 )
 
 // Result is returned by HandleRequest. Main sets status from Status, runs Cmd if set, and performs the FollowUp action.

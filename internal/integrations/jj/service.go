@@ -249,6 +249,34 @@ func (s *Service) GetChangedFiles(ctx context.Context, commitID string) ([]Chang
 	return files, nil
 }
 
+// DiffChangedFilesFromTo lists paths changed between two revisions (from..to), using jj diff --summary.
+func (s *Service) DiffChangedFilesFromTo(ctx context.Context, fromCommitID, toRev string) ([]ChangedFile, error) {
+	fromCommitID = strings.TrimSpace(fromCommitID)
+	toRev = strings.TrimSpace(toRev)
+	if fromCommitID == "" || toRev == "" {
+		return nil, fmt.Errorf("from and to revisions are required")
+	}
+	out, err := s.runJJOutput(ctx, "diff", "--from", fromCommitID, "--to", toRev, "--summary")
+	if err != nil {
+		return nil, err
+	}
+	var files []ChangedFile
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, " ", 2)
+		if len(parts) >= 2 {
+			files = append(files, ChangedFile{
+				Status: parts[0],
+				Path:   parts[1],
+			})
+		}
+	}
+	return files, nil
+}
+
 // IsCommitMutable checks if a commit can be modified
 func (s *Service) IsCommitMutable(ctx context.Context, commitID string) bool {
 	// Try a no-op describe to see if the commit is mutable
@@ -590,6 +618,134 @@ func (s *Service) MoveBookmarkDeltaOntoOrigin(ctx context.Context, bookmarkName,
 	}
 	_ = s.runJJ(ctx, "abandon", tipCommitID)
 	return nil
+}
+
+// EvologEntry is one revision line from jj evolog (newest first).
+type EvologEntry struct {
+	CommitIDShort string
+	CommitID      string
+	Summary       string
+}
+
+// ListEvolog returns evolution history for a revision (change or commit id), newest first.
+func (s *Service) ListEvolog(ctx context.Context, rev string) ([]EvologEntry, error) {
+	rev = strings.TrimSpace(rev)
+	if rev == "" {
+		return nil, fmt.Errorf("revision is required")
+	}
+	const tmpl = `commit.commit_id().short(8) ++ "\t" ++ commit.commit_id() ++ "\t" ++ if(commit.description(), commit.description().first_line(), "(empty)") ++ "\n"`
+	out, err := s.runJJOutput(ctx, "evolog", "-r", rev, "-G", "-n", "80", "-T", tmpl)
+	if err != nil {
+		return nil, err
+	}
+	var entries []EvologEntry
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "\t", 3)
+		if len(parts) < 2 {
+			continue
+		}
+		summary := ""
+		if len(parts) >= 3 {
+			summary = parts[2]
+		}
+		entries = append(entries, EvologEntry{
+			CommitIDShort: parts[0],
+			CommitID:      parts[1],
+			Summary:       summary,
+		})
+	}
+	if len(entries) == 0 {
+		return nil, fmt.Errorf("no evolog entries for %s", rev)
+	}
+	return entries, nil
+}
+
+const evologSplitDefaultMessage = "Follow-up (split via evolog)"
+
+// MoveBookmarkDeltaOntoEvologBase is the FAQ-style split: jj new <base>, restore tree from the selected
+// tip revision, optionally jj bookmark set, then abandon the old tip.
+// If bookmarkName is empty, the selected revision is the tip (no bookmark move). If non-empty, the
+// bookmark must point at the same commit as the selection (same rule as stack-on-origin flow).
+func (s *Service) MoveBookmarkDeltaOntoEvologBase(ctx context.Context, bookmarkName, localChangeID, localCommitID, baseCommitID string) error {
+	if strings.TrimSpace(localChangeID) == "" {
+		return fmt.Errorf("local revision is required")
+	}
+	baseCommitID = strings.TrimSpace(baseCommitID)
+	if baseCommitID == "" {
+		return fmt.Errorf("base revision is required")
+	}
+	revForSel := strings.TrimSpace(localCommitID)
+	if revForSel == "" {
+		revForSel = localChangeID
+	}
+	selCommitID, err := s.runJJOutputNoHistory(ctx, "log", "-r", revForSel, "--no-graph", "-T", "commit_id", "--limit", "1")
+	if err != nil {
+		return fmt.Errorf("selected revision: %w", err)
+	}
+	selCommitID = strings.TrimSpace(selCommitID)
+
+	var tipCommitID string
+	bookmarkName = strings.TrimSpace(bookmarkName)
+	if bookmarkName != "" {
+		tipCommitID, err = s.runJJOutputNoHistory(ctx, "log", "-r", bookmarkName, "--no-graph", "-T", "commit_id", "--limit", "1")
+		if err != nil {
+			return fmt.Errorf("bookmark %q: %w", bookmarkName, err)
+		}
+		tipCommitID = strings.TrimSpace(tipCommitID)
+		if tipCommitID != selCommitID {
+			return fmt.Errorf("select the bookmark tip (%s) to split", bookmarkName)
+		}
+	} else {
+		tipCommitID = selCommitID
+	}
+	if commitIDsEquivalent(tipCommitID, baseCommitID) {
+		return fmt.Errorf("pick an older evolog row as the split point (not the current tip)")
+	}
+	childrenRev := fmt.Sprintf("children(%s) ~ @", tipCommitID)
+	childLines, err := s.runJJOutput(ctx, "log", "-r", childrenRev, "--no-graph", "-T", "change_id", "--limit", "20")
+	if err != nil {
+		return fmt.Errorf("check descendants: %w", err)
+	}
+	for _, line := range strings.Split(childLines, "\n") {
+		if strings.TrimSpace(line) != "" {
+			return fmt.Errorf("commit has descendant commits (excluding working copy); rebase or squash the stack first")
+		}
+	}
+	diffOut, err := s.runJJOutput(ctx, "diff", "--from", baseCommitID, "--to", localChangeID, "--summary")
+	if err != nil {
+		return fmt.Errorf("diff vs base: %w", err)
+	}
+	if strings.TrimSpace(diffOut) == "" {
+		return fmt.Errorf("tree already matches base; nothing to split")
+	}
+	if err := s.runJJ(ctx, "new", baseCommitID, "-m", evologSplitDefaultMessage); err != nil {
+		return fmt.Errorf("jj new: %w", err)
+	}
+	if err := s.runJJ(ctx, "restore", "--into", "@", "--from", tipCommitID); err != nil {
+		return fmt.Errorf("jj restore: %w", err)
+	}
+	if bookmarkName != "" {
+		if err := s.runJJ(ctx, "bookmark", "set", bookmarkName, "-r", "@", "--allow-backwards"); err != nil {
+			return fmt.Errorf("jj bookmark set: %w", err)
+		}
+	}
+	_ = s.runJJ(ctx, "abandon", tipCommitID)
+	return nil
+}
+
+func commitIDsEquivalent(a, b string) bool {
+	a, b = strings.TrimSpace(a), strings.TrimSpace(b)
+	if a == b {
+		return true
+	}
+	if len(a) >= 8 && len(b) >= 8 && (strings.HasPrefix(a, b) || strings.HasPrefix(b, a)) {
+		return true
+	}
+	return false
 }
 
 // RevertFile reverts the changes to a file in a given commit,

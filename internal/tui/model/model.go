@@ -20,6 +20,7 @@ import (
 	conflicttab "github.com/madicen/jj-tui/internal/tui/tabs/conflict"
 	descedittab "github.com/madicen/jj-tui/internal/tui/tabs/descedit"
 	divergenttab "github.com/madicen/jj-tui/internal/tui/tabs/divergent"
+	evologsplittab "github.com/madicen/jj-tui/internal/tui/tabs/evologsplit"
 	errortab "github.com/madicen/jj-tui/internal/tui/tabs/error"
 	githublogintab "github.com/madicen/jj-tui/internal/tui/tabs/githublogin"
 	graphtab "github.com/madicen/jj-tui/internal/tui/tabs/graph"
@@ -63,6 +64,7 @@ type Model struct {
 	warningModal     warningtab.Model
 	conflictModal    conflicttab.Model
 	divergentModal   divergenttab.Model
+	evologSplitModal evologsplittab.Model
 	bookmarkModal    bookmarktab.Model
 	prFormModal      prformtab.Model
 	ticketFormModal  ticketformtab.Model
@@ -195,7 +197,7 @@ func (m *Model) createIsZoneClickedFuncWithEvent(event tea.MouseMsg) func(string
 
 // processGraphRequest runs a graph request via the graph tab; ApplyResult mutates app and returns cmd.
 func (m *Model) processGraphRequest(r graphtab.Request) (tea.Model, tea.Cmd) {
-	if r.Checkout || r.Squash || r.Abandon || r.NewCommit || r.PerformRebase || r.ResolveDivergent != nil || r.CreateBookmark || r.DeleteBookmark || r.CreatePR || r.UpdatePR || r.MoveFileUp || r.MoveFileDown || r.RevertFile || r.MoveDeltaOntoOrigin {
+	if r.Checkout || r.Squash || r.Abandon || r.NewCommit || r.PerformRebase || r.ResolveDivergent != nil || r.CreateBookmark || r.DeleteBookmark || r.CreatePR || r.UpdatePR || r.MoveFileUp || r.MoveFileDown || r.RevertFile || r.MoveDeltaOntoOrigin || r.StartEvologSplit {
 		m.redoOperationID = ""
 	}
 	ctx := graphtab.BuildRequestContextFrom(m)
@@ -271,7 +273,7 @@ func (m *Model) handleNavigateToBranchesTab() (tea.Model, tea.Cmd) {
 
 // handleNavigate performs view changes that only main can do (it owns modals and cross-tab state).
 func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
-	if t.Kind == state.NavigateSaveDescription || t.Kind == state.NavigateSubmitBookmark || t.Kind == state.NavigateSubmitPR || t.Kind == state.NavigateSubmitTicket || t.Kind == state.NavigateResolveConflict || t.Kind == state.NavigateResolveDivergent || t.Kind == state.NavigateRunInit {
+	if t.Kind == state.NavigateSaveDescription || t.Kind == state.NavigateSubmitBookmark || t.Kind == state.NavigateSubmitPR || t.Kind == state.NavigateSubmitTicket || t.Kind == state.NavigateResolveConflict || t.Kind == state.NavigateResolveDivergent || t.Kind == state.NavigateRunInit || t.Kind == state.NavigatePerformEvologSplit {
 		m.redoOperationID = ""
 	}
 	switch t.Kind {
@@ -301,12 +303,33 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		m.startCreatePR()
 		return m, nil
 	case state.NavigateBackToGraph:
+		m.evologSplitModal.Hide()
 		m.appState.ViewMode = state.ViewCommitGraph
 		m.appState.Loading = false
 		if t.StatusMessage != "" {
 			m.appState.StatusMessage = t.StatusMessage
 		}
 		return m, nil
+	case state.NavigateOpenEvologSplit:
+		bn := graphtab.FeatureBookmarkForSplit(t.Commit.Branches)
+		m.evologSplitModal = m.evologSplitModal.SetDimensions(m.width, m.height)
+		m.evologSplitModal.Show(t.Commit, bn)
+		m.appState.ViewMode = state.ViewEvologSplit
+		m.appState.StatusMessage = "Loading jj evolog…"
+		return m, evologsplittab.LoadEvologCmd(m.appState.JJService, bn, t.Commit)
+	case state.NavigatePerformEvologSplit:
+		m.appState.StatusMessage = "Splitting change…"
+		m.appState.Loading = true
+		return m, tea.Batch(
+			evologsplittab.MoveBookmarkDeltaOntoEvologBaseCmd(
+				m.appState.JJService,
+				t.EvologBookmarkName,
+				t.EvologTipChangeID,
+				t.EvologTipCommitHint,
+				t.EvologBaseCommitID,
+			),
+			m.startBusySpinnerCmd(),
+		)
 	case state.NavigateBackToBranches:
 		m.appState.ViewMode = state.ViewBranches
 		if t.StatusMessage != "" {
@@ -630,6 +653,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ticketsTabModel.SetDimensions(m.width, contentHeight)
 		m.settingsTabModel.SetDimensions(m.width, contentHeight)
 		m.helpTabModel.SetDimensions(m.width, contentHeight)
+		m.evologSplitModal = m.evologSplitModal.SetDimensions(m.width, m.height)
 		if len(cmds) > 0 {
 			return m, tea.Batch(cmds...)
 		}
@@ -641,7 +665,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleKeyMsg(msg)
 		}
 		// View-specific modals (divergent, bookmark conflict): route keys to handleKeyMsg so the modal gets them.
-		if m.appState.ViewMode == state.ViewDivergentCommit || m.appState.ViewMode == state.ViewBookmarkConflict {
+		if m.appState.ViewMode == state.ViewDivergentCommit || m.appState.ViewMode == state.ViewBookmarkConflict || m.appState.ViewMode == state.ViewEvologSplit {
 			return m.handleKeyMsg(msg)
 		}
 		// Esc in Settings: close in-tab overlays (theme picker, cleanup confirm) first; otherwise leave settings.
@@ -699,12 +723,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Blocking overlays and modal views: run zone check on release first so clicks reach the modal, not the tab.
 		if msg.Action == tea.MouseActionRelease &&
 			(m.initRepoModel.Path() != "" || m.errorModal.GetError() != nil || m.warningModal.IsShown() ||
-				m.appState.ViewMode == state.ViewCreatePR || m.appState.ViewMode == state.ViewCreateTicket || m.appState.ViewMode == state.ViewEditDescription || m.appState.ViewMode == state.ViewCreateBookmark || m.appState.ViewMode == state.ViewDivergentCommit || m.appState.ViewMode == state.ViewBookmarkConflict) {
+				m.appState.ViewMode == state.ViewCreatePR || m.appState.ViewMode == state.ViewCreateTicket || m.appState.ViewMode == state.ViewEditDescription || m.appState.ViewMode == state.ViewCreateBookmark || m.appState.ViewMode == state.ViewDivergentCommit || m.appState.ViewMode == state.ViewBookmarkConflict || m.appState.ViewMode == state.ViewEvologSplit) {
 			return m.zoneManager.AnyInBoundsAndUpdate(m, msg)
 		}
 		// Handle wheel: IsWheel() covers standard encodings; also accept raw X11 4/5
 		isWheel := tea.MouseEvent(msg).IsWheel() || msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown
 		if isWheel {
+			if m.appState.ViewMode == state.ViewEvologSplit {
+				updated, cmd := m.evologSplitModal.Update(msg)
+				m.evologSplitModal = updated
+				return m, cmd
+			}
 			contentHeight := m.estimatedContentHeight()
 			switch m.appState.ViewMode {
 			case state.ViewCommitGraph:
@@ -809,6 +838,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.appState.ViewMode == state.ViewBookmarkConflict {
 			updated, cmd := m.conflictModal.Update(msg)
 			m.conflictModal = updated
+			return m, cmd
+		}
+		if m.appState.ViewMode == state.ViewEvologSplit {
+			updated, cmd := m.evologSplitModal.Update(msg)
+			m.evologSplitModal = updated
 			return m, cmd
 		}
 		// Delegate to tab when in that view so it can return requests
@@ -961,6 +995,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case errorMsg:
+		if m.appState.ViewMode == state.ViewEvologSplit {
+			m.appState.Loading = false
+		}
 		cmd, info := errortab.HandleError(errortab.ErrorInput{NotJJRepo: msg.NotJJRepo, CurrentPath: msg.CurrentPath, Err: msg.Err}, &m.appState)
 		if info != nil {
 			if info.NotJJRepo {
@@ -1207,6 +1244,31 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	case divergenttab.DivergentCommitResolvedMsg:
 		return m, divergenttab.HandleDivergentCommitResolvedMsg(msg, &m.appState)
+	case evologsplittab.EvologLoadedMsg:
+		updated, cmd := m.evologSplitModal.Update(msg)
+		m.evologSplitModal = updated
+		if msg.Err == nil {
+			m.appState.StatusMessage = "Pick parent revision (j/k, Enter) — files vs tip update as you move"
+		} else {
+			m.appState.StatusMessage = "Evolog load failed"
+		}
+		return m, cmd
+	case evologsplittab.EvologDiffLoadRequestedMsg:
+		seq, from, to, ok := m.evologSplitModal.DiffSnapshotForLoad()
+		if !ok {
+			return m, nil
+		}
+		return m, evologsplittab.LoadEvologSplitDiffCmd(m.appState.JJService, seq, from, to)
+	case evologsplittab.EvologSplitDiffLoadedMsg:
+		updated, cmd := m.evologSplitModal.Update(msg)
+		m.evologSplitModal = updated
+		return m, cmd
+	case evologsplittab.EvologSplitCompletedMsg:
+		m.evologSplitModal.Hide()
+		m.appState.ViewMode = state.ViewCommitGraph
+		m2, cmd := m.applyRepositoryLoaded(msg.Repository)
+		m2.appState.StatusMessage = "Split complete — describe new commit if needed"
+		return m2, cmd
 	case graphtab.FileMoveCompletedMsg:
 		graphtab.HandleFileMoveCompletedMsg(graphtab.FileMoveInput{
 			FileMoveCompletedMsg: msg,

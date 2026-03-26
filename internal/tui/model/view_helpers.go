@@ -36,6 +36,12 @@ func (m *Model) View() string {
 
 	v := m.renderMainLayoutView()
 
+	if m.appState.ViewMode == state.ViewEvologSplit {
+		if evologContent := m.evologSplitModal.View(); evologContent != "" {
+			v = applyBubbleOverlayCentered(v, evologContent, m.width, m.height)
+		}
+	}
+
 	if warningContent := m.warningModal.View(); warningContent != "" {
 		v = applyBubbleOverlayCentered(v, warningContent, m.width, m.height)
 	}
@@ -88,6 +94,9 @@ func (m *Model) renderMainLayoutView() string {
 		content = m.conflictModal.View()
 	case state.ViewDivergentCommit:
 		content = m.divergentModal.View()
+	case state.ViewEvologSplit:
+		// Modal is drawn as an overlay in View(); keep graph visible underneath.
+		content = m.graphTabModel.View()
 	case state.ViewGitHubLogin:
 		content = m.githubLoginModel.View()
 	default:
@@ -175,8 +184,9 @@ func (m *Model) renderHeader() string {
 	}
 
 	// Create tabs wrapped in zones (with keyboard shortcuts)
+	graphTabActive := m.appState.ViewMode == state.ViewCommitGraph || m.appState.ViewMode == state.ViewEvologSplit
 	tabs := []string{
-		m.zoneManager.Mark(mouse.ZoneTabGraph, m.renderTab("Graph (g)", m.appState.ViewMode == state.ViewCommitGraph)),
+		m.zoneManager.Mark(mouse.ZoneTabGraph, m.renderTab("Graph (g)", graphTabActive)),
 		m.zoneManager.Mark(mouse.ZoneTabPRs, m.renderTab("PRs (p)", m.appState.ViewMode == state.ViewPullRequests)),
 		m.zoneManager.Mark(mouse.ZoneTabJira, m.renderTab("Tickets (t)", m.appState.ViewMode == state.ViewTickets)),
 		m.zoneManager.Mark(mouse.ZoneTabBranches, m.renderTab("Branches (b)", m.appState.ViewMode == state.ViewBranches)),
@@ -229,7 +239,7 @@ func (m *Model) renderStatusBar() string {
 
 	// Add keyboard shortcuts with ^ notation and | separators
 	// Start with undo/redo if in Graph view, then quit and refresh
-	if m.appState.ViewMode == state.ViewCommitGraph && m.appState.JJService != nil {
+	if (m.appState.ViewMode == state.ViewCommitGraph || m.appState.ViewMode == state.ViewEvologSplit) && m.appState.JJService != nil {
 		if m.redoOperationID != "" {
 			shortcuts = append(shortcuts,
 				m.zoneManager.Mark(mouse.ZoneActionRedo, "^y redo"),

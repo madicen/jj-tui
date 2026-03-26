@@ -192,13 +192,30 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 		)
 		afterStatus := statusIndicator
 		var commitRow string
-		if !data.InRebaseMode && commit.HasDeltaVsBookmarkOrigin && len(commit.ConflictedBranches) == 0 {
+		onSelectedRow := !data.InRebaseMode && i == data.SelectedCommit
+		showForgot := onSelectedRow && commit.HasDeltaVsBookmarkOrigin && len(commit.ConflictedBranches) == 0
+		// split (z): with or without a feature bookmark; only on the focused graph row.
+		showEvolog := onSelectedRow && !commit.Immutable && !commit.Divergent && len(commit.ConflictedBranches) == 0
+		if showForgot || showEvolog {
 			muted := lipgloss.NewStyle().Foreground(styles.ColorMuted)
-			btn := m.zoneManager.Mark(mouse.ZoneActionMoveOntoOriginAt(i), muted.Render("Forgot New Commit? (f)"))
+			mutedSp := muted.Render("  ")
+			var btnJoin string
+			switch {
+			case showForgot && showEvolog:
+				btnJoin = lipgloss.JoinHorizontal(lipgloss.Top,
+					m.zoneManager.Mark(mouse.ZoneActionMoveOntoOriginAt(i), muted.Render("Forgot New Commit? (f)")),
+					mutedSp,
+					m.zoneManager.Mark(mouse.ZoneActionEvologSplitAt(i), muted.Render("split (z)")),
+				)
+			case showForgot:
+				btnJoin = m.zoneManager.Mark(mouse.ZoneActionMoveOntoOriginAt(i), muted.Render("Forgot New Commit? (f)"))
+			default:
+				btnJoin = m.zoneManager.Mark(mouse.ZoneActionEvologSplitAt(i), muted.Render("split (z)"))
+			}
 			commitRow = lipgloss.JoinHorizontal(lipgloss.Bottom,
 				m.zoneManager.Mark(mouse.ZoneCommit(i), style.Render(beforeStatus)),
 				muted.Render("  "),
-				btn,
+				btnJoin,
 				style.Render(afterStatus),
 			)
 		} else {
@@ -407,7 +424,7 @@ func (m *GraphModel) renderTreeNodeWithLineIndex(node *fileTreeNode, indent stri
 			}
 			*lineIdx++
 			isSelected := !data.GraphFocused && node.fileIndex == data.SelectedFile
-			statusStyle, statusChar := GetStatusStyle(node.status)
+			statusStyle, statusChar := styles.GetStatusStyle(node.status)
 			var fileLine string
 			if isSelected {
 				selectedStyle := lipgloss.NewStyle().Background(lipgloss.Color("#3d4f5f")).Foreground(lipgloss.Color("#ffffff"))

@@ -40,8 +40,8 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 		if r.Checkout {
 			return Result{Status: "Cannot edit: not in a jj repository"}
 		}
-		if r.MoveDeltaOntoOrigin {
-			return Result{Status: "Cannot align: not in a jj repository"}
+		if r.MoveDeltaOntoOrigin || r.StartEvologSplit {
+			return Result{Status: "Cannot run: not in a jj repository"}
 		}
 		return Result{}
 	}
@@ -106,6 +106,15 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 			}
 		}
 		return Result{Cmd: cmd}
+	}
+	if r.StartEvologSplit {
+		if status := executeStartEvologSplit(ctx); status != "" {
+			return Result{Status: status}
+		}
+		if ctx.IsSelectedCommitValid() && ctx.Repository != nil {
+			return Result{FollowUp: FollowUpStartEvologSplit, CommitIndex: ctx.SelectedCommit}
+		}
+		return Result{}
 	}
 	if r.NewCommit {
 		cmd, _ := executeNewCommit(ctx)
@@ -335,6 +344,11 @@ func executeNewCommit(ctx *RequestContext) (tea.Cmd, string) {
 }
 
 // bookmarkNameForOriginSplit returns a non–default-branch bookmark on the commit for origin sync.
+// FeatureBookmarkForSplit returns the local bookmark name used for stack-on-origin and evolog split (ignores main/master).
+func FeatureBookmarkForSplit(branches []string) string {
+	return bookmarkNameForOriginSplit(branches)
+}
+
 func bookmarkNameForOriginSplit(branches []string) string {
 	for _, b := range branches {
 		if b == "" {
@@ -353,6 +367,23 @@ func commitHasBookmarkLocalName(branches []string, local string) bool {
 	return slices.ContainsFunc(branches, func(b string) bool {
 		return internal.LocalBookmarkName(b) == local
 	})
+}
+
+func executeStartEvologSplit(ctx *RequestContext) string {
+	if !ctx.IsSelectedCommitValid() || ctx.JJService == nil {
+		return ""
+	}
+	commit := ctx.Repository.Graph.Commits[ctx.SelectedCommit]
+	if commit.Immutable {
+		return "Cannot split: commit is immutable"
+	}
+	if commit.Divergent {
+		return "Resolve divergent commit first"
+	}
+	if len(commit.ConflictedBranches) > 0 {
+		return "Resolve bookmark conflict first (Branches tab)"
+	}
+	return ""
 }
 
 func executeMoveDeltaOntoOrigin(ctx *RequestContext) (tea.Cmd, string) {
@@ -430,6 +461,11 @@ func ApplyResult(res Result, graphModel *GraphModel, ctx *RequestContext, app *s
 		}.Cmd()
 	case FollowUpCreatePR:
 		return state.NavigateTarget{Kind: state.NavigateCreatePR}.Cmd()
+	case FollowUpStartEvologSplit:
+		if ctx != nil && ctx.Repository != nil && res.CommitIndex >= 0 && res.CommitIndex < len(ctx.Repository.Graph.Commits) {
+			return state.NavigateTarget{Kind: state.NavigateOpenEvologSplit, Commit: ctx.Repository.Graph.Commits[res.CommitIndex]}.Cmd()
+		}
+		return nil
 	case FollowUpUpdatePR:
 		if ctx == nil || ctx.Repository == nil || !ctx.IsSelectedCommitValid() {
 			return nil

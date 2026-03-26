@@ -62,6 +62,10 @@ const (
 	ZoneWarningGoToCommit = "zone:warning:goto_commit"
 	ZoneWarningDismiss    = "zone:warning:dismiss"
 
+	// Evolog split modal (prefix zone:evologsplit:entry: for dynamic row zones)
+	ZoneEvologSplitConfirm = "zone:evologsplit:confirm"
+	ZoneEvologSplitCancel  = "zone:evologsplit:cancel"
+
 	// Graph view pane zones (for click-to-focus)
 	ZoneGraphPane = "zone:graph:pane"
 	ZoneFilesPane = "zone:files:pane"
@@ -223,6 +227,11 @@ func ZoneActionMoveOntoOriginAt(index int) string {
 	return fmt.Sprintf("zone:action:move_onto_origin:%d", index)
 }
 
+// ZoneActionEvologSplitAt returns the zone ID for the inline evolog split control on a commit row.
+func ZoneActionEvologSplitAt(index int) string {
+	return fmt.Sprintf("zone:action:evolog_split:%d", index)
+}
+
 // ZonePR returns the zone ID for a PR at the given index
 func ZonePR(index int) string {
 	return fmt.Sprintf("zone:pr:%d", index)
@@ -246,4 +255,9 @@ func ZoneBranch(index int) string {
 // ZoneDivergentCommit returns the zone ID for a divergent commit option at the given index
 func ZoneDivergentCommit(index int) string {
 	return fmt.Sprintf("zone:divergent:commit:%d", index)
+}
+
+// ZoneEvologSplitEntry returns the zone ID for an evolog row at the given index.
+func ZoneEvologSplitEntry(index int) string {
+	return fmt.Sprintf("zone:evologsplit:entry:%d", index)
 }
