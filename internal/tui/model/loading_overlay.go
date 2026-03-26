@@ -28,6 +28,10 @@ func isUpdatePRPushLoadingStatus(msg string) bool {
 
 func shouldShowLoadingOverlay(viewMode state.ViewMode, msg string) bool {
 	trimmed := strings.TrimSpace(msg)
+	// Blocking pickers: never composite a centered busy box on top of these (see View() layer order).
+	if viewMode == state.ViewBookmarkConflict || viewMode == state.ViewDivergentCommit {
+		return false
+	}
 	// Background PR polling can set Loading while user is not on PR tab.
 	if strings.HasPrefix(trimmed, "Loading pull requests") && viewMode != state.ViewPullRequests {
 		return false

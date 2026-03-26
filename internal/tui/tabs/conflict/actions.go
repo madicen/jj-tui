@@ -57,12 +57,12 @@ func HandleBookmarkConflictInfoMsg(msg branches.BookmarkConflictInfoMsg, app *st
 	}
 }
 
-// HandleBookmarkConflictResolvedMsg mutates app (StatusMessage, ViewMode) and returns the Cmd to run.
+// HandleBookmarkConflictResolvedMsg mutates app StatusMessage and returns the Cmd to run.
+// Main sets ViewMode to the tab the user was on when opening the dialog.
 // branchLimit is used for LoadBranchesCmd (e.g. from settings).
 func HandleBookmarkConflictResolvedMsg(msg BookmarkConflictResolvedMsg, app *state.AppState, branchLimit int) tea.Cmd {
 	if msg.Err != nil {
 		app.StatusMessage = fmt.Sprintf("Error resolving conflict: %v", msg.Err)
-		app.ViewMode = state.ViewBranches
 		return nil
 	}
 	resolutionDesc := "kept local version"
@@ -70,7 +70,6 @@ func HandleBookmarkConflictResolvedMsg(msg BookmarkConflictResolvedMsg, app *sta
 		resolutionDesc = "reset to remote"
 	}
 	app.StatusMessage = fmt.Sprintf("Bookmark '%s' conflict resolved (%s)", msg.BookmarkName, resolutionDesc)
-	app.ViewMode = state.ViewBranches
 	return tea.Batch(
 		data.LoadRepository(app.JJService),
 		branches.LoadBranchesCmd(app.JJService, branchLimit),
