@@ -279,12 +279,6 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 						m.zoneManager.Mark(mouse.ZoneActionDelBookmark, styles.ButtonStyle.Render("Del Bookmark (x)")),
 					)
 				}
-				if len(commit.ConflictedBranches) > 0 {
-					bookmarkConflictBtnStyle := styles.ButtonStyle.Background(lipgloss.Color("#FF5555"))
-					actionButtons = append(actionButtons,
-						m.zoneManager.Mark(mouse.ZoneActionResolveBookmarkConflict, bookmarkConflictBtnStyle.Render("Resolve diverged bookmark (C)")),
-					)
-				}
 				actionLines = append(actionLines, lipgloss.JoinHorizontal(lipgloss.Left, actionButtons...))
 				actionLines = append(actionLines, "")
 				actionLines = append(actionLines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("◆ Selected commit is immutable (pushed to remote)"))
@@ -312,12 +306,6 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 					divergentBtnStyle := styles.ButtonStyle.Background(lipgloss.Color("#FF79C6"))
 					actionButtons = append(actionButtons,
 						m.zoneManager.Mark(mouse.ZoneActionResolveDivergent, divergentBtnStyle.Render("Resolve Divergent (d)")),
-					)
-				}
-				if len(commit.ConflictedBranches) > 0 {
-					bookmarkConflictBtnStyle := styles.ButtonStyle.Background(lipgloss.Color("#FF5555"))
-					actionButtons = append(actionButtons,
-						m.zoneManager.Mark(mouse.ZoneActionResolveBookmarkConflict, bookmarkConflictBtnStyle.Render("Resolve diverged bookmark (C)")),
 					)
 				}
 				prBranch := ""

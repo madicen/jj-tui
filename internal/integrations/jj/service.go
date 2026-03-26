@@ -1274,6 +1274,7 @@ func (s *Service) getCommitGraph(ctx context.Context, revset string) (*internal.
 		commits[len(commits)-1].GraphLines = pendingGraphLines
 	}
 
+	s.enrichConflictedBookmarks(ctx, commits)
 	s.enrichCommitsDeltaVsOrigin(ctx, commits)
 	s.enrichCommitsEvologSplitViable(ctx, commits)
 
@@ -1879,7 +1880,80 @@ func (s *Service) ListBranches(ctx context.Context, statsLimit int) ([]internal.
 	}
 	wg.Wait()
 
+	for i := range branches {
+		b := &branches[i]
+		if !b.IsLocal {
+			continue
+		}
+		switch strings.ToLower(b.Name) {
+		case "main", "master":
+			continue
+		}
+		if s.bookmarkDivergedFromOrigin(ctx, b.Name) {
+			b.HasConflict = true
+		}
+	}
+
 	return branches, nil
+}
+
+// commitIDAtRevision returns the commit_id for rev (e.g. bookmark name or name@origin).
+func (s *Service) commitIDAtRevision(ctx context.Context, rev string) (string, error) {
+	out, err := s.runJJOutputNoHistory(ctx, "log", "-r", rev, "--no-graph", "-T", "commit_id", "--limit", "1")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
+// bookmarkDivergedFromOrigin is true when the local bookmark tip is a different commit than origin.
+// We compare commit_id, not change_id, because jj amends can keep the same change_id while the git commit differs.
+func (s *Service) bookmarkDivergedFromOrigin(ctx context.Context, localName string) bool {
+	if strings.TrimSpace(localName) == "" {
+		return false
+	}
+	localID, errL := s.commitIDAtRevision(ctx, localName)
+	remoteID, errR := s.commitIDAtRevision(ctx, localName+"@origin")
+	if errL != nil || errR != nil {
+		return false
+	}
+	return localID != "" && remoteID != "" && localID != remoteID
+}
+
+// enrichConflictedBookmarks adds bookmarks whose local tip differs from origin (jj may omit ? in graph output).
+func (s *Service) enrichConflictedBookmarks(ctx context.Context, commits []internal.Commit) {
+	divergedCache := make(map[string]bool)
+	diverged := func(name string) bool {
+		if cached, ok := divergedCache[name]; ok {
+			return cached
+		}
+		isDiv := s.bookmarkDivergedFromOrigin(ctx, name)
+		divergedCache[name] = isDiv
+		return isDiv
+	}
+
+	for i := range commits {
+		c := &commits[i]
+		seen := make(map[string]bool)
+		for _, x := range c.ConflictedBranches {
+			seen[x] = true
+		}
+		for _, b := range c.Branches {
+			raw, _ := util.NormalizeBookmarkListToken(b)
+			name := util.LocalBookmarkName(strings.TrimSpace(raw))
+			if name == "" {
+				continue
+			}
+			switch strings.ToLower(name) {
+			case "main", "master":
+				continue
+			}
+			if diverged(name) && !seen[name] {
+				c.ConflictedBranches = append(c.ConflictedBranches, name)
+				seen[name] = true
+			}
+		}
+	}
 }
 
 // parseCommitInfo extracts change_id and short commit id from jj output

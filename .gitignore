@@ -11,6 +11,8 @@ fixtures/evolog-split-vhs-repo/
 fixtures/divergent-vhs-repo/
 fixtures/after-origin-fake-origin.git/
 fixtures/after-origin-vhs-repo/
+fixtures/bookmark-conflict-fake-origin.git/
+fixtures/bookmark-conflict-vhs-repo/
 
 # VSCode Settings
 .vscode/

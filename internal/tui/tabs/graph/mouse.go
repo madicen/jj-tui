@@ -155,15 +155,6 @@ func (m GraphModel) handleZoneClick(msg zone.MsgZoneInBounds) (GraphModel, *Requ
 		}
 		return m, nil, nil
 	}
-	if inBounds(mouse.ZoneActionResolveBookmarkConflict) {
-		if m.repository != nil && m.selectedCommit >= 0 && m.selectedCommit < len(m.repository.Graph.Commits) {
-			c := m.repository.Graph.Commits[m.selectedCommit]
-			if len(c.ConflictedBranches) > 0 {
-				return m, &Request{ResolveBookmarkConflict: true}, nil
-			}
-		}
-		return m, nil, nil
-	}
 	if inBounds(mouse.ZoneActionUpdatePR) {
 		return m, &Request{UpdatePR: true}, nil
 	}

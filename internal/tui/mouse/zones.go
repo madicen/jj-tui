@@ -195,8 +195,7 @@ const (
 	// Divergent commit resolution zones
 	ZoneDivergentConfirm       = "zone:divergent:confirm"
 	ZoneDivergentCancel        = "zone:divergent:cancel"
-	ZoneActionResolveDivergent        = "zone:action:resolve_divergent"
-	ZoneActionResolveBookmarkConflict = "zone:action:resolve_bookmark_conflict"
+	ZoneActionResolveDivergent = "zone:action:resolve_divergent"
 
 	ZoneJiraOpenBrowser = "zone:jira:openbrowser"
 

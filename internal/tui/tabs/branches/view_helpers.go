@@ -171,6 +171,23 @@ func (m Model) renderBranchGraph() string {
 	aheadStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B"))
 	behindStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFB86C"))
 	selectedStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF79C6"))
+	muted := lipgloss.NewStyle().Foreground(styles.ColorMuted)
+
+	var localBranches, remoteBranches []internal.Branch
+	for _, b := range m.branchList {
+		if b.IsLocal {
+			localBranches = append(localBranches, b)
+		} else {
+			remoteBranches = append(remoteBranches, b)
+		}
+	}
+
+	divergedFromRemoteLocal := make(map[string]bool)
+	for _, b := range localBranches {
+		if b.HasConflict {
+			divergedFromRemoteLocal[b.Name] = true
+		}
+	}
 
 	buildStatus := func(branch internal.Branch) string {
 		var statusParts []string
@@ -181,18 +198,20 @@ func (m Model) renderBranchGraph() string {
 			statusParts = append(statusParts, behindStyle.Render(fmt.Sprintf("-%d behind", branch.Behind)))
 		}
 		if len(statusParts) > 0 {
-			return " (" + strings.Join(statusParts, ", ") + ")"
+			line := " (" + strings.Join(statusParts, ", ") + ")" + muted.Render(" vs trunk")
+			if !branch.IsLocal && branch.IsTracked && divergedFromRemoteLocal[branch.Name] {
+				line += muted.Render(" · remote tip ≠ local")
+			}
+			return line
 		}
-		return lipgloss.NewStyle().Foreground(styles.ColorMuted).Render(" (up to date)")
-	}
-
-	var localBranches, remoteBranches []internal.Branch
-	for _, b := range m.branchList {
-		if b.IsLocal {
-			localBranches = append(localBranches, b)
-		} else {
-			remoteBranches = append(remoteBranches, b)
+		// No revs ahead/behind trunk(); still may differ from bookmark@remote (local amend after push).
+		if branch.IsLocal && branch.HasConflict {
+			return muted.Render(" (vs trunk: up to date · diverged vs remote)")
 		}
+		if !branch.IsLocal && divergedFromRemoteLocal[branch.Name] {
+			return muted.Render(" (vs trunk: up to date · remote tip ≠ local)")
+		}
+		return muted.Render(" (vs trunk: up to date)")
 	}
 
 	var lines []string
