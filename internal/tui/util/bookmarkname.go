@@ -68,6 +68,12 @@ func RevsetQuotedSymbol(name string) string {
 	return b.String()
 }
 
+// RevsetExactPattern returns exact:"..." for revset pattern arguments such as bookmarks() and
+// remote_bookmarks(); required when the bookmark name is not a valid bare symbol (e.g. contains '/').
+func RevsetExactPattern(s string) string {
+	return "exact:" + RevsetQuotedSymbol(s)
+}
+
 // LocalBookmarkName returns the jj bookmark name for revsets and commands like name@origin
 // (strips one @remote suffix, e.g. feature@origin -> feature).
 func LocalBookmarkName(b string) string {

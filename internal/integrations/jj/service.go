@@ -434,8 +434,36 @@ func (s *Service) ResolveBookmarkConflictResetToRemote(ctx context.Context, book
 	// Set the local bookmark to match the remote
 	// This uses the @origin suffix to reference the remote version
 	local := util.JJExactBookmarkPattern(bookmarkName)
-	remoteRev := util.RevsetQuotedSymbol(bookmarkName + "@origin")
+	// Single revision; symbol "name@origin" errors when the remote bookmark is conflicted.
+	remoteRev := fmt.Sprintf("latest(remote_bookmarks(%s, %s))",
+		util.RevsetExactPattern(bookmarkName), util.RevsetExactPattern("origin"))
 	return s.runJJ(ctx, "bookmark", "set", local, "-r", remoteRev)
+}
+
+// joinConflictLogLines parses jj log lines shaped as change_id|summary; multiple bookmark targets
+// become one display line each for id and summary.
+func joinConflictLogLines(out string) (idJoined, summaryJoined string) {
+	var ids, sums []string
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "|", 2)
+		ids = append(ids, strings.TrimSpace(parts[0]))
+		if len(parts) >= 2 {
+			sums = append(sums, strings.TrimSpace(parts[1]))
+		} else {
+			sums = append(sums, "")
+		}
+	}
+	if len(ids) == 0 {
+		return "", ""
+	}
+	if len(ids) == 1 {
+		return ids[0], sums[0]
+	}
+	return strings.Join(ids, ", "), strings.Join(sums, " · ")
 }
 
 // GetBookmarkConflictInfo retrieves information about a conflicted bookmark
@@ -446,34 +474,23 @@ func (s *Service) GetBookmarkConflictInfo(ctx context.Context, bookmarkName stri
 	if bookmarkName == "" {
 		return "", "", "", "", fmt.Errorf("bookmark name is required")
 	}
-	// Quote so `/` is not parsed as a change-offset and the name is one bookmark symbol.
-	localRev := util.RevsetQuotedSymbol(bookmarkName)
-	remoteRev := util.RevsetQuotedSymbol(bookmarkName + "@origin")
+	// Quoted symbol errors when the bookmark is conflicted (multiple targets); use bookmarks()/remote_bookmarks().
+	localRev := fmt.Sprintf("bookmarks(%s)", util.RevsetExactPattern(bookmarkName))
+	remoteRev := fmt.Sprintf("remote_bookmarks(%s, %s)",
+		util.RevsetExactPattern(bookmarkName), util.RevsetExactPattern("origin"))
 	// Get local bookmark info
 	localOut, err := s.runJJOutput(ctx, "log", "-r", localRev, "--no-graph", "-T", `change_id.short(8) ++ "|" ++ if(description, description.first_line(), "(no description)")`)
 	if err != nil {
 		return "", "", "", "", fmt.Errorf("failed to get local bookmark info: %w", err)
 	}
-	localParts := strings.SplitN(strings.TrimSpace(localOut), "|", 2)
-	if len(localParts) >= 2 {
-		localID = localParts[0]
-		localSummary = localParts[1]
-	} else if len(localParts) == 1 {
-		localID = localParts[0]
-	}
+	localID, localSummary = joinConflictLogLines(localOut)
 
 	// Get remote bookmark info
 	remoteOut, err := s.runJJOutput(ctx, "log", "-r", remoteRev, "--no-graph", "-T", `change_id.short(8) ++ "|" ++ if(description, description.first_line(), "(no description)")`)
 	if err != nil {
 		return localID, "", localSummary, "", fmt.Errorf("failed to get remote bookmark info: %w", err)
 	}
-	remoteParts := strings.SplitN(strings.TrimSpace(remoteOut), "|", 2)
-	if len(remoteParts) >= 2 {
-		remoteID = remoteParts[0]
-		remoteSummary = remoteParts[1]
-	} else if len(remoteParts) == 1 {
-		remoteID = remoteParts[0]
-	}
+	remoteID, remoteSummary = joinConflictLogLines(remoteOut)
 
 	return localID, remoteID, localSummary, remoteSummary, nil
 }

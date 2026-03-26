@@ -62,3 +62,9 @@ func TestRevsetQuotedSymbol(t *testing.T) {
 		}
 	}
 }
+
+func TestRevsetExactPattern(t *testing.T) {
+	if got, want := RevsetExactPattern(`madicen/x`), `exact:"madicen/x"`; got != want {
+		t.Fatalf("RevsetExactPattern = %q; want %q", got, want)
+	}
+}
