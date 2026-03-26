@@ -20,8 +20,8 @@ import (
 	conflicttab "github.com/madicen/jj-tui/internal/tui/tabs/conflict"
 	descedittab "github.com/madicen/jj-tui/internal/tui/tabs/descedit"
 	divergenttab "github.com/madicen/jj-tui/internal/tui/tabs/divergent"
-	evologsplittab "github.com/madicen/jj-tui/internal/tui/tabs/evologsplit"
 	errortab "github.com/madicen/jj-tui/internal/tui/tabs/error"
+	evologsplittab "github.com/madicen/jj-tui/internal/tui/tabs/evologsplit"
 	githublogintab "github.com/madicen/jj-tui/internal/tui/tabs/githublogin"
 	graphtab "github.com/madicen/jj-tui/internal/tui/tabs/graph"
 	helptab "github.com/madicen/jj-tui/internal/tui/tabs/help"
@@ -654,6 +654,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.settingsTabModel.SetDimensions(m.width, contentHeight)
 		m.helpTabModel.SetDimensions(m.width, contentHeight)
 		m.evologSplitModal = m.evologSplitModal.SetDimensions(m.width, m.height)
+		m.divergentModal = m.divergentModal.SetDimensions(m.width, m.height)
 		if len(cmds) > 0 {
 			return m, tea.Batch(cmds...)
 		}
@@ -1238,11 +1239,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case graphtab.DivergentCommitInfoMsg:
 		cmd, info := divergenttab.HandleDivergentCommitInfoMsg(msg, &m.appState)
 		if info != nil {
-			m.divergentModal.Show(info.ChangeID, info.CommitIDs, info.Summaries)
+			m.divergentModal = m.divergentModal.SetDimensions(m.width, m.height)
+			m.divergentModal.Show(info.ChangeID, info.Versions)
 			m.appState.ViewMode = state.ViewDivergentCommit
 		}
 		return m, cmd
 	case divergenttab.DivergentCommitResolvedMsg:
+		m.divergentModal.Hide()
 		return m, divergenttab.HandleDivergentCommitResolvedMsg(msg, &m.appState)
 	case evologsplittab.EvologLoadedMsg:
 		updated, cmd := m.evologSplitModal.Update(msg)

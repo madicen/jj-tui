@@ -23,11 +23,6 @@ func (m *Model) View() string {
 	}
 
 	// Full-screen centered modals (no header/tabs behind)
-	if m.appState.ViewMode == state.ViewDivergentCommit {
-		if divergentContent := m.divergentModal.View(); divergentContent != "" {
-			return m.centerModal(divergentContent)
-		}
-	}
 	if m.appState.ViewMode == state.ViewBookmarkConflict {
 		if conflictContent := m.conflictModal.View(); conflictContent != "" {
 			return m.centerModal(conflictContent)
@@ -39,6 +34,11 @@ func (m *Model) View() string {
 	if m.appState.ViewMode == state.ViewEvologSplit {
 		if evologContent := m.evologSplitModal.View(); evologContent != "" {
 			v = applyBubbleOverlayCentered(v, evologContent, m.width, m.height)
+		}
+	}
+	if m.appState.ViewMode == state.ViewDivergentCommit {
+		if divergentContent := m.divergentModal.View(); divergentContent != "" {
+			v = applyBubbleOverlayCentered(v, divergentContent, m.width, m.height)
 		}
 	}
 
@@ -92,9 +92,7 @@ func (m *Model) renderMainLayoutView() string {
 		content = m.bookmarkModal.View()
 	case state.ViewBookmarkConflict:
 		content = m.conflictModal.View()
-	case state.ViewDivergentCommit:
-		content = m.divergentModal.View()
-	case state.ViewEvologSplit:
+	case state.ViewDivergentCommit, state.ViewEvologSplit:
 		// Modal is drawn as an overlay in View(); keep graph visible underneath.
 		content = m.graphTabModel.View()
 	case state.ViewGitHubLogin:

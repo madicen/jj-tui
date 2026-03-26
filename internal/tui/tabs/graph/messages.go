@@ -47,10 +47,9 @@ type UndoCompletedMsg struct {
 
 // DivergentCommitInfoMsg is sent when divergent commit info has been loaded (or failed).
 type DivergentCommitInfoMsg struct {
-	ChangeID  string
-	CommitIDs []string
-	Summaries []string
-	Err       error
+	ChangeID string
+	Versions []jj.DivergentVersion
+	Err      error
 }
 
 // LoadChangedFilesCmd returns a command that loads changed files for the commit and sends ChangedFilesLoadedMsg.
@@ -73,11 +72,11 @@ func LoadDivergentCommitInfoCmd(svc *jj.Service, changeID string) tea.Cmd {
 		return nil
 	}
 	return func() tea.Msg {
-		commitIDs, summaries, err := svc.GetDivergentCommitInfo(context.Background(), changeID)
+		versions, err := svc.GetDivergentCommitDetails(context.Background(), changeID)
 		if err != nil {
 			return DivergentCommitInfoMsg{ChangeID: changeID, Err: err}
 		}
-		return DivergentCommitInfoMsg{ChangeID: changeID, CommitIDs: commitIDs, Summaries: summaries}
+		return DivergentCommitInfoMsg{ChangeID: changeID, Versions: versions}
 	}
 }
 
@@ -169,7 +168,7 @@ type Result struct {
 	WarningTitle    string
 	WarningMessage  string
 	WarningCommits  []internal.Commit
-	PerformRebase bool
+	PerformRebase   bool
 }
 
 // FocusMessage returns the status bar message for graph vs files pane focus.

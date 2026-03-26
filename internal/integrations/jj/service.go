@@ -221,6 +221,66 @@ type ChangedFile struct {
 	Status string // M=modified, A=added, D=deleted, R=renamed
 }
 
+// DivergentVersion is one visible revision for a divergent jj change ID.
+type DivergentVersion struct {
+	CommitID      string // full id for jj abandon / compare
+	CommitIDShort string
+	Summary       string
+	Author        string
+	WhenDisplay   string        // compact local time for UI
+	ParentsShort  string        // short parent commit id(s), comma-separated
+	Bookmarks     string        // local bookmark names on this revision (may be empty)
+	ChangedFiles  []ChangedFile // vs parent (jj diff --summary -r); nil if listing failed, non-nil when loaded (may be empty)
+	FilesLine     string        // compact summary for logs / fallback
+}
+
+// formatDivergentFilesLine formats changed-file rows for divergent-resolution UI.
+func formatDivergentFilesLine(files []ChangedFile) string {
+	if len(files) == 0 {
+		return "(no changes vs parent)"
+	}
+	const maxShow = 4
+	var b strings.Builder
+	nMore := 0
+	for i, f := range files {
+		if i >= maxShow {
+			nMore = len(files) - maxShow
+			break
+		}
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		p := f.Path
+		if len(p) > 40 {
+			p = p[:18] + "…" + p[len(p)-18:]
+		}
+		b.WriteString(f.Status)
+		b.WriteByte(' ')
+		b.WriteString(p)
+	}
+	if nMore > 0 {
+		fmt.Fprintf(&b, " (+%d more)", nMore)
+	}
+	return b.String()
+}
+
+func compactWhenDisplay(ts string) string {
+	ts = strings.TrimSpace(ts)
+	if ts == "" {
+		return ""
+	}
+	layouts := []string{time.RFC3339Nano, time.RFC3339, "2006-01-02 15:04:05.999999999 -0700 MST"}
+	for _, layout := range layouts {
+		if t, err := time.Parse(layout, ts); err == nil {
+			return t.Local().Format("Jan 02 2006 15:04")
+		}
+	}
+	if len(ts) > 20 {
+		return ts[:20]
+	}
+	return ts
+}
+
 // GetChangedFiles gets the list of changed files for a commit
 func (s *Service) GetChangedFiles(ctx context.Context, commitID string) ([]ChangedFile, error) {
 	// Use jj diff --summary to get a list of changed files
@@ -402,57 +462,105 @@ func (s *Service) GetBookmarkConflictInfo(ctx context.Context, bookmarkName stri
 	return localID, remoteID, localSummary, remoteSummary, nil
 }
 
-// GetDivergentCommitInfo retrieves information about all versions of a divergent change ID
-// Returns slice of commit IDs and their summaries
-func (s *Service) GetDivergentCommitInfo(ctx context.Context, changeID string) (commitIDs []string, summaries []string, err error) {
-	// Query all commits with this change ID using change_id() function
-	// This is required for divergent change IDs - jj won't accept bare change ID
-	// Format: commit_id|summary\n for each version
-	template := `commit_id.short(12) ++ "|" ++ if(description, description.first_line(), "(no description)") ++ "\n"`
+// GetDivergentCommitDetails returns one entry per visible revision with the same change ID,
+// including metadata and a compact file list vs parent for comparison in the UI.
+func (s *Service) GetDivergentCommitDetails(ctx context.Context, changeID string) ([]DivergentVersion, error) {
+	changeID = strings.TrimSpace(changeID)
+	if changeID == "" {
+		return nil, fmt.Errorf("change ID is required")
+	}
+	const template = `commit_id ++ "\t" ++ commit_id.short(12) ++ "\t" ++ if(description, description.first_line(), "(no description)") ++ "\t" ++ author.email() ++ "\t" ++ author.timestamp() ++ "\t" ++ parents.map(|p| p.commit_id().short(8)).join(",") ++ "\t" ++ bookmarks.join(",") ++ "\n"`
 	out, err := s.runJJOutput(ctx, "log", "-r", fmt.Sprintf("change_id(%s)", changeID), "--no-graph", "-T", template)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get divergent commit info: %w", err)
+		return nil, fmt.Errorf("failed to get divergent commit info: %w", err)
 	}
 
-	lines := strings.Split(strings.TrimSpace(out), "\n")
-	for _, line := range lines {
+	var versions []DivergentVersion
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-		parts := strings.SplitN(line, "|", 2)
-		if len(parts) >= 2 {
-			commitIDs = append(commitIDs, strings.TrimSpace(parts[0]))
-			summaries = append(summaries, strings.TrimSpace(parts[1]))
-		} else if len(parts) == 1 {
-			commitIDs = append(commitIDs, strings.TrimSpace(parts[0]))
-			summaries = append(summaries, "(no description)")
+		parts := strings.Split(line, "\t")
+		if len(parts) < 5 {
+			continue
 		}
+		fullID := strings.TrimSpace(parts[0])
+		if fullID == "" {
+			continue
+		}
+		short := strings.TrimSpace(parts[1])
+		summary := strings.TrimSpace(parts[2])
+		author := strings.TrimSpace(parts[3])
+		tsRaw := strings.TrimSpace(parts[4])
+		parents := ""
+		bookmarks := ""
+		if len(parts) > 5 {
+			parents = strings.TrimSpace(parts[5])
+		}
+		if len(parts) > 6 {
+			bookmarks = strings.TrimSpace(parts[6])
+		}
+
+		files, ferr := s.GetChangedFiles(ctx, fullID)
+		filesLine := formatDivergentFilesLine(files)
+		var storedFiles []ChangedFile
+		if ferr != nil {
+			filesLine = "(could not list files vs parent)"
+			storedFiles = nil
+		} else if len(files) == 0 {
+			storedFiles = []ChangedFile{}
+		} else {
+			storedFiles = files
+		}
+
+		versions = append(versions, DivergentVersion{
+			CommitID:      fullID,
+			CommitIDShort: short,
+			Summary:       summary,
+			Author:        author,
+			WhenDisplay:   compactWhenDisplay(tsRaw),
+			ParentsShort:  parents,
+			Bookmarks:     bookmarks,
+			ChangedFiles:  storedFiles,
+			FilesLine:     filesLine,
+		})
 	}
 
-	if len(commitIDs) < 2 {
-		return nil, nil, fmt.Errorf("commit is not divergent (only %d version found)", len(commitIDs))
+	if len(versions) < 2 {
+		return nil, fmt.Errorf("commit is not divergent (only %d version found)", len(versions))
 	}
 
+	return versions, nil
+}
+
+// GetDivergentCommitInfo retrieves short commit id and summary per version (legacy shape).
+func (s *Service) GetDivergentCommitInfo(ctx context.Context, changeID string) (commitIDs []string, summaries []string, err error) {
+	versions, err := s.GetDivergentCommitDetails(ctx, changeID)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, v := range versions {
+		commitIDs = append(commitIDs, v.CommitIDShort)
+		summaries = append(summaries, v.Summary)
+	}
 	return commitIDs, summaries, nil
 }
 
 // ResolveDivergentCommit resolves a divergent commit by keeping one version and abandoning others
 // keepCommitID is the commit hash (not change ID) to keep
 func (s *Service) ResolveDivergentCommit(ctx context.Context, changeID, keepCommitID string) error {
-	// Get all commit IDs for this change ID
-	commitIDs, _, err := s.GetDivergentCommitInfo(ctx, changeID)
+	versions, err := s.GetDivergentCommitDetails(ctx, changeID)
 	if err != nil {
 		return err
 	}
 
-	// Abandon all versions except the one we want to keep
-	for _, commitID := range commitIDs {
-		if commitID != keepCommitID {
-			err := s.runJJ(ctx, "abandon", commitID)
-			if err != nil {
-				return fmt.Errorf("failed to abandon commit %s: %w", commitID, err)
-			}
+	for _, v := range versions {
+		if commitIDsEquivalent(v.CommitID, keepCommitID) {
+			continue
+		}
+		if err := s.runJJ(ctx, "abandon", v.CommitID); err != nil {
+			return fmt.Errorf("failed to abandon commit %s: %w", v.CommitID, err)
 		}
 	}
 
