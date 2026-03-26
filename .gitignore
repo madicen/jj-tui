@@ -8,6 +8,7 @@ jj-tui
 fixtures/demo-repo/
 fixtures/fake-origin.git/
 fixtures/evolog-split-vhs-repo/
+fixtures/after-origin-fake-origin.git/
 
 # VSCode Settings
 .vscode/
