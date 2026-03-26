@@ -629,12 +629,22 @@ type EvologEntry struct {
 
 // ListEvolog returns evolution history for a revision (change or commit id), newest first.
 func (s *Service) ListEvolog(ctx context.Context, rev string) ([]EvologEntry, error) {
+	return s.listEvolog(ctx, rev, false)
+}
+
+func (s *Service) listEvolog(ctx context.Context, rev string, noHistory bool) ([]EvologEntry, error) {
 	rev = strings.TrimSpace(rev)
 	if rev == "" {
 		return nil, fmt.Errorf("revision is required")
 	}
 	const tmpl = `commit.commit_id().short(8) ++ "\t" ++ commit.commit_id() ++ "\t" ++ if(commit.description(), commit.description().first_line(), "(empty)") ++ "\n"`
-	out, err := s.runJJOutput(ctx, "evolog", "-r", rev, "-G", "-n", "80", "-T", tmpl)
+	var out string
+	var err error
+	if noHistory {
+		out, err = s.runJJOutputNoHistory(ctx, "evolog", "-r", rev, "-G", "-n", "80", "-T", tmpl)
+	} else {
+		out, err = s.runJJOutput(ctx, "evolog", "-r", rev, "-G", "-n", "80", "-T", tmpl)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -1101,11 +1111,97 @@ func (s *Service) getCommitGraph(ctx context.Context, revset string) (*internal.
 	}
 
 	s.enrichCommitsDeltaVsOrigin(ctx, commits)
+	s.enrichCommitsEvologSplitViable(ctx, commits)
 
 	return &internal.CommitGraph{
 		Commits:     commits,
 		Connections: connections,
 	}, nil
+}
+
+// enrichCommitsEvologSplitViable sets EvologSplitViable for mutable commits (cached per change id).
+func (s *Service) enrichCommitsEvologSplitViable(ctx context.Context, commits []internal.Commit) {
+	cache := make(map[string]bool)
+	for i := range commits {
+		c := &commits[i]
+		if c.Immutable || c.Divergent || len(c.ConflictedBranches) > 0 || c.Conflicts {
+			continue
+		}
+		ch := strings.TrimSpace(c.ChangeID)
+		if ch == "" {
+			continue
+		}
+		if v, ok := cache[ch]; ok {
+			c.EvologSplitViable = v
+			continue
+		}
+		v := s.commitEvologSplitViable(ctx, *c)
+		cache[ch] = v
+		c.EvologSplitViable = v
+	}
+}
+
+// commitEvologSplitViable mirrors MoveBookmarkDeltaOntoEvologBase: no non–working-copy children on the
+// tip, jj evolog has at least two rows, and some older row has a non-empty tree diff vs this change.
+func (s *Service) commitEvologSplitViable(ctx context.Context, c internal.Commit) bool {
+	revForSel := strings.TrimSpace(c.ID)
+	if revForSel == "" {
+		return false
+	}
+	selCommitID, err := s.runJJOutputNoHistory(ctx, "log", "-r", revForSel, "--no-graph", "-T", "commit_id", "--limit", "1")
+	if err != nil {
+		return false
+	}
+	selCommitID = strings.TrimSpace(selCommitID)
+	if selCommitID == "" {
+		return false
+	}
+
+	bn := eligibleBookmarkForOriginDelta(c.Branches)
+	var tipCommitID string
+	if bn != "" {
+		tipCommitID, err = s.runJJOutputNoHistory(ctx, "log", "-r", bn, "--no-graph", "-T", "commit_id", "--limit", "1")
+		if err != nil {
+			return false
+		}
+		tipCommitID = strings.TrimSpace(tipCommitID)
+		if !commitIDsEquivalent(tipCommitID, selCommitID) {
+			return false
+		}
+	} else {
+		tipCommitID = selCommitID
+	}
+
+	childrenRev := fmt.Sprintf("children(%s) ~ @", tipCommitID)
+	childLines, err := s.runJJOutputNoHistory(ctx, "log", "-r", childrenRev, "--no-graph", "-T", "change_id", "--limit", "20")
+	if err != nil {
+		return false
+	}
+	for _, line := range strings.Split(childLines, "\n") {
+		if strings.TrimSpace(line) != "" {
+			return false
+		}
+	}
+
+	entries, err := s.listEvolog(ctx, c.ChangeID, true)
+	if err != nil || len(entries) < 2 {
+		return false
+	}
+	tipEvolog := strings.TrimSpace(entries[0].CommitID)
+	for i := 1; i < len(entries); i++ {
+		baseID := strings.TrimSpace(entries[i].CommitID)
+		if baseID == "" || commitIDsEquivalent(baseID, tipEvolog) {
+			continue
+		}
+		ok, err := s.revisionDiffSummaryNonEmptyNoHistory(ctx, baseID, c.ChangeID)
+		if err != nil {
+			continue
+		}
+		if ok {
+			return true
+		}
+	}
+	return false
 }
 
 // eligibleBookmarkForOriginDelta returns the first non–default-branch bookmark name on a commit, for comparing to *@origin.
@@ -1272,6 +1368,7 @@ func (s *Service) getCommitGraphSimple(ctx context.Context, revset string) (*int
 	}
 
 	s.enrichCommitsDeltaVsOrigin(ctx, commits)
+	s.enrichCommitsEvologSplitViable(ctx, commits)
 
 	return &internal.CommitGraph{
 		Commits:     commits,
