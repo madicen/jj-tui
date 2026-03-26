@@ -198,13 +198,12 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 		showEvolog := onSelectedRow && !commit.Immutable && !commit.Divergent && len(commit.ConflictedBranches) == 0
 		if showForgot || showEvolog {
 			muted := lipgloss.NewStyle().Foreground(styles.ColorMuted)
-			mutedSp := muted.Render("  ")
 			var btnJoin string
 			switch {
 			case showForgot && showEvolog:
 				btnJoin = lipgloss.JoinHorizontal(lipgloss.Top,
 					m.zoneManager.Mark(mouse.ZoneActionMoveOntoOriginAt(i), muted.Render("Forgot New Commit? (f)")),
-					mutedSp,
+					muted.Render(" | "),
 					m.zoneManager.Mark(mouse.ZoneActionEvologSplitAt(i), muted.Render("split (z)")),
 				)
 			case showForgot:
