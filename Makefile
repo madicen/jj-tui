@@ -1,6 +1,6 @@
 # jj-tui Makefile
 
-.PHONY: build test clean screenshots demo-repo after-origin-vhs-repo after-origin-gif evolog-split-vhs-repo evolog-split-gif screenshot-after-origin screenshot-evolog-split help
+.PHONY: build test clean screenshots demo-repo after-origin-vhs-repo after-origin-gif evolog-split-vhs-repo evolog-split-gif divergent-vhs-repo divergent-gif screenshot-after-origin screenshot-evolog-split screenshot-divergent help
 
 # Default target
 all: build
@@ -16,7 +16,7 @@ test:
 # Clean build artifacts
 clean:
 	rm -f jj-tui
-	rm -rf fixtures/demo-repo fixtures/after-origin-vhs-repo fixtures/after-origin-fake-origin.git fixtures/evolog-split-vhs-repo
+	rm -rf fixtures/demo-repo fixtures/after-origin-vhs-repo fixtures/after-origin-fake-origin.git fixtures/evolog-split-vhs-repo fixtures/divergent-vhs-repo
 
 # Setup the demo repository for screenshots
 demo-repo:
@@ -38,7 +38,8 @@ screenshots: build demo-repo
 	vhs vhs/command_history.tape
 	vhs vhs/after-origin.tape
 	vhs vhs/evolog-split.tape
-	@echo "Screenshots saved to screenshots/ (including after-origin.gif, evolog-split.gif)"
+	vhs vhs/divergent.tape
+	@echo "Screenshots saved to screenshots/ (including after-origin.gif, evolog-split.gif, divergent.gif)"
 
 # Generate a demo GIF showing the TUI in action
 demo-gif: build demo-repo
@@ -75,6 +76,15 @@ evolog-split-gif: build evolog-split-vhs-repo
 	vhs vhs/evolog-split.tape
 	@echo "GIF saved to screenshots/evolog-split.gif"
 
+# Resolving a divergent change (d); see vhs/divergent.tape
+divergent-vhs-repo:
+	bash fixtures/setup-divergent-vhs-repo.sh
+
+divergent-gif: build divergent-vhs-repo
+	@mkdir -p screenshots
+	vhs vhs/divergent.tape
+	@echo "GIF saved to screenshots/divergent.gif"
+
 # Generate individual screenshots
 screenshot-graph: build demo-repo
 	vhs vhs/graph.tape
@@ -105,6 +115,10 @@ screenshot-evolog-split: build evolog-split-vhs-repo
 	@mkdir -p screenshots
 	vhs vhs/evolog-split.tape
 
+screenshot-divergent: build divergent-vhs-repo
+	@mkdir -p screenshots
+	vhs vhs/divergent.tape
+
 # Run in demo mode (for manual testing)
 demo: build demo-repo
 	cd fixtures/demo-repo && ../../jj-tui --demo
@@ -126,8 +140,10 @@ help:
 	@echo "  demo-gif-profile - Generate demo GIF with CPU/memory profiling"
 	@echo "  after-origin-gif - Generate after-origin GIF: (f) restack + (u) update PR (vhs/after-origin.tape)"
 	@echo "  evolog-split-gif - Generate evolog-split GIF: experimental (z) split (vhs/evolog-split.tape)"
+	@echo "  divergent-gif    - Generate divergent GIF: resolve duplicate change ID (vhs/divergent.tape)"
 	@echo "  screenshot-after-origin   - Regenerate only screenshots/after-origin.gif"
 	@echo "  screenshot-evolog-split   - Regenerate only screenshots/evolog-split.gif"
+	@echo "  screenshot-divergent      - Regenerate only screenshots/divergent.gif"
 	@echo "  demo         - Run the app in demo mode"
 	@echo "  deps         - Install/tidy dependencies"
 	@echo "  help         - Show this help"

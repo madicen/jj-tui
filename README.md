@@ -37,6 +37,12 @@ If you already pushed a feature bookmark but kept editing on the same jj revisio
 
 ![Split](screenshots/evolog-split.gif)
 
+### Resolving divergent commits
+
+When the same **change ID** exists on more than one revision, the graph shows **divergent**. Press **`d`** on that row to open the resolver: each option lists metadata and a short **files vs parent** summary so you can pick which revision to keep (the others are abandoned). The clip uses `fixtures/setup-divergent-vhs-repo.sh`.
+
+![Resolve divergent](screenshots/divergent.gif)
+
 ## Features
 
 - **Visual Commit Graph**: Navigate and visualize your commit history with tree structure
@@ -171,7 +177,7 @@ The graph view has two panes: the commit graph (left) and changed files (right).
 - `x`: Delete bookmark from selected commit
 - `c`: Create PR from selected commit (if bookmark exists)
 - `u`: Push/update PR (pushes to existing PR branch)
-- `f` (graph pane focused): **Forgot New Commit?** — fetch, then create a new commit on top of `bookmark@origin` with the same tree as the bookmark tip, move the bookmark there, **rebase any stacked commits that were on top of the old tip** onto the new tip (excluding the working copy), then abandon the old tip. Use when you amended after a push so you can `jj git push` without `--force`.
+- `f` (graph pane focused): **Forgot New Commit?** — fetch, then create a new commit on top of `bookmark@origin` with the same tree as the bookmark tip, move the bookmark there, **rebase any stacked commits that were on top of the old tip** onto the new tip (excluding the working copy), abandon the old tip, and **drop any leftover divergent duplicates** of the same change ID (jj keeps the revision on your `@` ancestry). Use when you amended after a push so you can `jj git push` without `--force`.
 - `z` (graph pane focused, experimental): **Split (evolog)** — same as the inline **split (z)** when it appears on the selected row: open the evolog modal only when the change has evolution history with a real tree diff vs an older revision (and no blocking descendants). See the clip under [Evolog split (experimental)](#evolog-split-experimental).
 
 **File pane (focus files with Tab first):**
@@ -471,17 +477,20 @@ jj-tui/
 │   ├── setup-demo-repo.sh
 │   ├── setup-after-origin-vhs-repo.sh
 │   ├── setup-evolog-split-vhs-repo.sh
+│   ├── setup-divergent-vhs-repo.sh
 │   ├── after-origin-vhs-append-and-tui.sh
 │   ├── demo-repo/             # Created by setup-demo-repo.sh
 │   ├── after-origin-vhs-repo/ # Created by setup-after-origin-vhs-repo.sh (after-origin GIF)
-│   └── evolog-split-vhs-repo/ # Created by setup-evolog-split-vhs-repo.sh (evolog-split GIF)
+│   ├── evolog-split-vhs-repo/ # Created by setup-evolog-split-vhs-repo.sh (evolog-split GIF)
+│   └── divergent-vhs-repo/    # Created by setup-divergent-vhs-repo.sh (divergent GIF)
 ├── vhs/                       # VHS tapes for screenshot generation
 │   ├── all.tape               # Main demo GIF
 │   ├── after-origin.tape      # Forgot New Commit? (f) workflow GIF
 │   ├── evolog-split.tape      # Evolog split (z) workflow GIF
+│   ├── divergent.tape         # Resolve divergent change (d) GIF
 │   ├── graph.tape
 │   └── ...
-├── screenshots/               # Generated (demo.gif, after-origin.gif, evolog-split.gif, *.png)
+├── screenshots/               # Generated (demo.gif, after-origin.gif, evolog-split.gif, divergent.gif, *.png)
 └── README.md
 ```
 
@@ -496,11 +505,11 @@ go build -o jj-tui .
 
 Screenshots are generated using [VHS](https://github.com/charmbracelet/vhs) with mock data for consistent, reproducible images.
 
-**Automatic (CI)**: The [Generate Screenshots](.github/workflows/screenshots.yml) workflow produces `demo.gif` (`all.tape`), `after-origin.gif`, `evolog-split.gif`, and the PNG captures; it runs after releases (via release workflows) and can be triggered manually. Results are committed to `screenshots/` on `main` when they change.
+**Automatic (CI)**: The [Generate Screenshots](.github/workflows/screenshots.yml) workflow produces `demo.gif` (`all.tape`), `after-origin.gif`, `evolog-split.gif`, `divergent.gif`, and the PNG captures; it runs after releases (via release workflows) and can be triggered manually. Results are committed to `screenshots/` on `main` when they change.
 
 **Manual (Local)**:
 ```bash
-# Generate PNG captures + after-origin.gif + evolog-split.gif (demo GIF is separate; see make demo-gif)
+# Generate PNG captures + after-origin.gif + evolog-split.gif + divergent.gif (demo GIF is separate; see make demo-gif)
 make screenshots
 
 # Generate demo GIF
@@ -512,11 +521,15 @@ make after-origin-gif
 # Regenerate only the evolog-split GIF (also included in `make screenshots`)
 make evolog-split-gif
 
+# Regenerate only the divergent GIF (also included in `make screenshots`)
+make divergent-gif
+
 # Or run individual tapes (PNG/GIF outputs live under screenshots/)
 vhs vhs/graph.tape
 vhs vhs/command_history.tape
 vhs vhs/after-origin.tape
 vhs vhs/evolog-split.tape
+vhs vhs/divergent.tape
 ```
 
 This creates a demo jj repository and runs the app in `--demo` mode, which uses mock ticket and PR data.

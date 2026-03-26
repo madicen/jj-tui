@@ -29,9 +29,8 @@ func ResolveDivergentCommitCmd(jjSvc *jj.Service, changeID, keepCommitID string)
 
 // ShowDivergentInfo is returned when the handler wants main to show the divergent modal.
 type ShowDivergentInfo struct {
-	ChangeID   string
-	CommitIDs  []string
-	Summaries  []string
+	ChangeID string
+	Versions []jj.DivergentVersion
 }
 
 // HandleDivergentCommitInfoMsg mutates app when err; otherwise returns info for main to show the modal.
@@ -42,9 +41,8 @@ func HandleDivergentCommitInfoMsg(msg graphtab.DivergentCommitInfoMsg, app *stat
 		return nil, nil
 	}
 	return nil, &ShowDivergentInfo{
-		ChangeID:  msg.ChangeID,
-		CommitIDs: msg.CommitIDs,
-		Summaries: msg.Summaries,
+		ChangeID: msg.ChangeID,
+		Versions: msg.Versions,
 	}
 }
 
@@ -55,7 +53,11 @@ func HandleDivergentCommitResolvedMsg(msg DivergentCommitResolvedMsg, app *state
 		app.ViewMode = state.ViewCommitGraph
 		return nil
 	}
-	app.StatusMessage = fmt.Sprintf("Divergent commit resolved (kept %s)", msg.KeptCommitID)
+	kept := msg.KeptCommitID
+	if len(kept) > 14 {
+		kept = kept[:12] + "…"
+	}
+	app.StatusMessage = fmt.Sprintf("Divergent commit resolved (kept %s)", kept)
 	app.ViewMode = state.ViewCommitGraph
 	return data.LoadRepository(app.JJService)
 }
