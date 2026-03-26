@@ -118,6 +118,13 @@ func (m GraphModel) handleKeyMsg(msg tea.KeyMsg) (GraphModel, *Request, tea.Cmd)
 		if m.repository != nil {
 			return m, &Request{CreatePR: true}, nil
 		}
+	case "C":
+		if m.graphFocused && m.repository != nil && m.selectedCommit >= 0 && m.selectedCommit < len(m.repository.Graph.Commits) {
+			c := m.repository.Graph.Commits[m.selectedCommit]
+			if len(c.ConflictedBranches) > 0 {
+				return m, &Request{ResolveBookmarkConflict: true}, nil
+			}
+		}
 	case "f":
 		if m.graphFocused && m.repository != nil && m.selectedCommit >= 0 && m.selectedCommit < len(m.repository.Graph.Commits) {
 			c := m.repository.Graph.Commits[m.selectedCommit]

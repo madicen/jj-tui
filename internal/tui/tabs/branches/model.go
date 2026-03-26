@@ -7,6 +7,7 @@ import (
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/util"
 	"github.com/madicen/jj-tui/internal/tui/state"
 )
 
@@ -293,7 +294,7 @@ func (m *Model) BuildBookmarkNameConflictSources() []string {
 		for _, commit := range m.repository.Graph.Commits {
 			for _, br := range commit.Branches {
 				names = append(names, br)
-				if loc := internal.LocalBookmarkName(br); loc != "" && loc != br {
+				if loc := util.LocalBookmarkName(br); loc != "" && loc != br {
 					names = append(names, loc)
 				}
 			}

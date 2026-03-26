@@ -196,20 +196,26 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 		showForgot := onSelectedRow && commit.HasDeltaVsBookmarkOrigin && len(commit.ConflictedBranches) == 0
 		// split (z): only when graph enrichment found a viable evolog split for this change.
 		showEvolog := onSelectedRow && commit.EvologSplitViable
-		if showForgot || showEvolog {
+		showResolveBookmark := onSelectedRow && len(commit.ConflictedBranches) > 0
+		if showForgot || showEvolog || showResolveBookmark {
 			muted := lipgloss.NewStyle().Foreground(styles.ColorMuted)
+			resolveStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555"))
+			var parts []string
+			if showForgot {
+				parts = append(parts, m.zoneManager.Mark(mouse.ZoneActionMoveOntoOriginAt(i), muted.Render("Forgot New Commit? (f)")))
+			}
+			if showResolveBookmark {
+				parts = append(parts, m.zoneManager.Mark(mouse.ZoneActionResolveBookmarkConflictAt(i), resolveStyle.Render("Resolve diverged bookmark (C)")))
+			}
+			if showEvolog {
+				parts = append(parts, m.zoneManager.Mark(mouse.ZoneActionEvologSplitAt(i), muted.Render("split (z)")))
+			}
 			var btnJoin string
-			switch {
-			case showForgot && showEvolog:
-				btnJoin = lipgloss.JoinHorizontal(lipgloss.Top,
-					m.zoneManager.Mark(mouse.ZoneActionMoveOntoOriginAt(i), muted.Render("Forgot New Commit? (f)")),
-					muted.Render(" | "),
-					m.zoneManager.Mark(mouse.ZoneActionEvologSplitAt(i), muted.Render("split (z)")),
-				)
-			case showForgot:
-				btnJoin = m.zoneManager.Mark(mouse.ZoneActionMoveOntoOriginAt(i), muted.Render("Forgot New Commit? (f)"))
-			default:
-				btnJoin = m.zoneManager.Mark(mouse.ZoneActionEvologSplitAt(i), muted.Render("split (z)"))
+			for pi, p := range parts {
+				if pi > 0 {
+					btnJoin += muted.Render(" | ")
+				}
+				btnJoin += p
 			}
 			commitRow = lipgloss.JoinHorizontal(lipgloss.Bottom,
 				m.zoneManager.Mark(mouse.ZoneCommit(i), style.Render(beforeStatus)),
@@ -273,6 +279,12 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 						m.zoneManager.Mark(mouse.ZoneActionDelBookmark, styles.ButtonStyle.Render("Del Bookmark (x)")),
 					)
 				}
+				if len(commit.ConflictedBranches) > 0 {
+					bookmarkConflictBtnStyle := styles.ButtonStyle.Background(lipgloss.Color("#FF5555"))
+					actionButtons = append(actionButtons,
+						m.zoneManager.Mark(mouse.ZoneActionResolveBookmarkConflict, bookmarkConflictBtnStyle.Render("Resolve diverged bookmark (C)")),
+					)
+				}
 				actionLines = append(actionLines, lipgloss.JoinHorizontal(lipgloss.Left, actionButtons...))
 				actionLines = append(actionLines, "")
 				actionLines = append(actionLines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("◆ Selected commit is immutable (pushed to remote)"))
@@ -300,6 +312,12 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 					divergentBtnStyle := styles.ButtonStyle.Background(lipgloss.Color("#FF79C6"))
 					actionButtons = append(actionButtons,
 						m.zoneManager.Mark(mouse.ZoneActionResolveDivergent, divergentBtnStyle.Render("Resolve Divergent (d)")),
+					)
+				}
+				if len(commit.ConflictedBranches) > 0 {
+					bookmarkConflictBtnStyle := styles.ButtonStyle.Background(lipgloss.Color("#FF5555"))
+					actionButtons = append(actionButtons,
+						m.zoneManager.Mark(mouse.ZoneActionResolveBookmarkConflict, bookmarkConflictBtnStyle.Render("Resolve diverged bookmark (C)")),
 					)
 				}
 				prBranch := ""

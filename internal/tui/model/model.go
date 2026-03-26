@@ -197,7 +197,7 @@ func (m *Model) createIsZoneClickedFuncWithEvent(event tea.MouseMsg) func(string
 
 // processGraphRequest runs a graph request via the graph tab; ApplyResult mutates app and returns cmd.
 func (m *Model) processGraphRequest(r graphtab.Request) (tea.Model, tea.Cmd) {
-	if r.Checkout || r.Squash || r.Abandon || r.NewCommit || r.PerformRebase || r.ResolveDivergent != nil || r.CreateBookmark || r.DeleteBookmark || r.CreatePR || r.UpdatePR || r.MoveFileUp || r.MoveFileDown || r.RevertFile || r.MoveDeltaOntoOrigin || r.StartEvologSplit {
+	if r.Checkout || r.Squash || r.Abandon || r.NewCommit || r.PerformRebase || r.ResolveDivergent != nil || r.CreateBookmark || r.DeleteBookmark || r.CreatePR || r.UpdatePR || r.MoveFileUp || r.MoveFileDown || r.RevertFile || r.MoveDeltaOntoOrigin || r.StartEvologSplit || r.ResolveBookmarkConflict {
 		m.redoOperationID = ""
 	}
 	ctx := graphtab.BuildRequestContextFrom(m)

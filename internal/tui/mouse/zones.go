@@ -195,7 +195,8 @@ const (
 	// Divergent commit resolution zones
 	ZoneDivergentConfirm       = "zone:divergent:confirm"
 	ZoneDivergentCancel        = "zone:divergent:cancel"
-	ZoneActionResolveDivergent = "zone:action:resolve_divergent"
+	ZoneActionResolveDivergent        = "zone:action:resolve_divergent"
+	ZoneActionResolveBookmarkConflict = "zone:action:resolve_bookmark_conflict"
 
 	ZoneJiraOpenBrowser = "zone:jira:openbrowser"
 
@@ -230,6 +231,11 @@ func ZoneActionMoveOntoOriginAt(index int) string {
 // ZoneActionEvologSplitAt returns the zone ID for the inline evolog split control on a commit row.
 func ZoneActionEvologSplitAt(index int) string {
 	return fmt.Sprintf("zone:action:evolog_split:%d", index)
+}
+
+// ZoneActionResolveBookmarkConflictAt is the inline control to open the diverged-bookmark resolver.
+func ZoneActionResolveBookmarkConflictAt(index int) string {
+	return fmt.Sprintf("zone:action:resolve_bookmark_conflict:%d", index)
 }
 
 // ZonePR returns the zone ID for a PR at the given index
