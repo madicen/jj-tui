@@ -23,6 +23,8 @@ type Model struct {
 	remoteSummary  string
 	selectedOption int // 0=Keep Local, 1=Reset to Remote
 	zoneManager    *zone.Manager
+	termW          int
+	termH          int
 }
 
 // NewModel creates a new Conflict model. zoneManager may be nil.
@@ -31,7 +33,21 @@ func NewModel(zoneManager *zone.Manager) Model {
 		shown:          false,
 		selectedOption: 0,
 		zoneManager:    zoneManager,
+		termW:          100,
+		termH:          24,
 	}
+}
+
+// SetDimensions records terminal size for layout (overlay + compact side-by-side when wide enough).
+func (m Model) SetDimensions(w, h int) Model {
+	if w < 1 {
+		w = 80
+	}
+	if h < 1 {
+		h = 24
+	}
+	m.termW, m.termH = w, h
+	return m
 }
 
 // Init initializes the model
@@ -75,75 +91,153 @@ func (m *Model) mark(id, content string) string {
 	return content
 }
 
+func (m *Model) layoutCols() (sideBySide bool, colW int) {
+	// Cap modal width on large terminals so columns do not stretch across empty space.
+	const maxModalOuter = 86
+	maxOuter := min(m.termW-6, maxModalOuter)
+	if maxOuter < 52 {
+		maxOuter = min(m.termW-4, 50)
+	}
+	sideBySide = m.termW >= 72
+	if sideBySide {
+		colW = max((maxOuter-2)/2, 24)
+	} else {
+		colW = max(maxOuter, 32)
+	}
+	return sideBySide, colW
+}
+
 func (m *Model) renderConflict() string {
-	var lines []string
-
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF5555"))
-	lines = append(lines, titleStyle.Render("⚠ Bookmark Conflict: "+m.bookmarkName))
-	lines = append(lines, "")
-
-	explanationStyle := lipgloss.NewStyle().Foreground(styles.ColorMuted)
-	lines = append(lines, explanationStyle.Render("This bookmark has diverged - local and remote point to different commits."))
-	lines = append(lines, "")
+	sideBySide, colW := m.layoutCols()
+	sumMax := max(colW-4, 20)
 
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(styles.ColorPrimary).
-		Padding(0, 1).
-		Width(60)
+		Padding(0, 1)
 
-	localHeader := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#50FA7B")).Render("Local Version")
-	localCommitID := lipgloss.NewStyle().Foreground(styles.ColorPrimary).Render(m.localCommitID)
-	localContent := fmt.Sprintf("%s\n%s\n%s", localHeader, localCommitID, truncateSummary(m.localSummary, 55))
-	lines = append(lines, boxStyle.Render(localContent))
-	lines = append(lines, "")
+	localHeader := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#50FA7B")).Render("Local")
+	localID := lipgloss.NewStyle().Foreground(styles.ColorPrimary).Render(m.localCommitID)
+	localBody := fmt.Sprintf("%s\n%s\n%s", localHeader, localID, truncateSummary(m.localSummary, sumMax))
+	localBox := boxStyle.Width(colW).Render(localBody)
 
-	remoteHeader := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#8BE9FD")).Render("Remote Version (origin)")
-	remoteCommitID := lipgloss.NewStyle().Foreground(styles.ColorPrimary).Render(m.remoteCommitID)
-	remoteContent := fmt.Sprintf("%s\n%s\n%s", remoteHeader, remoteCommitID, truncateSummary(m.remoteSummary, 55))
-	lines = append(lines, boxStyle.Render(remoteContent))
-	lines = append(lines, "")
+	remoteHeader := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#8BE9FD")).Render("Remote (origin)")
+	remoteID := lipgloss.NewStyle().Foreground(styles.ColorPrimary).Render(m.remoteCommitID)
+	remoteBody := fmt.Sprintf("%s\n%s\n%s", remoteHeader, remoteID, truncateSummary(m.remoteSummary, sumMax))
+	remoteBox := boxStyle.Width(colW).Render(remoteBody)
 
-	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render(strings.Repeat("─", 60)))
-	lines = append(lines, "")
+	var versionRow string
+	if sideBySide {
+		gap := lipgloss.NewStyle().Width(2).Render("")
+		versionRow = lipgloss.JoinHorizontal(lipgloss.Top, localBox, gap, remoteBox)
+	} else {
+		versionRow = lipgloss.JoinVertical(lipgloss.Left, localBox, "", remoteBox)
+	}
 
-	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("Choose Resolution:"))
-	lines = append(lines, "")
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF5555"))
+	title := titleStyle.Render("⚠ Diverged bookmark: " + m.bookmarkName)
+
+	explanationStyle := lipgloss.NewStyle().Foreground(styles.ColorMuted)
+	explanation := explanationStyle.Render("Local and origin disagree. Pick a side, then confirm.")
 
 	selectedStyle := lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary)
 	unselectedStyle := lipgloss.NewStyle().Foreground(styles.ColorMuted)
+	optBorder := lipgloss.RoundedBorder()
 
-	keepLocalPrefix := "  "
-	keepLocalStyle := unselectedStyle
+	keepStyle := lipgloss.NewStyle().Border(optBorder).Padding(0, 1).Width(colW)
 	if m.selectedOption == 0 {
-		keepLocalPrefix = "► "
-		keepLocalStyle = selectedStyle
+		keepStyle = keepStyle.BorderForeground(styles.ColorPrimary)
+	} else {
+		keepStyle = keepStyle.BorderForeground(styles.ColorMuted)
 	}
-	keepLocalLine := fmt.Sprintf("%s%s", keepLocalPrefix, "Keep Local (force push to remote)")
-	lines = append(lines, m.mark(mouse.ZoneConflictKeepLocal, keepLocalStyle.Render(keepLocalLine)))
-	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Overwrites remote with your local version"))
-	lines = append(lines, "")
-
-	resetRemotePrefix := "  "
-	resetRemoteStyle := unselectedStyle
+	resetStyle := lipgloss.NewStyle().Border(optBorder).Padding(0, 1).Width(colW)
 	if m.selectedOption == 1 {
-		resetRemotePrefix = "► "
-		resetRemoteStyle = selectedStyle
+		resetStyle = resetStyle.BorderForeground(styles.ColorPrimary)
+	} else {
+		resetStyle = resetStyle.BorderForeground(styles.ColorMuted)
 	}
-	resetRemoteLine := fmt.Sprintf("%s%s", resetRemotePrefix, "Reset to Remote (discard local)")
-	lines = append(lines, m.mark(mouse.ZoneConflictResetRemote, resetRemoteStyle.Render(resetRemoteLine)))
-	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Updates local bookmark to match remote"))
-	lines = append(lines, "")
 
-	lines = append(lines, "")
-	confirmBtn := m.mark(mouse.ZoneConflictConfirm, styles.ButtonStyle.Render("Confirm (Enter)"))
-	cancelBtn := m.mark(mouse.ZoneConflictCancel, styles.ButtonSecondaryStyle.Render("Cancel (Esc)"))
-	lines = append(lines, confirmBtn+"  "+cancelBtn)
+	keepTitle := unselectedStyle
+	resetTitle := unselectedStyle
+	if m.selectedOption == 0 {
+		keepTitle = selectedStyle
+	}
+	if m.selectedOption == 1 {
+		resetTitle = selectedStyle
+	}
 
-	lines = append(lines, "")
-	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("Use j/k or click to select, Enter to confirm"))
+	keepBlock := keepStyle.Render(fmt.Sprintf(
+		"%s\n%s\n%s",
+		keepTitle.Render("► Keep local"),
+		unselectedStyle.Render("jj bookmark set … then jj git push"),
+		unselectedStyle.Render("(overwrites remote if checks pass)"),
+	))
+	resetBlock := resetStyle.Render(fmt.Sprintf(
+		"%s\n%s\n%s",
+		resetTitle.Render("► Reset to origin"),
+		unselectedStyle.Render("jj bookmark set … @origin"),
+		unselectedStyle.Render("discard local tip"),
+	))
 
-	return strings.Join(lines, "\n")
+	var choiceRow string
+	if sideBySide {
+		gap := lipgloss.NewStyle().Width(2).Render("")
+		choiceRow = lipgloss.JoinHorizontal(lipgloss.Top,
+			m.mark(mouse.ZoneConflictKeepLocal, keepBlock),
+			gap,
+			m.mark(mouse.ZoneConflictResetRemote, resetBlock),
+		)
+	} else {
+		choiceRow = lipgloss.JoinVertical(lipgloss.Left,
+			m.mark(mouse.ZoneConflictKeepLocal, keepBlock),
+			"",
+			m.mark(mouse.ZoneConflictResetRemote, resetBlock),
+		)
+	}
+
+	sepW := lipgloss.Width(versionRow)
+	if sepW < 32 {
+		sepW = 32
+	}
+	sep := lipgloss.NewStyle().Foreground(styles.ColorMuted).Render(strings.Repeat("─", min(sepW, m.termW-4)))
+
+	btnRow := lipgloss.JoinHorizontal(lipgloss.Left,
+		m.mark(mouse.ZoneConflictConfirm, styles.ButtonStyle.Render("Confirm (Enter)")),
+		"  ",
+		m.mark(mouse.ZoneConflictCancel, styles.ButtonSecondaryStyle.Render("Cancel (Esc)")),
+	)
+
+	hintStyle := lipgloss.NewStyle().Foreground(styles.ColorMuted)
+	hint := lipgloss.JoinVertical(
+		lipgloss.Left,
+		hintStyle.Render("j/k · Enter confirm · Esc cancel"),
+		hintStyle.Render("h / ← keep local · l / → / r reset to origin"),
+	)
+
+	frame := lipgloss.JoinVertical(
+		lipgloss.Left,
+		title,
+		"",
+		explanation,
+		"",
+		versionRow,
+		"",
+		sep,
+		"",
+		lipgloss.NewStyle().Bold(true).Render("Resolution"),
+		"",
+		choiceRow,
+		"",
+		btnRow,
+		"",
+		hint,
+	)
+
+	outer := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(styles.ColorMuted).
+		Padding(1, 2)
+	return outer.Render(frame)
 }
 
 func truncateSummary(summary string, maxLen int) string {
@@ -158,12 +252,12 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.shown = false
-		return m, state.NavigateTarget{Kind: state.NavigateBackToBranches, StatusMessage: "Conflict resolution cancelled"}.Cmd()
+		return m, state.NavigateTarget{Kind: state.NavigateCloseBookmarkConflict, StatusMessage: "Conflict resolution cancelled"}.Cmd()
 	case "enter":
 		return m, state.NavigateTarget{
 			Kind:                 state.NavigateResolveConflict,
 			ConflictBookmarkName: m.bookmarkName,
-			ConflictResolution:  m.GetSelectedOption(),
+			ConflictResolution:   m.GetSelectedOption(),
 		}.Cmd()
 	case "j", "down":
 		if m.selectedOption < 1 {
@@ -175,7 +269,10 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.selectedOption--
 		}
 		return m, nil
-	case "l", "L":
+	case "l", "right":
+		m.selectedOption = 1
+		return m, nil
+	case "h", "left":
 		m.selectedOption = 0
 		return m, nil
 	case "r", "R":
@@ -216,11 +313,11 @@ func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
 		return m, state.NavigateTarget{
 			Kind:                 state.NavigateResolveConflict,
 			ConflictBookmarkName: m.bookmarkName,
-			ConflictResolution:  m.GetSelectedOption(),
+			ConflictResolution:   m.GetSelectedOption(),
 		}.Cmd()
 	case mouse.ZoneConflictCancel:
 		m.shown = false
-		return m, state.NavigateTarget{Kind: state.NavigateBackToBranches, StatusMessage: "Conflict resolution cancelled"}.Cmd()
+		return m, state.NavigateTarget{Kind: state.NavigateCloseBookmarkConflict, StatusMessage: "Conflict resolution cancelled"}.Cmd()
 	}
 	return m, nil
 }

@@ -74,6 +74,12 @@ func RevsetExactPattern(s string) string {
 	return "exact:" + RevsetQuotedSymbol(s)
 }
 
+// BookmarkArgForSetMove is the bookmark NAME/pattern for `jj bookmark set` and `jj bookmark move`.
+// Unlike `jj git push --bookmark`, set/move reject `exact:…` when the name contains `/`.
+func BookmarkArgForSetMove(name string) string {
+	return BookmarkNameForRevset(name)
+}
+
 // LocalBookmarkName returns the jj bookmark name for revsets and commands like name@origin
 // (strips one @remote suffix, e.g. feature@origin -> feature).
 func LocalBookmarkName(b string) string {

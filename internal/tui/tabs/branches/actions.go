@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tui/data"
 	"github.com/madicen/jj-tui/internal/tui/state"
@@ -13,6 +14,31 @@ import (
 	"github.com/madicen/jj-tui/internal/tui/tabs/prs"
 	"github.com/madicen/jj-tui/internal/tui/util"
 )
+
+// SortBranchList applies the same ordering as LoadBranchesCmd (locals first; among locals,
+// "ahead-only" branches before others; then name).
+func SortBranchList(branches []internal.Branch) {
+	sort.Slice(branches, func(i, j int) bool {
+		if branches[i].IsLocal != branches[j].IsLocal {
+			return branches[i].IsLocal
+		}
+		iAhead := branches[i].Ahead > 0 && branches[i].Behind == 0
+		jAhead := branches[j].Ahead > 0 && branches[j].Behind == 0
+		if iAhead != jAhead {
+			return iAhead
+		}
+		if iAhead {
+			if branches[i].Ahead != branches[j].Ahead {
+				return branches[i].Ahead > branches[j].Ahead
+			}
+		} else {
+			if branches[i].Behind != branches[j].Behind {
+				return branches[i].Behind < branches[j].Behind
+			}
+		}
+		return branches[i].Name < branches[j].Name
+	})
+}
 
 // LoadBranchesCmd returns a command that lists branches (with sorting) and sends BranchesLoadedMsg.
 func LoadBranchesCmd(jjSvc *jj.Service, branchLimit int) tea.Cmd {
@@ -25,26 +51,7 @@ func LoadBranchesCmd(jjSvc *jj.Service, branchLimit int) tea.Cmd {
 		if err != nil {
 			return BranchesLoadedMsg{Err: err}
 		}
-		sort.Slice(branches, func(i, j int) bool {
-			if branches[i].IsLocal != branches[j].IsLocal {
-				return branches[i].IsLocal
-			}
-			iAhead := branches[i].Ahead > 0 && branches[i].Behind == 0
-			jAhead := branches[j].Ahead > 0 && branches[j].Behind == 0
-			if iAhead != jAhead {
-				return iAhead
-			}
-			if iAhead {
-				if branches[i].Ahead != branches[j].Ahead {
-					return branches[i].Ahead > branches[j].Ahead
-				}
-			} else {
-				if branches[i].Behind != branches[j].Behind {
-					return branches[i].Behind < branches[j].Behind
-				}
-			}
-			return branches[i].Name < branches[j].Name
-		})
+		SortBranchList(branches)
 		return BranchesLoadedMsg{Branches: branches}
 	}
 }

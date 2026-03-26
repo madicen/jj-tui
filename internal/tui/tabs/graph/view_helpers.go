@@ -9,6 +9,7 @@ import (
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/styles"
+	"github.com/madicen/jj-tui/internal/tui/util"
 )
 
 // FindCommitsWithEmptyDescriptions finds commits from the selected commit back to
@@ -174,7 +175,9 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 				conflictedSet[cb] = true
 			}
 			for _, b := range commit.Branches {
-				if conflictedSet[b] {
+				raw, _ := util.NormalizeBookmarkListToken(b)
+				bKey := util.LocalBookmarkName(strings.TrimSpace(raw))
+				if conflictedSet[b] || conflictedSet[raw] || conflictedSet[bKey] {
 					branchParts = append(branchParts, lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555")).Render(b+" ⚠"))
 				} else {
 					branchParts = append(branchParts, b)
@@ -205,7 +208,7 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 				parts = append(parts, m.zoneManager.Mark(mouse.ZoneActionMoveOntoOriginAt(i), muted.Render("Forgot New Commit? (f)")))
 			}
 			if showResolveBookmark {
-				parts = append(parts, m.zoneManager.Mark(mouse.ZoneActionResolveBookmarkConflictAt(i), resolveStyle.Render("Resolve diverged bookmark (C)")))
+				parts = append(parts, m.zoneManager.Mark(mouse.ZoneActionResolveBookmarkConflictAt(i), resolveStyle.Render("Resolve diverged bookmark (c)")))
 			}
 			if showEvolog {
 				parts = append(parts, m.zoneManager.Mark(mouse.ZoneActionEvologSplitAt(i), muted.Render("split (z)")))

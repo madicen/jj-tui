@@ -35,6 +35,7 @@ const (
 	NavigateSubmitTicket // run create ticket and close modal
 	NavigateOpenEvologSplit    // experimental: show evolog picker for stack split
 	NavigatePerformEvologSplit // run jj new + restore (+ bookmark set if EvologBookmarkName set) after user picked base
+	NavigateCloseBookmarkConflict // close diverged-bookmark dialog; main restores the tab stored when opening
 )
 
 // NavigateTarget describes a navigation request. Only main can perform these

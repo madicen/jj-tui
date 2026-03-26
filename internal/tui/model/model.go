@@ -47,6 +47,9 @@ type Model struct {
 	// Dimensions (main only)
 	width  int
 	height int
+	// When ViewBookmarkConflict is open: tab to show under the overlay and restore on close/resolve.
+	bookmarkConflictReturnValid bool
+	bookmarkConflictReturnView  state.ViewMode
 	// Selection state lives in tab models: graph (commit/file), prs, tickets, branches
 	redoOperationID string
 
@@ -332,6 +335,18 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		)
 	case state.NavigateBackToBranches:
 		m.appState.ViewMode = state.ViewBranches
+		if t.StatusMessage != "" {
+			m.appState.StatusMessage = t.StatusMessage
+		}
+		return m, nil
+	case state.NavigateCloseBookmarkConflict:
+		m.conflictModal.Hide()
+		if m.bookmarkConflictReturnValid {
+			m.appState.ViewMode = m.bookmarkConflictReturnView
+		} else {
+			m.appState.ViewMode = state.ViewBranches
+		}
+		m.bookmarkConflictReturnValid = false
 		if t.StatusMessage != "" {
 			m.appState.StatusMessage = t.StatusMessage
 		}
@@ -655,6 +670,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.helpTabModel.SetDimensions(m.width, contentHeight)
 		m.evologSplitModal = m.evologSplitModal.SetDimensions(m.width, m.height)
 		m.divergentModal = m.divergentModal.SetDimensions(m.width, m.height)
+		m.conflictModal = m.conflictModal.SetDimensions(m.width, m.height)
 		if len(cmds) > 0 {
 			return m, tea.Batch(cmds...)
 		}
@@ -1235,11 +1251,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.errorModal.SetError(nil, false, "")
 		}
 		if info != nil {
+			m.bookmarkConflictReturnView = m.appState.ViewMode
+			m.bookmarkConflictReturnValid = true
+			m.conflictModal = m.conflictModal.SetDimensions(m.width, m.height)
 			m.conflictModal.Show(info.BookmarkName, info.LocalID, info.RemoteID, info.LocalSummary, info.RemoteSummary)
 			m.appState.ViewMode = state.ViewBookmarkConflict
 		}
 		return m, cmd
 	case conflicttab.BookmarkConflictResolvedMsg:
+		m.conflictModal.Hide()
+		restore := state.ViewBranches
+		if m.bookmarkConflictReturnValid {
+			restore = m.bookmarkConflictReturnView
+		}
+		m.bookmarkConflictReturnValid = false
+		m.appState.ViewMode = restore
 		return m, conflicttab.HandleBookmarkConflictResolvedMsg(msg, &m.appState, m.settingsTabModel.GetSettingsBranchLimit())
 	case graphtab.DivergentCommitInfoMsg:
 		cmd, info := divergenttab.HandleDivergentCommitInfoMsg(msg, &m.appState)

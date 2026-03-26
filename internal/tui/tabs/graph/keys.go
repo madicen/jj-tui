@@ -115,6 +115,13 @@ func (m GraphModel) handleKeyMsg(msg tea.KeyMsg) (GraphModel, *Request, tea.Cmd)
 			return m, &Request{UpdatePR: true}, nil
 		}
 	case "c":
+		// Match Branches tab: resolve diverged bookmark with lowercase c. (Create PR only when not conflicted.)
+		if m.repository != nil && m.graphFocused && m.selectedCommit >= 0 && m.selectedCommit < len(m.repository.Graph.Commits) {
+			c := m.repository.Graph.Commits[m.selectedCommit]
+			if len(c.ConflictedBranches) > 0 {
+				return m, &Request{ResolveBookmarkConflict: true}, nil
+			}
+		}
 		if m.repository != nil {
 			return m, &Request{CreatePR: true}, nil
 		}

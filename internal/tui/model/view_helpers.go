@@ -22,14 +22,10 @@ func (m *Model) View() string {
 		return m.renderWithHeader(m.initRepoModel.View())
 	}
 
-	// Full-screen centered modals (no header/tabs behind)
-	if m.appState.ViewMode == state.ViewBookmarkConflict {
-		if conflictContent := m.conflictModal.View(); conflictContent != "" {
-			return m.centerModal(conflictContent)
-		}
-	}
-
 	v := m.renderMainLayoutView()
+	// Busy spinner must sit *under* interactive overlays; otherwise Loading hides the bookmark /
+	// divergent pickers while keys still go to those modals (invisible resolve on j/k/Enter).
+	v = m.applyLoadingOverlay(v)
 
 	if m.appState.ViewMode == state.ViewEvologSplit {
 		if evologContent := m.evologSplitModal.View(); evologContent != "" {
@@ -41,6 +37,11 @@ func (m *Model) View() string {
 			v = applyBubbleOverlayCentered(v, divergentContent, m.width, m.height)
 		}
 	}
+	if m.appState.ViewMode == state.ViewBookmarkConflict {
+		if conflictContent := m.conflictModal.View(); conflictContent != "" {
+			v = applyBubbleOverlayCentered(v, conflictContent, m.width, m.height)
+		}
+	}
 
 	if warningContent := m.warningModal.View(); warningContent != "" {
 		v = applyBubbleOverlayCentered(v, warningContent, m.width, m.height)
@@ -49,7 +50,6 @@ func (m *Model) View() string {
 		v = applyBubbleOverlayCentered(v, errorContent, m.width, m.height)
 	}
 
-	v = m.applyLoadingOverlay(v)
 	return m.zoneManager.Scan(v)
 }
 
@@ -91,7 +91,19 @@ func (m *Model) renderMainLayoutView() string {
 	case state.ViewCreateBookmark:
 		content = m.bookmarkModal.View()
 	case state.ViewBookmarkConflict:
-		content = m.conflictModal.View()
+		// Modal drawn as overlay in View(); keep the tab the user was on (branches vs graph) visible underneath.
+		if m.bookmarkConflictReturnValid {
+			switch m.bookmarkConflictReturnView {
+			case state.ViewBranches:
+				content = m.branchesTabModel.View()
+			case state.ViewCommitGraph:
+				content = m.graphTabModel.View()
+			default:
+				content = m.graphTabModel.View()
+			}
+		} else {
+			content = m.graphTabModel.View()
+		}
 	case state.ViewDivergentCommit, state.ViewEvologSplit:
 		// Modal is drawn as an overlay in View(); keep graph visible underneath.
 		content = m.graphTabModel.View()
@@ -118,17 +130,6 @@ func (m *Model) renderMainLayoutView() string {
 		" ",
 		statusBar,
 	)
-}
-
-// centerModal centers a modal on the screen
-func (m *Model) centerModal(content string) string {
-	centered := lipgloss.NewStyle().
-		Width(m.width).
-		Height(m.height).
-		Align(lipgloss.Center).
-		AlignVertical(lipgloss.Center).
-		Render(content)
-	return m.zoneManager.Scan(centered)
 }
 
 // renderWithHeader renders content with the standard header (preserves zone markup for mouse)

@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
-# Repo for vhs/bookmark-conflict.tape: feature bookmark pushed to fake origin, then amended
-# locally so local tip != origin (diverged bookmark / conflict resolution demo).
+# Repo for vhs/bookmark-conflict.tape: colocated jj + git; feature bookmark pushed to origin, then amended locally.
+# After this, `jj bookmark list --all-remotes` shows the usual colocated pattern:
+#   vhs/conflict-feature: <local tip>
+#     @git:   same as local (underlying git branch)
+#     @origin (ahead by … behind by …): remembered remote tip ≠ local  ← jj-tui uses this for Resolve (c) / graph (C).
+# That is the same class of situation as “@git vs @origin” confusion when @git tracks your working tree and @origin lags.
 # Run: make bookmark-conflict-gif
 # Requires: jj, git
 set -euo pipefail

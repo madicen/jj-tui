@@ -35,7 +35,7 @@ When the same **change ID** exists on more than one revision, the graph shows **
 
 ### Resolving diverged bookmarks (local vs remote)
 
-When a bookmark was pushed and then amended or moved locally, **jj** may show the branch as diverged from `bookmark@origin`. **Branches** (`b`): select the bookmark, **Resolve Conflict** (`c`), then choose **keep local** or **reset to remote**. On the **graph**, the same flow is available with **Shift+C** (`C`) when a row shows a diverged bookmark. Recording: `fixtures/setup-bookmark-conflict-vhs-repo.sh`, `make bookmark-conflict-gif`.
+When a bookmark was pushed and then amended or moved locally, **jj** may show the branch as diverged from `bookmark@origin`. **Branches** (`b`): move the highlight to the **diverged local** bookmark (`j`/`k`), then **Resolve Conflict** (`c`)—a **centered popup** compares local vs `origin` and offers **Keep local** (resolve the bookmark, then `jj git push`) or **Reset to origin**. The list is **sorted** (locals with commits ahead of `trunk` and none behind are listed before e.g. `main`), so in the bookmark-conflict fixture the diverged feature is often **already first**—an extra **Down** would select `main` and **`c`** would not open the resolver. On the **graph**, with the row selected and the graph pane focused, **`c`** opens the same resolver when that row has a diverged bookmark (otherwise **`c`** starts **Create PR**). **`C` (shift+c)** also opens the resolver on a diverged row. Narrow terminals stack the columns; wide terminals show local/remote and both choices **side by side** so the dialog stays short for mice. Recording: `fixtures/setup-bookmark-conflict-vhs-repo.sh`, `make bookmark-conflict-gif`.
 
 ![Resolve diverged bookmark](screenshots/bookmark-conflict.gif)
 
@@ -171,7 +171,7 @@ The graph view has two panes: the commit graph (left) and changed files (right).
 - `a`: Abandon commit (or resolve divergent)
 - `m`: Create or move bookmark on selected commit
 - `x`: Delete bookmark from selected commit
-- `c`: Create PR from selected commit (if bookmark exists)
+- `c`: Create PR from selected commit (if bookmark exists), or **open diverged-bookmark resolver** when the selected row has a diverged bookmark (graph pane focused)
 - `u`: Push/update PR (pushes to existing PR branch)
 - `f` (graph pane focused): **Forgot New Commit?** — fetch, then create a new commit on top of `bookmark@origin` with the same tree as the bookmark tip, move the bookmark there, **rebase any stacked commits that were on top of the old tip** onto the new tip (excluding the working copy), abandon the old tip, and **drop any leftover divergent duplicates** of the same change ID (jj keeps the revision on your `@` ancestry). Use when you amended after a push so you can `jj git push` without `--force`.
 - `z` (graph pane focused, experimental): **Split (evolog)** — same as the inline **split (z)** when it appears on the selected row: open the evolog modal only when the change has evolution history with a real tree diff vs an older revision (and no blocking descendants). See the clip under [Evolog split (experimental)](#evolog-split-experimental).

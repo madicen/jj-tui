@@ -15,6 +15,7 @@ import (
 	"github.com/madicen/jj-tui/internal/tui/data"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/state"
+	branchestab "github.com/madicen/jj-tui/internal/tui/tabs/branches"
 	graphtab "github.com/madicen/jj-tui/internal/tui/tabs/graph"
 )
 
@@ -1541,5 +1542,75 @@ func TestInProgressTransitionDetection(t *testing.T) {
 				t.Errorf("%s\nExpected: %q, Got: %q", tc.description, tc.expectedID, result)
 			}
 		})
+	}
+}
+
+// Opening the bookmark-conflict overlay from Branches must keep the branch list visible under the modal
+// (not swap the underlay to the graph), so the dialog reads as a popup over the tab the user was on.
+func TestBookmarkConflictOverlayKeepsBranchesUnderlay(t *testing.T) {
+	m := newTestModel()
+	defer m.Close()
+	m.appState.ViewMode = state.ViewBranches
+	m.branchesTabModel.UpdateBranches([]internal.Branch{
+		{Name: "main", IsLocal: true},
+		{Name: "vhs/conflict-feature", IsLocal: true, HasConflict: true},
+	})
+	m.branchesTabModel.SetSelectedBranch(1)
+
+	msg := branchestab.BookmarkConflictInfoMsg{
+		BookmarkName:  "vhs/conflict-feature",
+		LocalID:       "abcabcab",
+		RemoteID:      "defdefde",
+		LocalSummary:  "local tip",
+		RemoteSummary: "origin tip",
+	}
+	newModel, _ := m.Update(msg)
+	m = newModel.(*Model)
+
+	if m.appState.ViewMode != state.ViewBookmarkConflict {
+		t.Fatalf("expected ViewBookmarkConflict, got %v", m.appState.ViewMode)
+	}
+	if !m.bookmarkConflictReturnValid || m.bookmarkConflictReturnView != state.ViewBranches {
+		t.Fatalf("expected return view Branches, valid=%v view=%v", m.bookmarkConflictReturnValid, m.bookmarkConflictReturnView)
+	}
+
+	view := m.View()
+	if !strings.Contains(view, "Diverged bookmark") {
+		t.Fatalf("expected conflict title in view")
+	}
+	if !strings.Contains(view, "vhs/conflict-feature") {
+		t.Fatalf("expected bookmark name in view")
+	}
+	// Branch list chrome should still be in the composite (underlay is Branches, not Graph).
+	if !strings.Contains(view, "Branches") {
+		t.Fatalf("expected branches tab underlay in composite view")
+	}
+}
+
+// Regression: centered busy overlay used to paint after the bookmark-conflict dialog, hiding it while
+// keystrokes still went to the modal (demo looked like instant resolve with no popup).
+func TestBookmarkConflictDialogNotHiddenByLoadingOverlay(t *testing.T) {
+	m := newTestModel()
+	defer m.Close()
+	m.appState.ViewMode = state.ViewBranches
+	m.appState.Loading = true
+	m.appState.StatusMessage = "Initializing…"
+	m.branchesTabModel.UpdateBranches([]internal.Branch{
+		{Name: "vhs/conflict-feature", IsLocal: true, HasConflict: true},
+	})
+	m.branchesTabModel.SetSelectedBranch(0)
+
+	newModel, _ := m.Update(branchestab.BookmarkConflictInfoMsg{
+		BookmarkName: "vhs/conflict-feature",
+		LocalID:      "aaa",
+		RemoteID:     "bbb",
+		LocalSummary: "local",
+		RemoteSummary: "remote",
+	})
+	m = newModel.(*Model)
+
+	view := m.View()
+	if !strings.Contains(view, "Diverged bookmark") {
+		t.Fatalf("conflict dialog should appear above loading state; view snippet: %.200q", view)
 	}
 }

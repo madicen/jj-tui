@@ -1,4 +1,4 @@
-# Resolve diverged bookmark: Branches tab (c) opens local vs remote chooser; keep local or reset to remote.
+# Diverged bookmark: graph stays visible; centered popup (Branches c) shows local vs origin, side-by-side choices.
 # Run: make bookmark-conflict-gif
 # Requires: VHS, bash, jj, git, fixtures/setup-bookmark-conflict-vhs-repo.sh
 
@@ -19,19 +19,20 @@ Show
 
 Sleep 2s
 
-# Commit graph: diverged bookmark shows warning on the feature row (and optional inline resolve).
-# Open Branches to use Resolve Conflict (c).
-Type "b"
-Sleep 2s
-
-# Local bookmark list order is main first; move to diverged vhs/conflict-feature.
-Down
+# Graph: diverged bookmark on feature row (dialog will overlay without hiding the graph).
 Sleep 1s
 
+# Branches tab → vhs/conflict-feature is first in list (LoadBranches sorts ahead-only locals first), so do NOT press Down (that selects main).
+Type "b"
+Sleep 2s
 Type "c"
 Sleep 3s
 
-# Keep local revision (default); confirm.
+# Switch resolution with j / k (popup stays compact); confirm keep local.
+Type "j"
+Sleep 1s
+Type "k"
+Sleep 1s
 Enter
 Sleep 5s
 
