@@ -17,6 +17,10 @@ func TestNormalizeBookmarkListToken(t *testing.T) {
 		{"feature*?", "feature", true},
 		{"feature??", "feature", true},
 		{"my/feature-1", "my/feature-1", false},
+		// jj bookmark list may append display-only " (conflicted)" before ':' — not part of the revset name.
+		{"madicen/APP-429 (conflicted)", "madicen/APP-429", true},
+		{"feat (diverged)", "feat", true},
+		{"wip (CONFLICTED)*", "wip", true},
 	}
 	for _, tt := range tests {
 		name, q := NormalizeBookmarkListToken(tt.token)
@@ -30,5 +34,13 @@ func TestFirstOperableBookmarkName_stripsConflictMarker(t *testing.T) {
 	got := FirstOperableBookmarkName([]string{"wip?"})
 	if got != "wip" {
 		t.Fatalf("FirstOperableBookmarkName = %q; want wip", got)
+	}
+}
+
+func TestBookmarkNameForRevset_stripsJJListLabel(t *testing.T) {
+	got := BookmarkNameForRevset("madicen/APP-429-svc-github-improvments (conflicted)")
+	want := "madicen/APP-429-svc-github-improvments"
+	if got != want {
+		t.Fatalf("BookmarkNameForRevset = %q; want %q", got, want)
 	}
 }

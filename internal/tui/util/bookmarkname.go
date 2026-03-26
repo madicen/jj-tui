@@ -4,11 +4,37 @@ import (
 	"strings"
 )
 
+// stripJJBookmarkDisplaySuffixes removes jj bookmark list labels that are not part of the name,
+// e.g. "my/feature (conflicted):" from `jj bookmark list` — otherwise revsets break on '('.
+func stripJJBookmarkDisplaySuffixes(s string) string {
+	s = strings.TrimSpace(s)
+	for {
+		trimmedAnything := false
+		for _, suf := range []string{" (conflicted)", " (diverged)"} {
+			if len(s) >= len(suf) && strings.EqualFold(s[len(s)-len(suf):], suf) {
+				s = strings.TrimSpace(s[:len(s)-len(suf)])
+				trimmedAnything = true
+				break
+			}
+		}
+		if !trimmedAnything {
+			return s
+		}
+	}
+}
+
+// BookmarkNameForRevset normalizes a bookmark string for jj -r, bookmark set, and conflict helpers:
+// trims space, strips list-only suffixes like " (conflicted)", then list token decorations (* / ?).
+func BookmarkNameForRevset(name string) string {
+	n, _ := NormalizeBookmarkListToken(name)
+	return n
+}
+
 // JJExactBookmarkPattern returns a jj string pattern that matches exactly this bookmark name.
 // jj bookmark delete/set and git push --bookmark interpret bare names as globs; see:
 // https://jj-vcs.github.io/jj/latest/revsets/#string-patterns
 func JJExactBookmarkPattern(name string) string {
-	name = strings.TrimSpace(name)
+	name = BookmarkNameForRevset(name)
 	if name == "" {
 		return name
 	}
@@ -29,22 +55,40 @@ func LocalBookmarkName(b string) string {
 }
 
 // NormalizeBookmarkListToken normalizes a bookmark token as emitted by jj graph templates
-// or `jj bookmark list`: trims space, removes trailing * (current-bookmark) and ?
-// (diverged / conflicted) markers—possibly interleaved—and reports whether any ? was present
-// in the raw token.
+// or `jj bookmark list`: trims space, removes display-only suffixes " (conflicted)" / " (diverged)"
+// that some jj versions print before ':', then trailing * / ? (possibly interleaved).
+// hadConflictQuestionMark is true if '?' was present or those display suffixes appeared.
 func NormalizeBookmarkListToken(token string) (name string, hadConflictQuestionMark bool) {
 	token = strings.TrimSpace(token)
 	if token == "" {
 		return "", false
 	}
 	hadConflictQuestionMark = strings.Contains(token, "?")
+	low := strings.ToLower(token)
+	if strings.Contains(low, " (conflicted)") || strings.Contains(low, " (diverged)") {
+		hadConflictQuestionMark = true
+	}
 	name = token
-	for strings.HasSuffix(name, "?") || strings.HasSuffix(name, "*") {
-		if strings.HasSuffix(name, "?") {
-			name = strings.TrimSuffix(name, "?")
-			continue
+	if name == "" {
+		return "", hadConflictQuestionMark
+	}
+	// jj may combine * / ? with " (conflicted)"; strip in turns until stable.
+	for {
+		prev := name
+		name = stripJJBookmarkDisplaySuffixes(name)
+		for strings.HasSuffix(name, "?") || strings.HasSuffix(name, "*") {
+			if strings.HasSuffix(name, "?") {
+				name = strings.TrimSuffix(name, "?")
+				continue
+			}
+			name = strings.TrimSuffix(name, "*")
 		}
-		name = strings.TrimSuffix(name, "*")
+		if name == prev {
+			break
+		}
+	}
+	if name == "" {
+		return "", hadConflictQuestionMark
 	}
 	return name, hadConflictQuestionMark
 }
