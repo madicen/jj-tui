@@ -11,6 +11,7 @@ import (
 	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/tabs/bookmark"
 	"github.com/madicen/jj-tui/internal/tui/tabs/prs"
+	"github.com/madicen/jj-tui/internal/tui/util"
 )
 
 // LoadBranchesCmd returns a command that lists branches (with sorting) and sends BranchesLoadedMsg.
@@ -172,10 +173,11 @@ func LoadBookmarkConflictInfo(svc *jj.Service, bookmarkName string) tea.Cmd {
 	if svc == nil {
 		return nil
 	}
+	cleanName := util.BookmarkNameForRevset(bookmarkName)
 	return func() tea.Msg {
-		localID, remoteID, localSummary, remoteSummary, err := svc.GetBookmarkConflictInfo(context.Background(), bookmarkName)
+		localID, remoteID, localSummary, remoteSummary, err := svc.GetBookmarkConflictInfo(context.Background(), cleanName)
 		return BookmarkConflictInfoMsg{
-			BookmarkName:  bookmarkName,
+			BookmarkName:  cleanName,
 			LocalID:       localID,
 			RemoteID:      remoteID,
 			LocalSummary:  localSummary,

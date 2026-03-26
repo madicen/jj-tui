@@ -426,6 +426,10 @@ func (s *Service) ResolveBookmarkConflictKeepLocal(ctx context.Context, bookmark
 
 // ResolveBookmarkConflictResetToRemote resolves a diverged bookmark by resetting local to remote
 func (s *Service) ResolveBookmarkConflictResetToRemote(ctx context.Context, bookmarkName string) error {
+	bookmarkName = util.BookmarkNameForRevset(bookmarkName)
+	if bookmarkName == "" {
+		return fmt.Errorf("bookmark name is required")
+	}
 	// Set the local bookmark to match the remote
 	// This uses the @origin suffix to reference the remote version
 	local := util.JJExactBookmarkPattern(bookmarkName)
@@ -435,6 +439,10 @@ func (s *Service) ResolveBookmarkConflictResetToRemote(ctx context.Context, book
 // GetBookmarkConflictInfo retrieves information about a conflicted bookmark
 // Returns local commit ID, remote commit ID, local summary, remote summary
 func (s *Service) GetBookmarkConflictInfo(ctx context.Context, bookmarkName string) (localID, remoteID, localSummary, remoteSummary string, err error) {
+	bookmarkName = util.BookmarkNameForRevset(bookmarkName)
+	if bookmarkName == "" {
+		return "", "", "", "", fmt.Errorf("bookmark name is required")
+	}
 	// Get local bookmark info
 	localOut, err := s.runJJOutput(ctx, "log", "-r", bookmarkName, "--no-graph", "-T", `change_id.short(8) ++ "|" ++ if(description, description.first_line(), "(no description)")`)
 	if err != nil {
