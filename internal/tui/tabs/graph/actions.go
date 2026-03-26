@@ -13,6 +13,7 @@ import (
 	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/util"
 	bookmarktab "github.com/madicen/jj-tui/internal/tui/tabs/bookmark"
+	branchestab "github.com/madicen/jj-tui/internal/tui/tabs/branches"
 	descedittab "github.com/madicen/jj-tui/internal/tui/tabs/descedit"
 	prstab "github.com/madicen/jj-tui/internal/tui/tabs/prs"
 )
@@ -115,6 +116,16 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 			return Result{FollowUp: FollowUpStartEvologSplit, CommitIndex: ctx.SelectedCommit}
 		}
 		return Result{}
+	}
+	if r.ResolveBookmarkConflict {
+		if !ctx.IsSelectedCommitValid() || ctx.Repository == nil {
+			return Result{}
+		}
+		commit := ctx.Repository.Graph.Commits[ctx.SelectedCommit]
+		if len(commit.ConflictedBranches) == 0 {
+			return Result{Status: "No diverged bookmark on this commit"}
+		}
+		return Result{FollowUp: FollowUpResolveBookmarkConflict, BookmarkConflictName: commit.ConflictedBranches[0]}
 	}
 	if r.NewCommit {
 		cmd, _ := executeNewCommit(ctx)
@@ -274,9 +285,14 @@ func executeDeleteBookmark(ctx *RequestContext) (tea.Cmd, string) {
 		return nil, ""
 	}
 	commit := ctx.Repository.Graph.Commits[ctx.SelectedCommit]
-	name := internal.FirstOperableBookmarkName(commit.Branches)
+	name := util.FirstOperableBookmarkName(commit.Branches)
 	if name == "" {
 		return nil, "No bookmark on this commit to delete"
+	}
+	for _, cb := range commit.ConflictedBranches {
+		if cb == name {
+			return nil, "Bookmark diverged (local vs remote). Resolve with Shift+C or Branches tab (c)."
+		}
 	}
 	return bookmarktab.DeleteBookmarkCmd(ctx.JJService, name), ""
 }
@@ -354,7 +370,7 @@ func bookmarkNameForOriginSplit(branches []string) string {
 		if b == "" {
 			continue
 		}
-		local := internal.LocalBookmarkName(strings.TrimSpace(b))
+		local := util.LocalBookmarkName(strings.TrimSpace(b))
 		if local == "" || isDefaultBranch(local) {
 			continue
 		}
@@ -365,7 +381,7 @@ func bookmarkNameForOriginSplit(branches []string) string {
 
 func commitHasBookmarkLocalName(branches []string, local string) bool {
 	return slices.ContainsFunc(branches, func(b string) bool {
-		return internal.LocalBookmarkName(b) == local
+		return util.LocalBookmarkName(b) == local
 	})
 }
 
@@ -467,6 +483,12 @@ func ApplyResult(res Result, graphModel *GraphModel, ctx *RequestContext, app *s
 	case FollowUpStartEvologSplit:
 		if ctx != nil && ctx.Repository != nil && res.CommitIndex >= 0 && res.CommitIndex < len(ctx.Repository.Graph.Commits) {
 			return state.NavigateTarget{Kind: state.NavigateOpenEvologSplit, Commit: ctx.Repository.Graph.Commits[res.CommitIndex]}.Cmd()
+		}
+		return nil
+	case FollowUpResolveBookmarkConflict:
+		if ctx != nil && ctx.JJService != nil && strings.TrimSpace(res.BookmarkConflictName) != "" {
+			app.StatusMessage = "Loading bookmark conflict info…"
+			return branchestab.LoadBookmarkConflictInfoCmd(ctx.JJService, res.BookmarkConflictName)
 		}
 		return nil
 	case FollowUpUpdatePR:
@@ -659,7 +681,7 @@ func FindPRBranchForCommit(repo *internal.Repository, commitIndex int) string {
 		visited[idx] = true
 		commit := repo.Graph.Commits[idx]
 		for _, branch := range commit.Branches {
-			local := internal.LocalBookmarkName(branch)
+			local := util.LocalBookmarkName(branch)
 			if openPRBranches[branch] || openPRBranches[local] {
 				return local
 			}

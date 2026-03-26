@@ -1,6 +1,6 @@
 # jj-tui Makefile
 
-.PHONY: build test clean screenshots demo-repo after-origin-vhs-repo after-origin-gif evolog-split-vhs-repo evolog-split-gif divergent-vhs-repo divergent-gif screenshot-after-origin screenshot-evolog-split screenshot-divergent help
+.PHONY: build test clean screenshots demo-repo after-origin-vhs-repo after-origin-gif evolog-split-vhs-repo evolog-split-gif divergent-vhs-repo divergent-gif bookmark-conflict-vhs-repo bookmark-conflict-gif screenshot-after-origin screenshot-evolog-split screenshot-divergent screenshot-bookmark-conflict help
 
 # Default target
 all: build
@@ -16,7 +16,7 @@ test:
 # Clean build artifacts
 clean:
 	rm -f jj-tui
-	rm -rf fixtures/demo-repo fixtures/after-origin-vhs-repo fixtures/after-origin-fake-origin.git fixtures/evolog-split-vhs-repo fixtures/divergent-vhs-repo
+	rm -rf fixtures/demo-repo fixtures/after-origin-vhs-repo fixtures/after-origin-fake-origin.git fixtures/evolog-split-vhs-repo fixtures/divergent-vhs-repo fixtures/bookmark-conflict-vhs-repo fixtures/bookmark-conflict-fake-origin.git
 
 # Setup the demo repository for screenshots
 demo-repo:
@@ -39,7 +39,8 @@ screenshots: build demo-repo
 	vhs vhs/after-origin.tape
 	vhs vhs/evolog-split.tape
 	vhs vhs/divergent.tape
-	@echo "Screenshots saved to screenshots/ (including after-origin.gif, evolog-split.gif, divergent.gif)"
+	vhs vhs/bookmark-conflict.tape
+	@echo "Screenshots saved to screenshots/ (including after-origin.gif, evolog-split.gif, divergent.gif, bookmark-conflict.gif)"
 
 # Generate a demo GIF showing the TUI in action
 demo-gif: build demo-repo
@@ -85,6 +86,15 @@ divergent-gif: build divergent-vhs-repo
 	vhs vhs/divergent.tape
 	@echo "GIF saved to screenshots/divergent.gif"
 
+# Diverged bookmark: local tip != origin after amend; resolve via Branches (c) or graph (Shift+C); see vhs/bookmark-conflict.tape
+bookmark-conflict-vhs-repo:
+	bash fixtures/setup-bookmark-conflict-vhs-repo.sh
+
+bookmark-conflict-gif: build bookmark-conflict-vhs-repo
+	@mkdir -p screenshots
+	vhs vhs/bookmark-conflict.tape
+	@echo "GIF saved to screenshots/bookmark-conflict.gif"
+
 # Generate individual screenshots
 screenshot-graph: build demo-repo
 	vhs vhs/graph.tape
@@ -119,6 +129,10 @@ screenshot-divergent: build divergent-vhs-repo
 	@mkdir -p screenshots
 	vhs vhs/divergent.tape
 
+screenshot-bookmark-conflict: build bookmark-conflict-vhs-repo
+	@mkdir -p screenshots
+	vhs vhs/bookmark-conflict.tape
+
 # Run in demo mode (for manual testing)
 demo: build demo-repo
 	cd fixtures/demo-repo && ../../jj-tui --demo
@@ -141,9 +155,11 @@ help:
 	@echo "  after-origin-gif - Generate after-origin GIF: (f) restack + (u) update PR (vhs/after-origin.tape)"
 	@echo "  evolog-split-gif - Generate evolog-split GIF: experimental (z) split (vhs/evolog-split.tape)"
 	@echo "  divergent-gif    - Generate divergent GIF: resolve duplicate change ID (vhs/divergent.tape)"
+	@echo "  bookmark-conflict-gif - Generate diverged-bookmark GIF: Branches (c) resolver (vhs/bookmark-conflict.tape)"
 	@echo "  screenshot-after-origin   - Regenerate only screenshots/after-origin.gif"
 	@echo "  screenshot-evolog-split   - Regenerate only screenshots/evolog-split.gif"
 	@echo "  screenshot-divergent      - Regenerate only screenshots/divergent.gif"
+	@echo "  screenshot-bookmark-conflict - Regenerate only screenshots/bookmark-conflict.gif"
 	@echo "  demo         - Run the app in demo mode"
 	@echo "  deps         - Install/tidy dependencies"
 	@echo "  help         - Show this help"

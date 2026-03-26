@@ -225,12 +225,12 @@ func GetExistingBookmarks(repo *internal.Repository, commitIdx int) []string {
 	commit := repo.Graph.Commits[commitIdx]
 	existingOnCommit := make(map[string]bool)
 	for _, b := range commit.Branches {
-		existingOnCommit[internal.LocalBookmarkName(b)] = true
+		existingOnCommit[util.LocalBookmarkName(b)] = true
 	}
 	bookmarkSet := make(map[string]bool)
 	for _, c := range repo.Graph.Commits {
 		for _, b := range c.Branches {
-			base := internal.LocalBookmarkName(b)
+			base := util.LocalBookmarkName(b)
 			if !existingOnCommit[base] {
 				bookmarkSet[base] = true
 			}
@@ -316,7 +316,7 @@ func FindBookmarkForCommit(repo *internal.Repository, commitIdx int) string {
 		visited[idx] = true
 		commit := repo.Graph.Commits[idx]
 		if len(commit.Branches) > 0 {
-			return internal.FirstOperableBookmarkName(commit.Branches)
+			return util.FirstOperableBookmarkName(commit.Branches)
 		}
 		for _, parentID := range commit.Parents {
 			if parentIdx, ok := commitIDToIndex[parentID]; ok {

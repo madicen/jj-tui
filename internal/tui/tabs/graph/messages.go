@@ -132,6 +132,8 @@ type Request struct {
 	MoveDeltaOntoOrigin bool
 	// StartEvologSplit: experimental FAQ-style split using jj evolog to pick parent revision.
 	StartEvologSplit bool
+	// ResolveBookmarkConflict: open diverged-bookmark dialog (local vs remote) for selected commit.
+	ResolveBookmarkConflict bool
 }
 
 // Cmd returns a tea.Cmd that sends this request to the program.
@@ -154,6 +156,7 @@ const (
 	FollowUpLoadChangedFiles
 	FollowUpShowEmptyDescWarning
 	FollowUpStartEvologSplit
+	FollowUpResolveBookmarkConflict
 )
 
 // Result is returned by HandleRequest. Main sets status from Status, runs Cmd if set, and performs the FollowUp action.
@@ -169,6 +172,8 @@ type Result struct {
 	WarningMessage  string
 	WarningCommits  []internal.Commit
 	PerformRebase   bool
+	// BookmarkConflictName is the local bookmark name when FollowUp is FollowUpResolveBookmarkConflict.
+	BookmarkConflictName string
 }
 
 // FocusMessage returns the status bar message for graph vs files pane focus.

@@ -34,7 +34,7 @@ func PrepareCreatePR(repo *internal.Repository, commitIdx int, jiraTitles map[st
 	var headBranch string
 	var needsMove bool
 	if len(commit.Branches) > 0 {
-		headBranch = internal.FirstOperableBookmarkName(commit.Branches)
+		headBranch = util.FirstOperableBookmarkName(commit.Branches)
 		needsMove = false
 	} else {
 		headBranch = bookmark.FindBookmarkForCommit(repo, commitIdx)

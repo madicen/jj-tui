@@ -10,6 +10,7 @@ import (
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
+	"github.com/madicen/jj-tui/internal/tui/util"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/mattn/go-runewidth"
@@ -396,7 +397,7 @@ func (m *GraphModel) buildGraphData() GraphData {
 			commitIDToIndex[commit.ChangeID] = i
 			// Check if this commit has a PR bookmark
 			for _, branch := range commit.Branches {
-				local := internal.LocalBookmarkName(branch)
+				local := util.LocalBookmarkName(branch)
 				if openPRBranches[branch] || openPRBranches[local] {
 					commitPRBranch[i] = local
 					break
@@ -437,7 +438,7 @@ func (m *GraphModel) buildGraphData() GraphData {
 			commitIDToIndex[commit.ChangeID] = i
 			// Check if this commit has a bookmark without an open PR
 			for _, branch := range commit.Branches {
-				local := internal.LocalBookmarkName(branch)
+				local := util.LocalBookmarkName(branch)
 				if !openPRBranches[branch] && !openPRBranches[local] {
 					commitBookmark[i] = local
 					break

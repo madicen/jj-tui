@@ -18,6 +18,7 @@ import (
 	"github.com/madicen/jj-tui/internal/tui/data"
 	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/styles"
+	"github.com/madicen/jj-tui/internal/tui/util"
 )
 
 // SettingsParams contains all settings values.
@@ -386,7 +387,7 @@ func DeleteAllBookmarksCmd(jjSvc *jj.Service, repo *internal.Repository) tea.Cmd
 		bookmarkMap := make(map[string]bool)
 		for _, commit := range repo.Graph.Commits {
 			for _, branch := range commit.Branches {
-				bookmarkMap[internal.LocalBookmarkName(branch)] = true
+				bookmarkMap[util.LocalBookmarkName(branch)] = true
 			}
 		}
 		if len(bookmarkMap) == 0 {

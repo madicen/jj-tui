@@ -4,17 +4,7 @@
 
 A modern Terminal User Interface (TUI) for managing [Jujutsu](https://github.com/martinvonz/jj) repositories. Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lip Gloss](https://github.com/charmbracelet/lipgloss) for an intuitive and beautiful command-line experience.
 
-### Graph
-![Graph](screenshots/graph.png)
-
-### Pull Requests
-![Pull Requests](screenshots/prs.png)
-
-### Tickets
-![Tickets](screenshots/tickets.png)
-
-### Branches
-![Branches](screenshots/branches.png)
+The demo above walks through the **commit graph**, **tickets**, **pull requests**, and **branches** (`make demo-gif` / `vhs/all.tape`). Static captures below cover views that are not in that recording.
 
 ### Settings
 ![Settings](screenshots/settings.png)
@@ -42,6 +32,12 @@ If you already pushed a feature bookmark but kept editing on the same jj revisio
 When the same **change ID** exists on more than one revision, the graph shows **divergent**. Press **`d`** on that row to open the resolver: each option lists metadata and a short **files vs parent** summary so you can pick which revision to keep (the others are abandoned). The clip uses `fixtures/setup-divergent-vhs-repo.sh`.
 
 ![Resolve divergent](screenshots/divergent.gif)
+
+### Resolving diverged bookmarks (local vs remote)
+
+When a bookmark was pushed and then amended or moved locally, **jj** may show the branch as diverged from `bookmark@origin`. **Branches** (`b`): select the bookmark, **Resolve Conflict** (`c`), then choose **keep local** or **reset to remote**. On the **graph**, the same flow is available with **Shift+C** (`C`) when a row shows a diverged bookmark. Recording: `fixtures/setup-bookmark-conflict-vhs-repo.sh`, `make bookmark-conflict-gif`.
+
+![Resolve diverged bookmark](screenshots/bookmark-conflict.gif)
 
 ## Features
 
@@ -478,19 +474,22 @@ jj-tui/
 │   ├── setup-after-origin-vhs-repo.sh
 │   ├── setup-evolog-split-vhs-repo.sh
 │   ├── setup-divergent-vhs-repo.sh
+│   ├── setup-bookmark-conflict-vhs-repo.sh
 │   ├── after-origin-vhs-append-and-tui.sh
 │   ├── demo-repo/             # Created by setup-demo-repo.sh
 │   ├── after-origin-vhs-repo/ # Created by setup-after-origin-vhs-repo.sh (after-origin GIF)
 │   ├── evolog-split-vhs-repo/ # Created by setup-evolog-split-vhs-repo.sh (evolog-split GIF)
-│   └── divergent-vhs-repo/    # Created by setup-divergent-vhs-repo.sh (divergent GIF)
+│   ├── divergent-vhs-repo/    # Created by setup-divergent-vhs-repo.sh (divergent GIF)
+│   └── bookmark-conflict-vhs-repo/ # setup-bookmark-conflict-vhs-repo.sh (bookmark-conflict GIF)
 ├── vhs/                       # VHS tapes for screenshot generation
 │   ├── all.tape               # Main demo GIF
 │   ├── after-origin.tape      # Forgot New Commit? (f) workflow GIF
 │   ├── evolog-split.tape      # Evolog split (z) workflow GIF
 │   ├── divergent.tape         # Resolve divergent change (d) GIF
+│   ├── bookmark-conflict.tape # Diverged bookmark resolver (Branches c) GIF
 │   ├── graph.tape
 │   └── ...
-├── screenshots/               # Generated (demo.gif, after-origin.gif, evolog-split.gif, divergent.gif, *.png)
+├── screenshots/               # Generated (demo.gif, after-origin.gif, evolog-split.gif, divergent.gif, bookmark-conflict.gif, *.png)
 └── README.md
 ```
 
@@ -505,11 +504,11 @@ go build -o jj-tui .
 
 Screenshots are generated using [VHS](https://github.com/charmbracelet/vhs) with mock data for consistent, reproducible images.
 
-**Automatic (CI)**: The [Generate Screenshots](.github/workflows/screenshots.yml) workflow produces `demo.gif` (`all.tape`), `after-origin.gif`, `evolog-split.gif`, `divergent.gif`, and the PNG captures; it runs after releases (via release workflows) and can be triggered manually. Results are committed to `screenshots/` on `main` when they change.
+**Automatic (CI)**: The [Generate Screenshots](.github/workflows/screenshots.yml) workflow produces `demo.gif` (`all.tape`), `after-origin.gif`, `evolog-split.gif`, `divergent.gif`, `bookmark-conflict.gif`, and the PNG captures; it runs after releases (via release workflows) and can be triggered manually. Results are committed to `screenshots/` on `main` when they change.
 
 **Manual (Local)**:
 ```bash
-# Generate PNG captures + after-origin.gif + evolog-split.gif + divergent.gif (demo GIF is separate; see make demo-gif)
+# Generate PNG captures + after-origin.gif + evolog-split.gif + divergent.gif + bookmark-conflict.gif (demo GIF is separate; see make demo-gif)
 make screenshots
 
 # Generate demo GIF
@@ -523,6 +522,9 @@ make evolog-split-gif
 
 # Regenerate only the divergent GIF (also included in `make screenshots`)
 make divergent-gif
+
+# Regenerate only the diverged-bookmark GIF (also included in `make screenshots`)
+make bookmark-conflict-gif
 
 # Or run individual tapes (PNG/GIF outputs live under screenshots/)
 vhs vhs/graph.tape

@@ -50,6 +50,15 @@ func (m GraphModel) handleZoneClick(msg zone.MsgZoneInBounds) (GraphModel, *Requ
 				return m, &Request{StartEvologSplit: true}, nil
 			}
 		}
+		for commitIndex := range m.repository.Graph.Commits {
+			if m.zoneManager.Get(mouse.ZoneActionResolveBookmarkConflictAt(commitIndex)) == z {
+				m.graphFocused = true
+				m.selectedCommit = commitIndex
+				m.changedFilesCommitID = ""
+				m.changedFiles = nil
+				return m, &Request{ResolveBookmarkConflict: true}, nil
+			}
+		}
 	}
 	for i := range m.changedFiles {
 		if m.zoneManager.Get(mouse.ZoneChangedFile(i)) == z {

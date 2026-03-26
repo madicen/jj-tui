@@ -232,6 +232,11 @@ func ZoneActionEvologSplitAt(index int) string {
 	return fmt.Sprintf("zone:action:evolog_split:%d", index)
 }
 
+// ZoneActionResolveBookmarkConflictAt is the inline control to open the diverged-bookmark resolver.
+func ZoneActionResolveBookmarkConflictAt(index int) string {
+	return fmt.Sprintf("zone:action:resolve_bookmark_conflict:%d", index)
+}
+
 // ZonePR returns the zone ID for a PR at the given index
 func ZonePR(index int) string {
 	return fmt.Sprintf("zone:pr:%d", index)

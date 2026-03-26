@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/madicen/jj-tui/internal"
+	"github.com/madicen/jj-tui/internal/tui/util"
 )
 
 // CommandHistoryEntry represents a single jj command that was executed
@@ -409,25 +410,26 @@ func (s *Service) CreateBookmarkOnCommit(ctx context.Context, bookmarkName, comm
 // MoveBookmark moves an existing bookmark to a different commit
 func (s *Service) MoveBookmark(ctx context.Context, bookmarkName, commitID string) error {
 	// jj bookmark set <name> -r <revision>
-	return s.runJJ(ctx, "bookmark", "set", bookmarkName, "-r", commitID)
+	return s.runJJ(ctx, "bookmark", "set", util.JJExactBookmarkPattern(bookmarkName), "-r", commitID)
 }
 
 // DeleteBookmark deletes a bookmark
 func (s *Service) DeleteBookmark(ctx context.Context, bookmarkName string) error {
-	return s.runJJ(ctx, "bookmark", "delete", bookmarkName)
+	return s.runJJ(ctx, "bookmark", "delete", util.JJExactBookmarkPattern(bookmarkName))
 }
 
 // ResolveBookmarkConflictKeepLocal resolves a diverged bookmark by force-pushing local to remote
 func (s *Service) ResolveBookmarkConflictKeepLocal(ctx context.Context, bookmarkName string) error {
 	// Force push the local bookmark to overwrite remote
-	return s.runJJ(ctx, "git", "push", "--bookmark", bookmarkName, "--force")
+	return s.runJJ(ctx, "git", "push", "--bookmark", util.JJExactBookmarkPattern(bookmarkName), "--force")
 }
 
 // ResolveBookmarkConflictResetToRemote resolves a diverged bookmark by resetting local to remote
 func (s *Service) ResolveBookmarkConflictResetToRemote(ctx context.Context, bookmarkName string) error {
 	// Set the local bookmark to match the remote
 	// This uses the @origin suffix to reference the remote version
-	return s.runJJ(ctx, "bookmark", "set", bookmarkName, "-r", bookmarkName+"@origin")
+	local := util.JJExactBookmarkPattern(bookmarkName)
+	return s.runJJ(ctx, "bookmark", "set", local, "-r", bookmarkName+"@origin")
 }
 
 // GetBookmarkConflictInfo retrieves information about a conflicted bookmark
@@ -724,7 +726,7 @@ func (s *Service) MoveBookmarkDeltaOntoOrigin(ctx context.Context, bookmarkName,
 	if err := s.runJJ(ctx, "restore", "--into", "@", "--from", tipCommitID); err != nil {
 		return fmt.Errorf("jj restore: %w", err)
 	}
-	if err := s.runJJ(ctx, "bookmark", "set", bookmarkName, "-r", "@", "--allow-backwards"); err != nil {
+	if err := s.runJJ(ctx, "bookmark", "set", util.JJExactBookmarkPattern(bookmarkName), "-r", "@", "--allow-backwards"); err != nil {
 		return fmt.Errorf("jj bookmark set: %w", err)
 	}
 	if len(rebaseChildRoots) > 0 {
@@ -909,7 +911,7 @@ func (s *Service) MoveBookmarkDeltaOntoEvologBase(ctx context.Context, bookmarkN
 		return fmt.Errorf("jj restore: %w", err)
 	}
 	if bookmarkName != "" {
-		if err := s.runJJ(ctx, "bookmark", "set", bookmarkName, "-r", "@", "--allow-backwards"); err != nil {
+		if err := s.runJJ(ctx, "bookmark", "set", util.JJExactBookmarkPattern(bookmarkName), "-r", "@", "--allow-backwards"); err != nil {
 			return fmt.Errorf("jj bookmark set: %w", err)
 		}
 	}
@@ -1031,7 +1033,7 @@ func (s *Service) PushToGit(ctx context.Context, branch string) (string, error) 
 
 	// --allow-new permits creating new remote bookmarks
 	// Use runJJOutput to capture any output/errors
-	pushOut, err := s.runJJOutput(ctx, "git", "push", "--bookmark", branch, "--allow-new")
+	pushOut, err := s.runJJOutput(ctx, "git", "push", "--bookmark", util.JJExactBookmarkPattern(branch), "--allow-new")
 	if err != nil {
 		return pushOut, fmt.Errorf("push failed: %w", err)
 	}
@@ -1213,16 +1215,8 @@ func (s *Service) getCommitGraph(ctx context.Context, revset string) (*internal.
 		var branches []string
 		var conflictedBranches []string
 		if branchesStr != "" {
-			for _, b := range strings.Split(branchesStr, ",") {
-				b = strings.TrimSpace(b)
-				// Remove * suffix (current bookmark indicator)
-				b = strings.TrimSuffix(b, "*")
-				// Check for ? suffix (conflicted bookmark) before stripping
-				isConflicted := strings.Contains(b, "?")
-				// Remove ? suffixes (conflicted bookmark indicator)
-				for strings.HasSuffix(b, "?") {
-					b = strings.TrimSuffix(b, "?")
-				}
+			for _, raw := range strings.Split(branchesStr, ",") {
+				b, isConflicted := util.NormalizeBookmarkListToken(raw)
 				// Keep @remote suffixes (e.g. feature@origin) so the graph can distinguish
 				// local bookmark tips from remote-tracking positions on different commits.
 				// Avoid duplicates
@@ -1280,6 +1274,7 @@ func (s *Service) getCommitGraph(ctx context.Context, revset string) (*internal.
 		commits[len(commits)-1].GraphLines = pendingGraphLines
 	}
 
+	s.enrichConflictedBookmarks(ctx, commits)
 	s.enrichCommitsDeltaVsOrigin(ctx, commits)
 	s.enrichCommitsEvologSplitViable(ctx, commits)
 
@@ -1381,7 +1376,7 @@ func eligibleBookmarkForOriginDelta(branches []string) string {
 		if b == "" {
 			continue
 		}
-		local := internal.LocalBookmarkName(b)
+		local := util.LocalBookmarkName(b)
 		switch strings.ToLower(local) {
 		case "main", "master":
 			continue
@@ -1709,13 +1704,13 @@ func (s *Service) ListBranches(ctx context.Context, statsLimit int) ([]internal.
 			if colonIdx > 0 && !isDeleted {
 				// Local branch with commit info on same line
 				rawBranchName := strings.TrimSpace(line[:colonIdx])
-				// Check for conflict indicator (? suffix) before cleaning
-				hasConflict := strings.Contains(rawBranchName, "?")
-				// Clean the branch name (strip * and ? suffixes)
-				currentBranch = strings.TrimSuffix(rawBranchName, "*")
-				for strings.HasSuffix(currentBranch, "?") {
-					currentBranch = strings.TrimSuffix(currentBranch, "?")
-				}
+				lineHead := strings.ToLower(strings.TrimSpace(line[:colonIdx+1]))
+				normalizedName, fromQuestionMark := util.NormalizeBookmarkListToken(rawBranchName)
+				// Conflict: jj often marks with ? on the name; some versions mention it in the header.
+				hasConflict := fromQuestionMark ||
+					strings.Contains(lineHead, "conflict") ||
+					strings.Contains(lineHead, "diverg")
+				currentBranch = normalizedName
 				commitInfo := strings.TrimSpace(line[colonIdx+1:])
 				changeID, shortID := parseCommitInfo(commitInfo)
 
@@ -1885,7 +1880,80 @@ func (s *Service) ListBranches(ctx context.Context, statsLimit int) ([]internal.
 	}
 	wg.Wait()
 
+	for i := range branches {
+		b := &branches[i]
+		if !b.IsLocal {
+			continue
+		}
+		switch strings.ToLower(b.Name) {
+		case "main", "master":
+			continue
+		}
+		if s.bookmarkDivergedFromOrigin(ctx, b.Name) {
+			b.HasConflict = true
+		}
+	}
+
 	return branches, nil
+}
+
+// commitIDAtRevision returns the commit_id for rev (e.g. bookmark name or name@origin).
+func (s *Service) commitIDAtRevision(ctx context.Context, rev string) (string, error) {
+	out, err := s.runJJOutputNoHistory(ctx, "log", "-r", rev, "--no-graph", "-T", "commit_id", "--limit", "1")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
+// bookmarkDivergedFromOrigin is true when the local bookmark tip is a different commit than origin.
+// We compare commit_id, not change_id, because jj amends can keep the same change_id while the git commit differs.
+func (s *Service) bookmarkDivergedFromOrigin(ctx context.Context, localName string) bool {
+	if strings.TrimSpace(localName) == "" {
+		return false
+	}
+	localID, errL := s.commitIDAtRevision(ctx, localName)
+	remoteID, errR := s.commitIDAtRevision(ctx, localName+"@origin")
+	if errL != nil || errR != nil {
+		return false
+	}
+	return localID != "" && remoteID != "" && localID != remoteID
+}
+
+// enrichConflictedBookmarks adds bookmarks whose local tip differs from origin (jj may omit ? in graph output).
+func (s *Service) enrichConflictedBookmarks(ctx context.Context, commits []internal.Commit) {
+	divergedCache := make(map[string]bool)
+	diverged := func(name string) bool {
+		if cached, ok := divergedCache[name]; ok {
+			return cached
+		}
+		isDiv := s.bookmarkDivergedFromOrigin(ctx, name)
+		divergedCache[name] = isDiv
+		return isDiv
+	}
+
+	for i := range commits {
+		c := &commits[i]
+		seen := make(map[string]bool)
+		for _, x := range c.ConflictedBranches {
+			seen[x] = true
+		}
+		for _, b := range c.Branches {
+			raw, _ := util.NormalizeBookmarkListToken(b)
+			name := util.LocalBookmarkName(strings.TrimSpace(raw))
+			if name == "" {
+				continue
+			}
+			switch strings.ToLower(name) {
+			case "main", "master":
+				continue
+			}
+			if diverged(name) && !seen[name] {
+				c.ConflictedBranches = append(c.ConflictedBranches, name)
+				seen[name] = true
+			}
+		}
+	}
 }
 
 // parseCommitInfo extracts change_id and short commit id from jj output
@@ -1950,12 +2018,12 @@ func (s *Service) UntrackBranch(ctx context.Context, branchName, remote string) 
 // RestoreLocalBranch restores a deleted local branch from its tracked remote
 func (s *Service) RestoreLocalBranch(ctx context.Context, branchName, commitID string) error {
 	// Use jj bookmark set to create/restore the local bookmark at the remote's revision
-	return s.runJJ(ctx, "bookmark", "set", branchName, "-r", commitID)
+	return s.runJJ(ctx, "bookmark", "set", util.JJExactBookmarkPattern(branchName), "-r", commitID)
 }
 
 // PushBranch pushes a local branch to remote
 func (s *Service) PushBranch(ctx context.Context, branchName string) error {
-	return s.runJJ(ctx, "git", "push", "--allow-new", "--bookmark", branchName)
+	return s.runJJ(ctx, "git", "push", "--allow-new", "--bookmark", util.JJExactBookmarkPattern(branchName))
 }
 
 // FetchFromRemote fetches updates from a remote
