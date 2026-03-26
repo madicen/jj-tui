@@ -44,6 +44,30 @@ func JJExactBookmarkPattern(name string) string {
 	return "exact:" + name
 }
 
+// RevsetQuotedSymbol returns name as a jj revset string literal so it resolves as one symbol.
+// Unquoted names with `/` are parsed as change-ID offsets, not bookmarks; `exact:foo` is not
+// valid top-level revset syntax (use exact:"foo" inside pattern arguments instead).
+// See https://docs.jj-vcs.dev/latest/revsets/#symbols
+func RevsetQuotedSymbol(name string) string {
+	if name == "" {
+		return `""`
+	}
+	var b strings.Builder
+	b.WriteByte('"')
+	for _, r := range name {
+		switch r {
+		case '\\':
+			b.WriteString(`\\`)
+		case '"':
+			b.WriteString(`\"`)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	b.WriteByte('"')
+	return b.String()
+}
+
 // LocalBookmarkName returns the jj bookmark name for revsets and commands like name@origin
 // (strips one @remote suffix, e.g. feature@origin -> feature).
 func LocalBookmarkName(b string) string {

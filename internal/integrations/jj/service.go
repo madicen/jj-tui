@@ -434,7 +434,7 @@ func (s *Service) ResolveBookmarkConflictResetToRemote(ctx context.Context, book
 	// Set the local bookmark to match the remote
 	// This uses the @origin suffix to reference the remote version
 	local := util.JJExactBookmarkPattern(bookmarkName)
-	remoteRev := util.JJExactBookmarkPattern(bookmarkName + "@origin")
+	remoteRev := util.RevsetQuotedSymbol(bookmarkName + "@origin")
 	return s.runJJ(ctx, "bookmark", "set", local, "-r", remoteRev)
 }
 
@@ -446,9 +446,9 @@ func (s *Service) GetBookmarkConflictInfo(ctx context.Context, bookmarkName stri
 	if bookmarkName == "" {
 		return "", "", "", "", fmt.Errorf("bookmark name is required")
 	}
-	// Bare names are revset syntax/globs; slashes (e.g. madicen/feature) break -r unless exact:…
-	localRev := util.JJExactBookmarkPattern(bookmarkName)
-	remoteRev := util.JJExactBookmarkPattern(bookmarkName + "@origin")
+	// Quote so `/` is not parsed as a change-offset and the name is one bookmark symbol.
+	localRev := util.RevsetQuotedSymbol(bookmarkName)
+	remoteRev := util.RevsetQuotedSymbol(bookmarkName + "@origin")
 	// Get local bookmark info
 	localOut, err := s.runJJOutput(ctx, "log", "-r", localRev, "--no-graph", "-T", `change_id.short(8) ++ "|" ++ if(description, description.first_line(), "(no description)")`)
 	if err != nil {
