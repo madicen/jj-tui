@@ -1229,6 +1229,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, branchestab.HandleBookmarkDeletedMsg(msg, &m.appState)
 	case branchestab.BookmarkConflictInfoMsg:
 		cmd, info := conflicttab.HandleBookmarkConflictInfoMsg(msg, &m.appState)
+		if msg.Err != nil {
+			m.errorModal.SetError(msg.Err, false, "")
+		} else {
+			m.errorModal.SetError(nil, false, "")
+		}
 		if info != nil {
 			m.conflictModal.Show(info.BookmarkName, info.LocalID, info.RemoteID, info.LocalSummary, info.RemoteSummary)
 			m.appState.ViewMode = state.ViewBookmarkConflict

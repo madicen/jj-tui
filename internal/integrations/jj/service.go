@@ -427,24 +427,30 @@ func (s *Service) ResolveBookmarkConflictKeepLocal(ctx context.Context, bookmark
 // ResolveBookmarkConflictResetToRemote resolves a diverged bookmark by resetting local to remote
 func (s *Service) ResolveBookmarkConflictResetToRemote(ctx context.Context, bookmarkName string) error {
 	bookmarkName = util.BookmarkNameForRevset(bookmarkName)
+	bookmarkName = util.LocalBookmarkName(bookmarkName)
 	if bookmarkName == "" {
 		return fmt.Errorf("bookmark name is required")
 	}
 	// Set the local bookmark to match the remote
 	// This uses the @origin suffix to reference the remote version
 	local := util.JJExactBookmarkPattern(bookmarkName)
-	return s.runJJ(ctx, "bookmark", "set", local, "-r", bookmarkName+"@origin")
+	remoteRev := util.JJExactBookmarkPattern(bookmarkName + "@origin")
+	return s.runJJ(ctx, "bookmark", "set", local, "-r", remoteRev)
 }
 
 // GetBookmarkConflictInfo retrieves information about a conflicted bookmark
 // Returns local commit ID, remote commit ID, local summary, remote summary
 func (s *Service) GetBookmarkConflictInfo(ctx context.Context, bookmarkName string) (localID, remoteID, localSummary, remoteSummary string, err error) {
 	bookmarkName = util.BookmarkNameForRevset(bookmarkName)
+	bookmarkName = util.LocalBookmarkName(bookmarkName)
 	if bookmarkName == "" {
 		return "", "", "", "", fmt.Errorf("bookmark name is required")
 	}
+	// Bare names are revset syntax/globs; slashes (e.g. madicen/feature) break -r unless exact:…
+	localRev := util.JJExactBookmarkPattern(bookmarkName)
+	remoteRev := util.JJExactBookmarkPattern(bookmarkName + "@origin")
 	// Get local bookmark info
-	localOut, err := s.runJJOutput(ctx, "log", "-r", bookmarkName, "--no-graph", "-T", `change_id.short(8) ++ "|" ++ if(description, description.first_line(), "(no description)")`)
+	localOut, err := s.runJJOutput(ctx, "log", "-r", localRev, "--no-graph", "-T", `change_id.short(8) ++ "|" ++ if(description, description.first_line(), "(no description)")`)
 	if err != nil {
 		return "", "", "", "", fmt.Errorf("failed to get local bookmark info: %w", err)
 	}
@@ -457,7 +463,7 @@ func (s *Service) GetBookmarkConflictInfo(ctx context.Context, bookmarkName stri
 	}
 
 	// Get remote bookmark info
-	remoteOut, err := s.runJJOutput(ctx, "log", "-r", bookmarkName+"@origin", "--no-graph", "-T", `change_id.short(8) ++ "|" ++ if(description, description.first_line(), "(no description)")`)
+	remoteOut, err := s.runJJOutput(ctx, "log", "-r", remoteRev, "--no-graph", "-T", `change_id.short(8) ++ "|" ++ if(description, description.first_line(), "(no description)")`)
 	if err != nil {
 		return localID, "", localSummary, "", fmt.Errorf("failed to get remote bookmark info: %w", err)
 	}
