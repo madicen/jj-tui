@@ -615,7 +615,7 @@ The application supports these key user workflows:
 ### 6. Repository Monitoring
 - Real-time repository state updates
 - Conflict detection and display
-- Divergent commit detection with visual indicator (⑂)
+- Divergent commit detection with visual indicator (≠)
 - Bookmark visualization
 - Working copy indicator
 

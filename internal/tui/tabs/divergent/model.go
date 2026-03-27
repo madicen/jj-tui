@@ -201,7 +201,7 @@ func (m *Model) renderDivergent() string {
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#8BE9FD"))
 	muted := lipgloss.NewStyle().Foreground(styles.ColorMuted)
 	var lines []string
-	lines = append(lines, titleStyle.Render("⑂ Divergent"))
+	lines = append(lines, titleStyle.Render(styles.DivergentMark+" Divergent"))
 	lines = append(lines, "")
 	lines = append(lines, muted.Render("Same change ID on multiple commits. Keep one row; others are abandoned."))
 	lines = append(lines, "")
