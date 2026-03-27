@@ -1318,10 +1318,21 @@ func (s *Service) getCommitGraph(ctx context.Context, revset string) (*internal.
 	}
 
 	originDiverged := map[string]bool{}
+	var suppressForkAfterAheadBehindList map[string]bool
 	if listOut, err := s.runJJOutputNoHistory(ctx, "bookmark", "list", "--all-remotes"); err == nil {
-		originDiverged = bookmarkListMarksOriginDiverged(listOut)
+		stated, ahBoth := bookmarkListParseOriginDivergence(listOut)
+		originDiverged = s.originDivergedResolved(ctx, stated, ahBoth)
+		// jj may print both ahead and behind after merges while tips stay linear; do not let
+		// bookmarkDivergedFromOrigin re-add those as conflicts when the fork check already declined.
+		suppressForkAfterAheadBehindList = make(map[string]bool)
+		for k := range ahBoth {
+			k = strings.TrimSpace(k)
+			if k != "" && !originDiverged[k] {
+				suppressForkAfterAheadBehindList[k] = true
+			}
+		}
 	}
-	s.enrichConflictedBookmarks(ctx, commits, originDiverged)
+	s.enrichConflictedBookmarks(ctx, commits, originDiverged, suppressForkAfterAheadBehindList)
 	s.enrichCommitsDeltaVsOrigin(ctx, commits)
 	s.enrichCommitsEvologSplitViable(ctx, commits)
 
@@ -1434,7 +1445,6 @@ func eligibleBookmarkForOriginDelta(branches []string) string {
 }
 
 func (s *Service) enrichCommitsDeltaVsOrigin(ctx context.Context, commits []internal.Commit) {
-	originShortByBookmark := make(map[string]string)
 	for i := range commits {
 		c := &commits[i]
 		if c.Immutable {
@@ -1444,20 +1454,13 @@ func (s *Service) enrichCommitsDeltaVsOrigin(ctx context.Context, commits []inte
 		if bn == "" {
 			continue
 		}
-		originShort, cached := originShortByBookmark[bn]
-		if !cached {
-			var err error
-			originShort, err = s.bookmarkOriginCommitIDShort(ctx, bn)
-			if err != nil {
-				originShort = ""
-			}
-			originShortByBookmark[bn] = originShort
-		}
-		// Already stacked on origin: tree can still differ from remote until push, but no restack needed.
-		if originShort != "" && parentListContainsCommitIDShort(c.Parents, originShort) {
+		// Already stacked on bookmark@origin (origin tip is an ancestor of this revision): push
+		// updates the remote bookmark; "(f)" restack is redundant (e.g. right after MoveBookmarkDeltaOntoOrigin).
+		if s.revisionBookmarkOriginIsAncestorOf(ctx, bn, c.ChangeID) {
 			c.HasDeltaVsBookmarkOrigin = false
 			continue
 		}
+		// Non-empty tree diff vs bookmark@origin and not in the ancestry chain above → offer Forgot.
 		ok, err := s.revisionDiffSummaryNonEmptyNoHistory(ctx, bn+"@origin", c.ChangeID)
 		if err != nil || !ok {
 			c.HasDeltaVsBookmarkOrigin = false
@@ -1467,25 +1470,19 @@ func (s *Service) enrichCommitsDeltaVsOrigin(ctx context.Context, commits []inte
 	}
 }
 
-func (s *Service) bookmarkOriginCommitIDShort(ctx context.Context, bookmarkName string) (string, error) {
-	out, err := s.runJJOutputNoHistory(ctx, "log", "-r", bookmarkName+"@origin", "--no-graph", "-T", "commit_id.short(8)", "--limit", "1")
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(out), nil
-}
-
-func parentListContainsCommitIDShort(parents []string, originShort string) bool {
-	if originShort == "" {
+// revisionBookmarkOriginIsAncestorOf is true when bn@origin lies on the ancestry of descendantRev
+// (jj revset x::y: commits below x and above y). Then the revision is already built on top of the
+// remembered remote tip — not the colocated "forgot to stack" case.
+func (s *Service) revisionBookmarkOriginIsAncestorOf(ctx context.Context, bookmarkLocalName, descendantChangeID string) bool {
+	bookmarkLocalName = strings.TrimSpace(bookmarkLocalName)
+	descendantChangeID = strings.TrimSpace(descendantChangeID)
+	if bookmarkLocalName == "" || descendantChangeID == "" {
 		return false
 	}
-	for _, p := range parents {
-		p = strings.TrimSpace(p)
-		if p == originShort {
-			return true
-		}
-	}
-	return false
+	originRef := bookmarkLocalName + "@origin"
+	rev := fmt.Sprintf("%s::%s", originRef, descendantChangeID)
+	out, err := s.runJJOutputNoHistory(ctx, "log", "-r", rev, "--no-graph", "-T", "commit_id", "--limit", "1")
+	return err == nil && strings.TrimSpace(out) != ""
 }
 
 func (s *Service) revisionDiffSummaryNonEmptyNoHistory(ctx context.Context, fromRef, toRev string) (bool, error) {
@@ -1918,7 +1915,15 @@ func (s *Service) ListBranches(ctx context.Context, statsLimit int) ([]internal.
 	}
 	wg.Wait()
 
-	originDiverged := bookmarkListMarksOriginDiverged(out)
+	stated, ahBoth := bookmarkListParseOriginDivergence(out)
+	originDiverged := s.originDivergedResolved(ctx, stated, ahBoth)
+	suppressForkAfterAheadBehindList := make(map[string]bool)
+	for k := range ahBoth {
+		k = strings.TrimSpace(k)
+		if k != "" && !originDiverged[k] {
+			suppressForkAfterAheadBehindList[k] = true
+		}
+	}
 	for i := range branches {
 		b := &branches[i]
 		if !b.IsLocal {
@@ -1928,7 +1933,14 @@ func (s *Service) ListBranches(ctx context.Context, statsLimit int) ([]internal.
 		case "main", "master":
 			continue
 		}
-		if originDiverged[b.Name] || s.bookmarkDivergedFromOrigin(ctx, b.Name) {
+		if originDiverged[b.Name] {
+			b.HasConflict = true
+			continue
+		}
+		if suppressForkAfterAheadBehindList[b.Name] {
+			continue
+		}
+		if s.bookmarkDivergedFromOrigin(ctx, b.Name) {
 			b.HasConflict = true
 		}
 	}
@@ -1996,15 +2008,16 @@ func jjOriginQualifierAheadBehind(originRemoteLine string) (ahead, behind int, o
 	return a, b, true
 }
 
-// bookmarkListMarksOriginDiverged parses `jj bookmark list --all-remotes` output. Colocated repos show
-// local tip on @git and a diverged remembered position on @origin as "(ahead by … behind by …)" — the
-// graph template often omits `?`, so we use this text (same as users see next to @origin) to detect
-// when to offer the resolver.
+// bookmarkListParseOriginDivergence parses `jj bookmark list --all-remotes` into two buckets.
+// conflictedStated is authoritative (jj says conflicted on the @origin line).
+// aheadBehindBothNonZero records "(ahead by N, behind by M)" with N>0 and M>0 — jj sometimes prints
+// that after merges even when local and remote tips are still linearly related; callers must confirm
+// with originDivergedResolved (DAG fork check) before treating as diverged.
 //
-// jj also prints "(ahead by 0, behind by N)" when the branch is simply behind the remembered remote tip
-// without a true two-sided fork (common after merges). Those must not set HasConflict or block delete.
-func bookmarkListMarksOriginDiverged(listOutput string) map[string]bool {
-	d := make(map[string]bool)
+// jj prints "(ahead by 0, behind by N)" for behind-only; those do not set aheadBehindBothNonZero.
+func bookmarkListParseOriginDivergence(listOutput string) (conflictedStated, aheadBehindBothNonZero map[string]bool) {
+	conflictedStated = make(map[string]bool)
+	aheadBehindBothNonZero = make(map[string]bool)
 	var pendingLocal string
 	for _, line := range strings.Split(listOutput, "\n") {
 		if line == "" {
@@ -2037,15 +2050,36 @@ func bookmarkListMarksOriginDiverged(listOutput string) map[string]bool {
 		if pendingLocal == "" {
 			continue
 		}
-		// Qualifiers like "(ahead by … behind by …)" or "(conflicted)" sit before "):", not in info.
 		full := strings.ToLower(t)
 		infoLower := strings.ToLower(info)
 		if strings.Contains(infoLower, "conflicted") || strings.Contains(full, "conflicted") {
-			d[pendingLocal] = true
+			conflictedStated[pendingLocal] = true
 			continue
 		}
 		if ah, bh, ok := jjOriginQualifierAheadBehind(t); ok && ah > 0 && bh > 0 {
-			d[pendingLocal] = true
+			aheadBehindBothNonZero[pendingLocal] = true
+		}
+	}
+	return conflictedStated, aheadBehindBothNonZero
+}
+
+// originDivergedResolved turns bookmark list parse output into "needs diverged resolver" names:
+// always includes conflictedStated; includes ahead/behind candidates only when bookmarkDivergedFromOrigin
+// confirms a real DAG fork (neither tip is an ancestor of the other).
+func (s *Service) originDivergedResolved(ctx context.Context, conflictedStated, aheadBehindBothNonZero map[string]bool) map[string]bool {
+	d := make(map[string]bool)
+	for k := range conflictedStated {
+		if strings.TrimSpace(k) != "" {
+			d[k] = true
+		}
+	}
+	for k := range aheadBehindBothNonZero {
+		k = strings.TrimSpace(k)
+		if k == "" || d[k] {
+			continue
+		}
+		if s.bookmarkDivergedFromOrigin(ctx, k) {
+			d[k] = true
 		}
 	}
 	return d
@@ -2060,7 +2094,72 @@ func (s *Service) commitIDAtRevision(ctx context.Context, rev string) (string, e
 	return strings.TrimSpace(out), nil
 }
 
-// bookmarkDivergedFromOrigin is true when the local bookmark tip is a different commit than origin.
+// revsetCommitID forces jj to treat a token as a git commit id (not a change id prefix).
+func revsetCommitID(commitID string) string {
+	commitID = strings.TrimSpace(commitID)
+	if commitID == "" {
+		return ""
+	}
+	return fmt.Sprintf("commit_id(%s)", commitID)
+}
+
+// changeIDRootKey normalizes a jj change_id template value for comparison (strip /N divergent suffix).
+func changeIDRootKey(s string) string {
+	s = strings.TrimSpace(strings.ToLower(s))
+	if s == "" {
+		return ""
+	}
+	if i := strings.Index(s, "/"); i > 0 {
+		return s[:i]
+	}
+	return s
+}
+
+func (s *Service) changeIDRootAtCommit(ctx context.Context, commitID string) string {
+	rs := revsetCommitID(commitID)
+	if rs == "" {
+		return ""
+	}
+	out, err := s.runJJOutputNoHistory(ctx, "log", "-r", rs, "--no-graph", "-T", "change_id", "--limit", "1")
+	if err != nil {
+		return ""
+	}
+	return changeIDRootKey(out)
+}
+
+// commitIDsShareJJChangeRoot is true when both commits belong to the same jj change (evolution line),
+// e.g. olxoxuzz vs olxoxuzz/11 on remote. That is not a bookmark fork even if ancestry paths are odd.
+func (s *Service) commitIDsShareJJChangeRoot(ctx context.Context, localCommitID, remoteCommitID string) bool {
+	a := s.changeIDRootAtCommit(ctx, localCommitID)
+	b := s.changeIDRootAtCommit(ctx, remoteCommitID)
+	return a != "" && a == b
+}
+
+// commitIDsHaveAncestorDescendantRelationship is true when either commit is an ancestor of the other
+// in the jj DAG (pure ahead/behind). Used so we do not treat "N commits ahead of origin" as a
+// diverged bookmark: that case should offer "Forgot New Commit?" (HasDeltaVsBookmarkOrigin), not resolve.
+//
+// We use x::y ("descendants of x that are also ancestors of y") with commit_id() so jj does not
+// interpret a short hex as a change id. Hidden remote tips still participate once both ends are named.
+func (s *Service) commitIDsHaveAncestorDescendantRelationship(ctx context.Context, a, b string) bool {
+	a, b = strings.TrimSpace(a), strings.TrimSpace(b)
+	if a == "" || b == "" {
+		return false
+	}
+	ra, rb := revsetCommitID(a), revsetCommitID(b)
+	for _, pair := range [2][2]string{{ra, rb}, {rb, ra}} {
+		x, y := pair[0], pair[1]
+		out, err := s.runJJOutputNoHistory(ctx, "log", "-r", fmt.Sprintf("%s::%s", x, y), "--no-graph", "-T", "commit_id", "--limit", "1")
+		if err == nil && strings.TrimSpace(out) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// bookmarkDivergedFromOrigin is true when the local bookmark tip and origin's tip are on a true fork:
+// different commits and neither is an ancestor of the other. Simple ahead (or behind) shares
+// ancestry, so we return false — bookmark list + graph still mark (conflicted) and "(ahead>0 behind>0)".
 // We compare commit_id, not change_id, because jj amends can keep the same change_id while the git commit differs.
 // Bare names with '/' are invalid revsets (change-offset syntax); conflicted bookmarks need bookmarks()/remote_bookmarks().
 func (s *Service) bookmarkDivergedFromOrigin(ctx context.Context, localName string) bool {
@@ -2075,25 +2174,48 @@ func (s *Service) bookmarkDivergedFromOrigin(ctx context.Context, localName stri
 	if errL != nil || errR != nil {
 		return false
 	}
-	return localID != "" && remoteID != "" && localID != remoteID
+	if localID == "" || remoteID == "" || localID == remoteID {
+		return false
+	}
+	if s.commitIDsHaveAncestorDescendantRelationship(ctx, localID, remoteID) {
+		return false
+	}
+	if s.commitIDsShareJJChangeRoot(ctx, localID, remoteID) {
+		return false
+	}
+	return true
 }
 
-// enrichConflictedBookmarks adds bookmarks whose local tip differs from origin (jj may omit ? in graph output).
-// originDiverged comes from bookmark list @origin "(ahead … behind …)" lines (colocated @git vs @origin layout).
-func (s *Service) enrichConflictedBookmarks(ctx context.Context, commits []internal.Commit, originDiverged map[string]bool) {
-	divergedCache := make(map[string]bool)
-	diverged := func(name string) bool {
-		if originDiverged != nil && originDiverged[name] {
-			return true
-		}
-		if cached, ok := divergedCache[name]; ok {
-			return cached
-		}
-		isDiv := s.bookmarkDivergedFromOrigin(ctx, name)
-		divergedCache[name] = isDiv
-		return isDiv
+// bookmarkNeedsDivergedResolver is true when the user should see "Resolve diverged bookmark", not
+// "Forgot New Commit?". jj graph templates append "?" for any local vs remote tip mismatch, including
+// a linear stack ahead of origin (forgot to push); those share ancestry and must not block (f).
+//
+// suppressForkAfterAheadBehindList names bookmarks where jj listed (ahead>0, behind>0) but
+// originDivergedResolved did not mark diverged (tips are linear). The fork detector must not override.
+func (s *Service) bookmarkNeedsDivergedResolver(ctx context.Context, name string, originDiverged map[string]bool, forkCache map[string]bool, suppressForkAfterAheadBehindList map[string]bool) bool {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return false
 	}
+	if suppressForkAfterAheadBehindList != nil && suppressForkAfterAheadBehindList[name] {
+		return false
+	}
+	if originDiverged != nil && originDiverged[name] {
+		return true
+	}
+	if v, ok := forkCache[name]; ok {
+		return v
+	}
+	v := s.bookmarkDivergedFromOrigin(ctx, name)
+	forkCache[name] = v
+	return v
+}
 
+// enrichConflictedBookmarks adds bookmarks that need the diverged resolver (jj may omit ? in graph output).
+// originDiverged comes from bookmark list plus DAG confirmation for (ahead>0, behind>0) lines.
+// The fallback uses bookmarkDivergedFromOrigin when the list did not run or did not classify the name.
+func (s *Service) enrichConflictedBookmarks(ctx context.Context, commits []internal.Commit, originDiverged map[string]bool, suppressForkAfterAheadBehindList map[string]bool) {
+	forkCache := make(map[string]bool)
 	for i := range commits {
 		c := &commits[i]
 		seen := make(map[string]bool)
@@ -2110,11 +2232,41 @@ func (s *Service) enrichConflictedBookmarks(ctx context.Context, commits []inter
 			case "main", "master":
 				continue
 			}
-			if diverged(name) && !seen[name] {
+			if s.bookmarkNeedsDivergedResolver(ctx, name, originDiverged, forkCache, suppressForkAfterAheadBehindList) && !seen[name] {
 				c.ConflictedBranches = append(c.ConflictedBranches, name)
 				seen[name] = true
 			}
 		}
+	}
+	s.pruneSpuriousGraphConflictMarks(ctx, commits, originDiverged, forkCache, suppressForkAfterAheadBehindList)
+}
+
+// pruneSpuriousGraphConflictMarks drops bookmark names that were marked conflicted only because jj's
+// graph added "?" on a linear ahead/behind relationship. Without this, the TUI hides "Forgot New
+// Commit?" and blocks (f), pushing users toward "keep local" resolve + git push (often a force-style
+// update on the PR branch).
+func (s *Service) pruneSpuriousGraphConflictMarks(ctx context.Context, commits []internal.Commit, originDiverged map[string]bool, forkCache map[string]bool, suppressForkAfterAheadBehindList map[string]bool) {
+	if forkCache == nil {
+		forkCache = make(map[string]bool)
+	}
+	for i := range commits {
+		c := &commits[i]
+		if len(c.ConflictedBranches) == 0 {
+			continue
+		}
+		kept := make([]string, 0, len(c.ConflictedBranches))
+		seen := make(map[string]bool)
+		for _, raw := range c.ConflictedBranches {
+			n := strings.TrimSpace(raw)
+			if n == "" || seen[n] {
+				continue
+			}
+			if s.bookmarkNeedsDivergedResolver(ctx, n, originDiverged, forkCache, suppressForkAfterAheadBehindList) {
+				kept = append(kept, n)
+				seen[n] = true
+			}
+		}
+		c.ConflictedBranches = kept
 	}
 }
 

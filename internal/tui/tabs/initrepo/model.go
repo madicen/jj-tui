@@ -10,6 +10,7 @@ import (
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/styles"
+	"github.com/madicen/jj-tui/internal/tui/util"
 )
 
 // Model is the "not a jj repo" welcome screen. Path non-empty means the screen is active.
@@ -54,6 +55,7 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "i":
 		return m, state.NavigateTarget{Kind: state.NavigateRunInit}.Cmd()
 	case "ctrl+q", "ctrl+c":
+		util.FlushMouse()
 		return m, tea.Quit
 	}
 	return m, nil

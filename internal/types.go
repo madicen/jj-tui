@@ -22,14 +22,14 @@ type Commit struct {
 	IsWorking          bool      `json:"is_working"`
 	Conflicts          bool      `json:"conflicts"`
 	Immutable          bool      `json:"immutable"`
-	Divergent          bool      `json:"divergent"`    // True if this change ID has multiple versions
+	Divergent          bool      `json:"divergent"` // True if this change ID has multiple versions
 	// HasDeltaVsBookmarkOrigin is true when this bookmark tip should offer "Forgot New Commit?":
-	// tree differs from bookmark@origin but the tip is not already a direct child of bookmark@origin
-	// (after restacking, diff may stay non-empty until push, but the parent link is correct).
+	// non-empty tree diff vs bookmark@origin and bookmark@origin is not an ancestor of this revision
+	// (once stacked on the remote tip, push suffices — diff may remain non-empty until then).
 	HasDeltaVsBookmarkOrigin bool `json:"has_delta_vs_bookmark_origin"`
 	// EvologSplitViable is true when experimental evolog split (z) can run: evolog has an older
 	// revision with a non-empty tree diff vs this change, no blocking descendants, etc.
-	EvologSplitViable bool   `json:"evolog_split_viable"`
+	EvologSplitViable bool     `json:"evolog_split_viable"`
 	GraphPrefix       string   `json:"graph_prefix"` // ASCII art graph prefix from jj (e.g., "│ ○  ")
 	GraphLines        []string `json:"graph_lines"`  // Connector lines after this commit (e.g., ["│", "├─╯"])
 }

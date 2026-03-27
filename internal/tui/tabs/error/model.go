@@ -6,6 +6,7 @@ import (
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/state"
+	"github.com/madicen/jj-tui/internal/tui/util"
 )
 
 // Model represents the error modal (generic errors only; "not a jj repo" is handled by initrepo tab).
@@ -62,6 +63,7 @@ func (m Model) View() string {
 func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+q", "ctrl+c":
+		util.FlushMouse()
 		return m, tea.Quit
 	case "ctrl+r":
 		return m, state.NavigateTarget{Kind: state.NavigateDismissErrorAndRefresh}.Cmd()
@@ -103,6 +105,7 @@ func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
 	case mouse.ZoneActionRetry:
 		return m, state.NavigateTarget{Kind: state.NavigateDismissErrorAndRefresh}.Cmd()
 	case mouse.ZoneActionQuit:
+		util.FlushMouse()
 		return m, tea.Quit
 	}
 	return m, nil

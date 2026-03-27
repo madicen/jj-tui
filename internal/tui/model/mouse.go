@@ -6,6 +6,7 @@ import (
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/state"
 	graphtab "github.com/madicen/jj-tui/internal/tui/tabs/graph"
+	"github.com/madicen/jj-tui/internal/tui/util"
 )
 
 // handleZoneClick handles clicks detected by bubblezone. Main forwards zone events to submodels or handles global zones.
@@ -52,6 +53,7 @@ func (m *Model) handleZoneClick(msg zone.MsgZoneInBounds) (tea.Model, tea.Cmd) {
 		return m.handleNavigateToHelpTab()
 	}
 	if userClicked(mouse.ZoneActionQuit) {
+		util.FlushMouse()
 		return m, tea.Quit
 	}
 	if userClicked(mouse.ZoneActionRefresh) {
@@ -137,6 +139,7 @@ func (m *Model) handleZoneClick(msg zone.MsgZoneInBounds) (tea.Model, tea.Cmd) {
 func (m *Model) handleAction(action ActionType) (tea.Model, tea.Cmd) {
 	switch action {
 	case ActionQuit:
+		util.FlushMouse()
 		return m, tea.Quit
 	case ActionRefresh:
 		return m, m.refreshRepository()

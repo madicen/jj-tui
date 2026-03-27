@@ -7,6 +7,7 @@ import (
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/state"
+	"github.com/madicen/jj-tui/internal/tui/util"
 )
 
 // Model represents the warning modal (e.g., for empty commit descriptions)
@@ -111,6 +112,7 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		return m, nil
 	case "ctrl+q", "ctrl+c":
+		util.FlushMouse()
 		return m, tea.Quit
 	}
 	return m, nil
