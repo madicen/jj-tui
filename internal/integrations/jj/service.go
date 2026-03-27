@@ -2060,7 +2060,30 @@ func (s *Service) commitIDAtRevision(ctx context.Context, rev string) (string, e
 	return strings.TrimSpace(out), nil
 }
 
-// bookmarkDivergedFromOrigin is true when the local bookmark tip is a different commit than origin.
+// commitIDsHaveAncestorDescendantRelationship is true when either commit is an ancestor of the other
+// in the jj DAG (pure ahead/behind). Used so we do not treat "N commits ahead of origin" as a
+// diverged bookmark: that case should offer "Forgot New Commit?" (HasDeltaVsBookmarkOrigin), not resolve.
+func (s *Service) commitIDsHaveAncestorDescendantRelationship(ctx context.Context, a, b string) bool {
+	a, b = strings.TrimSpace(a), strings.TrimSpace(b)
+	if a == "" || b == "" {
+		return false
+	}
+	// a is an ancestor of b
+	out, err := s.runJJOutputNoHistory(ctx, "log", "-r", fmt.Sprintf("%s & ancestors(%s)", a, b), "--no-graph", "-T", "commit_id", "--limit", "1")
+	if err == nil && strings.TrimSpace(out) != "" {
+		return true
+	}
+	// b is an ancestor of a
+	out2, err2 := s.runJJOutputNoHistory(ctx, "log", "-r", fmt.Sprintf("%s & ancestors(%s)", b, a), "--no-graph", "-T", "commit_id", "--limit", "1")
+	if err2 == nil && strings.TrimSpace(out2) != "" {
+		return true
+	}
+	return false
+}
+
+// bookmarkDivergedFromOrigin is true when the local bookmark tip and origin's tip are on a true fork:
+// different commits and neither is an ancestor of the other. Simple ahead (or behind) shares
+// ancestry, so we return false — bookmark list + graph still mark (conflicted) and "(ahead>0 behind>0)".
 // We compare commit_id, not change_id, because jj amends can keep the same change_id while the git commit differs.
 // Bare names with '/' are invalid revsets (change-offset syntax); conflicted bookmarks need bookmarks()/remote_bookmarks().
 func (s *Service) bookmarkDivergedFromOrigin(ctx context.Context, localName string) bool {
@@ -2075,11 +2098,18 @@ func (s *Service) bookmarkDivergedFromOrigin(ctx context.Context, localName stri
 	if errL != nil || errR != nil {
 		return false
 	}
-	return localID != "" && remoteID != "" && localID != remoteID
+	if localID == "" || remoteID == "" || localID == remoteID {
+		return false
+	}
+	if s.commitIDsHaveAncestorDescendantRelationship(ctx, localID, remoteID) {
+		return false
+	}
+	return true
 }
 
-// enrichConflictedBookmarks adds bookmarks whose local tip differs from origin (jj may omit ? in graph output).
-// originDiverged comes from bookmark list @origin "(ahead … behind …)" lines (colocated @git vs @origin layout).
+// enrichConflictedBookmarks adds bookmarks that need the diverged resolver (jj may omit ? in graph output).
+// originDiverged comes from bookmark list: "(conflicted)" or both ahead and behind > 0. The fallback uses
+// bookmarkDivergedFromOrigin (true DAG fork only), not mere commit_id inequality vs origin.
 func (s *Service) enrichConflictedBookmarks(ctx context.Context, commits []internal.Commit, originDiverged map[string]bool) {
 	divergedCache := make(map[string]bool)
 	diverged := func(name string) bool {
