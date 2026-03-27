@@ -3,7 +3,7 @@ package model
 import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen/jj-tui/internal/tui/state"
-	"github.com/madicen/jj-tui/internal/tui/termmouse"
+	"github.com/madicen/jj-tui/internal/tui/util"
 )
 
 // handleKeyMsg handles keyboard input. Overlay models (init repo, error, warning) get keys first
@@ -75,7 +75,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Global shortcuts (and Esc/Tab when not in a modal).
 	switch msg.String() {
 	case "ctrl+q", "ctrl+c":
-		termmouse.Flush() // sync: stop SGR mouse before quit cmd runs (avoids shell seeing "35;…M")
+		util.FlushMouse() // sync: stop SGR mouse before quit cmd runs (avoids shell seeing "35;…M")
 		return m, tea.Quit
 	case "g":
 		return m.handleNavigateToGraphTab()

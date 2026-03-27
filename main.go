@@ -15,7 +15,7 @@ import (
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/tui"
 	"github.com/madicen/jj-tui/internal/tui/styles"
-	"github.com/madicen/jj-tui/internal/tui/termmouse"
+	"github.com/madicen/jj-tui/internal/tui/util"
 	"github.com/madicen/jj-tui/internal/version"
 	"github.com/muesli/termenv"
 )
@@ -111,13 +111,13 @@ func main() {
 	)
 
 	// Full mouse teardown after Run (Tea also restores; this covers stderr /dev/tty etc.).
-	defer termmouse.Flush()
+	defer util.FlushMouse()
 
 	// Run the program
 	_, err = p.Run()
 
 	time.Sleep(25 * time.Millisecond)
-	termmouse.Flush()
+	util.FlushMouse()
 	if err != nil {
 		fmt.Printf("Error running TUI: %v\n", err)
 		os.Exit(1)

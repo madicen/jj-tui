@@ -1,7 +1,4 @@
-// Package termmouse writes CSI sequences to turn off xterm mouse reporting.
-// Must be callable from tea.Model.Update (synchronously) before tea.Quit so the terminal
-// stops emitting SGR mouse payloads while the user moves the pointer off the window.
-package termmouse
+package util
 
 import (
 	"io"
@@ -11,7 +8,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-var offSeq = ansi.ResetModeMouseX10 +
+var mouseTrackingOffSeq = ansi.ResetModeMouseX10 +
 	ansi.ResetModeMouseNormal +
 	ansi.ResetModeMouseHighlight +
 	ansi.ResetModeMouseButtonEvent +
@@ -22,20 +19,22 @@ var offSeq = ansi.ResetModeMouseX10 +
 	ansi.ResetModeMouseExtSgrPixel +
 	"\x1b[0m"
 
-func writeAndSync(w io.Writer) {
+func writeMouseOffAndSync(w io.Writer) {
 	if w == nil {
 		return
 	}
-	_, _ = io.WriteString(w, offSeq)
+	_, _ = io.WriteString(w, mouseTrackingOffSeq)
 	if f, ok := w.(*os.File); ok {
 		_ = f.Sync()
 	}
 }
 
-// Flush disables mouse tracking on stdout, stderr, and (Unix) /dev/tty.
-func Flush() {
-	writeAndSync(os.Stdout)
-	writeAndSync(os.Stderr)
+// FlushMouse writes CSIs to disable xterm mouse reporting on stdout, stderr, and (Unix) /dev/tty.
+// Call from tea.Model.Update synchronously before tea.Quit so the terminal stops emitting SGR mouse
+// payloads while the pointer leaves the pane.
+func FlushMouse() {
+	writeMouseOffAndSync(os.Stdout)
+	writeMouseOffAndSync(os.Stderr)
 	if runtime.GOOS == "windows" {
 		return
 	}
@@ -43,7 +42,7 @@ func Flush() {
 	if err != nil {
 		return
 	}
-	_, _ = io.WriteString(f, offSeq)
+	_, _ = io.WriteString(f, mouseTrackingOffSeq)
 	_ = f.Sync()
 	_ = f.Close()
 }
