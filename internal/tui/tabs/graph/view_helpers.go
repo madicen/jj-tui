@@ -164,7 +164,7 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 			statusIndicator = " ⚠"
 		}
 		if commit.Divergent {
-			statusIndicator += lipgloss.NewStyle().Foreground(lipgloss.Color("#FF79C6")).Render(" ⑂ divergent")
+			statusIndicator += lipgloss.NewStyle().Foreground(lipgloss.Color("#FF79C6")).Render(" " + styles.DivergentMark + " divergent")
 		}
 
 		branchStr := ""

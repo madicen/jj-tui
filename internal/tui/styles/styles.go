@@ -9,6 +9,10 @@ var (
 	ColorMuted     = lipgloss.Color("#6272A4")
 )
 
+// DivergentMark prefixes "divergent" in the graph and resolver. U+2442 (OCR FORK, "⑂") is missing
+// from many monospace fonts and from VHS GIF output (replacement boxes). U+2260 is widely supported.
+const DivergentMark = "≠"
+
 // SetTheme updates the global theme colors and rebuilds styles that use them.
 // Pass hex strings (e.g. "#7E00AF"). Empty strings are ignored (keep current).
 func SetTheme(primary, secondary, muted string) {

@@ -170,7 +170,7 @@ func (m Model) lines() []string {
 	lines = append(lines, "  ○  Mutable commit (can be edited)")
 	lines = append(lines, "  ◆  Immutable commit (pushed to remote)")
 	lines = append(lines, "  ⚠  Commit has conflicts")
-	lines = append(lines, "  ⑂  Divergent commit (same change ID in multiple versions)")
+	lines = append(lines, fmt.Sprintf("  %s  Divergent commit (same change ID in multiple versions)", styles.DivergentMark))
 	lines = append(lines, "")
 	lines = append(lines, styles.TitleStyle.Render("PR Status Symbols"))
 	lines = append(lines, "")
