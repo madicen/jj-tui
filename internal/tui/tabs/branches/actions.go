@@ -232,9 +232,6 @@ func ExecuteRequest(r Request, ctx *RequestContext) (statusMsg string, cmd tea.C
 		if !branch.IsLocal {
 			return "Can only delete local bookmarks", nil
 		}
-		if branch.HasConflict {
-			return "This bookmark has diverged. Resolve the conflict first (press 'c').", nil
-		}
 		return fmt.Sprintf("Deleting bookmark %s...", branch.Name), DeleteBranchBookmarkCmd(ctx.JJService, branch.Name)
 	case r.PushBranch:
 		if !branch.IsLocal {

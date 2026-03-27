@@ -198,7 +198,7 @@ func (m Model) renderBranchGraph() string {
 			statusParts = append(statusParts, behindStyle.Render(fmt.Sprintf("-%d behind", branch.Behind)))
 		}
 		if len(statusParts) > 0 {
-			line := " (" + strings.Join(statusParts, ", ") + ")" + muted.Render(" vs trunk")
+			line := " (" + strings.Join(statusParts, ", ") + ")"
 			if !branch.IsLocal && branch.IsTracked && divergedFromRemoteLocal[branch.Name] {
 				line += muted.Render(" · remote tip ≠ local")
 			}
@@ -206,12 +206,12 @@ func (m Model) renderBranchGraph() string {
 		}
 		// No revs ahead/behind trunk(); still may differ from bookmark@remote (local amend after push).
 		if branch.IsLocal && branch.HasConflict {
-			return muted.Render(" (vs trunk: up to date · diverged vs remote)")
+			return muted.Render(" (up to date · diverged vs remote)")
 		}
 		if !branch.IsLocal && divergedFromRemoteLocal[branch.Name] {
-			return muted.Render(" (vs trunk: up to date · remote tip ≠ local)")
+			return muted.Render(" (up to date · remote tip ≠ local)")
 		}
-		return muted.Render(" (vs trunk: up to date)")
+		return muted.Render(" (up to date)")
 	}
 
 	var lines []string
