@@ -93,7 +93,7 @@ func (m *Model) applyLoadingOverlay(fullView string) string {
 		BorderForeground(styles.ColorMuted).
 		Padding(0, 0).
 		MaxWidth(maxOuter).
-		Background(lipgloss.Color("#1F2937")).
+		Background(styles.HeaderBarBackground).
 		Render(line)
 	boxLines := strings.Split(box, "\n")
 	modalH := len(boxLines)

@@ -44,9 +44,9 @@ func rebuildThemeStyles() {
 		Background(ColorPrimary).
 		Padding(0, 2)
 	StatusBarStyle = lipgloss.NewStyle().
-		Background(lipgloss.Color("#1F2937")).
+		Background(StatusBarBackground).
 		Foreground(ColorMuted).
-		Padding(0, 1)
+		Padding(0, 0)
 }
 
 // Styles (TitleStyle, CommitIDStyle, HelpKeyStyle, GraphStyle, TabActiveStyle, StatusBarStyle rebuilt in rebuildThemeStyles)
@@ -101,10 +101,19 @@ var (
 				Bold(true)
 
 	// Header and layout (main model view)
+	// Bar backgrounds: horizontal “padding” is not lipgloss Padding(0,1) (that paints two extra
+	// background cells). Gutter colors are set in view_helpers.chromeHorizontalRow.
+	HeaderBarBackground = lipgloss.Color("#1F2937")
+	HeaderBarForeground = lipgloss.Color("#F9FAFB")
+	StatusBarBackground = lipgloss.Color("#1F2937")
+
+	// Top bar, rightmost column: NoColor leaves background unset so the terminal default shows through.
+	HeaderGutterRightBackground lipgloss.TerminalColor = lipgloss.NoColor{}
+
 	HeaderStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("#1F2937")).
-			Foreground(lipgloss.Color("#F9FAFB")).
-			Padding(0, 1)
+			Background(HeaderBarBackground).
+			Foreground(HeaderBarForeground).
+			Padding(0, 0)
 
 	TabStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#9CA3AF")).
@@ -119,9 +128,9 @@ var (
 			Padding(1, 2)
 
 	StatusBarStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("#1F2937")).
+			Background(StatusBarBackground).
 			Foreground(ColorMuted).
-			Padding(0, 1)
+			Padding(0, 0)
 )
 
 func init() {

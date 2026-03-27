@@ -12,6 +12,32 @@ import (
 	"github.com/mattn/go-runewidth"
 )
 
+// chromeHorizontalRow draws exactly width cells as [left 1][middle width-2][right 1], so gutter
+// colors can differ (see styles.HeaderGutterRightBackground). This replaces lipgloss Padding(0,1)
+// on HeaderStyle/StatusBarStyle, which always used the same background for both edge cells.
+func chromeHorizontalRow(width int, inner string, leftBG, midBG, rightBG, midFG lipgloss.TerminalColor) string {
+	switch {
+	case width < 1:
+		return ""
+	case width == 1:
+		return lipgloss.NewStyle().Background(leftBG).Width(1).Render(" ")
+	case width == 2:
+		left := lipgloss.NewStyle().Background(leftBG).Width(1).Render(" ")
+		right := lipgloss.NewStyle().Background(rightBG).Width(1).Render(" ")
+		return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
+	}
+	innerW := width - 2
+	body := lipgloss.NewStyle().
+		Background(midBG).
+		Foreground(midFG).
+		Width(innerW).
+		Render(lipgloss.PlaceHorizontal(innerW, lipgloss.Left, inner,
+			lipgloss.WithWhitespaceBackground(midBG)))
+	left := lipgloss.NewStyle().Background(leftBG).Width(1).Render(" ")
+	right := lipgloss.NewStyle().Background(rightBG).Width(1).Render(" ")
+	return lipgloss.JoinHorizontal(lipgloss.Top, left, body, right)
+}
+
 // View implements tea.Model
 func (m *Model) View() string {
 	if m.width == 0 || m.height == 0 {
@@ -175,11 +201,14 @@ func (m *Model) renderWithHeader(content string) string {
 
 // renderHeader renders the header with clickable tabs
 func (m *Model) renderHeader() string {
-	title := styles.TitleStyle.Render("jj-tui")
+	// Spaces inside TitleStyle (bar gutters are separate; see chromeHorizontalRow).
+	title := styles.TitleStyle.Render(" jj-tui  ")
 
 	// Hide tabs when we're in "not a jj repo" state - tabs aren't functional without a repo
 	if m.initRepoModel.Path() != "" {
-		return styles.HeaderStyle.Width(m.width).Render(title)
+		return chromeHorizontalRow(m.width, title,
+			styles.HeaderBarBackground, styles.HeaderBarBackground, styles.HeaderGutterRightBackground,
+			styles.HeaderBarForeground)
 	}
 
 	// Create tabs wrapped in zones (with keyboard shortcuts)
@@ -210,9 +239,10 @@ func (m *Model) renderHeader() string {
 	// Layout: title on left, tabs on right
 	padding := max(m.width-lipgloss.Width(title)-lipgloss.Width(repo)-lipgloss.Width(tabsStr)-2, 0)
 
-	return styles.HeaderStyle.Width(m.width).Render(
-		title + repo + strings.Repeat(" ", padding) + tabsStr,
-	)
+	line := title + repo + strings.Repeat(" ", padding) + tabsStr
+	return chromeHorizontalRow(m.width, line,
+		styles.HeaderBarBackground, styles.HeaderBarBackground, styles.HeaderGutterRightBackground,
+		styles.HeaderBarForeground)
 }
 
 // renderTab renders a single tab
@@ -289,7 +319,8 @@ func (m *Model) renderStatusBar() string {
 	// Layout: status on left, shortcuts on right
 	padding := max(m.width-lipgloss.Width(status)-lipgloss.Width(scrollIndicator)-lipgloss.Width(shortcutsStr)-2, 0)
 
-	return styles.StatusBarStyle.Width(m.width).Render(
-		status + scrollIndicator + strings.Repeat(" ", padding) + shortcutsStr,
-	)
+	line := status + scrollIndicator + strings.Repeat(" ", padding) + shortcutsStr
+	return chromeHorizontalRow(m.width, line,
+		styles.StatusBarBackground, styles.StatusBarBackground, styles.StatusBarBackground,
+		styles.ColorMuted)
 }
