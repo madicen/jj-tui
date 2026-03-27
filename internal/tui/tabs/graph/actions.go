@@ -289,11 +289,6 @@ func executeDeleteBookmark(ctx *RequestContext) (tea.Cmd, string) {
 	if name == "" {
 		return nil, "No bookmark on this commit to delete"
 	}
-	for _, cb := range commit.ConflictedBranches {
-		if cb == name {
-			return nil, "Bookmark diverged (local vs remote). Resolve with Shift+C or Branches tab (c)."
-		}
-	}
 	return bookmarktab.DeleteBookmarkCmd(ctx.JJService, name), ""
 }
 

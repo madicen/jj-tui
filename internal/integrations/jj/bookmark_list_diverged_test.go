@@ -32,6 +32,19 @@ func TestBookmarkListMarksOriginDiverged_conflictedWord(t *testing.T) {
 	}
 }
 
+func TestBookmarkListMarksOriginDiverged_aheadZeroNotDiverged(t *testing.T) {
+	// jj prints both "ahead" and "behind" even when ahead is 0 (merged / behind-only vs remembered tip).
+	// That is not a bookmark fork; do not block delete or show ⚠ diverged.
+	sample := `feature: abc 11111111 tip
+  @git: abc 11111111 tip
+  @origin (ahead by 0 commits, behind by 14 commits): abc 11111111 tip
+`
+	got := bookmarkListMarksOriginDiverged(sample)
+	if got["feature"] {
+		t.Fatalf("expected no divergence for ahead-by-0, got %v", got)
+	}
+}
+
 func TestParseBookmarkListRemoteLine_qualifiedOrigin(t *testing.T) {
 	r, info, ok := parseBookmarkListRemoteLine("@origin (ahead by 1 commits, behind by 1 commits): foo bar baz")
 	if !ok || r != "origin" || !strings.Contains(info, "foo") {

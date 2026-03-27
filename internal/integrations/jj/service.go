@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -1962,10 +1963,46 @@ func parseBookmarkListRemoteLine(trimmed string) (remote string, info string, ok
 	return strings.TrimSpace(rest[:colon]), strings.TrimSpace(rest[colon+1:]), true
 }
 
+var reAheadByJJ = regexp.MustCompile(`(?i)ahead by\s+(\d+)`)
+var reBehindByJJ = regexp.MustCompile(`(?i)behind by\s+(\d+)`)
+
+// jjOriginQualifierAheadBehind parses the parenthetical after @origin on a bookmark list line
+// (e.g. "(ahead by 1 commits, behind by 1 commits)") and returns ahead/behind counts when both appear.
+func jjOriginQualifierAheadBehind(originRemoteLine string) (ahead, behind int, ok bool) {
+	lo := strings.ToLower(originRemoteLine)
+	idx := strings.Index(lo, "@origin")
+	if idx < 0 {
+		return 0, 0, false
+	}
+	after := strings.TrimSpace(originRemoteLine[idx+len("@origin"):])
+	if !strings.HasPrefix(after, "(") {
+		return 0, 0, false
+	}
+	close := strings.Index(after, "):")
+	if close < 0 {
+		return 0, 0, false
+	}
+	inner := after[1:close]
+	am := reAheadByJJ.FindStringSubmatch(inner)
+	bm := reBehindByJJ.FindStringSubmatch(inner)
+	if len(am) < 2 || len(bm) < 2 {
+		return 0, 0, false
+	}
+	a, errA := strconv.Atoi(am[1])
+	b, errB := strconv.Atoi(bm[1])
+	if errA != nil || errB != nil {
+		return 0, 0, false
+	}
+	return a, b, true
+}
+
 // bookmarkListMarksOriginDiverged parses `jj bookmark list --all-remotes` output. Colocated repos show
 // local tip on @git and a diverged remembered position on @origin as "(ahead by … behind by …)" — the
 // graph template often omits `?`, so we use this text (same as users see next to @origin) to detect
 // when to offer the resolver.
+//
+// jj also prints "(ahead by 0, behind by N)" when the branch is simply behind the remembered remote tip
+// without a true two-sided fork (common after merges). Those must not set HasConflict or block delete.
 func bookmarkListMarksOriginDiverged(listOutput string) map[string]bool {
 	d := make(map[string]bool)
 	var pendingLocal string
@@ -2002,12 +2039,12 @@ func bookmarkListMarksOriginDiverged(listOutput string) map[string]bool {
 		}
 		// Qualifiers like "(ahead by … behind by …)" or "(conflicted)" sit before "):", not in info.
 		full := strings.ToLower(t)
-		info = strings.ToLower(info)
-		if (strings.Contains(info, "ahead") && strings.Contains(info, "behind")) ||
-			(strings.Contains(full, "ahead") && strings.Contains(full, "behind")) {
+		infoLower := strings.ToLower(info)
+		if strings.Contains(infoLower, "conflicted") || strings.Contains(full, "conflicted") {
 			d[pendingLocal] = true
+			continue
 		}
-		if strings.Contains(info, "conflicted") || strings.Contains(full, "conflicted") {
+		if ah, bh, ok := jjOriginQualifierAheadBehind(t); ok && ah > 0 && bh > 0 {
 			d[pendingLocal] = true
 		}
 	}

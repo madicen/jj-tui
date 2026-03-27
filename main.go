@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -11,12 +12,36 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/tui"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 	"github.com/madicen/jj-tui/internal/version"
+	"github.com/muesli/termenv"
 )
+
+// ttyMouseTrackingOff disables all common xterm mouse reporting modes. Bubble Tea normally does this
+// on shutdown, but we also emit a full sequence here because:
+//   - termenv.DisableMouseAllMotion() only sends ?1003l, not SGR mode ?1006l, so the terminal can
+//     still emit reports like "35;237;26M" after quit if anything missed the full teardown.
+//   - A trailing SGR reset covers truncated truecolor/style sequences on some terminals.
+func ttyMouseTrackingOff(w io.Writer) {
+	if w == nil {
+		return
+	}
+	_, _ = io.WriteString(w,
+		ansi.ResetX10MouseMode+
+			ansi.ResetNormalMouseMode+
+			ansi.ResetHighlightMouseMode+
+			ansi.ResetButtonEventMouseMode+
+			ansi.ResetAnyEventMouseMode+
+			ansi.ResetUtf8ExtMouseMode+
+			ansi.ResetSgrExtMouseMode+
+			ansi.ResetUrxvtExtMouseMode+
+			ansi.ResetSgrPixelExtMouseMode+
+			"\x1b[0m",
+	)
+}
 
 func main() {
 	// Parse command-line flags
@@ -104,19 +129,18 @@ func main() {
 	// (some terminals only deliver mouse events reliably in this mode).
 	p := tea.NewProgram(
 		model,
-		tea.WithAltScreen(),        // Use alternate screen buffer
-		tea.WithMouseAllMotion(),   // Mouse click, release, wheel, and motion without button press
+		tea.WithAltScreen(),      // Use alternate screen buffer
+		tea.WithMouseAllMotion(), // Mouse click, release, wheel, and motion without button press
 	)
 
-	// Ensure we always disable xterm mouse tracking on exit so the shell doesn't echo
-	// mouse reports (e.g. "35;269;21M"). Defer runs on normal return and panic; we must
-	// also call explicitly before os.Exit(1) since defer does not run then.
-	defer termenv.DefaultOutput().DisableMouseAllMotion()
+	// Belt-and-suspenders: fully disable mouse modes after the program exits so the shell never
+	// receives SGR mouse payloads (e.g. "35;237;26M") if teardown order or buffering differs.
+	defer ttyMouseTrackingOff(os.Stdout)
 
 	// Run the program
 	_, err = p.Run()
 
-	termenv.DefaultOutput().DisableMouseAllMotion()
+	ttyMouseTrackingOff(os.Stdout)
 	if err != nil {
 		fmt.Printf("Error running TUI: %v\n", err)
 		os.Exit(1)

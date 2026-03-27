@@ -1266,6 +1266,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.bookmarkConflictReturnValid = false
 		m.appState.ViewMode = restore
+		if msg.Err != nil {
+			m.errorModal.SetError(msg.Err, false, "")
+		}
 		return m, conflicttab.HandleBookmarkConflictResolvedMsg(msg, &m.appState, m.settingsTabModel.GetSettingsBranchLimit())
 	case graphtab.DivergentCommitInfoMsg:
 		cmd, info := divergenttab.HandleDivergentCommitInfoMsg(msg, &m.appState)
