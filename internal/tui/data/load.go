@@ -32,7 +32,8 @@ func LoadRepository(jjService *jj.Service) tea.Cmd {
 // LoadRepositorySilent loads repository without surfacing errors (for background refresh).
 // revset is the graph revset to use (e.g. from app config); empty uses jj default.
 // Pass revset from app state to avoid reading config from disk every tick.
-// Returns nil on error; sends SilentRepositoryLoadedMsg on success.
+// Always returns SilentRepositoryLoadedMsg so the UI can clear in-flight refresh state;
+// Repository is nil when GetRepository fails.
 func LoadRepositorySilent(jjService *jj.Service, revset string) tea.Cmd {
 	if jjService == nil {
 		return nil
@@ -40,7 +41,7 @@ func LoadRepositorySilent(jjService *jj.Service, revset string) tea.Cmd {
 	return func() tea.Msg {
 		repo, err := jjService.GetRepository(context.Background(), revset)
 		if err != nil {
-			return nil
+			return SilentRepositoryLoadedMsg{Repository: nil}
 		}
 		return SilentRepositoryLoadedMsg{Repository: repo}
 	}

@@ -18,6 +18,7 @@ import (
 // handleDataServicesInitializedMsg applies initialized services and repository; starts tick and PR load.
 // Kept for tests or code paths that still send the full message.
 func (m *Model) handleDataServicesInitializedMsg(msg data.ServicesInitializedMsg) (tea.Model, tea.Cmd) {
+	m.silentReloadInFlight = false
 	m.appState.JJService = msg.JJService
 	m.appState.GitHubService = msg.GitHubService
 	m.appState.TicketService = msg.TicketService
@@ -55,6 +56,7 @@ func (m *Model) handleDataServicesInitializedMsg(msg data.ServicesInitializedMsg
 // handleRepoReadyMsg shows the graph immediately and kicks off GitHub/ticket load in the background.
 // Changed files are loaded on the next frame (via loadChangedFilesTriggerMsg) so the graph paints first.
 func (m *Model) handleRepoReadyMsg(msg data.RepoReadyMsg) (tea.Model, tea.Cmd) {
+	m.silentReloadInFlight = false
 	m.appState.JJService = msg.JJService
 	m.appState.Repository = msg.Repository
 	m.appState.DemoMode = msg.DemoMode
@@ -121,6 +123,7 @@ func (m *Model) handleActionsRepositoryLoadedMsg(msg graphtab.RepositoryLoadedMs
 
 // handleDataSilentRepositoryLoadedMsg applies silent repo update and propagates to all tabs.
 func (m *Model) handleDataSilentRepositoryLoadedMsg(msg data.SilentRepositoryLoadedMsg) (tea.Model, tea.Cmd) {
+	m.silentReloadInFlight = false
 	if msg.Repository != nil {
 		oldCount := 0
 		var oldPRs []internal.GitHubPR
@@ -168,11 +171,12 @@ func (m *Model) handleTickMsg() (tea.Model, tea.Cmd) {
 			}
 		}
 	}
-	if !m.appState.Loading && m.appState.JJService != nil && m.appState.ViewMode != state.ViewEditDescription && m.appState.ViewMode != state.ViewCreatePR && m.appState.ViewMode != state.ViewCreateTicket && m.appState.ViewMode != state.ViewCreateBookmark && !m.graphTabModel.IsInRebaseMode() {
+	if !m.silentReloadInFlight && !m.appState.Loading && m.appState.JJService != nil && m.appState.ViewMode != state.ViewEditDescription && m.appState.ViewMode != state.ViewCreatePR && m.appState.ViewMode != state.ViewCreateTicket && m.appState.ViewMode != state.ViewCreateBookmark && !m.graphTabModel.IsInRebaseMode() {
 		revset := ""
 		if m.appState.Config != nil {
 			revset = m.appState.Config.GraphRevset
 		}
+		m.silentReloadInFlight = true
 		cmds = append(cmds, data.LoadRepositorySilent(m.appState.JJService, revset))
 	}
 	prInput := prstab.PrTickInput{
