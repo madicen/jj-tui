@@ -1143,6 +1143,21 @@ func (s *Service) cleanupAfterFetch(ctx context.Context) error {
 	return nil
 }
 
+// DefaultGraphRevset is used when config graph_revset is empty: all mutable (local rewritable)
+// commits on any branch, every local bookmark, and main@origin for trunk context. Unlike
+// (mutable() & (ancestors(@) | descendants(@))), this avoids a deep ancestors(@) walk when @ is
+// far below trunk, which made the first jj log very slow on large repos.
+const DefaultGraphRevset = `mutable() | bookmarks() | main@origin`
+
+// Caps for per-commit jj subprocess work during getCommitGraph. After the main jj log, we run
+// enrichCommitsDeltaVsOrigin and enrichCommitsEvologSplitViable; each mutable commit with a feature
+// bookmark can trigger several jj log/diff/evolog calls. Large revsets (deep ancestors(@), many
+// bookmarks) can list 100+ rows and make startup feel hung without these limits.
+const (
+	graphLoadMaxDeltaVsOriginProbes = 64
+	graphLoadMaxEvologSplitProbes   = 36
+)
+
 // getCommitGraph retrieves the commit graph with real jj data.
 // revset: if non-empty, used as the -r revset; if empty, a default is used.
 func (s *Service) getCommitGraph(ctx context.Context, revset string) (*internal.CommitGraph, error) {
@@ -1165,33 +1180,36 @@ func (s *Service) getCommitGraph(ctx context.Context, revset string) (*internal.
 		"\n"
 	)`
 
+	// Run bookmark list concurrently with log; enrichment needs it later and it does not depend on log output.
+	var bmOut string
+	var bmErr error
+	var bmWG sync.WaitGroup
+	bmWG.Add(1)
+	go func() {
+		defer bmWG.Done()
+		bmOut, bmErr = s.runJJOutputNoHistory(ctx, "bookmark", "list", "--all-remotes")
+	}()
+
 	// Run WITH the graph to get ASCII art (no --reversed, keep natural newest-first order)
-	// When revset is set (config), use it. Otherwise use a default that shows your local work:
-	// mutable commits that are ancestors OR descendants of @ (so move-to-parent/move-to-child
-	// split commits are visible), plus bookmarks and main.
 	var revsetArg string
 	if revset != "" {
 		revsetArg = revset
 	} else {
-		revsetArg = "(mutable() & (ancestors(@) | descendants(@))) | bookmarks() | main@origin"
+		revsetArg = DefaultGraphRevset
 	}
 	out, err := s.runJJOutput(ctx, "log", "-r", revsetArg, "-T", template)
 	if err != nil {
 		if revset != "" {
-			// Custom revset failed; try simple fallback so the app still loads
+			// Custom revset failed; try a broad safe revset so the app still loads
+			out, err = s.runJJOutput(ctx, "log", "-r", "mutable() | bookmarks()", "-T", template)
+		} else {
+			// Default may fail if main@origin is missing; omit trunk tip from the revset
 			out, err = s.runJJOutput(ctx, "log", "-r", "mutable() | bookmarks()", "-T", template)
 		}
-		if err != nil && revset == "" {
-			// Default revset: maybe main@origin doesn't exist
-			revsetArg = "(mutable() & (ancestors(@) | descendants(@))) | bookmarks()"
-			out, err = s.runJJOutput(ctx, "log", "-r", revsetArg, "-T", template)
-		}
-		if err != nil && revset == "" {
-			out, err = s.runJJOutput(ctx, "log", "-r", "mutable() | bookmarks()", "-T", template)
-		}
-		if err != nil {
-			return s.getCommitGraphSimple(ctx, revset)
-		}
+	}
+	bmWG.Wait()
+	if err != nil {
+		return s.getCommitGraphSimple(ctx, revset)
 	}
 
 	commits := []internal.Commit{}
@@ -1319,8 +1337,8 @@ func (s *Service) getCommitGraph(ctx context.Context, revset string) (*internal.
 
 	originDiverged := map[string]bool{}
 	var suppressForkAfterAheadBehindList map[string]bool
-	if listOut, err := s.runJJOutputNoHistory(ctx, "bookmark", "list", "--all-remotes"); err == nil {
-		stated, ahBoth := bookmarkListParseOriginDivergence(listOut)
+	if bmErr == nil {
+		stated, ahBoth := bookmarkListParseOriginDivergence(bmOut)
 		originDiverged = s.originDivergedResolved(ctx, stated, ahBoth)
 		// jj may print both ahead and behind after merges while tips stay linear; do not let
 		// bookmarkDivergedFromOrigin re-add those as conflicts when the fork check already declined.
@@ -1345,6 +1363,7 @@ func (s *Service) getCommitGraph(ctx context.Context, revset string) (*internal.
 // enrichCommitsEvologSplitViable sets EvologSplitViable for mutable commits (cached per change id).
 func (s *Service) enrichCommitsEvologSplitViable(ctx context.Context, commits []internal.Commit) {
 	cache := make(map[string]bool)
+	probes := 0
 	for i := range commits {
 		c := &commits[i]
 		if c.Immutable || c.Divergent || len(c.ConflictedBranches) > 0 || c.Conflicts {
@@ -1358,6 +1377,11 @@ func (s *Service) enrichCommitsEvologSplitViable(ctx context.Context, commits []
 			c.EvologSplitViable = v
 			continue
 		}
+		if graphLoadMaxEvologSplitProbes > 0 && probes >= graphLoadMaxEvologSplitProbes {
+			c.EvologSplitViable = false
+			continue
+		}
+		probes++
 		v := s.commitEvologSplitViable(ctx, *c)
 		cache[ch] = v
 		c.EvologSplitViable = v
@@ -1445,6 +1469,7 @@ func eligibleBookmarkForOriginDelta(branches []string) string {
 }
 
 func (s *Service) enrichCommitsDeltaVsOrigin(ctx context.Context, commits []internal.Commit) {
+	probes := 0
 	for i := range commits {
 		c := &commits[i]
 		if c.Immutable {
@@ -1454,6 +1479,11 @@ func (s *Service) enrichCommitsDeltaVsOrigin(ctx context.Context, commits []inte
 		if bn == "" {
 			continue
 		}
+		if graphLoadMaxDeltaVsOriginProbes > 0 && probes >= graphLoadMaxDeltaVsOriginProbes {
+			c.HasDeltaVsBookmarkOrigin = false
+			continue
+		}
+		probes++
 		// Already stacked on bookmark@origin (origin tip is an ancestor of this revision): push
 		// updates the remote bookmark; "(f)" restack is redundant (e.g. right after MoveBookmarkDeltaOntoOrigin).
 		if s.revisionBookmarkOriginIsAncestorOf(ctx, bn, c.ChangeID) {

@@ -399,17 +399,19 @@ jj-tui
 
 ### Graph view revset
 
-The commit graph shows commits selected by a **jj revset**. By default jj-tui uses a revset so you see **your local work** (mutable commits that are ancestors or descendants of `@`), **bookmarks**, and **main**. Including descendants of `@` ensures that “move to parent” / “move to child” split commits stay visible.
+The commit graph shows commits selected by a **jj revset**. By default (empty `graph_revset`) jj-tui uses **`mutable() | bookmarks() | main@origin`**: all **mutable** (locally rewritable) commits on any branch, every **local bookmark**, and **main@origin** for trunk context. This avoids the previous default’s deep **`ancestors(@)`** walk (which could make the first `jj log` very slow when `@` was far below `main`) while still showing local branches and stacks. Immutable history only appears when it’s an ancestor of a matching mutable/bookmark commit (as rendered by jj).
 
 To use a custom revset, set `graph_revset` in your config. Examples:
 
+- **Previous default** (working-copy cone; can be slow on huge `ancestors(@)`):  
+  `"graph_revset": "(mutable() & (ancestors(@) | descendants(@))) | bookmarks() | main@origin"`
 - **Main + your branch only** (minimal noise):  
   `"graph_revset": "trunk() | (ancestors(@) - ancestors(trunk()))"`
 - **Only your commits** (author = you):  
   `"graph_revset": "mine() | trunk()"`
-- **Ancestors of @ only** (stricter than default, may hide new split commits):  
+- **Ancestors of @ only** (may hide sibling branches):  
   `"graph_revset": "(mutable() & ancestors(@)) | bookmarks() | main@origin"`
-- **All mutable + bookmarks**:  
+- **All mutable + bookmarks** (same as built-in default except you can drop `main@origin`):  
   `"graph_revset": "mutable() | bookmarks() | main@origin"`
 
 Leave `graph_revset` empty to use the built-in default. See [jj revset docs](https://jj-vcs.github.io/jj/latest/revsets) for more.

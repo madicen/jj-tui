@@ -61,7 +61,7 @@ type Config struct {
 	BranchStatsLimit       *int  `json:"branch_limit,omitempty"`              // nil = 50 (default limit for branch stats calculation)
 	SanitizeBookmarkNames  *bool `json:"sanitize_bookmark_names,omitempty"`   // nil = true (auto-fix invalid bookmark names)
 
-	// Graph view: jj revset for which commits to show. Empty = use default (focus on your work + main + bookmarks).
+	// Graph view: jj revset for which commits to show. Empty = jj.DefaultGraphRevset (mutable | bookmarks | main@origin).
 	// Example: "trunk() | (ancestors(@) - ancestors(trunk()))" for main + your branch only.
 	GraphRevset string `json:"graph_revset,omitempty"`
 

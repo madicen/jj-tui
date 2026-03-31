@@ -2,7 +2,7 @@
 # Small jj repo for vhs/divergent.tape: one change ID with two visible revisions (divergent).
 # Pattern: create commit, record id, squash-amend via child+--into @-, then `jj new <old id>`
 # so the pre-amend revision is visible again. Bookmark the other head so it appears in the
-# default graph revset (sibling is not in ancestors(@)).
+# sibling revision is mutable + bookmarked so it appears in the default graph revset.
 # Tape: j → d → (optional j in modal) → Enter.
 # Run: make divergent-gif
 # Requires: jj, git
