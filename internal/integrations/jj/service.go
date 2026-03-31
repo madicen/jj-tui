@@ -660,6 +660,27 @@ func (s *Service) AbandonCommit(ctx context.Context, commitID string) error {
 	return s.runJJ(ctx, "abandon", commitID)
 }
 
+// abandonOldCommitsRevset matches mutable commits that are not on the ancestry of origin/main,
+// excluding the working copy. Used for Settings → Abandon old commits (single jj process).
+const abandonOldCommitsRevset = `mutable() & ~ancestors(main@origin) & ~@`
+
+// AbandonOldCommitsBatch runs one `jj abandon` for all obsolete mutable commits instead of one
+// process per row. N sequential abandons each triggered a full jj startup + working-copy snapshot,
+// which made cleanup feel slower and slower on large working trees.
+func (s *Service) AbandonOldCommitsBatch(ctx context.Context) (abandoned int, err error) {
+	if _, err := s.GetRevisionChangeID(ctx, "main@origin"); err != nil {
+		return 0, fmt.Errorf("could not find main@origin - make sure to track it first")
+	}
+	n := s.countRevisions(ctx, abandonOldCommitsRevset)
+	if n == 0 {
+		return 0, nil
+	}
+	if err := s.runJJ(ctx, "abandon", abandonOldCommitsRevset); err != nil {
+		return 0, err
+	}
+	return n, nil
+}
+
 // RebaseCommit rebases a commit and all its descendants onto a destination commit
 func (s *Service) RebaseCommit(ctx context.Context, sourceCommitID, destCommitID string) error {
 	// jj rebase -s <source> -d <destination>

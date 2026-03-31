@@ -403,7 +403,8 @@ func DeleteAllBookmarksCmd(jjSvc *jj.Service, repo *internal.Repository) tea.Cmd
 	}
 }
 
-// AbandonOldCommitsCmd returns a command that abandons all mutable commits that are not ancestors of main@origin.
+// AbandonOldCommitsCmd returns a command that abandons mutable commits not in ancestors(main@origin),
+// excluding @, in one jj invocation (see jj.Service.AbandonOldCommitsBatch).
 func AbandonOldCommitsCmd(jjSvc *jj.Service, repo *internal.Repository) tea.Cmd {
 	if jjSvc == nil || repo == nil {
 		return func() tea.Msg {
@@ -412,20 +413,14 @@ func AbandonOldCommitsCmd(jjSvc *jj.Service, repo *internal.Repository) tea.Cmd 
 	}
 	return func() tea.Msg {
 		ctx := context.Background()
-		mainCommitID, err := jjSvc.GetRevisionChangeID(ctx, "main@origin")
-		if err != nil || mainCommitID == "" {
-			return CleanupCompletedMsg{Err: fmt.Errorf("could not find main@origin - make sure to track it first")}
+		n, err := jjSvc.AbandonOldCommitsBatch(ctx)
+		if err != nil {
+			return CleanupCompletedMsg{Err: err}
 		}
-		var abandonedCount int
-		for _, commit := range repo.Graph.Commits {
-			if commit.IsWorking || commit.Immutable || commit.ChangeID == mainCommitID {
-				continue
-			}
-			if err := jjSvc.AbandonCommit(ctx, commit.ChangeID); err == nil {
-				abandonedCount++
-			}
+		if n == 0 {
+			return CleanupCompletedMsg{Success: true, Message: "No commits to abandon"}
 		}
-		return CleanupCompletedMsg{Success: true, Message: fmt.Sprintf("Abandoned %d commits", abandonedCount)}
+		return CleanupCompletedMsg{Success: true, Message: fmt.Sprintf("Abandoned %d commits", n)}
 	}
 }
 
