@@ -1199,11 +1199,14 @@ func (s *Service) cleanupAfterFetch(ctx context.Context) error {
 	return nil
 }
 
-// DefaultGraphRevset is used when config graph_revset is empty: all mutable (local rewritable)
-// commits on any branch, every local bookmark, and main@origin for trunk context. Unlike
-// (mutable() & (ancestors(@) | descendants(@))), this avoids a deep ancestors(@) walk when @ is
-// far below trunk, which made the first jj log very slow on large repos.
-const DefaultGraphRevset = `mutable() | bookmarks() | main@origin`
+// DefaultGraphRevset is used when config graph_revset is empty.
+//
+// We intersect mutable() with (ancestors(@) | descendants(@)) so the graph is tied to the
+// working copy's DAG neighborhood. Bare mutable() | bookmarks() | main@origin matches every
+// mutable revision repo-wide (including unrelated merged branches, stale divergent pairs, and
+// teammates' old lines), which is overwhelming in large colocated repos like access.
+// descendants(@) keeps move-to-parent / move-to-child splits visible.
+const DefaultGraphRevset = `(mutable() & (ancestors(@) | descendants(@))) | bookmarks() | main@origin`
 
 // Caps for per-commit jj subprocess work during getCommitGraph. After the main jj log, we run
 // enrichCommitsDeltaVsOrigin and enrichCommitsEvologSplitViable; each mutable commit with a feature
