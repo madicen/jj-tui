@@ -52,6 +52,9 @@ type Model struct {
 	bookmarkConflictReturnView  state.ViewMode
 	// Selection state lives in tab models: graph (commit/file), prs, tickets, branches
 	redoOperationID string
+	// Silent background graph refresh (handleTickMsg) runs concurrently per Bubble Tea Batch;
+	// without this guard, overlapping GetRepository calls can retain multi-copy graphs and spike RSS.
+	silentReloadInFlight bool
 
 	// Tab-specific models (own all tab/modal state; main model does not duplicate)
 	graphTabModel    graphtab.GraphModel
@@ -125,6 +128,7 @@ func (m *Model) isSelectedCommitValid() bool {
 
 // applyRepositoryLoaded applies a loaded repository from data or actions package (shared logic).
 func (m *Model) applyRepositoryLoaded(repo *internal.Repository) (*Model, tea.Cmd) {
+	m.silentReloadInFlight = false
 	var oldPRs []internal.GitHubPR
 	if m.appState.Repository != nil {
 		oldPRs = m.appState.Repository.PRs
