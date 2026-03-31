@@ -9,7 +9,7 @@ import (
 )
 
 // LoadRepository loads or refreshes repository data. Returns a cmd that sends RepositoryLoadedMsg.
-// Uses config.GraphRevset when set; otherwise jj uses a default revset focused on your work.
+// Uses config.GraphRevset when set; otherwise jj.DefaultGraphRevset (mutable | bookmarks | main@origin).
 // Caller should use InitializeServices if jjService is nil.
 func LoadRepository(jjService *jj.Service) tea.Cmd {
 	if jjService == nil {
