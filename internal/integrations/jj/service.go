@@ -660,25 +660,60 @@ func (s *Service) AbandonCommit(ctx context.Context, commitID string) error {
 	return s.runJJ(ctx, "abandon", commitID)
 }
 
-// abandonOldCommitsRevset matches mutable commits that are not on the ancestry of origin/main,
-// excluding the working copy. Used for Settings → Abandon old commits (single jj process).
-const abandonOldCommitsRevset = `mutable() & ~ancestors(main@origin) & ~@`
-
-// AbandonOldCommitsBatch runs one `jj abandon` for all obsolete mutable commits instead of one
-// process per row. N sequential abandons each triggered a full jj startup + working-copy snapshot,
-// which made cleanup feel slower and slower on large working trees.
-func (s *Service) AbandonOldCommitsBatch(ctx context.Context) (abandoned int, err error) {
-	if _, err := s.GetRevisionChangeID(ctx, "main@origin"); err != nil {
+// AbandonOldCommitsBatch runs one `jj abandon` over every mutable commit in the **current graph**
+// (except the working-copy row and the main@origin change id), matching the original settings
+// behavior. A revset like `mutable() & ~ancestors(main@origin)` was wrong: most local mutable
+// commits on trunk are still *in* ancestors(main@origin), so almost nothing was abandoned.
+// Divergent commits: each graph row uses its unique **commit** id in the union revset so all
+// versions of a change can be abandoned together; if jj rejects the batch (e.g. ordering), use
+// the divergent resolver (d) first, then retry cleanup.
+func (s *Service) AbandonOldCommitsBatch(ctx context.Context, repo *internal.Repository) (abandoned int, err error) {
+	if repo == nil {
+		return 0, fmt.Errorf("repository required")
+	}
+	mainChangeID, err := s.GetRevisionChangeID(ctx, "main@origin")
+	if err != nil || strings.TrimSpace(mainChangeID) == "" {
 		return 0, fmt.Errorf("could not find main@origin - make sure to track it first")
 	}
-	n := s.countRevisions(ctx, abandonOldCommitsRevset)
-	if n == 0 {
+	mainKey := changeIDRootKey(mainChangeID)
+
+	// Index by commit ID, not change ID: divergent rows share one change (same change_id.short(8) in
+	// the graph) but have different commit IDs — deduping by change would drop every extra version
+	// and jj would only abandon one revision.
+	seen := make(map[string]bool)
+	var revParts []string
+	for _, commit := range repo.Graph.Commits {
+		if commit.IsWorking || commit.Immutable {
+			continue
+		}
+		ch := strings.TrimSpace(commit.ChangeID)
+		if ch == "" {
+			continue
+		}
+		if mainKey != "" && changeIDRootKey(ch) == mainKey {
+			continue
+		}
+		rev := strings.TrimSpace(commit.ID)
+		if rev == "" {
+			rev = strings.TrimSpace(commit.ShortID)
+		}
+		if rev == "" {
+			rev = ch
+		}
+		if seen[rev] {
+			continue
+		}
+		seen[rev] = true
+		revParts = append(revParts, rev)
+	}
+	if len(revParts) == 0 {
 		return 0, nil
 	}
-	if err := s.runJJ(ctx, "abandon", abandonOldCommitsRevset); err != nil {
+	revset := strings.Join(revParts, " | ")
+	if err := s.runJJ(ctx, "abandon", revset); err != nil {
 		return 0, err
 	}
-	return n, nil
+	return len(revParts), nil
 }
 
 // RebaseCommit rebases a commit and all its descendants onto a destination commit

@@ -403,8 +403,8 @@ func DeleteAllBookmarksCmd(jjSvc *jj.Service, repo *internal.Repository) tea.Cmd
 	}
 }
 
-// AbandonOldCommitsCmd returns a command that abandons mutable commits not in ancestors(main@origin),
-// excluding @, in one jj invocation (see jj.Service.AbandonOldCommitsBatch).
+// AbandonOldCommitsCmd returns a command that abandons mutable commits in the current graph view
+// (except working copy and main@origin) in one jj invocation (see jj.Service.AbandonOldCommitsBatch).
 func AbandonOldCommitsCmd(jjSvc *jj.Service, repo *internal.Repository) tea.Cmd {
 	if jjSvc == nil || repo == nil {
 		return func() tea.Msg {
@@ -413,7 +413,7 @@ func AbandonOldCommitsCmd(jjSvc *jj.Service, repo *internal.Repository) tea.Cmd 
 	}
 	return func() tea.Msg {
 		ctx := context.Background()
-		n, err := jjSvc.AbandonOldCommitsBatch(ctx)
+		n, err := jjSvc.AbandonOldCommitsBatch(ctx, repo)
 		if err != nil {
 			return CleanupCompletedMsg{Err: err}
 		}
