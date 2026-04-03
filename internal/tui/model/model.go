@@ -50,6 +50,10 @@ type Model struct {
 	// When ViewBookmarkConflict is open: tab to show under the overlay and restore on close/resolve.
 	bookmarkConflictReturnValid bool
 	bookmarkConflictReturnView  state.ViewMode
+	// When a centered form modal is open (edit description, PR/ticket forms, bookmark, GitHub login): tab
+	// content and tab bar highlight use this; ViewMode stays the modal for input routing.
+	modalUnderlayValid bool
+	modalUnderlayView  state.ViewMode
 	// Selection state lives in tab models: graph (commit/file), prs, tickets, branches
 	redoOperationID string
 	// Silent background graph refresh (handleTickMsg) runs concurrently per Bubble Tea Batch;
@@ -87,6 +91,25 @@ type doPollMsg struct{}
 // Used in Update() when delegating to tabs so viewport/list dimensions are correct for scroll handling.
 func (m *Model) estimatedContentHeight() int {
 	return max(m.height-4, 1)
+}
+
+func (m *Model) beginModalUnderlay() {
+	m.modalUnderlayView = m.appState.ViewMode
+	m.modalUnderlayValid = true
+}
+
+func (m *Model) clearModalUnderlay() {
+	m.modalUnderlayValid = false
+}
+
+// restoreModalUnderlayOrGraph restores the tab from beginModalUnderlay, or the graph if none.
+func (m *Model) restoreModalUnderlayOrGraph() {
+	if m.modalUnderlayValid {
+		m.appState.ViewMode = m.modalUnderlayView
+		m.modalUnderlayValid = false
+		return
+	}
+	m.appState.ViewMode = state.ViewCommitGraph
 }
 
 // buildSettingsViewOpts builds ViewOpts for the settings tab (used when entering settings or on resize).
@@ -300,8 +323,9 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		m.startCreateBookmark()
 		return m, branchestab.LoadBranchesCmd(m.appState.JJService, m.settingsTabModel.GetSettingsBranchLimit())
 	case state.NavigateCreateBookmarkFromTicket:
+		m.beginModalUnderlay()
 		m.appState.ViewMode = state.ViewCreateBookmark
-		m.appState.StatusMessage = bookmarktab.OpenCreateBookmarkFromTicket(&m.bookmarkModal, m.appState.Repository, t.TicketKey, t.TicketTitle, t.TicketDisplayKey, m.branchesTabModel.BuildBookmarkNameConflictSources(), m.appState.Config != nil && m.appState.Config.ShouldSanitizeBookmarkNames(), m.width-10)
+		m.appState.StatusMessage = bookmarktab.OpenCreateBookmarkFromTicket(&m.bookmarkModal, m.appState.Repository, t.TicketKey, t.TicketTitle, t.TicketDisplayKey, m.branchesTabModel.BuildBookmarkNameConflictSources(), m.appState.Config != nil && m.appState.Config.ShouldSanitizeBookmarkNames(), ModalInnerWidth(m.width))
 		return m, nil
 	case state.NavigateWarning:
 		m.warningModal.Show(t.WarningTitle, t.WarningMessage, t.WarningCommits)
@@ -311,7 +335,7 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		return m, nil
 	case state.NavigateBackToGraph:
 		m.evologSplitModal.Hide()
-		m.appState.ViewMode = state.ViewCommitGraph
+		m.restoreModalUnderlayOrGraph()
 		m.appState.Loading = false
 		if t.StatusMessage != "" {
 			m.appState.StatusMessage = t.StatusMessage
@@ -380,6 +404,7 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		return m, m.tickCmd()
 	case state.NavigateGitHubLoginCancel:
 		m.githubLoginModel.ClearFlow()
+		m.clearModalUnderlay()
 		m.appState.ViewMode = state.ViewSettings
 		if t.StatusMessage != "" {
 			m.appState.StatusMessage = t.StatusMessage
@@ -387,12 +412,22 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		return m, nil
 	case state.NavigateSaveDescription:
 		if t.SaveCommitID != "" && m.appState.JJService != nil {
-			return m, graphtab.SaveDescriptionCmd(m.appState.JJService, t.SaveCommitID, t.SaveDescription)
+			m.appState.Loading = true
+			m.appState.StatusMessage = "Saving description…"
+			cmd := graphtab.SaveDescriptionCmd(m.appState.JJService, t.SaveCommitID, t.SaveDescription)
+			return m, tea.Batch(cmd, m.startBusySpinnerCmd())
 		}
 		return m, nil
 	case state.NavigateSubmitBookmark:
 		if m.appState.JJService != nil {
-			return m, m.submitBookmark()
+			cmd, status := bookmarktab.SubmitBookmark(&m.bookmarkModal, m.appState.Repository, m.appState.Config, m.appState.JJService)
+			m.appState.StatusMessage = status
+			if cmd == nil {
+				return m, nil
+			}
+			m.appState.Loading = true
+			// Single cmd (no tea.Batch): integration tests and simple Cmd chains drain one message per step.
+			return m, cmd
 		}
 		return m, nil
 	case state.NavigateSubmitPR:
@@ -412,15 +447,16 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case state.NavigateRunInit:
-		m.appState.StatusMessage = "Initializing repository..."
-		return m, data.RunJJInit()
+		m.appState.Loading = true
+		m.appState.StatusMessage = "Initializing repository…"
+		return m, tea.Batch(data.RunJJInit(), m.startBusySpinnerCmd())
 	case state.NavigateDismissErrorAndRefresh:
 		m.errorModal.ClearError()
 		m.appState.ViewMode = state.ViewCommitGraph
 		return m, m.refreshRepository()
 	case state.NavigateBackFromPRForm:
 		m.prFormModal.Hide()
-		m.appState.ViewMode = state.ViewCommitGraph
+		m.restoreModalUnderlayOrGraph()
 		if t.StatusMessage != "" {
 			m.appState.StatusMessage = t.StatusMessage
 		}
@@ -430,7 +466,12 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		return m, nil
 	case state.NavigateBackFromTicketForm:
 		m.ticketFormModal.Hide()
-		m.appState.ViewMode = state.ViewTickets
+		if m.modalUnderlayValid {
+			m.appState.ViewMode = m.modalUnderlayView
+			m.modalUnderlayValid = false
+		} else {
+			m.appState.ViewMode = state.ViewTickets
+		}
 		if t.StatusMessage != "" {
 			m.appState.StatusMessage = t.StatusMessage
 		}
@@ -464,8 +505,9 @@ func (m *Model) handleSelectCommit(index int) (tea.Model, tea.Cmd) {
 
 // startEditingDescription switches to description edit view and starts loading the description.
 func (m *Model) startEditingDescription(commit internal.Commit) (tea.Model, tea.Cmd) {
+	m.beginModalUnderlay()
 	m.appState.ViewMode = state.ViewEditDescription
-	m.desceditModal, m.appState.StatusMessage = descedittab.StartEditing(m.desceditModal, commit, m.width-10, m.height-12)
+	m.desceditModal, m.appState.StatusMessage = descedittab.StartEditing(m.desceditModal, commit, ModalInnerWidth(m.width), max(m.height-24, 3))
 	return m, descedittab.LoadDescriptionCmd(m.appState.JJService, commit.ChangeID)
 }
 
@@ -475,16 +517,10 @@ func (m *Model) startCreateBookmark() {
 		m.appState.StatusMessage = "No commit selected"
 		return
 	}
+	m.beginModalUnderlay()
 	idx := m.GetSelectedCommit()
 	m.appState.ViewMode = state.ViewCreateBookmark
-	m.appState.StatusMessage = bookmarktab.OpenCreateBookmark(&m.bookmarkModal, m.appState.Repository, idx, m.branchesTabModel.BuildBookmarkNameConflictSources(), m.appState.Config != nil && m.appState.Config.ShouldSanitizeBookmarkNames(), m.width-10)
-}
-
-// submitBookmark runs the bookmark create/move command.
-func (m *Model) submitBookmark() tea.Cmd {
-	cmd, status := bookmarktab.SubmitBookmark(&m.bookmarkModal, m.appState.Repository, m.appState.Config, m.appState.JJService)
-	m.appState.StatusMessage = status
-	return cmd
+	m.appState.StatusMessage = bookmarktab.OpenCreateBookmark(&m.bookmarkModal, m.appState.Repository, idx, m.branchesTabModel.BuildBookmarkNameConflictSources(), m.appState.Config != nil && m.appState.Config.ShouldSanitizeBookmarkNames(), ModalInnerWidth(m.width))
 }
 
 // startCreatePR opens the PR creation dialog for the selected commit's bookmark.
@@ -495,11 +531,12 @@ func (m *Model) startCreatePR() {
 	}
 	idx := m.GetSelectedCommit()
 	contentHeight := m.estimatedContentHeight()
-	res := prformtab.OpenCreatePR(&m.prFormModal, m.appState.Repository, idx, m.bookmarkModal.GetJiraBookmarkTitles(), m.width-10, contentHeight)
+	res := prformtab.OpenCreatePR(&m.prFormModal, m.appState.Repository, idx, m.bookmarkModal.GetJiraBookmarkTitles(), ModalInnerWidth(m.width), contentHeight)
 	if !res.Ok {
 		m.appState.StatusMessage = res.StatusMessage
 		return
 	}
+	m.beginModalUnderlay()
 	m.appState.ViewMode = state.ViewCreatePR
 	m.appState.StatusMessage = res.StatusMessage
 }
@@ -518,11 +555,12 @@ func (m *Model) submitPR() tea.Cmd {
 // startCreateTicket opens the Create Ticket dialog when the provider supports it.
 func (m *Model) startCreateTicket() {
 	contentHeight := m.estimatedContentHeight()
-	res := ticketformtab.OpenCreateTicket(&m.ticketFormModal, m.appState.TicketService, m.width-10, contentHeight)
+	res := ticketformtab.OpenCreateTicket(&m.ticketFormModal, m.appState.TicketService, ModalInnerWidth(m.width), contentHeight)
 	if !res.Ok {
 		m.appState.StatusMessage = res.StatusMessage
 		return
 	}
+	m.beginModalUnderlay()
 	m.appState.ViewMode = state.ViewCreateTicket
 	m.appState.StatusMessage = res.StatusMessage
 }
@@ -531,7 +569,11 @@ func (m *Model) startCreateTicket() {
 func (m *Model) submitTicket() tea.Cmd {
 	res := ticketformtab.SubmitTicket(&m.ticketFormModal, m.appState.TicketService, m.appState.DemoMode)
 	m.appState.StatusMessage = res.StatusMessage
-	return res.Cmd
+	if res.Cmd == nil {
+		return nil
+	}
+	m.appState.Loading = true
+	return tea.Batch(res.Cmd, m.startBusySpinnerCmd())
 }
 
 // saveSettings builds params from settings tab and runs global save.
@@ -622,17 +664,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.errorModal.SetWidth(m.width)
 		m.errorModal.SetHeight(m.height)
 
-		// Resize text areas to fit new window width
-		inputWidth := min(
-			// Leave margin for borders/padding
-			max(
-				m.width-20, 30,
-			),
-			// Cap at reasonable max
-			80,
-		)
+		inputWidth := ModalInnerWidth(m.width)
 
-		m.desceditModal.SetDimensions(inputWidth, max(m.height-12, 3))
+		m.desceditModal.SetDimensions(inputWidth, max(m.height-24, 3))
 		m.prFormModal.GetBodyInput().SetWidth(inputWidth)
 		m.prFormModal.GetTitleInput().Width = inputWidth
 		m.ticketFormModal.GetBodyInput().SetWidth(inputWidth)
@@ -640,7 +674,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// PR form body uses full content height when in create-PR view
 		contentHeight := m.estimatedContentHeight()
 		if m.appState.ViewMode == state.ViewCreatePR {
-			const fixedFormLines = 9
+			const fixedFormLines = 11
 			bodyH := contentHeight - fixedFormLines
 			if bodyH < 3 {
 				bodyH = 3
@@ -657,7 +691,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.bookmarkModal.GetNameInput().Width = inputWidth
 
-		m.settingsTabModel.SetInputWidths(inputWidth - 10)
+		m.settingsTabModel.SetInputWidths(min(max(m.width-24, 36), 76))
 
 		if m.appState.ViewMode == state.ViewSettings {
 			m.settingsTabModel.SetViewOpts(m.buildSettingsViewOpts())
@@ -717,10 +751,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.wrapBranchFetchCmd(cmd)
 			}
 		case state.ViewTickets:
+			wasStatusChange := m.ticketsTabModel.IsStatusChangeMode()
 			updated, cmd := m.ticketsTabModel.UpdateWithApp(msg, &m.appState)
 			m.ticketsTabModel = updated
 			if cmd != nil {
 				return m, cmd
+			}
+			if msg.String() == "esc" && wasStatusChange && !m.ticketsTabModel.IsStatusChangeMode() {
+				return m, nil
 			}
 		case state.ViewSettings:
 			cmds := util.PropagateUpdate(msg, &m.settingsTabModel)
@@ -1185,6 +1223,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case settingstab.GitHubDeviceFlowStartedMsg:
+		m.beginModalUnderlay()
 		m.githubLoginModel.SetDeviceFlow(msg.DeviceCode, msg.UserCode, msg.VerificationURL, msg.Interval)
 		m.appState.ViewMode = state.ViewGitHubLogin
 		m.appState.StatusMessage = "Waiting for GitHub authorization..."
@@ -1210,6 +1249,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case settingstab.GitHubLoginSuccessMsg:
 		m.githubLoginModel.ClearFlow()
+		m.clearModalUnderlay()
 		m.appState.ViewMode = state.ViewSettings
 		m.settingsTabModel.SetViewOpts(m.buildSettingsViewOpts())
 		m.appState.StatusMessage = "GitHub login successful!"
@@ -1222,15 +1262,20 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case settingstab.GitHubLoginErrorMsg:
 		m.githubLoginModel.ClearFlow()
+		m.clearModalUnderlay()
 		m.appState.ViewMode = state.ViewSettings
 		m.appState.StatusMessage = fmt.Sprintf("GitHub login error: %v", msg.Err)
 		m.errorModal.SetError(msg.Err, false, "")
 		return m, nil
 
 	case prformtab.PRCreatedMsg:
+		m.prFormModal.Hide()
+		m.clearModalUnderlay()
 		return m, prformtab.HandlePRCreatedMsg(prformtab.PRCreatedInput{PRCreatedMsg: msg, DemoMode: m.appState.DemoMode}, &m.appState)
 	case ticketformtab.TicketCreatedMsg:
 		m.ticketFormModal.Hide()
+		m.clearModalUnderlay()
+		m.appState.Loading = false
 		m.appState.ViewMode = state.ViewTickets
 		if msg.Ticket != nil {
 			m.appState.StatusMessage = fmt.Sprintf("Created %s: %s", msg.Ticket.DisplayKey, msg.Ticket.Summary)
@@ -1244,6 +1289,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case prstab.BranchPushedMsg:
 		return m, branchestab.HandleBranchPushedMsg(msg, &m.appState)
 	case bookmarktab.BookmarkCreatedMsg:
+		m.bookmarkModal.Hide()
+		m.clearModalUnderlay()
+		m.appState.Loading = false
 		return m, bookmarktab.HandleBookmarkCreatedMsg(msg, &m.appState)
 	case bookmarktab.BookmarkDeletedMsg:
 		return m, branchestab.HandleBookmarkDeletedMsg(msg, &m.appState)
@@ -1354,6 +1402,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case descedittab.DescriptionSavedMsg:
 		cmd := descedittab.HandleDescriptionSavedMsg(msg, &m.appState)
 		m.desceditModal.Hide()
+		m.clearModalUnderlay()
+		m.appState.Loading = false
 		return m, cmd
 	case descedittab.DescriptionLoadedMsg:
 		if m.appState.ViewMode != state.ViewEditDescription || m.desceditModal.GetEditingCommitID() != msg.CommitID {

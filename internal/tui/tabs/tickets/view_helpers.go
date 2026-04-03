@@ -54,6 +54,9 @@ func (m *Model) renderTickets() string {
 	}
 
 	var headerLines []string
+	showStatusPopover := false
+	popoverActionsRow := 0
+	popoverAnchorLeft := 0
 
 	if m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
 		ticket := m.ticketList[m.selectedTicket]
@@ -86,6 +89,7 @@ func (m *Model) renderTickets() string {
 			Padding(0, 1).
 			Render(strings.Join(detailLines, "\n"))
 		headerLines = append(headerLines, detailsBox)
+		detailsLineCount := strings.Count(detailsBox, "\n") + 1
 
 		separatorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#444444"))
 		separatorWidth := m.width - 4
@@ -95,6 +99,8 @@ func (m *Model) renderTickets() string {
 		separator := separatorStyle.Render(strings.Repeat("─", separatorWidth))
 		headerLines = append(headerLines, separator)
 		headerLines = append(headerLines, "Actions:")
+		// Line index (0-based) of the actions button row within the final tickets view (before list).
+		actionsRowLineIndex := detailsLineCount + 2
 
 		var actionButtons []string
 		actionButtons = append(actionButtons,
@@ -107,6 +113,7 @@ func (m *Model) renderTickets() string {
 			)
 		}
 
+		statusPopoverAnchorLeft := 0
 		if len(m.availableTransitions) > 0 && !m.transitionInProgress {
 			if m.statusChangeMode {
 				highlightedBtnStyle := lipgloss.NewStyle().
@@ -114,38 +121,23 @@ func (m *Model) renderTickets() string {
 					Foreground(lipgloss.Color("#000000")).
 					Padding(0, 1).
 					Bold(true)
+				changeStatusContent := highlightedBtnStyle.Render("Change Status (c)")
 				actionButtons = append(actionButtons,
-					mark(m.zoneManager, mouse.ZoneJiraChangeStatus, highlightedBtnStyle.Render("Change Status (c)")),
+					mark(m.zoneManager, mouse.ZoneJiraChangeStatus, changeStatusContent),
 				)
 				headerLines = append(headerLines, strings.Join(actionButtons, " "))
-				headerLines = append(headerLines, "")
-
-				var statusButtons []string
-				for i, t := range m.availableTransitions {
-					var shortcut string
-					btnStyle := styles.ButtonStyle
-					lowerName := strings.ToLower(t.Name)
-					isNotStarted := strings.Contains(lowerName, "not") && strings.Contains(lowerName, "start")
-					isInProgress := strings.Contains(lowerName, "progress") ||
-						(strings.Contains(lowerName, "start") && !strings.Contains(lowerName, "not start") && !strings.Contains(lowerName, "not_start"))
-
-					if isNotStarted {
-						shortcut = " (N)"
-						btnStyle = lipgloss.NewStyle().Background(lipgloss.Color("#6272A4")).Foreground(lipgloss.Color("#FFFFFF")).Padding(0, 1).Bold(true)
-					} else if isInProgress {
-						shortcut = " (i)"
-						btnStyle = lipgloss.NewStyle().Background(lipgloss.Color("#FFB86C")).Foreground(lipgloss.Color("#000000")).Padding(0, 1).Bold(true)
-					} else if strings.Contains(lowerName, "done") || strings.Contains(lowerName, "complete") || strings.Contains(lowerName, "resolve") {
-						shortcut = " (D)"
-						btnStyle = lipgloss.NewStyle().Background(lipgloss.Color("#50FA7B")).Foreground(lipgloss.Color("#000000")).Padding(0, 1).Bold(true)
-					} else if strings.Contains(lowerName, "block") {
-						shortcut = " (B)"
-						btnStyle = lipgloss.NewStyle().Background(lipgloss.Color("#FF5555")).Foreground(lipgloss.Color("#FFFFFF")).Padding(0, 1).Bold(true)
-					}
-					zoneID := mouse.ZoneJiraTransition + fmt.Sprintf("%d", i)
-					statusButtons = append(statusButtons, mark(m.zoneManager, zoneID, btnStyle.Render(t.Name+shortcut)))
+				// Popover anchors to the right of the button (not on top): prefix width + button + gap.
+				if len(actionButtons) > 1 {
+					prefixW := lipgloss.Width(strings.Join(actionButtons[:len(actionButtons)-1], " "))
+					statusPopoverAnchorLeft = prefixW + 1 + lipgloss.Width(mark(m.zoneManager, mouse.ZoneJiraChangeStatus, changeStatusContent))
+				} else {
+					statusPopoverAnchorLeft = lipgloss.Width(mark(m.zoneManager, mouse.ZoneJiraChangeStatus, changeStatusContent))
 				}
-				headerLines = append(headerLines, "  "+strings.Join(statusButtons, "   "))
+				const popoverGapAfterButton = 2
+				statusPopoverAnchorLeft += popoverGapAfterButton
+				showStatusPopover = true
+				popoverActionsRow = actionsRowLineIndex
+				popoverAnchorLeft = statusPopoverAnchorLeft
 			} else {
 				actionButtons = append(actionButtons,
 					mark(m.zoneManager, mouse.ZoneJiraChangeStatus, styles.ButtonStyle.Render("Change Status (c)")),
@@ -243,5 +235,9 @@ func (m *Model) renderTickets() string {
 	if len(outLines) > m.height {
 		outLines = outLines[:m.height]
 	}
-	return strings.Join(outLines, "\n")
+	outStr := strings.Join(outLines, "\n")
+	if showStatusPopover && len(m.availableTransitions) > 0 && !m.transitionInProgress {
+		outStr = overlayStatusPopover(outStr, m.renderStatusPopoverPanel(), m.width, m.height, popoverActionsRow, popoverAnchorLeft)
+	}
+	return outStr
 }

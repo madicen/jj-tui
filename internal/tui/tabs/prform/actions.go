@@ -183,8 +183,8 @@ func OpenCreatePR(modal *Model, repo *internal.Repository, commitIdx int, jiraTi
 	modal.SetBody("")
 	modal.GetTitleInput().Width = width
 	modal.GetBodyInput().SetWidth(width)
-	// Use full content height: fixed lines (title, branch, "Title:", title input, "Body:", buttons) ≈ 9
-	const fixedFormLines = 9
+	// Use full content height: fixed lines (title, branch, "Title:", title input, "Body:", buttons) ≈ 11
+	const fixedFormLines = 11
 	bodyHeight := height - fixedFormLines
 	if bodyHeight < 3 {
 		bodyHeight = 3

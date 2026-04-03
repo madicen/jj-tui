@@ -34,6 +34,11 @@ func (m *Model) handleZoneClick(msg zone.MsgZoneInBounds) (tea.Model, tea.Cmd) {
 	}
 
 	// ——— Global zones (tab nav, status bar actions) ———
+	tabZone := userClicked(mouse.ZoneTabGraph) || userClicked(mouse.ZoneTabPRs) || userClicked(mouse.ZoneTabJira) ||
+		userClicked(mouse.ZoneTabBranches) || userClicked(mouse.ZoneTabSettings) || userClicked(mouse.ZoneTabHelp)
+	if tabZone && (m.initRepoModel.Path() != "" || m.isFormModalView()) {
+		return m, nil
+	}
 	if userClicked(mouse.ZoneTabGraph) {
 		return m.handleNavigateToGraphTab()
 	}

@@ -44,13 +44,10 @@ func (m *Model) View() string {
 		return "Loading..."
 	}
 
-	if m.initRepoModel.Path() != "" {
-		return m.renderWithHeader(m.initRepoModel.View())
-	}
-
 	v := m.renderMainLayoutView()
-	// Busy spinner must sit *under* interactive overlays; otherwise Loading hides the bookmark /
-	// divergent pickers while keys still go to those modals (invisible resolve on j/k/Enter).
+	v = m.applyFormModalsOverlay(v)
+	// Busy overlay sits under graph pickers (evolog / divergent / conflict) so keys still target them;
+	// form modals are composited before loading so submit/init shows the spinner on top.
 	v = m.applyLoadingOverlay(v)
 
 	if m.appState.ViewMode == state.ViewEvologSplit {
@@ -95,7 +92,7 @@ func (m *Model) renderMainLayoutView() string {
 	m.helpTabModel.SetDimensions(m.width, contentHeight)
 
 	var content string
-	switch m.appState.ViewMode {
+	switch m.layoutContentMode() {
 	case state.ViewCommitGraph:
 		content = m.graphTabModel.View()
 	case state.ViewPullRequests:
@@ -108,33 +105,6 @@ func (m *Model) renderMainLayoutView() string {
 		content = m.settingsTabModel.View()
 	case state.ViewHelp:
 		content = m.helpTabModel.View()
-	case state.ViewEditDescription:
-		content = m.desceditModal.View()
-	case state.ViewCreatePR:
-		content = m.prFormModal.View()
-	case state.ViewCreateTicket:
-		content = m.ticketFormModal.View()
-	case state.ViewCreateBookmark:
-		content = m.bookmarkModal.View()
-	case state.ViewBookmarkConflict:
-		// Modal drawn as overlay in View(); keep the tab the user was on (branches vs graph) visible underneath.
-		if m.bookmarkConflictReturnValid {
-			switch m.bookmarkConflictReturnView {
-			case state.ViewBranches:
-				content = m.branchesTabModel.View()
-			case state.ViewCommitGraph:
-				content = m.graphTabModel.View()
-			default:
-				content = m.graphTabModel.View()
-			}
-		} else {
-			content = m.graphTabModel.View()
-		}
-	case state.ViewDivergentCommit, state.ViewEvologSplit:
-		// Modal is drawn as an overlay in View(); keep graph visible underneath.
-		content = m.graphTabModel.View()
-	case state.ViewGitHubLogin:
-		content = m.githubLoginModel.View()
 	default:
 		content = m.graphTabModel.View()
 	}
@@ -204,22 +174,16 @@ func (m *Model) renderHeader() string {
 	// Spaces inside TitleStyle (bar gutters are separate; see chromeHorizontalRow).
 	title := styles.TitleStyle.Render(" jj-tui  ")
 
-	// Hide tabs when we're in "not a jj repo" state - tabs aren't functional without a repo
-	if m.initRepoModel.Path() != "" {
-		return chromeHorizontalRow(m.width, title,
-			styles.HeaderBarBackground, styles.HeaderBarBackground, styles.HeaderGutterRightBackground,
-			styles.HeaderBarForeground)
-	}
-
 	// Create tabs wrapped in zones (with keyboard shortcuts)
-	graphTabActive := m.appState.ViewMode == state.ViewCommitGraph || m.appState.ViewMode == state.ViewEvologSplit
+	tm := m.tabHighlightMode()
+	graphTabActive := tm == state.ViewCommitGraph || m.appState.ViewMode == state.ViewEvologSplit
 	tabs := []string{
 		m.zoneManager.Mark(mouse.ZoneTabGraph, m.renderTab("Graph (g)", graphTabActive)),
-		m.zoneManager.Mark(mouse.ZoneTabPRs, m.renderTab("PRs (p)", m.appState.ViewMode == state.ViewPullRequests)),
-		m.zoneManager.Mark(mouse.ZoneTabJira, m.renderTab("Tickets (t)", m.appState.ViewMode == state.ViewTickets)),
-		m.zoneManager.Mark(mouse.ZoneTabBranches, m.renderTab("Branches (b)", m.appState.ViewMode == state.ViewBranches)),
-		m.zoneManager.Mark(mouse.ZoneTabSettings, m.renderTab("Settings (,)", m.appState.ViewMode == state.ViewSettings)),
-		m.zoneManager.Mark(mouse.ZoneTabHelp, m.renderTab("Help (h)", m.appState.ViewMode == state.ViewHelp)),
+		m.zoneManager.Mark(mouse.ZoneTabPRs, m.renderTab("PRs (p)", tm == state.ViewPullRequests)),
+		m.zoneManager.Mark(mouse.ZoneTabJira, m.renderTab("Tickets (t)", tm == state.ViewTickets)),
+		m.zoneManager.Mark(mouse.ZoneTabBranches, m.renderTab("Branches (b)", tm == state.ViewBranches)),
+		m.zoneManager.Mark(mouse.ZoneTabSettings, m.renderTab("Settings (,)", tm == state.ViewSettings)),
+		m.zoneManager.Mark(mouse.ZoneTabHelp, m.renderTab("Help (h)", tm == state.ViewHelp)),
 	}
 
 	tabsStr := lipgloss.JoinHorizontal(lipgloss.Right, tabs...)
@@ -268,7 +232,7 @@ func (m *Model) renderStatusBar() string {
 
 	// Add keyboard shortcuts with ^ notation and | separators
 	// Start with undo/redo if in Graph view, then quit and refresh
-	if (m.appState.ViewMode == state.ViewCommitGraph || m.appState.ViewMode == state.ViewEvologSplit) && m.appState.JJService != nil {
+	if (m.tabHighlightMode() == state.ViewCommitGraph || m.appState.ViewMode == state.ViewEvologSplit) && m.appState.JJService != nil {
 		if m.redoOperationID != "" {
 			shortcuts = append(shortcuts,
 				m.zoneManager.Mark(mouse.ZoneActionRedo, "^y redo"),

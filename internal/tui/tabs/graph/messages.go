@@ -172,6 +172,8 @@ type Result struct {
 	WarningMessage  string
 	WarningCommits  []internal.Commit
 	PerformRebase   bool
+	// Loading: when true with Cmd, main shows the busy overlay until the command completes (e.g. file move/revert).
+	Loading bool
 	// BookmarkConflictName is the local bookmark name when FollowUp is FollowUpResolveBookmarkConflict.
 	BookmarkConflictName string
 }
