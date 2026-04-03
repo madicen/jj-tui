@@ -1,7 +1,7 @@
 # VHS tape for capturing the Settings view screenshot
 # Run with: vhs vhs/settings.tape
 
-Output "screenshots/settings.png"
+# PNG: Screenshot only (see graph.tape re VHS 0.11+ Output .png)
 
 Set FontSize 14
 Set Width 1300
@@ -21,3 +21,4 @@ Type ","
 Sleep 2s
 
 Screenshot "screenshots/settings.png"
+Sleep 500ms

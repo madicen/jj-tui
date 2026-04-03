@@ -11,11 +11,11 @@ import (
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tui/data"
 	"github.com/madicen/jj-tui/internal/tui/state"
-	"github.com/madicen/jj-tui/internal/tui/util"
 	bookmarktab "github.com/madicen/jj-tui/internal/tui/tabs/bookmark"
 	branchestab "github.com/madicen/jj-tui/internal/tui/tabs/branches"
 	descedittab "github.com/madicen/jj-tui/internal/tui/tabs/descedit"
 	prstab "github.com/madicen/jj-tui/internal/tui/tabs/prs"
+	"github.com/madicen/jj-tui/internal/tui/util"
 )
 
 // HandleRequest runs the requested graph action using the given context.
@@ -83,15 +83,24 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 	}
 	if r.MoveFileUp {
 		cmd, status := executeMoveFileUp(ctx)
-		return Result{Cmd: cmd, Status: status}
+		if cmd != nil {
+			return Result{Cmd: cmd, Status: status, SuccessStatus: "Moving file to parent commit…", Loading: true}
+		}
+		return Result{Status: status}
 	}
 	if r.MoveFileDown {
 		cmd, status := executeMoveFileDown(ctx)
-		return Result{Cmd: cmd, Status: status}
+		if cmd != nil {
+			return Result{Cmd: cmd, Status: status, SuccessStatus: "Moving file to child commit…", Loading: true}
+		}
+		return Result{Status: status}
 	}
 	if r.RevertFile {
 		cmd, status := executeRevertFile(ctx)
-		return Result{Cmd: cmd, Status: status}
+		if cmd != nil {
+			return Result{Cmd: cmd, Status: status, SuccessStatus: "Reverting file…", Loading: true}
+		}
+		return Result{Status: status}
 	}
 	if r.MoveDeltaOntoOrigin {
 		cmd, status := executeMoveDeltaOntoOrigin(ctx)
@@ -104,9 +113,10 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 			return Result{
 				Cmd:           cmd,
 				SuccessStatus: fmt.Sprintf("Placing changes after %s@origin…", bn),
+				Loading:       true,
 			}
 		}
-		return Result{Cmd: cmd}
+		return Result{Cmd: cmd, Loading: cmd != nil}
 	}
 	if r.StartEvologSplit {
 		if status := executeStartEvologSplit(ctx); status != "" {
@@ -468,8 +478,8 @@ func ApplyResult(res Result, graphModel *GraphModel, ctx *RequestContext, app *s
 		return state.NavigateTarget{Kind: state.NavigateCreateBookmark}.Cmd()
 	case FollowUpShowEmptyDescWarning:
 		return state.NavigateTarget{
-			Kind:          state.NavigateWarning,
-			WarningTitle:  res.WarningTitle,
+			Kind:           state.NavigateWarning,
+			WarningTitle:   res.WarningTitle,
 			WarningMessage: res.WarningMessage,
 			WarningCommits: res.WarningCommits,
 		}.Cmd()
@@ -514,6 +524,9 @@ func ApplyResult(res Result, graphModel *GraphModel, ctx *RequestContext, app *s
 		}
 		if res.SuccessStatus != "" {
 			app.StatusMessage = res.SuccessStatus
+		}
+		if res.Loading {
+			app.Loading = true
 		}
 		return res.Cmd
 	}
@@ -719,6 +732,7 @@ func HandleFileMoveCompletedMsg(input FileMoveInput, app *state.AppState) tea.Cm
 		directionText = "new child commit"
 	}
 	app.StatusMessage = fmt.Sprintf("Moved %s to %s", input.FilePath, directionText)
+	app.Loading = false
 	return nil
 }
 
@@ -734,6 +748,7 @@ func HandleFileRevertedMsg(input FileRevertedInput, app *state.AppState) tea.Cmd
 		app.Repository.PRs = oldPRs
 	}
 	app.StatusMessage = fmt.Sprintf("Reverted changes to %s", input.FilePath)
+	app.Loading = false
 	return nil
 }
 
@@ -792,7 +807,9 @@ func StartCreatePRCmd() tea.Cmd {
 }
 
 func UpdatePREffectCmd(prBranch, commitID string, needsMoveBookmark bool) tea.Cmd {
-	return func() tea.Msg { return UpdatePREffect{PrBranch: prBranch, CommitID: commitID, NeedsMoveBookmark: needsMoveBookmark} }
+	return func() tea.Msg {
+		return UpdatePREffect{PrBranch: prBranch, CommitID: commitID, NeedsMoveBookmark: needsMoveBookmark}
+	}
 }
 
 func LoadChangedFilesEffectCmd(cmd tea.Cmd) tea.Cmd {

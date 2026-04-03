@@ -15,7 +15,7 @@ import (
 
 // Model represents the commit description editing dialog
 type Model struct {
-	shown           bool
+	shown            bool
 	descriptionInput textarea.Model
 	editingCommitID  string
 	commitShortID    string // For header display (e.g. "abc123")
@@ -28,7 +28,7 @@ func NewModel(zoneManager *zone.Manager) Model {
 	ta.Placeholder = "Enter commit description..."
 	ta.ShowLineNumbers = false
 	ta.SetWidth(60)
-	ta.SetHeight(5)
+	ta.SetHeight(3)
 	return Model{
 		shown:            false,
 		descriptionInput: ta,
@@ -50,8 +50,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg.(type) {
 	case SaveRequestedMsg:
 		return m, state.NavigateTarget{
-			Kind:           state.NavigateSaveDescription,
-			SaveCommitID:   m.editingCommitID,
+			Kind:            state.NavigateSaveDescription,
+			SaveCommitID:    m.editingCommitID,
 			SaveDescription: m.descriptionInput.Value(),
 		}.Cmd()
 	case CancelRequestedMsg:

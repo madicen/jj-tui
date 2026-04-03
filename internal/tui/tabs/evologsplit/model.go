@@ -30,7 +30,7 @@ type Model struct {
 	// term size (SetDimensions from main)
 	termW, termH     int
 	listViewportRows int
-	// diff vs tip for selected base
+	// diff: selected row vs the list row above (newer neighbor), evolog order is newest-first
 	diffSeq    int
 	diffLoading bool
 	diffErr    string
@@ -125,19 +125,32 @@ func (m Model) syncListScroll() Model {
 	return m
 }
 
-func (m Model) bumpDiffRequest() (Model, tea.Cmd) {
+// refreshDiffPreview bumps the diff generation; loads jj diff when the selected row has a newer
+// neighbor above it in the list (index selectedIdx-1). Row 0 is the tip — no neighbor, so no load.
+func (m Model) refreshDiffPreview() (Model, tea.Cmd) {
 	m.diffSeq++
-	m.diffLoading = true
 	m.diffErr = ""
+	if len(m.entries) == 0 || m.selectedIdx <= 0 || m.selectedIdx >= len(m.entries) {
+		m.diffLoading = false
+		m.diffFiles = nil
+		return m, nil
+	}
+	m.diffLoading = true
 	return m, EvologDiffLoadRequestedCmd()
 }
 
-// DiffSnapshotForLoad returns seq and revisions for the in-flight diff (after bumpDiffRequest).
-func (m Model) DiffSnapshotForLoad() (seq int, fromCommitID, tipChangeID string, ok bool) {
-	if len(m.entries) == 0 || m.selectedIdx < 0 || m.selectedIdx >= len(m.entries) {
+// DiffSnapshotForLoad returns seq and revisions for the in-flight diff (after refreshDiffPreview).
+// Diffs the selected commit against the previous list entry (newer), not cumulative vs tip.
+func (m Model) DiffSnapshotForLoad() (seq int, fromCommitID, toCommitID string, ok bool) {
+	if len(m.entries) == 0 || m.selectedIdx < 0 || m.selectedIdx >= len(m.entries) || m.selectedIdx == 0 {
 		return 0, "", "", false
 	}
-	return m.diffSeq, m.entries[m.selectedIdx].CommitID, m.tipChangeID, true
+	prev := strings.TrimSpace(m.entries[m.selectedIdx-1].CommitID)
+	sel := strings.TrimSpace(m.entries[m.selectedIdx].CommitID)
+	if prev == "" || sel == "" {
+		return 0, "", "", false
+	}
+	return m.diffSeq, sel, prev, true
 }
 
 // Update handles keys, zone clicks, mouse wheel, and async messages.
@@ -162,7 +175,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		m.listScrollTop = 0
 		m = m.syncListScroll()
-		return m.bumpDiffRequest()
+		return m.refreshDiffPreview()
 
 	case EvologSplitDiffLoadedMsg:
 		if msg.Seq != m.diffSeq {
@@ -251,14 +264,14 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 		if m.selectedIdx < len(m.entries)-1 {
 			m.selectedIdx++
 			m = m.syncListScroll()
-			return m.bumpDiffRequest()
+			return m.refreshDiffPreview()
 		}
 		return m, nil
 	case "k", "up":
 		if m.selectedIdx > 0 {
 			m.selectedIdx--
 			m = m.syncListScroll()
-			return m.bumpDiffRequest()
+			return m.refreshDiffPreview()
 		}
 		return m, nil
 	case "pgdown", "ctrl+f":
@@ -300,7 +313,7 @@ func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
 		if err == nil && idx >= 0 && idx < len(m.entries) {
 			m.selectedIdx = idx
 			m = m.syncListScroll()
-			return m.bumpDiffRequest()
+			return m.refreshDiffPreview()
 		}
 	}
 	if zoneID == mouse.ZoneEvologSplitConfirm {
@@ -333,7 +346,7 @@ func formatSplitModalFileLine(f jj.ChangedFile, pathMax int) string {
 // matches the history column; the last body row is always used (overflow count or "—").
 func buildEvologSplitRightColumn(m Model, vr, rightW int, muted lipgloss.Style) []string {
 	errStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#F85149"))
-	title := muted.Render("Files vs tip (selected →)")
+	title := muted.Render("Files vs row above (step →)")
 	if vr < 1 {
 		vr = 1
 	}
@@ -347,8 +360,12 @@ func buildEvologSplitRightColumn(m Model, vr, rightW int, muted lipgloss.Style) 
 		body[0] = errStyle.Render(runewidth.Truncate(m.diffErr, max(4, rightW-2), "…"))
 		return append([]string{title}, body...)
 	}
+	if m.selectedIdx == 0 && len(m.entries) > 0 {
+		body[0] = muted.Render("(tip row — move down for step diff)")
+		return append([]string{title}, body...)
+	}
 	if len(m.diffFiles) == 0 {
-		body[0] = muted.Render("(no file changes vs tip)")
+		body[0] = muted.Render("(no file changes in this step)")
 		return append([]string{title}, body...)
 	}
 

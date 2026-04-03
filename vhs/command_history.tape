@@ -1,7 +1,7 @@
-# VHS tape for capturing the Help view screenshot
-# Run with: vhs vhs/help.tape
-
-Output "screenshots/help.png"
+# VHS tape for capturing the Command history help sub-tab screenshot
+# Run with: vhs vhs/command_history.tape
+#
+# PNG: Screenshot only (see graph.tape re VHS 0.11+ Output .png)
 
 Set FontSize 14
 Set Width 1300
@@ -22,3 +22,4 @@ Ctrl+K
 Sleep 2s
 
 Screenshot "screenshots/command_history.png"
+Sleep 500ms

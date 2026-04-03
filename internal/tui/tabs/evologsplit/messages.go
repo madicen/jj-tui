@@ -21,20 +21,20 @@ func EvologDiffLoadRequestedCmd() tea.Cmd {
 	}
 }
 
-// EvologSplitDiffLoadedMsg carries jj diff --summary results for the selected evolog base vs tip.
+// EvologSplitDiffLoadedMsg carries jj diff --summary for selected row vs the newer neighbor above it.
 type EvologSplitDiffLoadedMsg struct {
 	Seq   int
 	Files []jj.ChangedFile
 	Err   error
 }
 
-// LoadEvologSplitDiffCmd loads changed files between base commit and tip change (async).
-func LoadEvologSplitDiffCmd(svc *jj.Service, seq int, fromCommitID, tipChangeID string) tea.Cmd {
+// LoadEvologSplitDiffCmd loads changed files between two commits (async): jj diff --from from --to to.
+func LoadEvologSplitDiffCmd(svc *jj.Service, seq int, fromCommitID, toCommitID string) tea.Cmd {
 	if svc == nil || seq <= 0 {
 		return nil
 	}
 	from := strings.TrimSpace(fromCommitID)
-	to := strings.TrimSpace(tipChangeID)
+	to := strings.TrimSpace(toCommitID)
 	if from == "" || to == "" {
 		return nil
 	}

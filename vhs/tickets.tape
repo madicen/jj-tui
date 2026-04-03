@@ -1,7 +1,7 @@
 # VHS tape for capturing the Tickets view screenshot
 # Run with: vhs vhs/tickets.tape
 
-Output "screenshots/tickets.png"
+# PNG: Screenshot only (see graph.tape re VHS 0.11+ Output .png)
 
 Set FontSize 14
 Set Width 1300
@@ -21,3 +21,4 @@ Type "t"
 Sleep 2s
 
 Screenshot "screenshots/tickets.png"
+Sleep 500ms
