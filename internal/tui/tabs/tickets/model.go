@@ -252,12 +252,14 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, *Request, tea.Cmd) {
 	case "j", "down":
 		if m.selectedTicket < len(m.ticketList)-1 {
 			m.selectedTicket++
+			m.scrollToSelectedTicket = true
 			return m, &Request{LoadTransitionsForSelection: true}, nil
 		}
 		return m, nil, nil
 	case "k", "up":
 		if m.selectedTicket > 0 {
 			m.selectedTicket--
+			m.scrollToSelectedTicket = true
 			return m, &Request{LoadTransitionsForSelection: true}, nil
 		}
 		return m, nil, nil
