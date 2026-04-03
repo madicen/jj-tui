@@ -1289,7 +1289,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		updated, cmd := m.evologSplitModal.Update(msg)
 		m.evologSplitModal = updated
 		if msg.Err == nil {
-			m.appState.StatusMessage = "Pick parent revision (j/k, Enter) — files vs tip update as you move"
+			m.appState.StatusMessage = "Pick parent revision (j/k, Enter) — step diff vs row above updates as you move"
 		} else {
 			m.appState.StatusMessage = "Evolog load failed"
 		}
