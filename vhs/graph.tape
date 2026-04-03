@@ -1,7 +1,8 @@
 # VHS tape for capturing the Graph view screenshot
 # Run with: vhs vhs/graph.tape
-
-Output "screenshots/graph.png"
+#
+# Do not use Output with .png: VHS 0.11+ treats that as a frames directory and
+# renames the whole frame sequence there. Use Screenshot only for a single PNG.
 
 Set FontSize 14
 Set Width 1300

@@ -1,7 +1,7 @@
 # VHS tape for capturing the Pull Requests view screenshot
 # Run with: vhs vhs/prs.tape
 
-Output "screenshots/prs.png"
+# PNG: Screenshot only (see graph.tape re VHS 0.11+ Output .png)
 
 Set FontSize 14
 Set Width 1300
