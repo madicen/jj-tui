@@ -128,47 +128,6 @@ func (m *Model) renderMainLayoutView() string {
 	)
 }
 
-// renderWithHeader renders content with the standard header (preserves zone markup for mouse)
-func (m *Model) renderWithHeader(content string) string {
-	header := m.renderHeader()
-	statusBar := m.renderStatusBar()
-
-	headerHeight := strings.Count(header, "\n") + 1
-	statusHeight := strings.Count(statusBar, "\n") + 1
-	fullContentHeight := max(m.height-headerHeight-statusHeight-2, 1) // -2 for blank lines after header and before status
-	contentLines := strings.Split(content, "\n")
-	end := min(fullContentHeight, len(contentLines))
-	var visible string
-	if end > 0 {
-		visible = strings.Join(contentLines[0:end], "\n")
-	} else if len(contentLines) > 0 {
-		visible = contentLines[0]
-	} else {
-		visible = ""
-	}
-
-	// Pin footer to bottom: pad content to fixed height (preserve zone markup)
-	visibleLines := strings.Split(visible, "\n")
-	for len(visibleLines) < fullContentHeight {
-		visibleLines = append(visibleLines, "")
-	}
-	if len(visibleLines) > fullContentHeight {
-		visibleLines = visibleLines[:fullContentHeight]
-	}
-	contentPadded := strings.Join(visibleLines, "\n")
-
-	v := lipgloss.JoinVertical(
-		lipgloss.Left,
-		header,
-		" ",
-		contentPadded,
-		" ",
-		statusBar,
-	)
-	v = m.applyLoadingOverlay(v)
-	return m.zoneManager.Scan(v)
-}
-
 // renderHeader renders the header with clickable tabs
 func (m *Model) renderHeader() string {
 	// Spaces inside TitleStyle (bar gutters are separate; see chromeHorizontalRow).
