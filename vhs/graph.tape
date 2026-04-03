@@ -3,6 +3,8 @@
 #
 # Do not use Output with .png: VHS 0.11+ treats that as a frames directory and
 # renames the whole frame sequence there. Use Screenshot only for a single PNG.
+# Always put Sleep after Screenshot (last command otherwise the next frame may
+# never record; see charmbracelet/vhs#540).
 
 Set FontSize 14
 Set Width 1300
@@ -18,3 +20,4 @@ Enter
 Sleep 3s
 
 Screenshot "screenshots/graph.png"
+Sleep 500ms

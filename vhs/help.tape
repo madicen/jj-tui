@@ -21,3 +21,4 @@ Type "h"
 Sleep 2s
 
 Screenshot "screenshots/help.png"
+Sleep 500ms

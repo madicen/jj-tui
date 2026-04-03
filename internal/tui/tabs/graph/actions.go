@@ -113,9 +113,10 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 			return Result{
 				Cmd:           cmd,
 				SuccessStatus: fmt.Sprintf("Placing changes after %s@origin…", bn),
+				Loading:       true,
 			}
 		}
-		return Result{Cmd: cmd}
+		return Result{Cmd: cmd, Loading: cmd != nil}
 	}
 	if r.StartEvologSplit {
 		if status := executeStartEvologSplit(ctx); status != "" {

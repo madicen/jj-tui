@@ -21,3 +21,4 @@ Type ","
 Sleep 2s
 
 Screenshot "screenshots/settings.png"
+Sleep 500ms

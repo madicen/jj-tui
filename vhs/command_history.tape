@@ -22,3 +22,4 @@ Ctrl+K
 Sleep 2s
 
 Screenshot "screenshots/command_history.png"
+Sleep 500ms

@@ -21,3 +21,4 @@ Type "b"
 Sleep 2s
 
 Screenshot "screenshots/branches.png"
+Sleep 500ms

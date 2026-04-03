@@ -21,3 +21,4 @@ Type "p"
 Sleep 2s
 
 Screenshot "screenshots/prs.png"
+Sleep 500ms

@@ -21,3 +21,4 @@ Type "t"
 Sleep 2s
 
 Screenshot "screenshots/tickets.png"
+Sleep 500ms
