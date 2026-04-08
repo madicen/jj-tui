@@ -128,12 +128,12 @@ func CreatePRCmd(jjSvc *jj.Service, ghSvc *github.Service, params PRCreateParams
 		ctx := context.Background()
 		if params.NeedsMoveBookmark && params.CommitChangeID != "" {
 			if err := jjSvc.MoveBookmark(ctx, params.HeadBranch, params.CommitChangeID); err != nil {
-				return util.ErrorMsg{Err: fmt.Errorf("failed to move bookmark %s: %w", params.HeadBranch, err)}
+				return util.ErrorMsg{Err: fmt.Errorf("failed to move bookmark %s: %w", params.HeadBranch, err), StatusOnly: true}
 			}
 		}
 		pushOutput, err := jjSvc.PushToGit(ctx, params.HeadBranch)
 		if err != nil {
-			return util.ErrorMsg{Err: fmt.Errorf("failed to push branch: %w\nOutput: %s", err, pushOutput)}
+			return util.ErrorMsg{Err: fmt.Errorf("failed to push branch: %w\nOutput: %s", err, pushOutput), StatusOnly: true}
 		}
 		time.Sleep(3 * time.Second)
 		var pr *internal.GitHubPR

@@ -111,7 +111,7 @@ func PushToPRCmd(svc *jj.Service, branch, commitID string, moveBookmark bool, de
 		ctx := context.Background()
 		if moveBookmark {
 			if err := svc.MoveBookmark(ctx, branch, commitID); err != nil {
-				return util.ErrorMsg{Err: fmt.Errorf("failed to move bookmark %s: %w", branch, err)}
+				return util.ErrorMsg{Err: fmt.Errorf("failed to move bookmark %s: %w", branch, err), StatusOnly: true}
 			}
 		}
 		if demoMode {
@@ -119,7 +119,7 @@ func PushToPRCmd(svc *jj.Service, branch, commitID string, moveBookmark bool, de
 		}
 		pushOutput, err := svc.PushToGit(ctx, branch)
 		if err != nil {
-			return util.ErrorMsg{Err: fmt.Errorf("failed to push: %w\nOutput: %s", err, pushOutput)}
+			return util.ErrorMsg{Err: fmt.Errorf("failed to push: %w\nOutput: %s", err, pushOutput), StatusOnly: true}
 		}
 		return BranchPushedMsg{Branch: branch, PushOutput: pushOutput}
 	}
