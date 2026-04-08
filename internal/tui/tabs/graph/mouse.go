@@ -170,6 +170,9 @@ func (m GraphModel) handleZoneClick(msg zone.MsgZoneInBounds) (GraphModel, *Requ
 	if inBounds(mouse.ZoneActionRevertFile) {
 		return m, &Request{RevertFile: true}, nil
 	}
+	if inBounds(mouse.ZoneActionViewFileDiff) {
+		return m, &Request{ViewFileDiff: true}, nil
+	}
 
 	return m, nil, nil
 }

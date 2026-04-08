@@ -155,6 +155,7 @@ func (m *Model) handleTickMsg() (tea.Model, tea.Cmd) {
 		m.appState.ViewMode == state.ViewCreatePR ||
 		m.appState.ViewMode == state.ViewCreateBookmark ||
 		m.appState.ViewMode == state.ViewGitHubLogin ||
+		m.appState.ViewMode == state.ViewFileDiff ||
 		m.graphTabModel.IsInRebaseMode()
 
 	if m.errorModal.GetError() != nil || isBlockingView {
@@ -171,7 +172,7 @@ func (m *Model) handleTickMsg() (tea.Model, tea.Cmd) {
 			}
 		}
 	}
-	if !m.silentReloadInFlight && !m.appState.Loading && m.appState.JJService != nil && m.appState.ViewMode != state.ViewEditDescription && m.appState.ViewMode != state.ViewCreatePR && m.appState.ViewMode != state.ViewCreateTicket && m.appState.ViewMode != state.ViewCreateBookmark && !m.graphTabModel.IsInRebaseMode() {
+	if !m.silentReloadInFlight && !m.appState.Loading && m.appState.JJService != nil && m.appState.ViewMode != state.ViewEditDescription && m.appState.ViewMode != state.ViewCreatePR && m.appState.ViewMode != state.ViewCreateTicket && m.appState.ViewMode != state.ViewCreateBookmark && m.appState.ViewMode != state.ViewFileDiff && !m.graphTabModel.IsInRebaseMode() {
 		revset := ""
 		if m.appState.Config != nil {
 			revset = m.appState.Config.GraphRevset

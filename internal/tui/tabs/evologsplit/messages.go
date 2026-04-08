@@ -21,11 +21,13 @@ func EvologDiffLoadRequestedCmd() tea.Cmd {
 	}
 }
 
-// EvologSplitDiffLoadedMsg carries jj diff --summary for selected row vs the newer neighbor above it.
+// EvologSplitDiffLoadedMsg carries jj diff --summary for selected row vs the newer neighbor above it,
+// plus the full git unified diff for the same revision pair (colored in the modal).
 type EvologSplitDiffLoadedMsg struct {
-	Seq   int
-	Files []jj.ChangedFile
-	Err   error
+	Seq    int
+	Files  []jj.ChangedFile
+	GitDiff string
+	Err    error
 }
 
 // LoadEvologSplitDiffCmd loads changed files for one evolog step (async). prevStepFrom/prevStepTo may be
@@ -43,13 +45,14 @@ func LoadEvologSplitDiffCmd(svc *jj.Service, seq int, fromCommitID, toCommitID, 
 	pt := strings.TrimSpace(prevStepTo)
 	return func() tea.Msg {
 		var files []jj.ChangedFile
+		var git string
 		var err error
 		if pf != "" && pt != "" {
-			files, err = svc.DiffChangedFilesEvologStep(context.Background(), from, to, pf, pt)
+			files, git, err = svc.DiffChangedFilesEvologStep(context.Background(), from, to, pf, pt)
 		} else {
-			files, err = svc.DiffChangedFilesFromTo(context.Background(), from, to)
+			files, git, err = svc.DiffChangedFilesFromTo(context.Background(), from, to)
 		}
-		return EvologSplitDiffLoadedMsg{Seq: seq, Files: files, Err: err}
+		return EvologSplitDiffLoadedMsg{Seq: seq, Files: files, GitDiff: git, Err: err}
 	}
 }
 

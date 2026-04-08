@@ -128,6 +128,7 @@ type Request struct {
 	MoveFileUp           bool
 	MoveFileDown         bool
 	RevertFile           bool
+	ViewFileDiff         bool
 	// MoveDeltaOntoOrigin: new commit on bookmark@origin with same tree as selection; avoids force-push after amending a pushed branch.
 	MoveDeltaOntoOrigin bool
 	// StartEvologSplit: experimental FAQ-style split using jj evolog to pick parent revision.
@@ -157,6 +158,7 @@ const (
 	FollowUpShowEmptyDescWarning
 	FollowUpStartEvologSplit
 	FollowUpResolveBookmarkConflict
+	FollowUpViewFileDiff
 )
 
 // Result is returned by HandleRequest. Main sets status from Status, runs Cmd if set, and performs the FollowUp action.
@@ -176,6 +178,8 @@ type Result struct {
 	Loading bool
 	// BookmarkConflictName is the local bookmark name when FollowUp is FollowUpResolveBookmarkConflict.
 	BookmarkConflictName string
+	// FileDiffPath is the repo-relative path when FollowUp is FollowUpViewFileDiff.
+	FileDiffPath string
 }
 
 // FocusMessage returns the status bar message for graph vs files pane focus.

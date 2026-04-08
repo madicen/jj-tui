@@ -55,6 +55,11 @@ func (m *Model) View() string {
 			v = applyBubbleOverlayCentered(v, evologContent, m.width, m.height)
 		}
 	}
+	if m.appState.ViewMode == state.ViewFileDiff {
+		if diffContent := m.fileDiffModal.View(); diffContent != "" {
+			v = applyBubbleOverlayCentered(v, diffContent, m.width, m.height)
+		}
+	}
 	if m.appState.ViewMode == state.ViewDivergentCommit {
 		if divergentContent := m.divergentModal.View(); divergentContent != "" {
 			v = applyBubbleOverlayCentered(v, divergentContent, m.width, m.height)
@@ -135,7 +140,7 @@ func (m *Model) renderHeader() string {
 
 	// Create tabs wrapped in zones (with keyboard shortcuts)
 	tm := m.tabHighlightMode()
-	graphTabActive := tm == state.ViewCommitGraph || m.appState.ViewMode == state.ViewEvologSplit
+	graphTabActive := tm == state.ViewCommitGraph || m.appState.ViewMode == state.ViewEvologSplit || m.appState.ViewMode == state.ViewFileDiff
 	tabs := []string{
 		m.zoneManager.Mark(mouse.ZoneTabGraph, m.renderTab("Graph (g)", graphTabActive)),
 		m.zoneManager.Mark(mouse.ZoneTabPRs, m.renderTab("PRs (p)", tm == state.ViewPullRequests)),
@@ -191,7 +196,7 @@ func (m *Model) renderStatusBar() string {
 
 	// Add keyboard shortcuts with ^ notation and | separators
 	// Start with undo/redo if in Graph view, then quit and refresh
-	if (m.tabHighlightMode() == state.ViewCommitGraph || m.appState.ViewMode == state.ViewEvologSplit) && m.appState.JJService != nil {
+	if (m.tabHighlightMode() == state.ViewCommitGraph || m.appState.ViewMode == state.ViewEvologSplit || m.appState.ViewMode == state.ViewFileDiff) && m.appState.JJService != nil {
 		if m.redoOperationID != "" {
 			shortcuts = append(shortcuts,
 				m.zoneManager.Mark(mouse.ZoneActionRedo, "^y redo"),

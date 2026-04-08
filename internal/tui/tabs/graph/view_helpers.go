@@ -250,6 +250,9 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 	if !data.GraphFocused && len(data.ChangedFiles) > 0 && data.SelectedFile >= 0 {
 		actionLines = append(actionLines, "File Actions:")
 		var fileActionButtons []string
+		fileActionButtons = append(fileActionButtons,
+			m.zoneManager.Mark(mouse.ZoneActionViewFileDiff, styles.ButtonStyle.Render("View diff (o)")),
+		)
 		isMutable := false
 		if data.SelectedCommit >= 0 && data.SelectedCommit < len(data.Repository.Graph.Commits) {
 			commit := data.Repository.Graph.Commits[data.SelectedCommit]
@@ -265,10 +268,12 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 				m.zoneManager.Mark(mouse.ZoneActionMoveFileDown, styles.ButtonStyle.Render("Move to Child (])")),
 				m.zoneManager.Mark(mouse.ZoneActionRevertFile, styles.ButtonStyle.Render("Revert Changes (v)")),
 			)
-			actionLines = append(actionLines, lipgloss.JoinHorizontal(lipgloss.Left, fileActionButtons...))
 		} else {
-			actionLines = append(actionLines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("◆ Cannot modify files in immutable commits"))
+			fileActionButtons = append(fileActionButtons,
+				lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("◆ Read-only commit"),
+			)
 		}
+		actionLines = append(actionLines, lipgloss.JoinHorizontal(lipgloss.Left, fileActionButtons...))
 	} else {
 		actionLines = append(actionLines, "Actions:")
 		actionButtons := []string{

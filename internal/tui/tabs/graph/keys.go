@@ -158,6 +158,10 @@ func (m GraphModel) handleKeyMsg(msg tea.KeyMsg) (GraphModel, *Request, tea.Cmd)
 		if !m.graphFocused {
 			return m, &Request{RevertFile: true}, nil
 		}
+	case "o":
+		if !m.graphFocused {
+			return m, &Request{ViewFileDiff: true}, nil
+		}
 	}
 
 	return m, nil, nil

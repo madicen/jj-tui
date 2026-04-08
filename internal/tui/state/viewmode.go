@@ -18,6 +18,7 @@ const (
 	ViewBookmarkConflict // Bookmark conflict resolution dialog
 	ViewDivergentCommit  // Divergent commit resolution dialog
 	ViewEvologSplit      // Experimental evolog-driven stack split (FAQ-style)
+	ViewFileDiff         // Full-file diff for selected changed file (graph overlay)
 )
 
 func (v ViewMode) String() string {
@@ -50,6 +51,8 @@ func (v ViewMode) String() string {
 		return "divergent_commit"
 	case ViewEvologSplit:
 		return "evolog_split"
+	case ViewFileDiff:
+		return "file_diff"
 	default:
 		return "unknown"
 	}

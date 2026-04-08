@@ -388,10 +388,10 @@ func (s *Service) getChangedFilesSummaryOnly(ctx context.Context, commitID strin
 }
 
 // DiffChangedFilesFromTo lists paths changed between two revisions (from..to), using jj diff --summary,
-// and fills per-file line counts from a git-format diff when possible.
-func (s *Service) DiffChangedFilesFromTo(ctx context.Context, fromCommitID, toRev string) ([]ChangedFile, error) {
-	files, _, err := s.diffChangedFilesFromToWithGit(ctx, fromCommitID, toRev)
-	return files, err
+// and fills per-file line counts from a git-format diff when possible. The string is the full unified
+// git diff (same source as stats) for UI coloring.
+func (s *Service) DiffChangedFilesFromTo(ctx context.Context, fromCommitID, toRev string) ([]ChangedFile, string, error) {
+	return s.diffChangedFilesFromToWithGit(ctx, fromCommitID, toRev)
 }
 
 // diffChangedFilesFromToWithGit is like DiffChangedFilesFromTo but also returns the raw git-format diff output.
@@ -422,8 +422,11 @@ func (s *Service) diffChangedFilesFromToWithGit(ctx context.Context, fromCommitI
 	if len(files) == 0 {
 		return files, "", nil
 	}
-	gitOut, gerr := s.runJJOutput(ctx, "diff", "--from", fromCommitID, "--to", toRev, "--tool", ":git", "--context=0")
-	if gerr != nil || strings.TrimSpace(gitOut) == "" {
+	gitOut, gerr := s.runJJOutput(ctx, "diff", "--from", fromCommitID, "--to", toRev, "--git", "--color", "never")
+	if gerr != nil {
+		return files, "", nil
+	}
+	if strings.TrimSpace(gitOut) == "" {
 		return files, "", nil
 	}
 	stats := parseGitUnifiedDiffStats(gitOut)
@@ -440,19 +443,20 @@ func (s *Service) diffChangedFilesFromToWithGit(ctx context.Context, fromCommitI
 // DiffChangedFilesEvologStep is like DiffChangedFilesFromTo for one evolog UI row (diff from older snapshot to newer).
 // When prevFrom/prevTo are set (older→newer along the list for the row above), files whose git patch text is
 // identical to that prior step are omitted so the list only shows new deltas for this step.
-func (s *Service) DiffChangedFilesEvologStep(ctx context.Context, from, to, prevFrom, prevTo string) ([]ChangedFile, error) {
+// The returned git diff is the full patch from→to (not filtered to the shortened file list).
+func (s *Service) DiffChangedFilesEvologStep(ctx context.Context, from, to, prevFrom, prevTo string) ([]ChangedFile, string, error) {
 	files, gitCur, err := s.diffChangedFilesFromToWithGit(ctx, from, to)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	prevFrom = strings.TrimSpace(prevFrom)
 	prevTo = strings.TrimSpace(prevTo)
 	if prevFrom == "" || prevTo == "" || len(files) == 0 || strings.TrimSpace(gitCur) == "" {
-		return files, nil
+		return files, gitCur, nil
 	}
-	gitPrev, gerr := s.runJJOutput(ctx, "diff", "--from", prevFrom, "--to", prevTo, "--tool", ":git", "--context=0")
+	gitPrev, gerr := s.runJJOutput(ctx, "diff", "--from", prevFrom, "--to", prevTo, "--git", "--color", "never")
 	if gerr != nil || strings.TrimSpace(gitPrev) == "" {
-		return files, nil
+		return files, gitCur, nil
 	}
 	chunksCur := mapGitUnifiedDiffByPath(gitCur)
 	chunksPrev := mapGitUnifiedDiffByPath(gitPrev)
@@ -470,7 +474,25 @@ func (s *Service) DiffChangedFilesEvologStep(ctx context.Context, from, to, prev
 		}
 		kept = append(kept, f)
 	}
-	return kept, nil
+	return kept, gitCur, nil
+}
+
+// DiffRevisionFile returns the jj diff for a single path at the given revision vs its parents
+// (equivalent to `jj diff -r <rev> -- <path>`).
+func (s *Service) DiffRevisionFile(ctx context.Context, revision, path string) (string, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "", fmt.Errorf("path is required")
+	}
+	rev := strings.TrimSpace(revision)
+	if rev == "" {
+		return "", fmt.Errorf("revision is required")
+	}
+	out, err := s.runJJOutputNoHistory(ctx, "diff", "-r", rev, "--git", "--color", "never", "--", path)
+	if err != nil {
+		return "", err
+	}
+	return out, nil
 }
 
 // IsCommitMutable checks if a commit can be modified
