@@ -1341,11 +1341,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, cmd
 	case evologsplittab.EvologDiffLoadRequestedMsg:
-		seq, from, to, ok := m.evologSplitModal.DiffSnapshotForLoad()
+		seq, from, to, prevFrom, prevTo, ok := m.evologSplitModal.DiffSnapshotForLoad()
 		if !ok {
 			return m, nil
 		}
-		return m, evologsplittab.LoadEvologSplitDiffCmd(m.appState.JJService, seq, from, to)
+		return m, evologsplittab.LoadEvologSplitDiffCmd(m.appState.JJService, seq, from, to, prevFrom, prevTo)
 	case evologsplittab.EvologSplitDiffLoadedMsg:
 		updated, cmd := m.evologSplitModal.Update(msg)
 		m.evologSplitModal = updated

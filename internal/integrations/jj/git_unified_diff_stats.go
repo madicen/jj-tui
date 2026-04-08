@@ -140,3 +140,70 @@ func unquoteGitPath(s string) string {
 	}
 	return s
 }
+
+// mapGitUnifiedDiffByPath splits a git unified diff into one string per "b/" path (same keys as parseGitUnifiedDiffStats).
+func mapGitUnifiedDiffByPath(gitDiff string) map[string]string {
+	out := make(map[string]string)
+	lines := strings.Split(gitDiff, "\n")
+	var curPath string
+	var chunk []string
+	flush := func() {
+		if curPath != "" && len(chunk) > 0 {
+			out[curPath] = strings.Join(chunk, "\n")
+		}
+		curPath = ""
+		chunk = nil
+	}
+	for _, raw := range lines {
+		line := strings.TrimSuffix(raw, "\r")
+		if strings.HasPrefix(line, "diff --git ") {
+			flush()
+			if p, ok := parseDiffGitBPath(line); ok {
+				curPath = p
+				chunk = append(chunk, line)
+			}
+			continue
+		}
+		if curPath != "" {
+			chunk = append(chunk, line)
+		}
+	}
+	flush()
+	return out
+}
+
+// normalizeGitChunkForCompare removes volatile git metadata so two patches that differ only by blob ids still compare equal.
+func normalizeGitChunkForCompare(s string) string {
+	var out []string
+	for _, line := range strings.Split(s, "\n") {
+		line = strings.TrimSuffix(line, "\r")
+		if strings.HasPrefix(line, "index ") {
+			continue
+		}
+		out = append(out, line)
+	}
+	return strings.TrimSpace(strings.Join(out, "\n"))
+}
+
+// materialGitChunk reports whether a per-file git diff section has a real content or mode/binary change.
+func materialGitChunk(section string) bool {
+	s := strings.TrimSpace(section)
+	if s == "" {
+		return false
+	}
+	if strings.Contains(s, "Binary files ") && strings.Contains(s, " differ") {
+		return true
+	}
+	if strings.Contains(s, "old mode ") || strings.Contains(s, "new mode ") {
+		return true
+	}
+	for _, line := range strings.Split(s, "\n") {
+		if len(line) > 0 && line[0] == '+' && !strings.HasPrefix(line, "+++") {
+			return true
+		}
+		if len(line) > 0 && line[0] == '-' && !strings.HasPrefix(line, "---") {
+			return true
+		}
+	}
+	return false
+}

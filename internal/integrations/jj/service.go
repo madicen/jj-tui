@@ -381,14 +381,20 @@ func (s *Service) getChangedFilesSummaryOnly(ctx context.Context, commitID strin
 // DiffChangedFilesFromTo lists paths changed between two revisions (from..to), using jj diff --summary,
 // and fills per-file line counts from a git-format diff when possible.
 func (s *Service) DiffChangedFilesFromTo(ctx context.Context, fromCommitID, toRev string) ([]ChangedFile, error) {
+	files, _, err := s.diffChangedFilesFromToWithGit(ctx, fromCommitID, toRev)
+	return files, err
+}
+
+// diffChangedFilesFromToWithGit is like DiffChangedFilesFromTo but also returns the raw git-format diff output.
+func (s *Service) diffChangedFilesFromToWithGit(ctx context.Context, fromCommitID, toRev string) ([]ChangedFile, string, error) {
 	fromCommitID = strings.TrimSpace(fromCommitID)
 	toRev = strings.TrimSpace(toRev)
 	if fromCommitID == "" || toRev == "" {
-		return nil, fmt.Errorf("from and to revisions are required")
+		return nil, "", fmt.Errorf("from and to revisions are required")
 	}
 	out, err := s.runJJOutput(ctx, "diff", "--from", fromCommitID, "--to", toRev, "--summary")
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	var files []ChangedFile
 	for _, line := range strings.Split(out, "\n") {
@@ -405,11 +411,11 @@ func (s *Service) DiffChangedFilesFromTo(ctx context.Context, fromCommitID, toRe
 		}
 	}
 	if len(files) == 0 {
-		return files, nil
+		return files, "", nil
 	}
 	gitOut, gerr := s.runJJOutput(ctx, "diff", "--from", fromCommitID, "--to", toRev, "--tool", ":git", "--context=0")
 	if gerr != nil || strings.TrimSpace(gitOut) == "" {
-		return files, nil
+		return files, "", nil
 	}
 	stats := parseGitUnifiedDiffStats(gitOut)
 	for i := range files {
@@ -419,7 +425,43 @@ func (s *Service) DiffChangedFilesFromTo(ctx context.Context, fromCommitID, toRe
 			files[i].StatsOK = true
 		}
 	}
-	return files, nil
+	return files, gitOut, nil
+}
+
+// DiffChangedFilesEvologStep is like DiffChangedFilesFromTo for one evolog UI row (diff from older snapshot to newer).
+// When prevFrom/prevTo are set (older→newer along the list for the row above), files whose git patch text is
+// identical to that prior step are omitted so the list only shows new deltas for this step.
+func (s *Service) DiffChangedFilesEvologStep(ctx context.Context, from, to, prevFrom, prevTo string) ([]ChangedFile, error) {
+	files, gitCur, err := s.diffChangedFilesFromToWithGit(ctx, from, to)
+	if err != nil {
+		return nil, err
+	}
+	prevFrom = strings.TrimSpace(prevFrom)
+	prevTo = strings.TrimSpace(prevTo)
+	if prevFrom == "" || prevTo == "" || len(files) == 0 || strings.TrimSpace(gitCur) == "" {
+		return files, nil
+	}
+	gitPrev, gerr := s.runJJOutput(ctx, "diff", "--from", prevFrom, "--to", prevTo, "--tool", ":git", "--context=0")
+	if gerr != nil || strings.TrimSpace(gitPrev) == "" {
+		return files, nil
+	}
+	chunksCur := mapGitUnifiedDiffByPath(gitCur)
+	chunksPrev := mapGitUnifiedDiffByPath(gitPrev)
+	var kept []ChangedFile
+	for _, f := range files {
+		cur := chunksCur[f.Path]
+		prev := chunksPrev[f.Path]
+		curMaterial := materialGitChunk(cur) || (f.StatsOK && (f.LinesAdded > 0 || f.LinesRemoved > 0))
+		if !curMaterial {
+			continue
+		}
+		if materialGitChunk(prev) && materialGitChunk(cur) &&
+			normalizeGitChunkForCompare(cur) == normalizeGitChunkForCompare(prev) {
+			continue
+		}
+		kept = append(kept, f)
+	}
+	return kept, nil
 }
 
 // IsCommitMutable checks if a commit can be modified
