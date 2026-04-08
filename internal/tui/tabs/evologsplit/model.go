@@ -339,7 +339,7 @@ func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
 func formatSplitModalFileLine(f jj.ChangedFile, pathMax int) string {
 	p := runewidth.Truncate(f.Path, max(8, pathMax), "…")
 	st, ch := styles.GetStatusStyle(f.Status)
-	return fmt.Sprintf("%s %s", st.Render(ch), p)
+	return fmt.Sprintf("%s %s%s", st.Render(ch), p, styles.DiffStatsSuffix(f.LinesAdded, f.LinesRemoved, f.StatsOK))
 }
 
 // buildEvologSplitRightColumn returns exactly vr+1 lines (title + vr body rows) so layout

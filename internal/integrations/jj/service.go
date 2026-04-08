@@ -219,8 +219,11 @@ func (s *Service) Redo(ctx context.Context, opID string) error {
 
 // ChangedFile represents a file changed in a commit
 type ChangedFile struct {
-	Path   string // File path
-	Status string // M=modified, A=added, D=deleted, R=renamed
+	Path         string // File path
+	Status       string // M=modified, A=added, D=deleted, R=renamed
+	LinesAdded   int    // meaningful when StatsOK
+	LinesRemoved int    // meaningful when StatsOK
+	StatsOK      bool   // true when counts came from jj log template (single rev) or parsed git diff (from–to)
 }
 
 // DivergentVersion is one visible revision for a divergent jj change ID.
@@ -234,6 +237,24 @@ type DivergentVersion struct {
 	Bookmarks     string        // local bookmark names on this revision (may be empty)
 	ChangedFiles  []ChangedFile // vs parent (jj diff --summary -r); nil if listing failed, non-nil when loaded (may be empty)
 	FilesLine     string        // compact summary for logs / fallback
+}
+
+// plainDiffStatsSuffix is an unstyled variant of the TUI diff stats suffix (+n / −m only when non-zero).
+func plainDiffStatsSuffix(added, removed int, ok bool) string {
+	if !ok {
+		return ""
+	}
+	var parts []string
+	if added > 0 {
+		parts = append(parts, fmt.Sprintf("+%d", added))
+	}
+	if removed > 0 {
+		parts = append(parts, fmt.Sprintf("-%d", removed))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return " " + strings.Join(parts, " ")
 }
 
 // formatDivergentFilesLine formats changed-file rows for divergent-resolution UI.
@@ -259,6 +280,7 @@ func formatDivergentFilesLine(files []ChangedFile) string {
 		b.WriteString(f.Status)
 		b.WriteByte(' ')
 		b.WriteString(p)
+		b.WriteString(plainDiffStatsSuffix(f.LinesAdded, f.LinesRemoved, f.StatsOK))
 	}
 	if nMore > 0 {
 		fmt.Fprintf(&b, " (+%d more)", nMore)
@@ -283,22 +305,68 @@ func compactWhenDisplay(ts string) string {
 	return ts
 }
 
-// GetChangedFiles gets the list of changed files for a commit
+// Template for one revision: per-file path, status char, lines added, lines removed (tab-separated lines).
+// Uses one jj invocation vs diff --summary + separate stat work; requires a jj build with Commit.diff().stat().
+const changedFilesStatLogTemplate = `self.diff().stat().files().map(|f| f.path().display() ++ "\t" ++ f.status_char() ++ "\t" ++ f.lines_added() ++ "\t" ++ f.lines_removed() ++ "\n")`
+
+// GetChangedFiles gets changed files for a revision vs its parents, with per-file line stats when supported.
 func (s *Service) GetChangedFiles(ctx context.Context, commitID string) ([]ChangedFile, error) {
-	// Use jj diff --summary to get a list of changed files
+	out, err := s.runJJOutput(ctx, "log", "-r", commitID, "--no-graph", "-T", changedFilesStatLogTemplate)
+	if err == nil && strings.TrimSpace(out) != "" {
+		if files, perr := parseChangedFilesStatLogOutput(out); perr == nil && len(files) > 0 {
+			return files, nil
+		}
+	}
+	// Older jj or template parse issues: fall back to summary only (no line counts).
+	return s.getChangedFilesSummaryOnly(ctx, commitID)
+}
+
+func parseChangedFilesStatLogOutput(out string) ([]ChangedFile, error) {
+	var files []ChangedFile
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimRight(line, "\r")
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		parts := strings.Split(line, "\t")
+		if len(parts) != 4 {
+			return nil, fmt.Errorf("expected 4 tab fields, got %d", len(parts))
+		}
+		path := strings.TrimSpace(parts[0])
+		status := strings.TrimSpace(parts[1])
+		added, err1 := strconv.Atoi(strings.TrimSpace(parts[2]))
+		removed, err2 := strconv.Atoi(strings.TrimSpace(parts[3]))
+		if err1 != nil || err2 != nil {
+			return nil, fmt.Errorf("invalid line counts")
+		}
+		if path == "" || status == "" {
+			return nil, fmt.Errorf("empty path or status")
+		}
+		files = append(files, ChangedFile{
+			Path:         path,
+			Status:       status,
+			LinesAdded:   added,
+			LinesRemoved: removed,
+			StatsOK:      true,
+		})
+	}
+	if len(files) == 0 {
+		return nil, fmt.Errorf("no files parsed")
+	}
+	return files, nil
+}
+
+func (s *Service) getChangedFilesSummaryOnly(ctx context.Context, commitID string) ([]ChangedFile, error) {
 	out, err := s.runJJOutput(ctx, "diff", "--summary", "-r", commitID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get changed files: %w", err)
 	}
-
 	var files []ChangedFile
 	for _, line := range strings.Split(out, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-
-		// Format is: "M path/to/file" or "A path/to/file" etc.
 		parts := strings.SplitN(line, " ", 2)
 		if len(parts) >= 2 {
 			files = append(files, ChangedFile{
@@ -307,11 +375,11 @@ func (s *Service) GetChangedFiles(ctx context.Context, commitID string) ([]Chang
 			})
 		}
 	}
-
 	return files, nil
 }
 
-// DiffChangedFilesFromTo lists paths changed between two revisions (from..to), using jj diff --summary.
+// DiffChangedFilesFromTo lists paths changed between two revisions (from..to), using jj diff --summary,
+// and fills per-file line counts from a git-format diff when possible.
 func (s *Service) DiffChangedFilesFromTo(ctx context.Context, fromCommitID, toRev string) ([]ChangedFile, error) {
 	fromCommitID = strings.TrimSpace(fromCommitID)
 	toRev = strings.TrimSpace(toRev)
@@ -334,6 +402,21 @@ func (s *Service) DiffChangedFilesFromTo(ctx context.Context, fromCommitID, toRe
 				Status: parts[0],
 				Path:   parts[1],
 			})
+		}
+	}
+	if len(files) == 0 {
+		return files, nil
+	}
+	gitOut, gerr := s.runJJOutput(ctx, "diff", "--from", fromCommitID, "--to", toRev, "--tool", ":git", "--context=0")
+	if gerr != nil || strings.TrimSpace(gitOut) == "" {
+		return files, nil
+	}
+	stats := parseGitUnifiedDiffStats(gitOut)
+	for i := range files {
+		if st, ok := stats[files[i].Path]; ok {
+			files[i].LinesAdded = st.added
+			files[i].LinesRemoved = st.removed
+			files[i].StatsOK = true
 		}
 	}
 	return files, nil
