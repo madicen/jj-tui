@@ -1197,12 +1197,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.branchesTabModel = updated
 		if msg.Action == "fetch" {
 			m.appState.BranchRemoteFetchPending = false
-			if msg.Err != nil {
-				m.appState.Loading = false
-			}
 		}
 		if msg.Err != nil {
-			m.errorModal.SetError(msg.Err, false, "")
+			// Branches tab already set StatusMessage (e.g. "Failed to push branch: ...").
+			m.appState.Loading = false
 			return m, nil
 		}
 		return m, tea.Batch(
@@ -1343,11 +1341,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, cmd
 	case evologsplittab.EvologDiffLoadRequestedMsg:
-		seq, from, to, ok := m.evologSplitModal.DiffSnapshotForLoad()
+		seq, from, to, prevFrom, prevTo, ok := m.evologSplitModal.DiffSnapshotForLoad()
 		if !ok {
 			return m, nil
 		}
-		return m, evologsplittab.LoadEvologSplitDiffCmd(m.appState.JJService, seq, from, to)
+		return m, evologsplittab.LoadEvologSplitDiffCmd(m.appState.JJService, seq, from, to, prevFrom, prevTo)
 	case evologsplittab.EvologSplitDiffLoadedMsg:
 		updated, cmd := m.evologSplitModal.Update(msg)
 		m.evologSplitModal = updated
@@ -1487,6 +1485,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Handle messages from actions package
 	case util.ErrorMsg:
+		if msg.StatusOnly {
+			m.appState.Loading = false
+			m.appState.StatusMessage = util.StatusStringFromError(msg.Err, 220)
+			return m, nil
+		}
 		return m.Update(errorMsg{Err: msg.Err})
 	}
 

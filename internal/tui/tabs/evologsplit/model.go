@@ -141,16 +141,26 @@ func (m Model) refreshDiffPreview() (Model, tea.Cmd) {
 
 // DiffSnapshotForLoad returns seq and revisions for the in-flight diff (after refreshDiffPreview).
 // Diffs the selected commit against the previous list entry (newer), not cumulative vs tip.
-func (m Model) DiffSnapshotForLoad() (seq int, fromCommitID, toCommitID string, ok bool) {
+// When selectedIdx >= 2, prevStepFrom/prevStepTo are the older→newer pair for the list row above the
+// selected row (used to hide files whose patch is identical to the prior evolog step).
+func (m Model) DiffSnapshotForLoad() (seq int, fromCommitID, toCommitID, prevStepFrom, prevStepTo string, ok bool) {
 	if len(m.entries) == 0 || m.selectedIdx < 0 || m.selectedIdx >= len(m.entries) || m.selectedIdx == 0 {
-		return 0, "", "", false
+		return 0, "", "", "", "", false
 	}
 	prev := strings.TrimSpace(m.entries[m.selectedIdx-1].CommitID)
 	sel := strings.TrimSpace(m.entries[m.selectedIdx].CommitID)
 	if prev == "" || sel == "" {
-		return 0, "", "", false
+		return 0, "", "", "", "", false
 	}
-	return m.diffSeq, sel, prev, true
+	psf, pst := "", ""
+	if m.selectedIdx >= 2 {
+		psf = strings.TrimSpace(m.entries[m.selectedIdx-1].CommitID)
+		pst = strings.TrimSpace(m.entries[m.selectedIdx-2].CommitID)
+		if psf == "" || pst == "" {
+			psf, pst = "", ""
+		}
+	}
+	return m.diffSeq, sel, prev, psf, pst, true
 }
 
 // Update handles keys, zone clicks, mouse wheel, and async messages.
@@ -339,7 +349,7 @@ func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
 func formatSplitModalFileLine(f jj.ChangedFile, pathMax int) string {
 	p := runewidth.Truncate(f.Path, max(8, pathMax), "…")
 	st, ch := styles.GetStatusStyle(f.Status)
-	return fmt.Sprintf("%s %s", st.Render(ch), p)
+	return fmt.Sprintf("%s %s%s", st.Render(ch), p, styles.DiffStatsSuffix(f.LinesAdded, f.LinesRemoved, f.StatsOK))
 }
 
 // buildEvologSplitRightColumn returns exactly vr+1 lines (title + vr body rows) so layout

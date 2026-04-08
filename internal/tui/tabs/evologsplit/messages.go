@@ -28,8 +28,9 @@ type EvologSplitDiffLoadedMsg struct {
 	Err   error
 }
 
-// LoadEvologSplitDiffCmd loads changed files between two commits (async): jj diff --from from --to to.
-func LoadEvologSplitDiffCmd(svc *jj.Service, seq int, fromCommitID, toCommitID string) tea.Cmd {
+// LoadEvologSplitDiffCmd loads changed files for one evolog step (async). prevStepFrom/prevStepTo may be
+// empty; when both are set, files whose git patch matches the prior step are omitted.
+func LoadEvologSplitDiffCmd(svc *jj.Service, seq int, fromCommitID, toCommitID, prevStepFrom, prevStepTo string) tea.Cmd {
 	if svc == nil || seq <= 0 {
 		return nil
 	}
@@ -38,8 +39,16 @@ func LoadEvologSplitDiffCmd(svc *jj.Service, seq int, fromCommitID, toCommitID s
 	if from == "" || to == "" {
 		return nil
 	}
+	pf := strings.TrimSpace(prevStepFrom)
+	pt := strings.TrimSpace(prevStepTo)
 	return func() tea.Msg {
-		files, err := svc.DiffChangedFilesFromTo(context.Background(), from, to)
+		var files []jj.ChangedFile
+		var err error
+		if pf != "" && pt != "" {
+			files, err = svc.DiffChangedFilesEvologStep(context.Background(), from, to, pf, pt)
+		} else {
+			files, err = svc.DiffChangedFilesFromTo(context.Background(), from, to)
+		}
 		return EvologSplitDiffLoadedMsg{Seq: seq, Files: files, Err: err}
 	}
 }

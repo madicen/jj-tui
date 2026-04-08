@@ -1,6 +1,11 @@
 package styles
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"fmt"
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+)
 
 // Colors (updated by SetTheme when config or theme picker changes)
 var (
@@ -151,4 +156,25 @@ func GetStatusStyle(status string) (lipgloss.Style, string) {
 	default:
 		return lipgloss.NewStyle().Foreground(ColorMuted), status
 	}
+}
+
+// DiffStatsSuffix returns a styled " +n -m" suffix for changed-file lines, or "" when stats are unavailable.
+// Omits +0 and −0; if both counts are zero, returns "".
+func DiffStatsSuffix(added, removed int, ok bool) string {
+	if !ok {
+		return ""
+	}
+	var parts []string
+	addSt := lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B"))
+	remSt := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555"))
+	if added > 0 {
+		parts = append(parts, addSt.Render(fmt.Sprintf("+%d", added)))
+	}
+	if removed > 0 {
+		parts = append(parts, remSt.Render(fmt.Sprintf("-%d", removed)))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return " " + strings.Join(parts, " ")
 }

@@ -123,7 +123,7 @@ func formatDivergentFileLine(f jj.ChangedFile, pathMax int) string {
 	pm := max(8, pathMax)
 	p := runewidth.Truncate(f.Path, pm, "…")
 	st, ch := styles.GetStatusStyle(f.Status)
-	return fmt.Sprintf("%s %s", st.Render(ch), p)
+	return fmt.Sprintf("%s %s%s", st.Render(ch), p, styles.DiffStatsSuffix(f.LinesAdded, f.LinesRemoved, f.StatsOK))
 }
 
 // buildDivergentRightColumn returns exactly vr+1 lines (title + vr body) to align with the left column.

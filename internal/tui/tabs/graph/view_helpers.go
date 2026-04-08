@@ -433,12 +433,17 @@ func (m *GraphModel) renderTreeNodeWithLineIndex(node *fileTreeNode, indent stri
 			*lineIdx++
 			isSelected := !data.GraphFocused && node.fileIndex == data.SelectedFile
 			statusStyle, statusChar := styles.GetStatusStyle(node.status)
+			statSuffix := ""
+			if node.fileIndex >= 0 && node.fileIndex < len(data.ChangedFiles) {
+				cf := data.ChangedFiles[node.fileIndex]
+				statSuffix = styles.DiffStatsSuffix(cf.LinesAdded, cf.LinesRemoved, cf.StatsOK)
+			}
 			var fileLine string
 			if isSelected {
 				selectedStyle := lipgloss.NewStyle().Background(lipgloss.Color("#3d4f5f")).Foreground(lipgloss.Color("#ffffff"))
-				fileLine = fmt.Sprintf("%s%s %s", indent, statusStyle.Render(statusChar), selectedStyle.Render(node.name))
+				fileLine = fmt.Sprintf("%s%s %s%s", indent, statusStyle.Render(statusChar), selectedStyle.Render(node.name), statSuffix)
 			} else {
-				fileLine = fmt.Sprintf("%s%s %s", indent, statusStyle.Render(statusChar), node.name)
+				fileLine = fmt.Sprintf("%s%s %s%s", indent, statusStyle.Render(statusChar), node.name, statSuffix)
 			}
 			*lines = append(*lines, m.zoneManager.Mark(mouse.ZoneChangedFile(node.fileIndex), fileLine))
 		} else {

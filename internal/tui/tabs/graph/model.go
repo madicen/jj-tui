@@ -53,8 +53,11 @@ const (
 
 // ChangedFile represents a file changed in a commit
 type ChangedFile struct {
-	Path   string
-	Status string // M=modified, A=added, D=deleted
+	Path         string
+	Status       string // M=modified, A=added, D=deleted
+	LinesAdded   int
+	LinesRemoved int
+	StatsOK      bool
 }
 
 // GraphData contains data needed for commit graph rendering
@@ -472,8 +475,11 @@ func (m *GraphModel) buildGraphData() GraphData {
 	var changedFiles []ChangedFile
 	for _, f := range m.changedFiles {
 		changedFiles = append(changedFiles, ChangedFile{
-			Path:   f.Path,
-			Status: f.Status,
+			Path:         f.Path,
+			Status:       f.Status,
+			LinesAdded:   f.LinesAdded,
+			LinesRemoved: f.LinesRemoved,
+			StatsOK:      f.StatsOK,
 		})
 	}
 
