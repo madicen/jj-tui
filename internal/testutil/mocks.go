@@ -184,6 +184,11 @@ func (m *MockJJService) GetRepository(ctx context.Context, revset string) (*inte
 	}, nil
 }
 
+// GetRepositoryQuiet matches jj.Service behavior for background refresh (same data as GetRepository).
+func (m *MockJJService) GetRepositoryQuiet(ctx context.Context, revset string) (*internal.Repository, error) {
+	return m.GetRepository(ctx, revset)
+}
+
 // NewCommit creates a mock new commit
 func (m *MockJJService) NewCommit(parentID string) error {
 	if m.NewCommitFunc != nil {

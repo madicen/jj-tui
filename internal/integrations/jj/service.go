@@ -137,14 +137,23 @@ func (s *Service) addToHistory(entry CommandHistoryEntry) {
 // GetRepository retrieves the current repository state.
 // revset: optional jj revset for the graph; if empty, a default is used that focuses on
 // your work (mutable ancestors of @), bookmarks, and main to reduce noise from others' merges.
+// Graph jj log invocations are recorded in Help → Command history.
 func (s *Service) GetRepository(ctx context.Context, revset string) (*internal.Repository, error) {
-	// Get commit graph (includes working copy)
-	graph, err := s.getCommitGraph(ctx, revset)
+	return s.getRepository(ctx, revset, true)
+}
+
+// GetRepositoryQuiet is the same as GetRepository but does not append the main graph jj log
+// (and its fallbacks) to command history. Used for periodic background refresh so history stays readable.
+func (s *Service) GetRepositoryQuiet(ctx context.Context, revset string) (*internal.Repository, error) {
+	return s.getRepository(ctx, revset, false)
+}
+
+func (s *Service) getRepository(ctx context.Context, revset string, recordGraphInHistory bool) (*internal.Repository, error) {
+	graph, err := s.getCommitGraph(ctx, revset, recordGraphInHistory)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get commit graph: %w", err)
 	}
 
-	// Find working copy from graph
 	var workingCopy internal.Commit
 	for _, c := range graph.Commits {
 		if c.IsWorking {
@@ -1342,9 +1351,18 @@ const (
 	graphLoadMaxEvologSplitProbes   = 36
 )
 
+// jjLogWithGraphTemplate runs jj log with the graph ASCII template; recordInHistory controls command history.
+func (s *Service) jjLogWithGraphTemplate(ctx context.Context, recordInHistory bool, revsetArg, template string) (string, error) {
+	if recordInHistory {
+		return s.runJJOutput(ctx, "log", "-r", revsetArg, "-T", template)
+	}
+	return s.runJJOutputNoHistory(ctx, "log", "-r", revsetArg, "-T", template)
+}
+
 // getCommitGraph retrieves the commit graph with real jj data.
 // revset: if non-empty, used as the -r revset; if empty, a default is used.
-func (s *Service) getCommitGraph(ctx context.Context, revset string) (*internal.CommitGraph, error) {
+// recordGraphInHistory: when false, the primary (and fallback) jj log calls are not added to command history.
+func (s *Service) getCommitGraph(ctx context.Context, revset string, recordGraphInHistory bool) (*internal.CommitGraph, error) {
 	// Use a custom template with a unique marker to separate graph prefix from data
 	// The marker "<<<COMMIT>>>" lets us identify where the graph ends and data begins
 	// Format after marker: change_id|commit_id|author|date|description|parents|bookmarks|is_working|has_conflict|immutable|divergent
@@ -1381,19 +1399,19 @@ func (s *Service) getCommitGraph(ctx context.Context, revset string) (*internal.
 	} else {
 		revsetArg = DefaultGraphRevset
 	}
-	out, err := s.runJJOutput(ctx, "log", "-r", revsetArg, "-T", template)
+	out, err := s.jjLogWithGraphTemplate(ctx, recordGraphInHistory, revsetArg, template)
 	if err != nil {
 		if revset != "" {
 			// Custom revset failed; try a broad safe revset so the app still loads
-			out, err = s.runJJOutput(ctx, "log", "-r", "mutable() | bookmarks()", "-T", template)
+			out, err = s.jjLogWithGraphTemplate(ctx, recordGraphInHistory, "mutable() | bookmarks()", template)
 		} else {
 			// Default may fail if main@origin is missing; omit trunk tip from the revset
-			out, err = s.runJJOutput(ctx, "log", "-r", "mutable() | bookmarks()", "-T", template)
+			out, err = s.jjLogWithGraphTemplate(ctx, recordGraphInHistory, "mutable() | bookmarks()", template)
 		}
 	}
 	bmWG.Wait()
 	if err != nil {
-		return s.getCommitGraphSimple(ctx, revset)
+		return s.getCommitGraphSimple(ctx, revset, recordGraphInHistory)
 	}
 
 	commits := []internal.Commit{}
@@ -1726,12 +1744,18 @@ func (s *Service) runJJOutputNoHistory(ctx context.Context, args ...string) (str
 }
 
 // getCommitGraphSimple is a fallback that uses simpler parsing
-func (s *Service) getCommitGraphSimple(ctx context.Context, revset string) (*internal.CommitGraph, error) {
+func (s *Service) getCommitGraphSimple(ctx context.Context, revset string, recordInHistory bool) (*internal.CommitGraph, error) {
 	revsetArg := "mutable() | bookmarks()"
 	if revset != "" {
 		revsetArg = revset
 	}
-	out, err := s.runJJOutput(ctx, "log", "-r", revsetArg, "--no-graph")
+	var out string
+	var err error
+	if recordInHistory {
+		out, err = s.runJJOutput(ctx, "log", "-r", revsetArg, "--no-graph")
+	} else {
+		out, err = s.runJJOutputNoHistory(ctx, "log", "-r", revsetArg, "--no-graph")
+	}
 	if err != nil {
 		return nil, err
 	}

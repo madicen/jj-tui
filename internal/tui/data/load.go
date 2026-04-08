@@ -39,7 +39,8 @@ func LoadRepositorySilent(jjService *jj.Service, revset string) tea.Cmd {
 		return nil
 	}
 	return func() tea.Msg {
-		repo, err := jjService.GetRepository(context.Background(), revset)
+		// Quiet refresh: same graph load as GetRepository but do not spam command history every tick.
+		repo, err := jjService.GetRepositoryQuiet(context.Background(), revset)
 		if err != nil {
 			return SilentRepositoryLoadedMsg{Repository: nil}
 		}
