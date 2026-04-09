@@ -39,7 +39,7 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 		commit := ctx.Repository.Graph.Commits[idx]
 		return Result{FollowUp: FollowUpLoadChangedFiles, ChangeID: commit.ChangeID, CommitIndex: idx}
 	}
-	if ctx.JJService == nil && !r.StartEditDescription && !r.StartRebaseMode && r.ResolveDivergent == nil {
+	if ctx.JJService == nil && !r.StartEditDescription && !r.StartRebaseMode && r.ResolveDivergent == nil && !r.DragRebase {
 		if r.Checkout {
 			return Result{Status: "Cannot edit: not in a jj repository"}
 		}
@@ -78,6 +78,25 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 			return Result{Cmd: cmd, SuccessStatus: fmt.Sprintf("Rebasing %s onto %s...", src.ShortID, dst.ShortID), PerformRebase: true}
 		}
 		return Result{Cmd: cmd, PerformRebase: true}
+	}
+	if r.DragRebase {
+		if ctx.JJService == nil {
+			return Result{Status: "Cannot rebase: not in a jj repository"}
+		}
+		if ctx.Repository == nil {
+			return Result{}
+		}
+		cmd, status := executeDragRebase(r.DragRebaseFrom, r.DragRebaseTo, ctx)
+		if status != "" {
+			return Result{Status: status}
+		}
+		if cmd != nil && r.DragRebaseFrom >= 0 && r.DragRebaseFrom < len(ctx.Repository.Graph.Commits) &&
+			r.DragRebaseTo >= 0 && r.DragRebaseTo < len(ctx.Repository.Graph.Commits) {
+			src := ctx.Repository.Graph.Commits[r.DragRebaseFrom]
+			dst := ctx.Repository.Graph.Commits[r.DragRebaseTo]
+			return Result{Cmd: cmd, SuccessStatus: fmt.Sprintf("Rebasing %s onto %s...", src.ShortID, dst.ShortID), PerformRebase: true, Loading: true}
+		}
+		return Result{Cmd: cmd, PerformRebase: true, Loading: true}
 	}
 	if r.DeleteBookmark {
 		cmd, status := executeDeleteBookmark(ctx)
@@ -338,6 +357,31 @@ func executePerformRebase(destIndex int, ctx *RequestContext) (tea.Cmd, string) 
 	}
 	sourceCommit := ctx.Repository.Graph.Commits[ctx.RebaseSourceCommit]
 	destCommit := ctx.Repository.Graph.Commits[destIndex]
+	return Rebase(ctx.JJService, sourceCommit.ChangeID, destCommit.ChangeID), ""
+}
+
+func executeDragRebase(fromIndex, toIndex int, ctx *RequestContext) (tea.Cmd, string) {
+	if ctx.Repository == nil || ctx.JJService == nil {
+		return nil, ""
+	}
+	commits := ctx.Repository.Graph.Commits
+	if fromIndex < 0 || fromIndex >= len(commits) || toIndex < 0 || toIndex >= len(commits) {
+		return nil, ""
+	}
+	if fromIndex == toIndex {
+		return nil, "Cannot rebase commit onto itself"
+	}
+	sourceCommit := commits[fromIndex]
+	destCommit := commits[toIndex]
+	if sourceCommit.Immutable {
+		return nil, "Cannot rebase: source commit is immutable"
+	}
+	if sourceCommit.Divergent {
+		return nil, "Resolve divergent commit first"
+	}
+	if len(sourceCommit.ConflictedBranches) > 0 {
+		return nil, "Resolve bookmark conflict first (Branches tab)"
+	}
 	return Rebase(ctx.JJService, sourceCommit.ChangeID, destCommit.ChangeID), ""
 }
 

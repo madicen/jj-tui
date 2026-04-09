@@ -2,7 +2,7 @@
 
 ![Demo](screenshots/demo.gif)
 
-A modern Terminal User Interface (TUI) for managing [Jujutsu](https://github.com/martinvonz/jj) repositories. Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lip Gloss](https://github.com/charmbracelet/lipgloss) for an intuitive and beautiful command-line experience.
+A modern Terminal User Interface (TUI) for managing [Jujutsu (jj)](https://github.com/jj-vcs/jj) repositories. Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lip Gloss](https://github.com/charmbracelet/lipgloss) for an intuitive and beautiful command-line experience.
 
 The demo above walks through the **commit graph**, **tickets**, **pull requests**, and **branches** (`make demo-gif` / `vhs/all.tape`). Static captures below cover views that are not in that recording.
 
@@ -41,29 +41,29 @@ When a bookmark was pushed and then amended or moved locally, **jj** may show th
 
 ## Features
 
-- **Visual Commit Graph**: Navigate and visualize your commit history with tree structure
-- **Split-Pane View**: Graph and changed files in separate scrollable panes with click-to-focus
-- **Changed Files View**: See files modified in the selected commit; move files to parent/child commits or revert changes
-- **Keyboard & Mouse Support**: Full keyboard navigation with zone-based mouse support for clickable UI elements
-- **GitHub Integration**: Create and manage GitHub Pull Requests directly from the TUI
-- **GitHub Device Flow**: Login to GitHub via browser - no token copying required
-- **Ticket Integration**: View assigned tickets from Jira, Codecks, or GitHub Issues; create a bookmark on your current commit with the ticket name
-- **Ticket Status Transitions**: Change ticket statuses directly from the TUI (In Progress, Done, etc.)
-- **Commit Management**: Edit, squash, describe, abandon, rebase, and manage commits with simple key presses
-- **New Commits from Immutable Parents**: Create new commits based on `main` or other immutable commits
-- **Bookmark Management**: Create, move, and delete bookmarks on commits
-- **Immutable Commit Detection**: Automatically detects and protects immutable commits (pushed to remote)
-- **Divergent Commit Resolution**: Detect and resolve divergent commits (same change ID in multiple versions)
-- **Conflicted Bookmark Resolution**: Resolve bookmark conflicts when local and remote have diverged
-- **Repository Cleanup Tools**: Abandon old commits, delete all bookmarks, track remote branches
-- **Auto-Initialize**: Prompt to run `jj git init` when opening a non-jj repository
-- **Real-time Updates**: Auto-refresh repository state and see changes immediately
-- **Modern UI**: Beautiful styling with colors, borders, and responsive layouts
+- **Visual commit graph**: Navigate history with ASCII graph, symbols for working copy / mutable / immutable, divergent and conflict indicators
+- **Split-pane layout**: Graph and changed files in separate scrollable panes; **Tab** or **click** to focus; mouse wheel scrolls the focused pane
+- **Changed files**: Per-commit file list with line stats; **move** a file to a new parent/child commit (`[` / `]`) or **revert** it (`v`) from the files pane
+- **File diff overlay**: **`o`** (files pane) opens a full **jj** diff for the selected path in a scrollable modal
+- **External editor**: **`O`** (files pane) opens the selected file in Cursor, VS Code, Zed, Neovim (`nvr`), etc.—configured under **Settings → Advanced**
+- **Rebase**: **`r`** enters destination-pick mode, or **drag** a commit row onto another (mouse) for the same `jj rebase -s … -d …` flow
+- **Keyboard & mouse**: Zone-based clicks across tabs, settings, PRs, tickets, and branch lists
+- **GitHub**: Create/update PRs, device-flow login, PR list with CI and review hints
+- **Tickets**: Jira, Codecks, or GitHub Issues—provider choice in Settings; create a bookmark from a ticket on your current commit; status transitions where supported
+- **Branches**: List locals/remotes, track/untrack, push/fetch, resolve diverged bookmarks
+- **Settings**: GitHub, Jira, Codecks, **Tickets** (provider + workflow), **Branches** (limit), **Theme** (primary/secondary/muted), **Advanced** (editor, graph revset, bookmark sanitize, destructive cleanup)
+- **Help tab**: Shortcuts reference plus **command history** of **jj** commands the TUI ran (copy-friendly)
+- **Evolog split (`z`)**: Experimental FAQ-style split when evolution history allows (see [Split](#split))
+- **Divergent commits & diverged bookmarks**: Dedicated flows from the graph or Branches tab (see sections below)
+- **Undo / redo**: **`Ctrl+z`** / **`Ctrl+y`** for **jj** undo and redo
+- **Non-repo & init**: Prompt to **`jj git init`** when the path is not a jj repo
+- **Demo mode**: **`jj-tui --demo`** uses mock tickets/PRs for screenshots or trying the UI
+- **Config**: Global and per-repo **`.jj-tui.json`** merge; optional **`JJ_TUI_CONFIG`**
 
 ## Prerequisites
 
-- [Jujutsu (jj)](https://github.com/martinvonz/jj) installed and available in your PATH
-- A jujutsu repository to work with
+- [Jujutsu (jj)](https://jj-vcs.github.io/jj/) installed and on your `PATH`
+- A jj repository to work with (or use **`jj-tui --demo`**)
 
 ## Installation
 
@@ -152,7 +152,7 @@ jj-tui --demo
 - `h`, `?`: Show help
 - `Esc`: Return to graph / Cancel current action
 
-### Commit Graph View
+### Commit graph
 
 The graph view has two panes: the commit graph (left) and changed files (right). Click on either pane to focus it, or use keyboard navigation.
 
@@ -162,32 +162,41 @@ The graph view has two panes: the commit graph (left) and changed files (right).
 - **Click** on a pane to focus it
 - **Mouse scroll** works on the focused pane
 
-**Commit Actions:**
-- `e`, `Enter`: Edit selected commit (checkout with `jj edit`)
-- `n`: Create new commit (works even on immutable commits like `main`)
-- `d`: Edit commit description
-- `s`: Squash selected commit into parent
-- `r`: Rebase selected commit (with descendants)
-- `a`: Abandon commit (or resolve divergent)
-- `m`: Create or move bookmark on selected commit
-- `x`: Delete bookmark from selected commit
-- `c`: Create PR from selected commit (if bookmark exists), or **open diverged-bookmark resolver** when the selected row has a diverged bookmark (graph pane focused)
-- `u`: Push/update PR (pushes to existing PR branch)
-- `f` (graph pane focused): **Forgot New Commit?** — fetch, then create a new commit on top of `bookmark@origin` with the same tree as the bookmark tip, move the bookmark there, **rebase any stacked commits that were on top of the old tip** onto the new tip (excluding the working copy), abandon the old tip, and **drop any leftover divergent duplicates** of the same change ID (jj keeps the revision on your `@` ancestry). Use when you amended after a push so you can `jj git push` without `--force`.
-- `z` (graph pane focused, experimental): **Split (evolog)** — same as the inline **split (z)** when it appears on the selected row: open the evolog modal only when the change has evolution history with a real tree diff vs an older revision (and no blocking descendants). See the clip under [Evolog split (experimental)](#evolog-split-experimental).
+**Commit actions (graph pane focused unless noted):**
+- `e`, `Enter`: Edit selected commit (`jj edit`)
+- `n`: Create new commit (works from immutable parents like `main`)
+- `d`: Edit description; on a **divergent** row, opens the divergent resolver instead
+- `s`: Squash into parent (hidden when the parent would be immutable)
+- `r`: Rebase mode—pick destination with `Enter`/`e`, or **Esc** to cancel
+- **Mouse**: Press on a commit row, drag, release on another commit to rebase (same as `r` + pick destination); **Esc** cancels an in-progress drag
+- `a`: Abandon commit
+- `m`: Create or move bookmark
+- `x`: Delete bookmark
+- `c`: Create PR, or **resolve diverged bookmark** when the row has a conflicted/diverged bookmark (`c` matches Branches-tab behavior)
+- `C` (shift+c): **Resolve diverged bookmark** when shown on the row
+- `u`: Update PR (push bookmark branch)
+- `f`: **Forgot New Commit?** (when the inline control appears)—restack after amending a pushed bookmark so you can push without `--force`
+- `z`: **Split (evolog)** when the inline **split (z)** appears—see [Split](#split)
 
-**File pane (focus files with Tab first):**
-- `[`: Move selected file to new parent commit (split out)
-- `]`: Move selected file to new child commit (split out)
-- `v`: Revert changes to selected file in this commit
+**Files pane (focus with Tab or click the files side):**
+- `o`: Open full **jj** diff for the selected file (modal)
+- `O`: Open the selected file in the **external editor** (configure under **Settings → Advanced**)
+- `[` / `]`: Move file to new parent / child commit
+- `v`: Revert the file in this commit
 
-### Pull Requests View
+### Help tab (`h` / `?`)
+
+- **`Ctrl+j`** / **`Ctrl+k`** (or **`Tab`**): Switch between **Shortcuts** and **Command history**
+- **Command history** lists **`jj`** commands the TUI ran (with timing); copy-friendly for debugging or docs
+- Mouse **wheel** scrolls the active sub-tab
+
+### Pull Requests view
 
 - `↑/↓`, `j/k`: Navigate pull requests
 - `Enter`, `e`: Open PR in browser
 - `Ctrl+r`: Refresh PR list
 
-### Tickets View (Jira / Codecks / GitHub Issues)
+### Tickets view (Jira / Codecks / GitHub Issues)
 
 - `↑/↓`, `j/k`: Navigate tickets
 - `Enter`: Create branch from selected ticket (creates a bookmark on your **current commit** with the ticket name)
@@ -195,25 +204,33 @@ The graph view has two panes: the commit graph (left) and changed files (right).
 - `c`: Change ticket status (transitions to In Progress, Done, etc.)
 - `Ctrl+r`: Refresh ticket list
 
-### Settings View
+### Settings view
 
-- `Ctrl+J`: Previous sub-tab (GitHub, Jira, Codecks, Advanced)
-- `Ctrl+K`: Next sub-tab
-- `Tab`, `↓`: Move to next field
-- `Shift+Tab`, `↑`: Move to previous field
-- `Enter`: Move to next field (or save if on last field)
-- `Ctrl+S`: Save settings globally
-- `Ctrl+L`: Save settings to local `.jj-tui.json`
-- `Esc`: Cancel and return to graph
-- **Click** on any field or tab to focus/select it
+Sub-tabs (use **`Ctrl+j`** / **`Ctrl+k`**, click the tab bar, or **`Tab`** through fields):
 
-### Advanced Settings
+1. **GitHub** — token / device login, PR list filters, refresh interval  
+2. **Jira** — URL, user, token, projects, JQL, filters  
+3. **Codecks** — subdomain, token, project filter  
+4. **Tickets** — active provider (None / Jira / Codecks / GitHub Issues), auto “In Progress” on branch-from-ticket, GitHub Issues status excludes  
+5. **Branches** — how many branches to load for the Branches tab (`0` = all)  
+6. **Theme** — primary, secondary, muted accent colors (click swatches or **Save** to persist)  
+7. **Advanced** — see below  
 
-The Advanced tab in Settings provides repository cleanup tools:
+**Keys:**
 
-- **Delete All Bookmarks**: Remove all bookmarks in the repository
-- **Abandon Old Commits**: Abandon all mutable commits (useful for cleaning up after merging PRs)
-- **Track origin/main**: Fetch and track the remote main branch
+- **`Ctrl+j`** / **`Ctrl+k`**: Previous / next settings sub-tab  
+- **`Tab`** / **`Shift+Tab`**: Next / previous field (and tab bar navigation where applicable)  
+- **`Ctrl+s`**: Save globally (`~/.config/jj-tui/config.json`)  
+- **`Ctrl+l`**: Save **local** (`.jj-tui.json` in the repo)  
+- **`Esc`**: Cancel and return to the graph (or dismiss in-tab overlays first)  
+- **Click** fields, tabs, toggles, and theme swatches
+
+### Advanced settings
+
+- **Open in external editor**: Presets (Cursor, VS Code, Zed, Neovim/`nvr`, Emacs, Sublime, JetBrains) or **Custom** (`sh -c` with `{path}` → absolute file path). Used from the graph **files** pane with **`O`**.  
+- **Default graph revset**: Optional `jj` revset for the commit list; empty = built-in default (see [Graph view revset](#graph-view-revset)).  
+- **Sanitize bookmark names**: Auto-fix invalid bookmark characters when creating/moving names.  
+- **Delete all bookmarks** / **Abandon old commits**: Destructive maintenance (with confirmation).
 
 ## Settings
 
@@ -378,12 +395,13 @@ export JJ_TUI_CONFIG=/path/to/shared-config.json
 jj-tui
 ```
 
-### Config File Format
+### Config file format
 
 ```json
 {
   "github_token": "ghp_...",
   "ticket_provider": "github_issues",
+  "ticket_auto_in_progress": true,
   "jira_url": "https://company.atlassian.net",
   "jira_user": "user@example.com",
   "jira_token": "...",
@@ -393,9 +411,18 @@ jj-tui
   "codecks_project": "Project Name",
   "codecks_excluded_statuses": "done,resolved",
   "github_issues_excluded_statuses": "closed",
-  "graph_revset": ""
+  "branch_limit": 50,
+  "sanitize_bookmark_names": true,
+  "graph_revset": "",
+  "external_file_editor": "cursor",
+  "external_file_editor_custom": "cursor -g {path}",
+  "theme_primary": "#7E00AF",
+  "theme_secondary": "#FF79C6",
+  "theme_muted": "#6272A4"
 }
 ```
+
+Omit keys you do not need. See `internal/config/config.go` for the full schema and merge rules.
 
 ### Graph view revset
 
@@ -421,10 +448,10 @@ Leave `graph_revset` empty to use the built-in default. See [jj revset docs](htt
 ### Ticket Provider Options
 
 The `ticket_provider` field can be one of:
-- `"jira"` - Use Jira for tickets
-- `"codecks"` - Use Codecks for tickets  
-- `"github_issues"` - Use GitHub Issues for tickets
-- `""` (empty) - Auto-detect based on configured credentials
+- `""` (empty) — pick explicitly in **Settings → Tickets** or auto-detect from credentials
+- `"jira"` — Jira
+- `"codecks"` — Codecks
+- `"github_issues"` — GitHub Issues (uses the same auth as the GitHub tab)
 
 ## Development
 
@@ -455,7 +482,7 @@ jj-tui/
 │       ├── data/              # Load repo, init services, messages
 │       ├── styles/            # Lip Gloss styles
 │       ├── mouse/             # Zone IDs for clickable elements
-│       ├── util/              # Clipboard, helpers
+│       ├── util/              # Clipboard, external editor, helpers
 │       ├── model/             # Main TUI model (Update, view, keys, mouse)
 │       └── tabs/              # Tab-specific models and views
 │           ├── graph/         # Commit graph, keys, file move/revert, actions
@@ -465,8 +492,10 @@ jj-tui/
 │           ├── branches/      # Branches/bookmarks list
 │           ├── bookmark/      # Create bookmark modal
 │           ├── descedit/      # Edit commit description modal
-│           ├── settings/      # Settings (GitHub, Jira, Codecks, Advanced)
-│           ├── help/          # Help + command history
+│           ├── settings/      # Settings tabs (GitHub, Jira, Codecks, tickets, branches, theme, advanced)
+│           ├── help/          # Help (shortcuts + jj command history)
+│           ├── filediff/      # Full-file diff modal (jj diff)
+│           ├── evologsplit/   # Evolog split wizard
 │           ├── conflict/      # Bookmark conflict resolution
 │           ├── divergent/     # Divergent commit resolution
 │           ├── warning/       # Warning modal (e.g. empty descriptions)
@@ -569,11 +598,12 @@ go test ./integration_tests/ -v
 
 ### Dependencies
 
-- **[Bubble Tea](https://github.com/charmbracelet/bubbletea)**: Terminal UI framework
+- **[Bubble Tea](https://github.com/charmbracelet/bubbletea)**, **[Bubbles](https://github.com/charmbracelet/bubbles)** (e.g. spinners, inputs)
 - **[Lip Gloss](https://github.com/charmbracelet/lipgloss)**: Styling and layout
-- **[Bubblezone](https://github.com/lrstanley/bubblezone)**: Mouse zone management for clickable UI elements
-- **[go-github](https://github.com/google/go-github)**: GitHub API client
-- **[oauth2](https://golang.org/x/oauth2)**: OAuth2 authentication
+- **[Bubblezone](https://github.com/lrstanley/bubblezone)**: Mouse hit targets
+- **[bubble-overlay](https://github.com/madicen/bubble-overlay)**, **[bubble-color-picker](https://github.com/madicen/bubble-color-picker)**: Centered modals and theme UI
+- **[go-github](https://github.com/google/go-github)**, **[oauth2](https://golang.org/x/oauth2)**: GitHub REST + device flow
+- **[githubv4](https://github.com/shurcooL/githubv4)**: GitHub GraphQL (issues)
 
 ## User Stories
 
@@ -586,14 +616,13 @@ The application supports these key user workflows:
 - View changed files for each commit in the files pane; move files to parent/child commits (`[` / `]`) or revert (`v`)
 - Mouse scroll works on the focused pane
 
-### 2. Commit Management
-- Edit commits (checkout with `jj edit` — press `e` or Enter on the commit you want to work on)
-- Squash commits into their parents
-- Rebase commits onto different parents
-- Create new commits (including from immutable parents like `main`)
-- Move files between commits: split a file into a new parent or child commit (`[` / `]` with files pane focused)
-- Revert file changes in a commit (`v` with files pane focused)
-- Immutable commit protection (cannot modify pushed commits)
+### 2. Commit management
+- Edit commits (`jj edit` with **`e`** / **Enter**)
+- Squash, describe, abandon; rebase with **`r`** or **mouse drag** between commit rows
+- New commits from immutable parents (**`n`**)
+- Move files between commits (**`[`** / **`]`** in files pane) or revert (**`v`**)
+- Full-file diff modal (**`o`**) and external editor (**`O`**) from the files pane
+- Immutable commits are protected from destructive actions
 
 ### 3. Bookmark Management
 - Create bookmarks on any mutable commit (`m` in graph view)
@@ -616,8 +645,8 @@ The application supports these key user workflows:
 - Open tickets in the browser
 - Consistent layout with description placeholders
 
-### 6. Repository Monitoring
-- Real-time repository state updates
+### 6. Repository state
+- Refresh the repo with **`Ctrl+r`** and after jj operations (checkout, rebase, etc.)
 - Conflict detection and display
 - Divergent commit detection with visual indicator (≠)
 - Bookmark visualization
@@ -649,6 +678,6 @@ MIT License - see LICENSE file for details.
 
 ## Acknowledgments
 
-- [Jujutsu](https://github.com/martinvonz/jj) for the amazing VCS
+- [Jujutsu (jj)](https://jj-vcs.github.io/jj/) for the amazing VCS
 - [Charm](https://charm.sh/) for the excellent TUI libraries
 - The Go community for great tooling and libraries

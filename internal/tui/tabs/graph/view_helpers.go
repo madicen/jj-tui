@@ -118,7 +118,14 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 
 	for i, commit := range data.Repository.Graph.Commits {
 		style := CommitStyle
-		if data.InRebaseMode {
+		if data.RebaseDragSource >= 0 {
+			switch {
+			case i == data.RebaseDragSource:
+				style = RebaseSourceStyle
+			case data.RebaseDragHoverDest >= 0 && i == data.RebaseDragHoverDest:
+				style = RebaseDestStyle
+			}
+		} else if data.InRebaseMode {
 			switch {
 			case data.RebaseSourceCommit > -1:
 				style = RebaseSourceStyle
@@ -148,7 +155,14 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 		}
 
 		selectionPrefix := "  "
-		if data.InRebaseMode {
+		if data.RebaseDragSource >= 0 {
+			switch {
+			case data.RebaseDragSource == i:
+				selectionPrefix = "⚡ "
+			case data.RebaseDragHoverDest >= 0 && i == data.RebaseDragHoverDest:
+				selectionPrefix = "→ "
+			}
+		} else if data.InRebaseMode {
 			switch {
 			case data.RebaseSourceCommit == i:
 				selectionPrefix = "⚡ "
@@ -195,7 +209,7 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 		)
 		afterStatus := statusIndicator
 		var commitRow string
-		onSelectedRow := !data.InRebaseMode && i == data.SelectedCommit
+		onSelectedRow := !data.InRebaseMode && data.RebaseDragSource < 0 && i == data.SelectedCommit
 		showForgot := onSelectedRow && commit.HasDeltaVsBookmarkOrigin && len(commit.ConflictedBranches) == 0
 		// split (z): only when graph enrichment found a viable evolog split for this change.
 		showEvolog := onSelectedRow && commit.EvologSplitViable
