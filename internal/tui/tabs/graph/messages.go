@@ -120,6 +120,10 @@ type Request struct {
 	StartRebaseMode      bool
 	PerformRebase        bool
 	RebaseDestIndex      int
+	// DragRebase: mouse drag from DragRebaseFrom onto DragRebaseTo (same semantics as r + pick destination).
+	DragRebase     bool
+	DragRebaseFrom int
+	DragRebaseTo   int
 	ResolveDivergent     *string
 	CreateBookmark       bool
 	DeleteBookmark       bool

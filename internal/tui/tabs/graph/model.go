@@ -41,6 +41,10 @@ type GraphModel struct {
 	// Rebase mode state
 	selectionMode      SelectionMode
 	rebaseSourceCommit int // Index of commit being rebased
+
+	// Click-drag rebase: press on commit row, release on another (not used with keyboard rebase mode).
+	rebaseDragSource    int
+	rebaseDragHoverDest int
 }
 
 // SelectionMode indicates what the user is selecting commits for
@@ -72,6 +76,9 @@ type GraphData struct {
 	ChangedFiles       []ChangedFile   // Changed files for the selected commit
 	GraphFocused       bool            // True if graph pane has focus
 	SelectedFile       int             // Index of selected file in changed files list
+	// RebaseDragSource / RebaseDragHoverDest: mouse drag rebase (-1 = none)
+	RebaseDragSource    int
+	RebaseDragHoverDest int
 }
 
 func NewGraphModel(zoneManager *zone.Manager) GraphModel {
@@ -82,10 +89,12 @@ func NewGraphModel(zoneManager *zone.Manager) GraphModel {
 	filesVp := viewport.New(defaultW, defaultH)
 	filesVp.MouseWheelEnabled = true
 	return GraphModel{
-		zoneManager:     zoneManager,
-		graphFocused:    true, // default to graph pane focused so j/k navigate commits and wheel scrolls graph
-		viewport:        vp,
-		filesViewport:   filesVp,
+		zoneManager:         zoneManager,
+		graphFocused:        true, // default to graph pane focused so j/k navigate commits and wheel scrolls graph
+		viewport:            vp,
+		filesViewport:       filesVp,
+		rebaseDragSource:    -1,
+		rebaseDragHoverDest: -1,
 	}
 }
 
@@ -164,6 +173,17 @@ func (m *GraphModel) UpdateWithApp(msg tea.Msg, app *state.AppState) (GraphModel
 		return *m, nil
 	}
 	switch msg := msg.(type) {
+	case tea.MouseMsg:
+		if tea.MouseEvent(msg).IsWheel() {
+			updated, cmd := m.Update(msg)
+			if g, ok := updated.(*GraphModel); ok {
+				return *g, cmd
+			}
+			return *m, cmd
+		}
+		m.handleRebaseDragMouse(msg)
+		return *m, nil
+
 	case tea.KeyMsg:
 		updated, req, directCmd := m.handleKeyMsg(msg)
 		*m = updated
@@ -484,16 +504,18 @@ func (m *GraphModel) buildGraphData() GraphData {
 	}
 
 	return GraphData{
-		Repository:         m.repository,
-		SelectedCommit:     m.selectedCommit,
-		InRebaseMode:       m.selectionMode == SelectionRebaseDestination,
-		RebaseSourceCommit: m.rebaseSourceCommit,
-		OpenPRBranches:     openPRBranches,
-		CommitPRBranch:     commitPRBranch,
-		CommitBookmark:     commitBookmark,
-		ChangedFiles:       changedFiles,
-		GraphFocused:       m.graphFocused,
-		SelectedFile:       m.selectedFile,
+		Repository:          m.repository,
+		SelectedCommit:      m.selectedCommit,
+		InRebaseMode:        m.selectionMode == SelectionRebaseDestination,
+		RebaseSourceCommit:  m.rebaseSourceCommit,
+		OpenPRBranches:      openPRBranches,
+		CommitPRBranch:      commitPRBranch,
+		CommitBookmark:      commitBookmark,
+		ChangedFiles:        changedFiles,
+		GraphFocused:        m.graphFocused,
+		SelectedFile:        m.selectedFile,
+		RebaseDragSource:    m.rebaseDragSource,
+		RebaseDragHoverDest: m.rebaseDragHoverDest,
 	}
 }
 
@@ -529,6 +551,10 @@ func (m *GraphModel) UpdateRepository(repo *internal.Repository) {
 	}
 	if m.selectedCommit >= len(commits) {
 		m.selectedCommit = max(0, len(commits)-1)
+	}
+	if m.rebaseDragSource >= len(commits) {
+		m.rebaseDragSource = -1
+		m.rebaseDragHoverDest = -1
 	}
 }
 
@@ -682,12 +708,16 @@ func (m *GraphModel) GetFilesViewport() viewport.Model {
 func (m *GraphModel) StartRebaseMode(sourceCommitIdx int) {
 	m.selectionMode = SelectionRebaseDestination
 	m.rebaseSourceCommit = sourceCommitIdx
+	m.rebaseDragSource = -1
+	m.rebaseDragHoverDest = -1
 }
 
 // CancelRebaseMode cancels rebase mode.
 func (m *GraphModel) CancelRebaseMode() {
 	m.selectionMode = SelectionNormal
 	m.rebaseSourceCommit = -1
+	m.rebaseDragSource = -1
+	m.rebaseDragHoverDest = -1
 }
 
 // IsInRebaseMode returns whether the graph is in rebase mode.

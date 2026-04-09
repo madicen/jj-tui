@@ -18,6 +18,31 @@ func (m GraphModel) handleZoneClick(msg zone.MsgZoneInBounds) (GraphModel, *Requ
 		return zm != nil && zm.InBounds(event)
 	}
 
+	// Click-drag rebase: resolve on mouse-up before other targets.
+	if m.rebaseDragSource >= 0 && m.selectionMode == SelectionNormal && m.repository != nil {
+		dest := -1
+		for i := range m.repository.Graph.Commits {
+			if inBounds(mouse.ZoneCommit(i)) {
+				dest = i
+				break
+			}
+		}
+		if dest < 0 {
+			m.rebaseDragSource = -1
+			m.rebaseDragHoverDest = -1
+		} else if dest != m.rebaseDragSource {
+			src := m.rebaseDragSource
+			m.rebaseDragSource = -1
+			m.rebaseDragHoverDest = -1
+			m.graphFocused = true
+			m.selectedCommit = dest
+			return m, &Request{DragRebase: true, DragRebaseFrom: src, DragRebaseTo: dest}, nil
+		} else {
+			m.rebaseDragSource = -1
+			m.rebaseDragHoverDest = -1
+		}
+	}
+
 	if m.repository != nil {
 		for commitIndex := range m.repository.Graph.Commits {
 			if m.zoneManager.Get(mouse.ZoneCommit(commitIndex)) == z {
