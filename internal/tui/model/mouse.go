@@ -103,6 +103,10 @@ func (m *Model) handleZoneClick(msg zone.MsgZoneInBounds) (tea.Model, tea.Cmd) {
 		updated, cmd := m.evologSplitModal.Update(msg)
 		m.evologSplitModal = updated
 		return m, cmd
+	case state.ViewFileDiff:
+		updated, cmd := m.fileDiffModal.Update(msg)
+		m.fileDiffModal = updated
+		return m, cmd
 	case state.ViewCreatePR:
 		updated, cmd := m.prFormModal.Update(msg)
 		m.prFormModal = updated

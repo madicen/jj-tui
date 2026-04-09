@@ -137,14 +137,23 @@ func (s *Service) addToHistory(entry CommandHistoryEntry) {
 // GetRepository retrieves the current repository state.
 // revset: optional jj revset for the graph; if empty, a default is used that focuses on
 // your work (mutable ancestors of @), bookmarks, and main to reduce noise from others' merges.
+// Graph jj log invocations are recorded in Help → Command history.
 func (s *Service) GetRepository(ctx context.Context, revset string) (*internal.Repository, error) {
-	// Get commit graph (includes working copy)
-	graph, err := s.getCommitGraph(ctx, revset)
+	return s.getRepository(ctx, revset, true)
+}
+
+// GetRepositoryQuiet is the same as GetRepository but does not append the main graph jj log
+// (and its fallbacks) to command history. Used for periodic background refresh so history stays readable.
+func (s *Service) GetRepositoryQuiet(ctx context.Context, revset string) (*internal.Repository, error) {
+	return s.getRepository(ctx, revset, false)
+}
+
+func (s *Service) getRepository(ctx context.Context, revset string, recordGraphInHistory bool) (*internal.Repository, error) {
+	graph, err := s.getCommitGraph(ctx, revset, recordGraphInHistory)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get commit graph: %w", err)
 	}
 
-	// Find working copy from graph
 	var workingCopy internal.Commit
 	for _, c := range graph.Commits {
 		if c.IsWorking {
@@ -379,10 +388,10 @@ func (s *Service) getChangedFilesSummaryOnly(ctx context.Context, commitID strin
 }
 
 // DiffChangedFilesFromTo lists paths changed between two revisions (from..to), using jj diff --summary,
-// and fills per-file line counts from a git-format diff when possible.
-func (s *Service) DiffChangedFilesFromTo(ctx context.Context, fromCommitID, toRev string) ([]ChangedFile, error) {
-	files, _, err := s.diffChangedFilesFromToWithGit(ctx, fromCommitID, toRev)
-	return files, err
+// and fills per-file line counts from a git-format diff when possible. The string is the full unified
+// git diff (same source as stats) for UI coloring.
+func (s *Service) DiffChangedFilesFromTo(ctx context.Context, fromCommitID, toRev string) ([]ChangedFile, string, error) {
+	return s.diffChangedFilesFromToWithGit(ctx, fromCommitID, toRev)
 }
 
 // diffChangedFilesFromToWithGit is like DiffChangedFilesFromTo but also returns the raw git-format diff output.
@@ -413,8 +422,11 @@ func (s *Service) diffChangedFilesFromToWithGit(ctx context.Context, fromCommitI
 	if len(files) == 0 {
 		return files, "", nil
 	}
-	gitOut, gerr := s.runJJOutput(ctx, "diff", "--from", fromCommitID, "--to", toRev, "--tool", ":git", "--context=0")
-	if gerr != nil || strings.TrimSpace(gitOut) == "" {
+	gitOut, gerr := s.runJJOutput(ctx, "diff", "--from", fromCommitID, "--to", toRev, "--git", "--color", "never")
+	if gerr != nil {
+		return files, "", nil
+	}
+	if strings.TrimSpace(gitOut) == "" {
 		return files, "", nil
 	}
 	stats := parseGitUnifiedDiffStats(gitOut)
@@ -431,19 +443,20 @@ func (s *Service) diffChangedFilesFromToWithGit(ctx context.Context, fromCommitI
 // DiffChangedFilesEvologStep is like DiffChangedFilesFromTo for one evolog UI row (diff from older snapshot to newer).
 // When prevFrom/prevTo are set (older→newer along the list for the row above), files whose git patch text is
 // identical to that prior step are omitted so the list only shows new deltas for this step.
-func (s *Service) DiffChangedFilesEvologStep(ctx context.Context, from, to, prevFrom, prevTo string) ([]ChangedFile, error) {
+// The returned git diff is the full patch from→to (not filtered to the shortened file list).
+func (s *Service) DiffChangedFilesEvologStep(ctx context.Context, from, to, prevFrom, prevTo string) ([]ChangedFile, string, error) {
 	files, gitCur, err := s.diffChangedFilesFromToWithGit(ctx, from, to)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	prevFrom = strings.TrimSpace(prevFrom)
 	prevTo = strings.TrimSpace(prevTo)
 	if prevFrom == "" || prevTo == "" || len(files) == 0 || strings.TrimSpace(gitCur) == "" {
-		return files, nil
+		return files, gitCur, nil
 	}
-	gitPrev, gerr := s.runJJOutput(ctx, "diff", "--from", prevFrom, "--to", prevTo, "--tool", ":git", "--context=0")
+	gitPrev, gerr := s.runJJOutput(ctx, "diff", "--from", prevFrom, "--to", prevTo, "--git", "--color", "never")
 	if gerr != nil || strings.TrimSpace(gitPrev) == "" {
-		return files, nil
+		return files, gitCur, nil
 	}
 	chunksCur := mapGitUnifiedDiffByPath(gitCur)
 	chunksPrev := mapGitUnifiedDiffByPath(gitPrev)
@@ -461,7 +474,25 @@ func (s *Service) DiffChangedFilesEvologStep(ctx context.Context, from, to, prev
 		}
 		kept = append(kept, f)
 	}
-	return kept, nil
+	return kept, gitCur, nil
+}
+
+// DiffRevisionFile returns the jj diff for a single path at the given revision vs its parents
+// (equivalent to `jj diff -r <rev> -- <path>`).
+func (s *Service) DiffRevisionFile(ctx context.Context, revision, path string) (string, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "", fmt.Errorf("path is required")
+	}
+	rev := strings.TrimSpace(revision)
+	if rev == "" {
+		return "", fmt.Errorf("revision is required")
+	}
+	out, err := s.runJJOutputNoHistory(ctx, "diff", "-r", rev, "--git", "--color", "never", "--", path)
+	if err != nil {
+		return "", err
+	}
+	return out, nil
 }
 
 // IsCommitMutable checks if a commit can be modified
@@ -1072,8 +1103,42 @@ func (s *Service) listEvolog(ctx context.Context, rev string, noHistory bool) ([
 
 const evologSplitDefaultMessage = "Follow-up (split via evolog)"
 
-// MoveBookmarkDeltaOntoEvologBase is the FAQ-style split: jj new <base>, restore tree from the selected
-// tip revision, optionally jj bookmark set, then abandon the old tip.
+// evologSplitParentForNewCommit returns the revision to pass to `jj new` for an evolog split.
+// If the user-picked base is empty (same tree as its parent), parenting the new commit directly
+// under that base would leave a useless no-description spacer in the graph (main → … → empty → B).
+// In that case we use the sole parent instead; diff(base, tip) equals diff(parent, tip), so the
+// split boundary is unchanged. For merges or missing parents, base is used as-is.
+func (s *Service) evologSplitParentForNewCommit(ctx context.Context, baseCommitID string) (string, error) {
+	baseCommitID = strings.TrimSpace(baseCommitID)
+	emptyOut, err := s.runJJOutputNoHistory(ctx, "log", "-r", baseCommitID, "--no-graph", "-T", "empty", "--limit", "1")
+	if err != nil {
+		return "", fmt.Errorf("log empty flag: %w", err)
+	}
+	if strings.TrimSpace(emptyOut) != "true" {
+		return baseCommitID, nil
+	}
+	parentsOut, err := s.runJJOutputNoHistory(ctx, "log", "-r", baseCommitID, "--no-graph", "-T", "parents.map(|p| p.commit_id()).join(\"\\n\")", "--limit", "1")
+	if err != nil {
+		return "", fmt.Errorf("log parents: %w", err)
+	}
+	var parents []string
+	for _, line := range strings.Split(parentsOut, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			parents = append(parents, line)
+		}
+	}
+	if len(parents) == 1 {
+		return parents[0], nil
+	}
+	return baseCommitID, nil
+}
+
+// MoveBookmarkDeltaOntoEvologBase is the FAQ-style split: jj new <parent>, restore tree from the selected
+// tip revision, optionally jj bookmark set, then abandon the old tip. Parent is the evolog base row,
+// or that row's parent when the base is an empty revision (see evologSplitParentForNewCommit).
+// A final describe @ reapplies evologSplitDefaultMessage so the working copy never ends up with no
+// description (e.g. jj metadata quirks after restore/abandon).
 // If bookmarkName is empty, the selected revision is the tip (no bookmark move). If non-empty, the
 // bookmark must point at the same commit as the selection (same rule as stack-on-origin flow).
 func (s *Service) MoveBookmarkDeltaOntoEvologBase(ctx context.Context, bookmarkName, localChangeID, localCommitID, baseCommitID string) error {
@@ -1128,7 +1193,14 @@ func (s *Service) MoveBookmarkDeltaOntoEvologBase(ctx context.Context, bookmarkN
 	if strings.TrimSpace(diffOut) == "" {
 		return fmt.Errorf("tree already matches base; nothing to split")
 	}
-	if err := s.runJJ(ctx, "new", baseCommitID, "-m", evologSplitDefaultMessage); err != nil {
+	parentForNew, err := s.evologSplitParentForNewCommit(ctx, baseCommitID)
+	if err != nil {
+		return err
+	}
+	if commitIDsEquivalent(tipCommitID, parentForNew) {
+		return fmt.Errorf("split parent would be the tip; pick a different evolog row")
+	}
+	if err := s.runJJ(ctx, "new", parentForNew, "-m", evologSplitDefaultMessage); err != nil {
 		return fmt.Errorf("jj new: %w", err)
 	}
 	if err := s.runJJ(ctx, "restore", "--into", "@", "--from", tipCommitID); err != nil {
@@ -1140,6 +1212,9 @@ func (s *Service) MoveBookmarkDeltaOntoEvologBase(ctx context.Context, bookmarkN
 		}
 	}
 	_ = s.runJJ(ctx, "abandon", tipCommitID)
+	if err := s.DescribeCommit(ctx, "@", evologSplitDefaultMessage); err != nil {
+		return fmt.Errorf("jj describe: %w", err)
+	}
 	return nil
 }
 
@@ -1342,9 +1417,18 @@ const (
 	graphLoadMaxEvologSplitProbes   = 36
 )
 
+// jjLogWithGraphTemplate runs jj log with the graph ASCII template; recordInHistory controls command history.
+func (s *Service) jjLogWithGraphTemplate(ctx context.Context, recordInHistory bool, revsetArg, template string) (string, error) {
+	if recordInHistory {
+		return s.runJJOutput(ctx, "log", "-r", revsetArg, "-T", template)
+	}
+	return s.runJJOutputNoHistory(ctx, "log", "-r", revsetArg, "-T", template)
+}
+
 // getCommitGraph retrieves the commit graph with real jj data.
 // revset: if non-empty, used as the -r revset; if empty, a default is used.
-func (s *Service) getCommitGraph(ctx context.Context, revset string) (*internal.CommitGraph, error) {
+// recordGraphInHistory: when false, the primary (and fallback) jj log calls are not added to command history.
+func (s *Service) getCommitGraph(ctx context.Context, revset string, recordGraphInHistory bool) (*internal.CommitGraph, error) {
 	// Use a custom template with a unique marker to separate graph prefix from data
 	// The marker "<<<COMMIT>>>" lets us identify where the graph ends and data begins
 	// Format after marker: change_id|commit_id|author|date|description|parents|bookmarks|is_working|has_conflict|immutable|divergent
@@ -1381,19 +1465,19 @@ func (s *Service) getCommitGraph(ctx context.Context, revset string) (*internal.
 	} else {
 		revsetArg = DefaultGraphRevset
 	}
-	out, err := s.runJJOutput(ctx, "log", "-r", revsetArg, "-T", template)
+	out, err := s.jjLogWithGraphTemplate(ctx, recordGraphInHistory, revsetArg, template)
 	if err != nil {
 		if revset != "" {
 			// Custom revset failed; try a broad safe revset so the app still loads
-			out, err = s.runJJOutput(ctx, "log", "-r", "mutable() | bookmarks()", "-T", template)
+			out, err = s.jjLogWithGraphTemplate(ctx, recordGraphInHistory, "mutable() | bookmarks()", template)
 		} else {
 			// Default may fail if main@origin is missing; omit trunk tip from the revset
-			out, err = s.runJJOutput(ctx, "log", "-r", "mutable() | bookmarks()", "-T", template)
+			out, err = s.jjLogWithGraphTemplate(ctx, recordGraphInHistory, "mutable() | bookmarks()", template)
 		}
 	}
 	bmWG.Wait()
 	if err != nil {
-		return s.getCommitGraphSimple(ctx, revset)
+		return s.getCommitGraphSimple(ctx, revset, recordGraphInHistory)
 	}
 
 	commits := []internal.Commit{}
@@ -1726,12 +1810,18 @@ func (s *Service) runJJOutputNoHistory(ctx context.Context, args ...string) (str
 }
 
 // getCommitGraphSimple is a fallback that uses simpler parsing
-func (s *Service) getCommitGraphSimple(ctx context.Context, revset string) (*internal.CommitGraph, error) {
+func (s *Service) getCommitGraphSimple(ctx context.Context, revset string, recordInHistory bool) (*internal.CommitGraph, error) {
 	revsetArg := "mutable() | bookmarks()"
 	if revset != "" {
 		revsetArg = revset
 	}
-	out, err := s.runJJOutput(ctx, "log", "-r", revsetArg, "--no-graph")
+	var out string
+	var err error
+	if recordInHistory {
+		out, err = s.runJJOutput(ctx, "log", "-r", revsetArg, "--no-graph")
+	} else {
+		out, err = s.runJJOutputNoHistory(ctx, "log", "-r", revsetArg, "--no-graph")
+	}
 	if err != nil {
 		return nil, err
 	}

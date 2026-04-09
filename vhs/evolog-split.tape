@@ -1,4 +1,4 @@
-# split (z): evolog picker + diff preview, choose parent, FAQ-style jj new/restore/abandon.
+# split (z): evolog picker + step file list; o opens colored step diff overlay; Enter splits.
 # Run: make evolog-split-gif
 # Requires: VHS, bash, jj, git, fixtures/setup-evolog-split-vhs-repo.sh
 
@@ -15,21 +15,29 @@ Set TypingSpeed 75ms
 Hide
 Type "( bash fixtures/setup-evolog-split-vhs-repo.sh && cd fixtures/evolog-split-vhs-repo && ../../jj-tui --demo )"
 Enter
-Sleep 3s
+Sleep 4s
 Show
 
 # Graph: working copy is on demo/feature (jj edit); feature bookmark tip is selected.
 Sleep 2s
 
-# split (z) — loads evolog + file diff vs tip; pick a parent row with a real tree delta vs tip.
+# split (z) — loads evolog; default row (below @) has an empty step diff vs the row above — press j once
+# to select the next row, whose step vs neighbor includes the rollout edits (feature-flag + ui-settings).
 Type "z"
 Sleep 3s
 
-# Default row can be an intermediate evolution commit with an empty diff vs tip; move one step older (j).
 Type "j"
 Sleep 1s
-Type "j"
-Sleep 1s
+
+# Colored step diff overlay (same styling as graph file diff), scroll, then dismiss
+Type "o"
+Sleep 3s
+Down
+Sleep 500ms
+Down
+Sleep 500ms
+Escape
+Sleep 2s
 
 # Key Enter (not Type "Enter", which would type the word "Enter").
 Enter

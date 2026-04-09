@@ -27,7 +27,7 @@ func (m *Model) layoutContentMode() state.ViewMode {
 			}
 		}
 		return state.ViewCommitGraph
-	case state.ViewDivergentCommit, state.ViewEvologSplit:
+	case state.ViewDivergentCommit, state.ViewEvologSplit, state.ViewFileDiff:
 		return state.ViewCommitGraph
 	default:
 		return m.appState.ViewMode
@@ -49,7 +49,7 @@ func (m *Model) tabHighlightMode() state.ViewMode {
 		if m.bookmarkConflictReturnValid {
 			return m.bookmarkConflictReturnView
 		}
-	case state.ViewDivergentCommit, state.ViewEvologSplit:
+	case state.ViewDivergentCommit, state.ViewEvologSplit, state.ViewFileDiff:
 		return state.ViewCommitGraph
 	}
 	return vm

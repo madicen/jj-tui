@@ -32,6 +32,21 @@ Show
 # Graph view shows our work in progress
 Sleep 2s
 
+# Colored file diff overlay: allow async changed-files load, focus files pane (Tab), View diff (o)
+Sleep 2s
+Tab
+Sleep 1s
+Type "o"
+Sleep 3s
+Down
+Sleep 400ms
+Down
+Sleep 400ms
+Escape
+Sleep 1s
+Tab
+Sleep 800ms
+
 # Move down to see more commits
 Down
 Sleep 500ms

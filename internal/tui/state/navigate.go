@@ -36,6 +36,8 @@ const (
 	NavigateOpenEvologSplit    // experimental: show evolog picker for stack split
 	NavigatePerformEvologSplit // run jj new + restore (+ bookmark set if EvologBookmarkName set) after user picked base
 	NavigateCloseBookmarkConflict // close diverged-bookmark dialog; main restores the tab stored when opening
+	NavigateOpenFileDiff  // show full jj diff for one changed file (graph modal) or preloaded raw git text (evolog)
+	NavigateCloseFileDiff // dismiss file diff overlay only (return to evolog split or graph)
 )
 
 // NavigateTarget describes a navigation request. Only main can perform these
@@ -71,6 +73,12 @@ type NavigateTarget struct {
 	EvologTipChangeID   string
 	EvologTipCommitHint string
 	EvologBaseCommitID  string
+	// File diff modal (graph): path relative to repo; Commit holds change id / short id.
+	FileDiffPath string
+	// When non-empty, NavigateOpenFileDiff shows this git unified diff immediately (no jj call). Used by evolog split.
+	FileDiffRawGit          string
+	FileDiffOverlayTitle    string // e.g. "Evolog step"; empty => default "File diff"
+	FileDiffOverlaySubtitle string // e.g. "abc… → def…"; empty => path @ change id
 }
 
 // NavigateMsg is the only callback from submodels to main: they request a view change or

@@ -63,8 +63,9 @@ const (
 	ZoneWarningDismiss    = "zone:warning:dismiss"
 
 	// Evolog split modal (prefix zone:evologsplit:entry: for dynamic row zones)
-	ZoneEvologSplitConfirm = "zone:evologsplit:confirm"
-	ZoneEvologSplitCancel  = "zone:evologsplit:cancel"
+	ZoneEvologSplitConfirm   = "zone:evologsplit:confirm"
+	ZoneEvologSplitCancel    = "zone:evologsplit:cancel"
+	ZoneEvologSplitViewPatch = "zone:evologsplit:viewpatch"
 
 	// Graph view pane zones (for click-to-focus)
 	ZoneGraphPane = "zone:graph:pane"
@@ -74,6 +75,10 @@ const (
 	ZoneActionMoveFileUp   = "zone:action:movefileup"
 	ZoneActionMoveFileDown = "zone:action:movefiledown"
 	ZoneActionRevertFile   = "zone:action:revertfile"
+	ZoneActionViewFileDiff = "zone:action:viewfilediff"
+
+	// Graph file-diff modal
+	ZoneFileDiffClose = "zone:filediff:close"
 
 	// Jira/Ticket action zones
 	ZoneJiraCreateBranch  = "zone:jira:createbranch"

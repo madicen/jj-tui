@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -22,6 +23,7 @@ import (
 	divergenttab "github.com/madicen/jj-tui/internal/tui/tabs/divergent"
 	errortab "github.com/madicen/jj-tui/internal/tui/tabs/error"
 	evologsplittab "github.com/madicen/jj-tui/internal/tui/tabs/evologsplit"
+	filedifftab "github.com/madicen/jj-tui/internal/tui/tabs/filediff"
 	githublogintab "github.com/madicen/jj-tui/internal/tui/tabs/githublogin"
 	graphtab "github.com/madicen/jj-tui/internal/tui/tabs/graph"
 	helptab "github.com/madicen/jj-tui/internal/tui/tabs/help"
@@ -75,6 +77,7 @@ type Model struct {
 	conflictModal    conflicttab.Model
 	divergentModal   divergenttab.Model
 	evologSplitModal evologsplittab.Model
+	fileDiffModal    filedifftab.Model
 	bookmarkModal    bookmarktab.Model
 	prFormModal      prformtab.Model
 	ticketFormModal  ticketformtab.Model
@@ -335,6 +338,7 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		return m, nil
 	case state.NavigateBackToGraph:
 		m.evologSplitModal.Hide()
+		m.fileDiffModal.Hide()
 		m.restoreModalUnderlayOrGraph()
 		m.appState.Loading = false
 		if t.StatusMessage != "" {
@@ -348,6 +352,36 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		m.appState.ViewMode = state.ViewEvologSplit
 		m.appState.StatusMessage = "Loading jj evolog…"
 		return m, evologsplittab.LoadEvologCmd(m.appState.JJService, bn, t.Commit)
+	case state.NavigateCloseFileDiff:
+		m.fileDiffModal.Hide()
+		if m.evologSplitModal.IsShown() {
+			m.appState.ViewMode = state.ViewEvologSplit
+		} else {
+			m.restoreModalUnderlayOrGraph()
+		}
+		return m, nil
+	case state.NavigateOpenFileDiff:
+		if raw := strings.TrimSpace(t.FileDiffRawGit); raw != "" {
+			m.fileDiffModal = m.fileDiffModal.SetDimensions(m.width, m.height)
+			m.fileDiffModal = m.fileDiffModal.ShowPreloadedStyledDiff(
+				strings.TrimSpace(t.FileDiffOverlayTitle),
+				strings.TrimSpace(t.FileDiffOverlaySubtitle),
+				raw,
+			)
+			m.appState.ViewMode = state.ViewFileDiff
+			m.appState.StatusMessage = ""
+			return m, nil
+		}
+		path := strings.TrimSpace(t.FileDiffPath)
+		if path == "" || m.appState.JJService == nil {
+			m.appState.StatusMessage = "Cannot open file diff"
+			return m, nil
+		}
+		m.fileDiffModal = m.fileDiffModal.SetDimensions(m.width, m.height)
+		seq := m.fileDiffModal.BeginLoad(t.Commit, path)
+		m.appState.ViewMode = state.ViewFileDiff
+		m.appState.StatusMessage = "Loading file diff…"
+		return m, filedifftab.LoadFileDiffCmd(m.appState.JJService, seq, t.Commit.ChangeID, path)
 	case state.NavigatePerformEvologSplit:
 		m.appState.StatusMessage = "Splitting change…"
 		m.appState.Loading = true
@@ -707,6 +741,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.settingsTabModel.SetDimensions(m.width, contentHeight)
 		m.helpTabModel.SetDimensions(m.width, contentHeight)
 		m.evologSplitModal = m.evologSplitModal.SetDimensions(m.width, m.height)
+		m.fileDiffModal = m.fileDiffModal.SetDimensions(m.width, m.height)
 		m.divergentModal = m.divergentModal.SetDimensions(m.width, m.height)
 		m.conflictModal = m.conflictModal.SetDimensions(m.width, m.height)
 		if len(cmds) > 0 {
@@ -720,7 +755,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleKeyMsg(msg)
 		}
 		// View-specific modals (divergent, bookmark conflict): route keys to handleKeyMsg so the modal gets them.
-		if m.appState.ViewMode == state.ViewDivergentCommit || m.appState.ViewMode == state.ViewBookmarkConflict || m.appState.ViewMode == state.ViewEvologSplit {
+		if m.appState.ViewMode == state.ViewDivergentCommit || m.appState.ViewMode == state.ViewBookmarkConflict || m.appState.ViewMode == state.ViewEvologSplit || m.appState.ViewMode == state.ViewFileDiff {
 			return m.handleKeyMsg(msg)
 		}
 		// Esc in Settings: close in-tab overlays (theme picker, cleanup confirm) first; otherwise leave settings.
@@ -782,7 +817,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Blocking overlays and modal views: run zone check on release first so clicks reach the modal, not the tab.
 		if msg.Action == tea.MouseActionRelease &&
 			(m.initRepoModel.Path() != "" || m.errorModal.GetError() != nil || m.warningModal.IsShown() ||
-				m.appState.ViewMode == state.ViewCreatePR || m.appState.ViewMode == state.ViewCreateTicket || m.appState.ViewMode == state.ViewEditDescription || m.appState.ViewMode == state.ViewCreateBookmark || m.appState.ViewMode == state.ViewDivergentCommit || m.appState.ViewMode == state.ViewBookmarkConflict || m.appState.ViewMode == state.ViewEvologSplit) {
+				m.appState.ViewMode == state.ViewCreatePR || m.appState.ViewMode == state.ViewCreateTicket || m.appState.ViewMode == state.ViewEditDescription || m.appState.ViewMode == state.ViewCreateBookmark || m.appState.ViewMode == state.ViewDivergentCommit || m.appState.ViewMode == state.ViewBookmarkConflict || m.appState.ViewMode == state.ViewEvologSplit || m.appState.ViewMode == state.ViewFileDiff) {
 			return m.zoneManager.AnyInBoundsAndUpdate(m, msg)
 		}
 		// Handle wheel: IsWheel() covers standard encodings; also accept raw X11 4/5
@@ -791,6 +826,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.appState.ViewMode == state.ViewEvologSplit {
 				updated, cmd := m.evologSplitModal.Update(msg)
 				m.evologSplitModal = updated
+				return m, cmd
+			}
+			if m.appState.ViewMode == state.ViewFileDiff {
+				updated, cmd := m.fileDiffModal.Update(msg)
+				m.fileDiffModal = updated
 				return m, cmd
 			}
 			contentHeight := m.estimatedContentHeight()
@@ -902,6 +942,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.appState.ViewMode == state.ViewEvologSplit {
 			updated, cmd := m.evologSplitModal.Update(msg)
 			m.evologSplitModal = updated
+			return m, cmd
+		}
+		if m.appState.ViewMode == state.ViewFileDiff {
+			updated, cmd := m.fileDiffModal.Update(msg)
+			m.fileDiffModal = updated
 			return m, cmd
 		}
 		// Delegate to tab when in that view so it can return requests
@@ -1054,7 +1099,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case errorMsg:
-		if m.appState.ViewMode == state.ViewEvologSplit {
+		if m.appState.ViewMode == state.ViewEvologSplit || m.appState.ViewMode == state.ViewFileDiff {
 			m.appState.Loading = false
 		}
 		cmd, info := errortab.HandleError(errortab.ErrorInput{NotJJRepo: msg.NotJJRepo, CurrentPath: msg.CurrentPath, Err: msg.Err}, &m.appState)
@@ -1335,7 +1380,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		updated, cmd := m.evologSplitModal.Update(msg)
 		m.evologSplitModal = updated
 		if msg.Err == nil {
-			m.appState.StatusMessage = "Pick parent revision (j/k, Enter) — step diff vs row above updates as you move"
+			m.appState.StatusMessage = "Pick parent revision (j/k, Enter); o opens colored step diff when a row below the tip is selected"
 		} else {
 			m.appState.StatusMessage = "Evolog load failed"
 		}
@@ -1433,6 +1478,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		updated, cmd := m.graphTabModel.Update(msg)
 		if g, ok := updated.(*graphtab.GraphModel); ok {
 			m.graphTabModel = *g
+		}
+		return m, cmd
+	case filedifftab.FileDiffLoadedMsg:
+		updated, cmd := m.fileDiffModal.Update(msg)
+		m.fileDiffModal = updated
+		if msg.Err != nil {
+			m.appState.StatusMessage = "File diff failed"
+		} else {
+			m.appState.StatusMessage = "File diff — Esc to close, scroll with j/k or wheel"
 		}
 		return m, cmd
 	case loadChangedFilesTriggerMsg:

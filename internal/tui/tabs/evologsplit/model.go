@@ -31,10 +31,11 @@ type Model struct {
 	termW, termH     int
 	listViewportRows int
 	// diff: selected row vs the list row above (newer neighbor), evolog order is newest-first
-	diffSeq    int
+	diffSeq     int
 	diffLoading bool
-	diffErr    string
-	diffFiles  []jj.ChangedFile
+	diffErr     string
+	diffFiles   []jj.ChangedFile
+	diffGitRaw  string // cached jj --git for the step; opened via overlay (o)
 	zoneManager *zone.Manager
 }
 
@@ -54,7 +55,6 @@ func (m Model) SetDimensions(w, h int) Model {
 		h = 24
 	}
 	m.termW, m.termH = w, h
-	// Reserve space for header, two column titles, buttons, hints, border.
 	vr := (h - 16) / 2
 	if vr < 3 {
 		vr = 3
@@ -81,6 +81,7 @@ func (m *Model) Show(commit internal.Commit, bookmarkName string) {
 	m.diffLoading = false
 	m.diffErr = ""
 	m.diffFiles = nil
+	m.diffGitRaw = ""
 }
 
 // Hide clears the modal.
@@ -92,6 +93,7 @@ func (m *Model) Hide() {
 	m.diffFiles = nil
 	m.diffErr = ""
 	m.diffLoading = false
+	m.diffGitRaw = ""
 }
 
 // IsShown reports whether the modal is active.
@@ -133,9 +135,13 @@ func (m Model) refreshDiffPreview() (Model, tea.Cmd) {
 	if len(m.entries) == 0 || m.selectedIdx <= 0 || m.selectedIdx >= len(m.entries) {
 		m.diffLoading = false
 		m.diffFiles = nil
+		m.diffErr = ""
+		m.diffGitRaw = ""
 		return m, nil
 	}
 	m.diffLoading = true
+	m.diffErr = ""
+	m.diffGitRaw = ""
 	return m, EvologDiffLoadRequestedCmd()
 }
 
@@ -161,6 +167,29 @@ func (m Model) DiffSnapshotForLoad() (seq int, fromCommitID, toCommitID, prevSte
 		}
 	}
 	return m.diffSeq, sel, prev, psf, pst, true
+}
+
+func (m Model) canOpenStepPatchOverlay() bool {
+	return m.selectedIdx > 0 &&
+		len(m.entries) > m.selectedIdx &&
+		!m.diffLoading &&
+		m.diffErr == "" &&
+		strings.TrimSpace(m.diffGitRaw) != ""
+}
+
+func (m Model) openStepPatchNavigate() tea.Cmd {
+	if !m.canOpenStepPatchOverlay() {
+		return nil
+	}
+	sel := m.entries[m.selectedIdx]
+	prev := m.entries[m.selectedIdx-1]
+	sub := fmt.Sprintf("%s → %s", sel.CommitIDShort, prev.CommitIDShort)
+	return state.NavigateTarget{
+		Kind:                    state.NavigateOpenFileDiff,
+		FileDiffRawGit:          m.diffGitRaw,
+		FileDiffOverlayTitle:    "Evolog step",
+		FileDiffOverlaySubtitle: sub,
+	}.Cmd()
 }
 
 // Update handles keys, zone clicks, mouse wheel, and async messages.
@@ -195,9 +224,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		if msg.Err != nil {
 			m.diffErr = msg.Err.Error()
 			m.diffFiles = nil
+			m.diffGitRaw = ""
 		} else {
 			m.diffErr = ""
 			m.diffFiles = msg.Files
+			m.diffGitRaw = msg.GitDiff
 		}
 		return m, nil
 
@@ -264,12 +295,18 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		baseID := m.entries[m.selectedIdx].CommitID
 		return m, state.NavigateTarget{
-			Kind:                 state.NavigatePerformEvologSplit,
-			EvologBookmarkName:   m.bookmarkName,
-			EvologTipChangeID:    m.tipChangeID,
-			EvologTipCommitHint:  m.tipCommitHint,
-			EvologBaseCommitID:   baseID,
+			Kind:                state.NavigatePerformEvologSplit,
+			EvologBookmarkName:  m.bookmarkName,
+			EvologTipChangeID:   m.tipChangeID,
+			EvologTipCommitHint: m.tipCommitHint,
+			EvologBaseCommitID:  baseID,
 		}.Cmd()
+	case "o":
+		cmd := m.openStepPatchNavigate()
+		if cmd == nil {
+			return m, nil
+		}
+		return m, cmd
 	case "j", "down":
 		if m.selectedIdx < len(m.entries)-1 {
 			m.selectedIdx++
@@ -295,11 +332,11 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 }
 
 func (m Model) ZoneIDs() []string {
-	ids := make([]string, 0, len(m.entries)+2)
+	ids := make([]string, 0, len(m.entries)+4)
 	for i := range m.entries {
 		ids = append(ids, mouse.ZoneEvologSplitEntry(i))
 	}
-	ids = append(ids, mouse.ZoneEvologSplitConfirm, mouse.ZoneEvologSplitCancel)
+	ids = append(ids, mouse.ZoneEvologSplitConfirm, mouse.ZoneEvologSplitCancel, mouse.ZoneEvologSplitViewPatch)
 	return ids
 }
 
@@ -332,16 +369,23 @@ func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
 		}
 		baseID := m.entries[m.selectedIdx].CommitID
 		return m, state.NavigateTarget{
-			Kind:                 state.NavigatePerformEvologSplit,
-			EvologBookmarkName:   m.bookmarkName,
-			EvologTipChangeID:    m.tipChangeID,
-			EvologTipCommitHint:  m.tipCommitHint,
-			EvologBaseCommitID:   baseID,
+			Kind:                state.NavigatePerformEvologSplit,
+			EvologBookmarkName:  m.bookmarkName,
+			EvologTipChangeID:   m.tipChangeID,
+			EvologTipCommitHint: m.tipCommitHint,
+			EvologBaseCommitID:  baseID,
 		}.Cmd()
 	}
 	if zoneID == mouse.ZoneEvologSplitCancel {
 		m.shown = false
 		return m, state.NavigateTarget{Kind: state.NavigateBackToGraph, StatusMessage: "Split cancelled"}.Cmd()
+	}
+	if zoneID == mouse.ZoneEvologSplitViewPatch {
+		cmd := m.openStepPatchNavigate()
+		if cmd == nil {
+			return m, nil
+		}
+		return m, cmd
 	}
 	return m, nil
 }
@@ -484,11 +528,17 @@ func (m Model) View() string {
 	body := lipgloss.JoinHorizontal(lipgloss.Top, leftBlock, "  ", rightBlock)
 	lines = append(lines, body)
 	lines = append(lines, "")
+	var patchBtn string
+	if m.canOpenStepPatchOverlay() {
+		patchBtn = m.mark(mouse.ZoneEvologSplitViewPatch, styles.ButtonStyle.Render("View patch (o)"))
+	} else {
+		patchBtn = lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("View patch (o)")
+	}
 	confirm := m.mark(mouse.ZoneEvologSplitConfirm, styles.ButtonStyle.Render("Split here (Enter)"))
 	cancel := m.mark(mouse.ZoneEvologSplitCancel, styles.ButtonSecondaryStyle.Render("Cancel (Esc)"))
-	lines = append(lines, confirm+"  "+cancel)
+	lines = append(lines, patchBtn+"  "+confirm+"  "+cancel)
 	lines = append(lines, "")
-	lines = append(lines, muted.Render("Wheel scrolls history · Do not pick the current tip row as base"))
+	lines = append(lines, muted.Render("Wheel scrolls history · o opens colored step diff when a row below the tip is selected · Do not pick the current tip row as base"))
 
 	box := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(styles.ColorMuted).Padding(1, 2).Width(modalW)
 	return box.Render(strings.Join(lines, "\n"))

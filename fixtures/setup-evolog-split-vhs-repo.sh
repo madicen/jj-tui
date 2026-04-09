@@ -3,7 +3,7 @@
 # revisions after squashing edits from a child WC into the feature commit.
 # The main "Add feature flag" commit touches several files; only 1–2 files change in the squash
 # so evolog base→tip diff is small and the split (rollout vs rest) reads clearly in the modal.
-# Tape: z → j j (pick an older row with a non-empty diff vs tip) → Enter.
+# Tape: z → j (first row below @ has empty step diff vs tip; one step older has rollout patch) → o / Enter.
 # Run: make evolog-split-gif
 # Requires: jj, git
 set -euo pipefail
