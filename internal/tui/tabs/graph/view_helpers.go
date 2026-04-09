@@ -252,6 +252,7 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 		var fileActionButtons []string
 		fileActionButtons = append(fileActionButtons,
 			m.zoneManager.Mark(mouse.ZoneActionViewFileDiff, styles.ButtonStyle.Render("View diff (o)")),
+			m.zoneManager.Mark(mouse.ZoneActionOpenInExternalEditor, styles.ButtonStyle.Render("Open in editor (O)")),
 		)
 		isMutable := false
 		if data.SelectedCommit >= 0 && data.SelectedCommit < len(data.Repository.Graph.Commits) {

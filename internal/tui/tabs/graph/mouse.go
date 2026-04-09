@@ -173,6 +173,9 @@ func (m GraphModel) handleZoneClick(msg zone.MsgZoneInBounds) (GraphModel, *Requ
 	if inBounds(mouse.ZoneActionViewFileDiff) {
 		return m, &Request{ViewFileDiff: true}, nil
 	}
+	if inBounds(mouse.ZoneActionOpenInExternalEditor) {
+		return m, &Request{OpenInExternalEditor: true}, nil
+	}
 
 	return m, nil, nil
 }

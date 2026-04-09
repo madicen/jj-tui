@@ -1,6 +1,9 @@
 package settings
 
 import (
+	"strconv"
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 )
@@ -265,6 +268,16 @@ func handleAdvancedZone(m *Model, zoneID string) (Model, tea.Cmd) {
 	case mouse.ZoneSettingsGraphRevsetClear:
 		adv.SetGraphRevset("")
 		return *m, m.SetFocusedField(14)
+	case mouse.ZoneSettingsExternalEditorCustom:
+		return *m, m.SetFocusedField(15)
+	default:
+		if strings.HasPrefix(zoneID, mouse.ZoneSettingsExternalEditorPresetPrefix) {
+			s := strings.TrimPrefix(zoneID, mouse.ZoneSettingsExternalEditorPresetPrefix)
+			if idx, err := strconv.Atoi(s); err == nil {
+				adv.SetExternalEditorPreset(idx)
+			}
+			return *m, nil
+		}
 	}
 	return *m, nil
 }

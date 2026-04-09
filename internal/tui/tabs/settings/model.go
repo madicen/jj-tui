@@ -3,6 +3,7 @@ package settings
 import (
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
+	"github.com/madicen/bubble-color-picker"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
@@ -11,19 +12,18 @@ import (
 	"github.com/madicen/jj-tui/internal/tui/tabs/settings/codecks"
 	"github.com/madicen/jj-tui/internal/tui/tabs/settings/github"
 	"github.com/madicen/jj-tui/internal/tui/tabs/settings/jira"
-	"github.com/madicen/bubble-color-picker"
 	"github.com/madicen/jj-tui/internal/tui/tabs/settings/theme"
 	"github.com/madicen/jj-tui/internal/tui/tabs/settings/tickets"
 )
 
 // Model represents the state of the Settings tab (routing-only; state lives in sub-models).
 type Model struct {
-	settingsTab   int
-	zoneManager   *zone.Manager
-	panelYOffset  [7]int
-	width         int
-	height        int
-	viewOpts      *ViewOpts
+	settingsTab  int
+	zoneManager  *zone.Manager
+	panelYOffset [7]int
+	width        int
+	height       int
+	viewOpts     *ViewOpts
 
 	githubModel   github.Model
 	jiraModel     jira.Model
@@ -246,7 +246,7 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 // ZoneIDs returns the zone IDs this tab uses when rendering (same IDs used in settingstab.Render). Used to resolve clicks.
 func (m *Model) ZoneIDs() []string {
-	return []string{
+	ids := []string{
 		mouse.ZoneSettingsTabGitHub, mouse.ZoneSettingsTabJira, mouse.ZoneSettingsTabCodecks,
 		mouse.ZoneSettingsTabTickets, mouse.ZoneSettingsTabBranches, mouse.ZoneSettingsTabTheme, mouse.ZoneSettingsTabAdvanced,
 		mouse.ZoneSettingsThemePrimary, mouse.ZoneSettingsThemeSecondary, mouse.ZoneSettingsThemeMuted,
@@ -257,6 +257,12 @@ func (m *Model) ZoneIDs() []string {
 		mouse.ZoneSettingsAdvancedConfirmYes, mouse.ZoneSettingsAdvancedConfirmNo,
 		mouse.ZoneSettingsAdvancedDeleteBookmarks, mouse.ZoneSettingsAdvancedAbandonOldCommits,
 		mouse.ZoneSettingsGraphRevset, mouse.ZoneSettingsGraphRevsetClear,
+	}
+	for i := range advanced.ExternalEditorPresetLabels {
+		ids = append(ids, mouse.ZoneSettingsExternalEditorPreset(i))
+	}
+	ids = append(ids,
+		mouse.ZoneSettingsExternalEditorCustom,
 		mouse.ZoneSettingsSanitizeBookmarks,
 		mouse.ZoneSettingsGitHubLogin,
 		mouse.ZoneSettingsGitHubOnlyMine, mouse.ZoneSettingsGitHubShowMerged, mouse.ZoneSettingsGitHubShowClosed,
@@ -272,7 +278,8 @@ func (m *Model) ZoneIDs() []string {
 		mouse.ZoneSettingsJiraExcluded, mouse.ZoneSettingsCodecksSubdomain, mouse.ZoneSettingsCodecksToken,
 		mouse.ZoneSettingsCodecksProject, mouse.ZoneSettingsCodecksExcluded, mouse.ZoneSettingsGitHubIssuesExcluded,
 		mouse.ZoneSettingsSave, mouse.ZoneSettingsSaveLocal, mouse.ZoneSettingsCancel,
-	}
+	)
+	return ids
 }
 
 func (m *Model) resolveClickedZone(msg zone.MsgZoneInBounds) string {
@@ -296,12 +303,12 @@ func (m *Model) SetZoneManager(zm *zone.Manager) {
 
 // Sub-model getters (return pointers so zone handlers and BuildSettingsParams can mutate)
 
-func (m *Model) GetGitHubModel() *github.Model    { return &m.githubModel }
-func (m *Model) GetJiraModel() *jira.Model        { return &m.jiraModel }
-func (m *Model) GetCodecksModel() *codecks.Model  { return &m.codecksModel }
-func (m *Model) GetTicketsModel() *tickets.Model  { return &m.ticketsModel }
+func (m *Model) GetGitHubModel() *github.Model     { return &m.githubModel }
+func (m *Model) GetJiraModel() *jira.Model         { return &m.jiraModel }
+func (m *Model) GetCodecksModel() *codecks.Model   { return &m.codecksModel }
+func (m *Model) GetTicketsModel() *tickets.Model   { return &m.ticketsModel }
 func (m *Model) GetBranchesModel() *branches.Model { return &m.branchesModel }
-func (m *Model) GetThemeModel() *theme.Model      { return &m.themeModel }
+func (m *Model) GetThemeModel() *theme.Model       { return &m.themeModel }
 func (m *Model) GetAdvancedModel() *advanced.Model { return &m.advancedModel }
 
 // forwardKeyToActiveSubmodel updates focus/state for tab/up/down within the active panel (mutates m in place).
@@ -359,12 +366,12 @@ func (m *Model) forwardKeyToActiveSubmodel(msg tea.KeyMsg) {
 		adv := m.GetAdvancedModel()
 		switch msg.String() {
 		case "tab", "down", "j":
-			if adv.GetFocusedField() < 0 {
-				adv.SetFocusedField(0)
+			if adv.GetFocusedField() < 1 {
+				adv.SetFocusedField(adv.GetFocusedField() + 1)
 			}
 		case "shift+tab", "up", "k":
 			if adv.GetFocusedField() > 0 {
-				adv.SetFocusedField(0)
+				adv.SetFocusedField(adv.GetFocusedField() - 1)
 			}
 		}
 	}
@@ -446,7 +453,7 @@ func (m *Model) SetSettingsTab(tab int) {
 	m.settingsTab = tab % 7
 }
 
-// GetFocusedField returns the currently focused input field (global index 0-14 for BuildRenderData).
+// GetFocusedField returns the currently focused input field (global index; Advanced uses 14–15 for text inputs).
 func (m *Model) GetFocusedField() int {
 	switch m.settingsTab {
 	case 0:
@@ -471,7 +478,7 @@ func (m *Model) GetFocusedField() int {
 }
 
 // SetFocusedField sets the focused input field (global index); used by zone handlers to focus an input.
-// Returns a tea.Cmd when focusing the Advanced revset input (index 14) so the cursor is shown.
+// Returns a tea.Cmd when focusing an Advanced text input (indices 14–15) so the cursor is shown.
 func (m *Model) SetFocusedField(idx int) tea.Cmd {
 	if idx < 1 {
 		m.githubModel.SetFocusedField(0)
@@ -561,8 +568,8 @@ func (m *Model) GetSettingsInputs() []struct{ View string } {
 	for _, v := range m.advancedModel.GetInputViews() {
 		out = append(out, struct{ View string }{v})
 	}
-	// Ensure exactly 15 elements so views can safely use data.Inputs[0..14].
-	for len(out) < 15 {
+	// Ensure exactly 16 elements so views can safely use data.Inputs[0..15] (14=revset, 15=custom editor).
+	for len(out) < 16 {
 		out = append(out, struct{ View string }{""})
 	}
 	return out
@@ -605,24 +612,24 @@ func (m *Model) UpdateRepository(repo *internal.Repository) {}
 
 // Getters for toggle/state (delegate to sub-models)
 func (m *Model) GetSettingsShowMerged() bool        { return m.githubModel.GetShowMerged() }
-func (m *Model) GetSettingsShowClosed() bool       { return m.githubModel.GetShowClosed() }
-func (m *Model) GetSettingsOnlyMine() bool         { return m.githubModel.GetOnlyMine() }
-func (m *Model) GetSettingsPRLimit() int           { return m.githubModel.GetPRLimit() }
-func (m *Model) GetSettingsPRRefreshInterval() int { return m.githubModel.GetRefreshInterval() }
-func (m *Model) GetSettingsAutoInProgress() bool   { return m.ticketsModel.GetAutoInProgress() }
-func (m *Model) GetSettingsBranchLimit() int       { return m.branchesModel.GetBranchLimit() }
+func (m *Model) GetSettingsShowClosed() bool        { return m.githubModel.GetShowClosed() }
+func (m *Model) GetSettingsOnlyMine() bool          { return m.githubModel.GetOnlyMine() }
+func (m *Model) GetSettingsPRLimit() int            { return m.githubModel.GetPRLimit() }
+func (m *Model) GetSettingsPRRefreshInterval() int  { return m.githubModel.GetRefreshInterval() }
+func (m *Model) GetSettingsAutoInProgress() bool    { return m.ticketsModel.GetAutoInProgress() }
+func (m *Model) GetSettingsBranchLimit() int        { return m.branchesModel.GetBranchLimit() }
 func (m *Model) GetSettingsSanitizeBookmarks() bool { return m.advancedModel.GetSanitizeBookmarks() }
-func (m *Model) GetSettingsTicketProvider() string { return m.ticketsModel.GetTicketProvider() }
-func (m *Model) GetConfirmingCleanup() string     { return m.advancedModel.GetConfirmingCleanup() }
+func (m *Model) GetSettingsTicketProvider() string  { return m.ticketsModel.GetTicketProvider() }
+func (m *Model) GetConfirmingCleanup() string       { return m.advancedModel.GetConfirmingCleanup() }
 
 // Setters for init/zone handlers (delegate to sub-models)
 func (m *Model) SetSettingsShowMerged(v bool)        { m.githubModel.SetShowMerged(v) }
-func (m *Model) SetSettingsShowClosed(v bool)       { m.githubModel.SetShowClosed(v) }
-func (m *Model) SetSettingsOnlyMine(v bool)         { m.githubModel.SetOnlyMine(v) }
-func (m *Model) SetSettingsPRLimit(v int)           { m.githubModel.SetPRLimit(v) }
-func (m *Model) SetSettingsPRRefreshInterval(v int) { m.githubModel.SetRefreshInterval(v) }
-func (m *Model) SetSettingsAutoInProgress(v bool)   { m.ticketsModel.SetAutoInProgress(v) }
-func (m *Model) SetSettingsBranchLimit(v int)      { m.branchesModel.SetBranchLimit(v) }
+func (m *Model) SetSettingsShowClosed(v bool)        { m.githubModel.SetShowClosed(v) }
+func (m *Model) SetSettingsOnlyMine(v bool)          { m.githubModel.SetOnlyMine(v) }
+func (m *Model) SetSettingsPRLimit(v int)            { m.githubModel.SetPRLimit(v) }
+func (m *Model) SetSettingsPRRefreshInterval(v int)  { m.githubModel.SetRefreshInterval(v) }
+func (m *Model) SetSettingsAutoInProgress(v bool)    { m.ticketsModel.SetAutoInProgress(v) }
+func (m *Model) SetSettingsBranchLimit(v int)        { m.branchesModel.SetBranchLimit(v) }
 func (m *Model) SetSettingsSanitizeBookmarks(v bool) { m.advancedModel.SetSanitizeBookmarks(v) }
 func (m *Model) SetSettingsTicketProvider(s string)  { m.ticketsModel.SetTicketProvider(s) }
 func (m *Model) SetConfirmingCleanup(s string)       { m.advancedModel.SetConfirmingCleanup(s) }

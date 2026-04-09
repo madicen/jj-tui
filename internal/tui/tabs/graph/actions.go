@@ -3,11 +3,13 @@ package graph
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen/jj-tui/internal"
+	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tui/data"
 	"github.com/madicen/jj-tui/internal/tui/state"
@@ -122,6 +124,33 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 			FollowUp:     FollowUpViewFileDiff,
 			CommitIndex:  ctx.SelectedCommit,
 			FileDiffPath: ctx.ChangedFiles[ctx.SelectedFile].Path,
+		}
+	}
+	if r.OpenInExternalEditor {
+		if ctx.GraphFocused {
+			return Result{Status: "Press Tab to focus files, select a file, then press O"}
+		}
+		if len(ctx.ChangedFiles) == 0 {
+			return Result{Status: "No changed files for this commit"}
+		}
+		if ctx.SelectedFile < 0 || ctx.SelectedFile >= len(ctx.ChangedFiles) {
+			return Result{Status: "Select a file in the changed-files list"}
+		}
+		if ctx.Repository == nil || strings.TrimSpace(ctx.Repository.Path) == "" {
+			return Result{Status: "Repository path not available"}
+		}
+		if config.NormalizeExternalFileEditor(ctx.Config) == config.ExternalEditorNone {
+			return Result{Status: "Set an external editor in Settings → Advanced"}
+		}
+		rel := ctx.ChangedFiles[ctx.SelectedFile].Path
+		abs, err := util.RepoAbsPath(ctx.Repository.Path, rel)
+		if err != nil {
+			return Result{Status: err.Error()}
+		}
+		return Result{
+			Status:  fmt.Sprintf("Opening %s…", filepath.Base(abs)),
+			Cmd:     util.OpenFileInExternalEditorCmd(abs, ctx.Config),
+			Loading: true,
 		}
 	}
 	if r.MoveDeltaOntoOrigin {

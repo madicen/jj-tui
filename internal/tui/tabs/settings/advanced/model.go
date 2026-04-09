@@ -1,6 +1,8 @@
 package advanced
 
 import (
+	"strings"
+
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen/jj-tui/internal"
@@ -9,10 +11,37 @@ import (
 
 // Model represents the Advanced settings sub-tab (sanitize bookmarks, graph revset, cleanup confirmation).
 type Model struct {
-	sanitizeBookmarks bool
-	confirmingCleanup string
-	graphRevsetInput  textinput.Model
-	focusedField      int // 0 = graph revset input
+	sanitizeBookmarks    bool
+	confirmingCleanup    string
+	graphRevsetInput     textinput.Model
+	customEditorInput    textinput.Model
+	focusedField         int // 0 = graph revset, 1 = custom editor command
+	externalEditorPreset int // 0..8 — see externalEditorPresetLabels
+}
+
+// ExternalEditorPresetLabels are UI labels for each editor preset (same order as config values below).
+var ExternalEditorPresetLabels = []string{
+	"None (disabled)",
+	"Cursor",
+	"VS Code",
+	"Zed",
+	"Neovim (nvr — remote)",
+	"Emacs (emacsclient)",
+	"Sublime Text (subl)",
+	"JetBrains (idea)",
+	"Custom shell command",
+}
+
+var externalEditorPresetConfig = []string{
+	config.ExternalEditorNone,
+	config.ExternalEditorCursor,
+	config.ExternalEditorVSCode,
+	config.ExternalEditorZed,
+	config.ExternalEditorNeovim,
+	config.ExternalEditorEmacs,
+	config.ExternalEditorSublime,
+	config.ExternalEditorIntelliJ,
+	config.ExternalEditorCustom,
 }
 
 // NewModel creates a new Advanced settings model
@@ -22,11 +51,18 @@ func NewModel() Model {
 	revsetInput.CharLimit = 500
 	revsetInput.Width = 60
 
+	customIn := textinput.New()
+	customIn.Placeholder = `e.g. cursor -g {path}  or  alacritty -e nvim {path}`
+	customIn.CharLimit = 400
+	customIn.Width = 60
+
 	return Model{
-		sanitizeBookmarks: true,
-		confirmingCleanup: "",
-		graphRevsetInput:  revsetInput,
-		focusedField:      0,
+		sanitizeBookmarks:    true,
+		confirmingCleanup:    "",
+		graphRevsetInput:     revsetInput,
+		customEditorInput:    customIn,
+		focusedField:         0,
+		externalEditorPreset: 0,
 	}
 }
 
@@ -36,8 +72,20 @@ func NewModelFromConfig(cfg *config.Config) Model {
 	if cfg != nil {
 		m.sanitizeBookmarks = cfg.ShouldSanitizeBookmarkNames()
 		m.graphRevsetInput.SetValue(cfg.GraphRevset)
+		m.customEditorInput.SetValue(cfg.ExternalFileEditorCustom)
+		m.externalEditorPreset = presetIndexFromConfig(cfg.ExternalFileEditor)
 	}
 	return m
+}
+
+func presetIndexFromConfig(s string) int {
+	n := config.NormalizeExternalFileEditor(&config.Config{ExternalFileEditor: s})
+	for i, v := range externalEditorPresetConfig {
+		if v == n {
+			return i
+		}
+	}
+	return 0
 }
 
 // Init initializes the model
@@ -45,14 +93,20 @@ func (m Model) Init() tea.Cmd {
 	return nil
 }
 
-// Update handles messages (key handling for revset input; zones handled by parent)
+// Update handles messages (key handling for inputs; zones handled by parent)
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
-	if m.focusedField == 0 {
+	switch m.focusedField {
+	case 0:
 		var cmd tea.Cmd
 		m.graphRevsetInput, cmd = m.graphRevsetInput.Update(msg)
 		return m, cmd
+	case 1:
+		var cmd tea.Cmd
+		m.customEditorInput, cmd = m.customEditorInput.Update(msg)
+		return m, cmd
+	default:
+		return m, nil
 	}
-	return m, nil
 }
 
 // View renders the model
@@ -92,36 +146,66 @@ func (m *Model) SetConfirmingCleanup(s string) {
 	m.confirmingCleanup = s
 }
 
-// GetInputViews returns the view strings for the graph revset input
+// GetInputViews returns the view strings for advanced text inputs (revset, then custom editor).
 func (m *Model) GetInputViews() []string {
-	return []string{m.graphRevsetInput.View()}
+	return []string{m.graphRevsetInput.View(), m.customEditorInput.View()}
 }
 
-// GetFocusedField returns the focused input index (0 = graph revset)
+// GetFocusedField returns the focused input index (0 = graph revset, 1 = custom editor)
 func (m *Model) GetFocusedField() int {
 	return m.focusedField
 }
 
-// SetFocusedField sets the focused input index (0 = graph revset).
+// SetFocusedField sets the focused input index.
 // Returns the tea.Cmd from Focus() so the cursor is shown; caller must return it from Update.
 func (m *Model) SetFocusedField(i int) tea.Cmd {
 	if i < 0 {
 		i = 0
 	}
+	if i > 1 {
+		i = 1
+	}
 	m.focusedField = i
 	if m.focusedField == 0 {
+		m.customEditorInput.Blur()
 		return m.graphRevsetInput.Focus()
 	}
 	m.graphRevsetInput.Blur()
-	return nil
+	return m.customEditorInput.Focus()
 }
 
-// SetInputWidth sets the graph revset input width (minimum 40 so the field and cursor are visible).
+// SetInputWidth sets input widths (minimum 40 so the field and cursor are visible).
 func (m *Model) SetInputWidth(w int) {
 	if w < 40 {
 		w = 40
 	}
 	m.graphRevsetInput.Width = w
+	m.customEditorInput.Width = w
+}
+
+// GetExternalEditorPreset returns the selected editor preset index (0..len(ExternalEditorPresetLabels)-1).
+func (m *Model) GetExternalEditorPreset() int {
+	if m.externalEditorPreset < 0 || m.externalEditorPreset >= len(ExternalEditorPresetLabels) {
+		return 0
+	}
+	return m.externalEditorPreset
+}
+
+// SetExternalEditorPreset selects an editor preset by index.
+func (m *Model) SetExternalEditorPreset(i int) {
+	if i < 0 || i >= len(externalEditorPresetConfig) {
+		return
+	}
+	m.externalEditorPreset = i
+}
+
+// SavedExternalEditor returns config strings to persist.
+func (m *Model) SavedExternalEditor() (preset string, custom string) {
+	i := m.externalEditorPreset
+	if i < 0 || i >= len(externalEditorPresetConfig) {
+		return config.ExternalEditorNone, strings.TrimSpace(m.customEditorInput.Value())
+	}
+	return externalEditorPresetConfig[i], strings.TrimSpace(m.customEditorInput.Value())
 }
 
 // UpdateRepository updates the repository

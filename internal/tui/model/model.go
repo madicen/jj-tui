@@ -1538,6 +1538,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleAction(msg.Action)
 
 	// Handle messages from actions package
+	case util.ExternalEditorOpenedMsg:
+		m.appState.Loading = false
+		if strings.TrimSpace(msg.FileBase) != "" {
+			m.appState.StatusMessage = fmt.Sprintf("Opened %s", msg.FileBase)
+		} else {
+			m.appState.StatusMessage = "Opened in external editor"
+		}
+		return m, nil
+
 	case util.ErrorMsg:
 		if msg.StatusOnly {
 			m.appState.Loading = false

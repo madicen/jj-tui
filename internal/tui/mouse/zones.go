@@ -75,7 +75,8 @@ const (
 	ZoneActionMoveFileUp   = "zone:action:movefileup"
 	ZoneActionMoveFileDown = "zone:action:movefiledown"
 	ZoneActionRevertFile   = "zone:action:revertfile"
-	ZoneActionViewFileDiff = "zone:action:viewfilediff"
+	ZoneActionViewFileDiff          = "zone:action:viewfilediff"
+	ZoneActionOpenInExternalEditor  = "zone:action:openinexternaleditor"
 
 	// Graph file-diff modal
 	ZoneFileDiffClose = "zone:filediff:close"
@@ -144,6 +145,9 @@ const (
 	ZoneSettingsAdvancedConfirmNo         = "zone:settings:advanced:confirm_no"
 	ZoneSettingsGraphRevset               = "zone:settings:graph_revset"
 	ZoneSettingsGraphRevsetClear          = "zone:settings:graph_revset_clear"
+	// External editor preset rows: zone:settings:external_editor_preset:N for N in 0..8
+	ZoneSettingsExternalEditorPresetPrefix = "zone:settings:external_editor_preset:"
+	ZoneSettingsExternalEditorCustom       = "zone:settings:external_editor_custom"
 	ZoneSettingsAutoInProgress            = "zone:settings:auto_in_progress"
 	ZoneSettingsSanitizeBookmarks         = "zone:settings:sanitize_bookmarks"
 
@@ -216,6 +220,11 @@ const (
 	// Help view zones
 	ZoneHelpCommand = "zone:help:command:" // Prefix for command history entries
 )
+
+// ZoneSettingsExternalEditorPreset returns the zone ID for the external editor preset row at index (0..8).
+func ZoneSettingsExternalEditorPreset(index int) string {
+	return fmt.Sprintf("%s%d", ZoneSettingsExternalEditorPresetPrefix, index)
+}
 
 // ZoneExistingBookmark returns the zone ID for an existing bookmark at the given index
 func ZoneExistingBookmark(index int) string {
