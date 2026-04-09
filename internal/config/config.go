@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // GitHubAuthMethod represents how the user authenticated with GitHub
@@ -26,10 +27,10 @@ type Config struct {
 	GitHubAuthMethod GitHubAuthMethod `json:"github_auth_method,omitempty"` // How the token was obtained
 
 	// GitHub filter settings
-	GitHubShowMerged      *bool `json:"github_show_merged,omitempty"`       // nil = true (show by default)
-	GitHubShowClosed      *bool `json:"github_show_closed,omitempty"`       // nil = true (show by default)
-	GitHubOnlyMine        *bool `json:"github_only_mine,omitempty"`         // nil = false (show all by default)
-	GitHubPRLimit         *int  `json:"github_pr_limit,omitempty"`          // nil = 100 (default limit)
+	GitHubShowMerged      *bool `json:"github_show_merged,omitempty"`      // nil = true (show by default)
+	GitHubShowClosed      *bool `json:"github_show_closed,omitempty"`      // nil = true (show by default)
+	GitHubOnlyMine        *bool `json:"github_only_mine,omitempty"`        // nil = false (show all by default)
+	GitHubPRLimit         *int  `json:"github_pr_limit,omitempty"`         // nil = 100 (default limit)
 	GitHubRefreshInterval *int  `json:"github_refresh_interval,omitempty"` // nil = 120 seconds (2 min default), 0 = disabled
 
 	// Ticket provider selection: "jira" or "codecks"
@@ -41,14 +42,14 @@ type Config struct {
 	JiraToken            string `json:"jira_token,omitempty"`
 	JiraProject          string `json:"jira_project,omitempty"`           // Project key for creating new issues (e.g., "PROJ")
 	JiraProjectFilter    string `json:"jira_project_filter,omitempty"`    // Optional: project key(s) to filter ticket list (e.g., "PROJ" or "PROJ,TEAM")
-	JiraIssueType        string `json:"jira_issue_type,omitempty"`     // Default issue type when creating issues (e.g., "Task", "Bug", "Story")
+	JiraIssueType        string `json:"jira_issue_type,omitempty"`        // Default issue type when creating issues (e.g., "Task", "Bug", "Story")
 	JiraJQL              string `json:"jira_jql,omitempty"`               // Optional: custom JQL to append to query (e.g., "sprint in openSprints()")
 	JiraExcludedStatuses string `json:"jira_excluded_statuses,omitempty"` // Comma-separated statuses to hide
 
 	// Codecks settings
 	CodecksSubdomain        string `json:"codecks_subdomain,omitempty"`
 	CodecksToken            string `json:"codecks_token,omitempty"`
-	CodecksProject          string `json:"codecks_project,omitempty"`          // Optional: filter by project name
+	CodecksProject          string `json:"codecks_project,omitempty"`           // Optional: filter by project name
 	CodecksExcludedStatuses string `json:"codecks_excluded_statuses,omitempty"` // Comma-separated statuses to hide
 
 	// GitHub Issues settings (uses existing GitHubToken for auth)
@@ -58,12 +59,19 @@ type Config struct {
 	TicketAutoInProgress *bool `json:"ticket_auto_in_progress,omitempty"` // nil = true (auto-set "In Progress" when creating branch)
 
 	// Branch settings
-	BranchStatsLimit       *int  `json:"branch_limit,omitempty"`              // nil = 50 (default limit for branch stats calculation)
-	SanitizeBookmarkNames  *bool `json:"sanitize_bookmark_names,omitempty"`   // nil = true (auto-fix invalid bookmark names)
+	BranchStatsLimit      *int  `json:"branch_limit,omitempty"`            // nil = 50 (default limit for branch stats calculation)
+	SanitizeBookmarkNames *bool `json:"sanitize_bookmark_names,omitempty"` // nil = true (auto-fix invalid bookmark names)
 
 	// Graph view: jj revset for which commits to show. Empty = jj.DefaultGraphRevset (mutable ∩ (ancestors(@)|descendants(@)) | bookmarks | main@origin).
 	// Example: "trunk() | (ancestors(@) - ancestors(trunk()))" for main + your branch only.
 	GraphRevset string `json:"graph_revset,omitempty"`
+
+	// ExternalFileEditor opens the selected changed file from the graph (files pane, key O).
+	// Values: none, cursor, vscode, zed, neovim, emacs, sublime, idea, custom (case-insensitive; see NormalizeExternalFileEditor).
+	ExternalFileEditor string `json:"external_file_editor,omitempty"`
+	// ExternalFileEditorCustom: when ExternalFileEditor is "custom", a shell snippet run as `sh -c` with {path}
+	// replaced by a single-quoted absolute path, e.g. `cursor -g {path}` or `alacritty -e nvim {path}`.
+	ExternalFileEditorCustom string `json:"external_file_editor_custom,omitempty"`
 
 	// Theme colors (hex, e.g. "#7E00AF"). Empty = use built-in defaults.
 	ThemePrimary   string `json:"theme_primary,omitempty"`
@@ -206,6 +214,55 @@ func mergeConfig(dest, source *Config) {
 	}
 	if source.ThemeMuted != "" {
 		dest.ThemeMuted = source.ThemeMuted
+	}
+	if source.ExternalFileEditor != "" {
+		dest.ExternalFileEditor = source.ExternalFileEditor
+	}
+	if source.ExternalFileEditorCustom != "" {
+		dest.ExternalFileEditorCustom = source.ExternalFileEditorCustom
+	}
+}
+
+// Canonical external editor presets (NormalizeExternalFileEditor).
+const (
+	ExternalEditorNone     = "none"
+	ExternalEditorCursor   = "cursor"
+	ExternalEditorVSCode   = "vscode"
+	ExternalEditorZed      = "zed"
+	ExternalEditorNeovim   = "neovim"
+	ExternalEditorEmacs    = "emacs"
+	ExternalEditorSublime  = "sublime"
+	ExternalEditorIntelliJ = "idea"
+	ExternalEditorCustom   = "custom"
+)
+
+// NormalizeExternalFileEditor returns a canonical preset string for cfg (nil-safe).
+func NormalizeExternalFileEditor(cfg *Config) string {
+	if cfg == nil {
+		return ExternalEditorNone
+	}
+	s := strings.ToLower(strings.TrimSpace(cfg.ExternalFileEditor))
+	switch s {
+	case "", "none", "disabled", "off":
+		return ExternalEditorNone
+	case "cursor":
+		return ExternalEditorCursor
+	case "vscode", "code", "vs code", "visual studio code":
+		return ExternalEditorVSCode
+	case "zed":
+		return ExternalEditorZed
+	case "neovim", "nvim", "nvr":
+		return ExternalEditorNeovim
+	case "emacs", "emacsclient":
+		return ExternalEditorEmacs
+	case "sublime", "subl":
+		return ExternalEditorSublime
+	case "idea", "intellij", "jetbrains", "webstorm", "goland", "rustrover", "pycharm":
+		return ExternalEditorIntelliJ
+	case "custom":
+		return ExternalEditorCustom
+	default:
+		return ExternalEditorNone
 	}
 }
 
@@ -540,4 +597,3 @@ func (c *Config) GetThemeMuted() string {
 	}
 	return c.ThemeMuted
 }
-

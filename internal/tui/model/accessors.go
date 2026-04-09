@@ -2,6 +2,7 @@ package model
 
 import (
 	"github.com/madicen/jj-tui/internal"
+	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/integrations/github"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tickets"
@@ -101,6 +102,11 @@ func (m *Model) GetCreatePRBranch() string {
 // IsDemoMode returns whether the app is in demo mode (for tab context providers).
 func (m *Model) IsDemoMode() bool {
 	return m.appState.DemoMode
+}
+
+// GetConfig returns persisted config (for graph ContextProvider).
+func (m *Model) GetConfig() *config.Config {
+	return m.appState.Config
 }
 
 // GetGitHubService returns the GitHub service (for tab context providers).

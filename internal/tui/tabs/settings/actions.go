@@ -6,14 +6,14 @@ import (
 	"os"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/textinput"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/integrations/codecks"
 	"github.com/madicen/jj-tui/internal/integrations/github"
-	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/integrations/jira"
+	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tickets"
 	"github.com/madicen/jj-tui/internal/tui/data"
 	"github.com/madicen/jj-tui/internal/tui/state"
@@ -52,13 +52,15 @@ type SettingsParams struct {
 	ThemePrimary                 string
 	ThemeSecondary               string
 	ThemeMuted                   string
+	ExternalFileEditor           string
+	ExternalFileEditorCustom     string
 }
 
 // Status messages for cleanup flows.
 const (
 	StartDeleteBookmarksStatus   = "Press Y to confirm deletion of all bookmarks, or N to cancel"
 	StartAbandonOldCommitsStatus = "Press Y to confirm abandoning commits before origin/main, or N to cancel"
-	CancelCleanupStatus         = "Cleanup cancelled"
+	CancelCleanupStatus          = "Cleanup cancelled"
 )
 
 // HandleCleanupCompletedMsg mutates app and returns the Cmd to run.
@@ -155,19 +157,22 @@ func BuildSettingsParams(m *Model, githubOwner, githubRepo string) SettingsParam
 	br := m.GetBranchesModel()
 	adv := m.GetAdvancedModel()
 	params := SettingsParams{
-		TicketProvider:       tk.GetTicketProvider(),
-		ShowMerged:           gh.GetShowMerged(),
-		ShowClosed:           gh.GetShowClosed(),
-		OnlyMine:             gh.GetOnlyMine(),
-		PRLimit:              gh.GetPRLimit(),
-		PRRefreshInterval:    gh.GetRefreshInterval(),
-		AutoInProgress:       tk.GetAutoInProgress(),
-		BranchLimit:          br.GetBranchLimit(),
-		SanitizeBookmarks:    adv.GetSanitizeBookmarks(),
-		GraphRevset:          strings.TrimSpace(adv.GetGraphRevset()),
-		GitHubOwner:          githubOwner,
-		GitHubRepo:           githubRepo,
+		TicketProvider:    tk.GetTicketProvider(),
+		ShowMerged:        gh.GetShowMerged(),
+		ShowClosed:        gh.GetShowClosed(),
+		OnlyMine:          gh.GetOnlyMine(),
+		PRLimit:           gh.GetPRLimit(),
+		PRRefreshInterval: gh.GetRefreshInterval(),
+		AutoInProgress:    tk.GetAutoInProgress(),
+		BranchLimit:       br.GetBranchLimit(),
+		SanitizeBookmarks: adv.GetSanitizeBookmarks(),
+		GraphRevset:       strings.TrimSpace(adv.GetGraphRevset()),
+		GitHubOwner:       githubOwner,
+		GitHubRepo:        githubRepo,
 	}
+	preset, custom := adv.SavedExternalEditor()
+	params.ExternalFileEditor = preset
+	params.ExternalFileEditorCustom = custom
 	params.GitHubToken = strings.TrimSpace(gh.GetToken())
 	params.JiraURL = strings.TrimSpace(jr.GetURL())
 	params.JiraUser = strings.TrimSpace(jr.GetUser())
@@ -259,6 +264,8 @@ func SaveSettingsCmd(params SettingsParams) tea.Cmd {
 		cfg.BranchStatsLimit = &params.BranchLimit
 		cfg.SanitizeBookmarkNames = &params.SanitizeBookmarks
 		cfg.GraphRevset = params.GraphRevset
+		cfg.ExternalFileEditor = params.ExternalFileEditor
+		cfg.ExternalFileEditorCustom = params.ExternalFileEditorCustom
 		cfg.ThemePrimary = params.ThemePrimary
 		cfg.ThemeSecondary = params.ThemeSecondary
 		cfg.ThemeMuted = params.ThemeMuted
@@ -282,6 +289,8 @@ func SaveSettingsLocalCmd(params SettingsParams) tea.Cmd {
 			BranchStatsLimit:             &params.BranchLimit,
 			SanitizeBookmarkNames:        &params.SanitizeBookmarks,
 			GraphRevset:                  params.GraphRevset,
+			ExternalFileEditor:           params.ExternalFileEditor,
+			ExternalFileEditorCustom:     params.ExternalFileEditorCustom,
 			ThemePrimary:                 params.ThemePrimary,
 			ThemeSecondary:               params.ThemeSecondary,
 			ThemeMuted:                   params.ThemeMuted,

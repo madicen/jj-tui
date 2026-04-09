@@ -162,6 +162,10 @@ func (m GraphModel) handleKeyMsg(msg tea.KeyMsg) (GraphModel, *Request, tea.Cmd)
 		if !m.graphFocused {
 			return m, &Request{ViewFileDiff: true}, nil
 		}
+	case "O":
+		if !m.graphFocused {
+			return m, &Request{OpenInExternalEditor: true}, nil
+		}
 	}
 
 	return m, nil, nil

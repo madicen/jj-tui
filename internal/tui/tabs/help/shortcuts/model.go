@@ -85,6 +85,7 @@ func (m Model) lines() []string {
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("k/↑"), styles.HelpDescStyle.Render("Move up")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("Tab"), styles.HelpDescStyle.Render("Switch focus: graph ↔ files")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("o"), styles.HelpDescStyle.Render("View full jj diff for selected changed file (files pane)")))
+	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("O"), styles.HelpDescStyle.Render("Open selected file in external editor (files pane; set editor in Settings → Advanced)")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("Enter/e"), styles.HelpDescStyle.Render("Edit selected commit (jj edit)")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("s"), styles.HelpDescStyle.Render("Squash commit into parent")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("r"), styles.HelpDescStyle.Render("Rebase commit (with descendants)")))

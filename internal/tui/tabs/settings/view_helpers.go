@@ -9,6 +9,7 @@ import (
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/styles"
+	"github.com/madicen/jj-tui/internal/tui/tabs/settings/advanced"
 	"github.com/madicen/jj-tui/internal/tui/tabs/settings/theme"
 	"github.com/madicen/jj-tui/internal/version"
 )
@@ -31,7 +32,7 @@ type RenderData struct {
 	Inputs                 []struct{ View string }
 	FocusedField           int
 	GithubService          bool
-	JiraService           bool
+	JiraService            bool
 	HasLocalConfig         bool
 	ConfigSource           string
 	ActiveTab              ActiveTab
@@ -49,6 +50,7 @@ type RenderData struct {
 	BranchLimit            int
 	SanitizeBookmarks      bool
 	ConfirmingCleanup      string
+	ExternalEditorPreset   int // Advanced: selected external editor preset index (radio rows)
 
 	// ThemeModel is set by BuildRenderData for rendering the Theme tab (swatches + bounds).
 	ThemeModel *theme.Model
@@ -83,8 +85,9 @@ func BuildRenderData(sm *Model, opts ViewOpts) RenderData {
 		AutoInProgressOnBranch: sm.GetSettingsAutoInProgress(),
 		BranchLimit:            sm.GetSettingsBranchLimit(),
 		SanitizeBookmarks:      sm.GetSettingsSanitizeBookmarks(),
-		ConfirmingCleanup:      sm.GetConfirmingCleanup(),
-		YOffset:                sm.GetSettingsYOffset(),
+		ConfirmingCleanup:    sm.GetConfirmingCleanup(),
+		ExternalEditorPreset: sm.GetAdvancedModel().GetExternalEditorPreset(),
+		YOffset:              sm.GetSettingsYOffset(),
 		ContentHeight:          opts.ContentHeight,
 		ThemeModel:             sm.GetThemeModel(),
 	}
@@ -469,7 +472,6 @@ func (r renderCtx) renderTheme(data RenderData, startRow int) []string {
 
 func (r renderCtx) renderAdvanced(data RenderData) []string {
 	var lines []string
-	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render("Graph View"), "")
 	focusStyle := func(i int) lipgloss.Style {
 		s := lipgloss.NewStyle()
 		if data.FocusedField == i {
@@ -477,6 +479,31 @@ func (r renderCtx) renderAdvanced(data RenderData) []string {
 		}
 		return s
 	}
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render("Open in external editor"), "")
+	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Graph files pane: O opens the selected file. Install the editor CLI on your PATH (e.g. Cursor “Install cursor command”)."), "")
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("  Editor:"), "")
+	renderEditorRadio := func(idx int, label string) string {
+		selected := data.ExternalEditorPreset == idx
+		var radioText string
+		if selected {
+			radioText = toggleOnStyle.Render("(●) " + label)
+		} else {
+			radioText = lipgloss.NewStyle().Foreground(styles.ColorPrimary).Render("( ) " + label)
+		}
+		return r.mark(mouse.ZoneSettingsExternalEditorPreset(idx), radioText)
+	}
+	for i, label := range advanced.ExternalEditorPresetLabels {
+		lines = append(lines, "    "+renderEditorRadio(i, label))
+	}
+	lines = append(lines, "")
+	lines = append(lines, focusStyle(15).Render("  Custom command (when preset is Custom, run via sh -c):"))
+	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Use {path} for the absolute file path, e.g. cursor -g {path}"), "")
+	if len(data.Inputs) > 15 {
+		lines = append(lines, "  "+r.mark(mouse.ZoneSettingsExternalEditorCustom, data.Inputs[15].View))
+	}
+	lines = append(lines, "", "")
+
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render("Graph View"), "")
 	lines = append(lines, focusStyle(14).Render("  Default revset (jj):"))
 	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Which commits to show in the commit graph. Empty = use built-in default."), "")
 	if len(data.Inputs) > 14 {

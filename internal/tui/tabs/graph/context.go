@@ -2,6 +2,7 @@ package graph
 
 import (
 	"github.com/madicen/jj-tui/internal"
+	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tui/state"
 )
@@ -19,6 +20,7 @@ type ContextProvider interface {
 	IsGitHubAvailable() bool
 	GetCreatePRBranch() string
 	IsDemoMode() bool
+	GetConfig() *config.Config
 }
 
 // BuildRequestContextFrom builds RequestContext from a provider (e.g. main model).
@@ -38,6 +40,7 @@ func BuildRequestContextFrom(p ContextProvider) *RequestContext {
 		GitHubAvailable:      p.IsGitHubAvailable(),
 		CreatePRBranch:       p.GetCreatePRBranch(),
 		DemoMode:             p.IsDemoMode(),
+		Config:               p.GetConfig(),
 	})
 }
 
@@ -55,6 +58,7 @@ type RequestContext struct {
 	GitHubAvailable      bool
 	CreatePRBranch       string // branch that would be used for Create PR for selected commit (to block main/master)
 	DemoMode             bool
+	Config               *config.Config
 }
 
 // ContextInput is the data needed to build a RequestContext. Main passes this from its state.
@@ -70,6 +74,7 @@ type ContextInput struct {
 	GitHubAvailable      bool
 	CreatePRBranch       string
 	DemoMode             bool
+	Config               *config.Config
 }
 
 // BuildRequestContext builds RequestContext from input. The graph package owns what context it needs.
@@ -89,6 +94,7 @@ func BuildRequestContext(input *ContextInput) *RequestContext {
 		GitHubAvailable:      input.GitHubAvailable,
 		CreatePRBranch:       input.CreatePRBranch,
 		DemoMode:             input.DemoMode,
+		Config:               input.Config,
 	}
 }
 
@@ -119,5 +125,6 @@ func BuildRequestContextFromApp(app *state.AppState, m *GraphModel) *RequestCont
 		GitHubAvailable:      githubAvailable,
 		CreatePRBranch:       m.GetCreatePRBranch(),
 		DemoMode:             app.DemoMode,
+		Config:               app.Config,
 	})
 }

@@ -129,6 +129,7 @@ type Request struct {
 	MoveFileDown         bool
 	RevertFile           bool
 	ViewFileDiff         bool
+	OpenInExternalEditor bool
 	// MoveDeltaOntoOrigin: new commit on bookmark@origin with same tree as selection; avoids force-push after amending a pushed branch.
 	MoveDeltaOntoOrigin bool
 	// StartEvologSplit: experimental FAQ-style split using jj evolog to pick parent revision.
