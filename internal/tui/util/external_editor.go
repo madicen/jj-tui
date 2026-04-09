@@ -4,9 +4,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
-	"syscall"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -97,14 +95,4 @@ func openFileInExternalEditor(absPath string, cfg *config.Config) error {
 
 func shellQuoteSingle(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
-}
-
-func startDetached(cmd *exec.Cmd) error {
-	cmd.Stdin = nil
-	cmd.Stdout = nil
-	cmd.Stderr = nil
-	if runtime.GOOS != "windows" {
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	}
-	return cmd.Start()
 }
