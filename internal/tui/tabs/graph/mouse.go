@@ -18,8 +18,15 @@ func (m GraphModel) handleZoneClick(msg zone.MsgZoneInBounds) (GraphModel, *Requ
 		return zm != nil && zm.InBounds(event)
 	}
 
-	// Click-drag rebase: resolve on mouse-up before other targets.
-	if m.rebaseDragSource >= 0 && m.selectionMode == SelectionNormal && m.repository != nil {
+	// Click-drag rebase: resolve on mouse-up before other targets (source = active drag or press-only anchor).
+	dragSrc := -1
+	switch {
+	case m.rebaseDragSource >= 0:
+		dragSrc = m.rebaseDragSource
+	case m.rebasePressAnchor >= 0:
+		dragSrc = m.rebasePressAnchor
+	}
+	if dragSrc >= 0 && m.selectionMode == SelectionNormal && m.repository != nil {
 		dest := -1
 		for i := range m.repository.Graph.Commits {
 			if inBounds(mouse.ZoneCommit(i)) {
@@ -28,16 +35,19 @@ func (m GraphModel) handleZoneClick(msg zone.MsgZoneInBounds) (GraphModel, *Requ
 			}
 		}
 		if dest < 0 {
+			m.rebasePressAnchor = -1
 			m.rebaseDragSource = -1
 			m.rebaseDragHoverDest = -1
-		} else if dest != m.rebaseDragSource {
-			src := m.rebaseDragSource
+		} else if dest != dragSrc {
+			src := dragSrc
+			m.rebasePressAnchor = -1
 			m.rebaseDragSource = -1
 			m.rebaseDragHoverDest = -1
 			m.graphFocused = true
 			m.selectedCommit = dest
 			return m, &Request{DragRebase: true, DragRebaseFrom: src, DragRebaseTo: dest}, nil
 		} else {
+			m.rebasePressAnchor = -1
 			m.rebaseDragSource = -1
 			m.rebaseDragHoverDest = -1
 		}

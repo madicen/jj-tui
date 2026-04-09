@@ -6,6 +6,8 @@ import (
 )
 
 // handleRebaseDragMouse handles press/motion for click-drag rebase. Release is handled in handleZoneClick.
+// Rebase row styling only appears after the pointer moves to a different commit than the press target,
+// so a simple click to select does not flash rebase highlights.
 func (m *GraphModel) handleRebaseDragMouse(msg tea.MouseMsg) {
 	if tea.MouseEvent(msg).IsWheel() {
 		return
@@ -35,16 +37,28 @@ func (m *GraphModel) handleRebaseDragMouse(msg tea.MouseMsg) {
 		}
 		idx := commitUnder()
 		if idx < 0 {
+			m.rebasePressAnchor = -1
+			m.rebaseDragSource = -1
+			m.rebaseDragHoverDest = -1
 			return
 		}
-		m.rebaseDragSource = idx
-		m.rebaseDragHoverDest = idx
+		m.rebasePressAnchor = idx
+		m.rebaseDragSource = -1
+		m.rebaseDragHoverDest = -1
 		m.selectedCommit = idx
 	case tea.MouseActionMotion:
-		if m.rebaseDragSource < 0 {
+		if m.rebasePressAnchor < 0 {
 			return
 		}
-		m.rebaseDragHoverDest = commitUnder()
+		hover := commitUnder()
+		if m.rebaseDragSource < 0 {
+			// Only start drag styling after the pointer leaves the pressed row while left is held.
+			if msg.Button == tea.MouseButtonLeft && hover >= 0 && hover != m.rebasePressAnchor {
+				m.rebaseDragSource = m.rebasePressAnchor
+			}
+		} else if msg.Button == tea.MouseButtonLeft || msg.Button == tea.MouseButtonNone {
+			m.rebaseDragHoverDest = hover
+		}
 	default:
 		return
 	}

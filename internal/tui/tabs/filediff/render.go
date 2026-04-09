@@ -1,6 +1,9 @@
 package filediff
 
 import (
+	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -8,8 +11,12 @@ import (
 	"github.com/mattn/go-runewidth"
 )
 
+// unifiedHunkHeader matches git unified diff hunk lines, e.g. @@ -10,6 +10,7 @@
+var unifiedHunkHeader = regexp.MustCompile(`^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@`)
+
 // StyleGitUnifiedDiff applies per-line background colors to git unified diff output
-// (from `jj diff --git --color never`). Other formats are returned unchanged.
+// (from `jj diff --git --color never`). When the text looks like a git diff, each line
+// gets an old/new line-number gutter; other formats are returned unchanged.
 func StyleGitUnifiedDiff(text string, contentWidth int) string {
 	if contentWidth < 8 {
 		contentWidth = 8
@@ -23,6 +30,9 @@ func StyleGitUnifiedDiff(text string, contentWidth int) string {
 		return normalized
 	}
 
+	const gutterW = 12
+	gap := strings.Repeat(" ", gutterW)
+
 	fg := lipgloss.Color("#F8F8F2")
 	addSt := lipgloss.NewStyle().Background(lipgloss.Color("#1B4332")).Foreground(fg)
 	delSt := lipgloss.NewStyle().Background(lipgloss.Color("#4A232C")).Foreground(fg)
@@ -31,18 +41,58 @@ func StyleGitUnifiedDiff(text string, contentWidth int) string {
 	hunkSt := lipgloss.NewStyle().Background(lipgloss.Color("#44475A")).Foreground(lipgloss.Color("#8BE9FD")).Bold(true)
 
 	out := make([]string, 0, len(lines))
+	var oldLine, newLine int
+	inHunk := false
+
 	for _, line := range lines {
+		if strings.HasPrefix(line, "diff --git ") {
+			inHunk = false
+		}
+
 		if line == "" {
-			out = append(out, "")
+			out = append(out, styleGitDiffLine("", gap, contentWidth, metaSt))
 			continue
 		}
-		st := lineStyle(line, addSt, delSt, ctxSt, metaSt, hunkSt)
-		out = append(out, st.Width(contentWidth).Render(truncateVisual(line, contentWidth)))
+
+		if strings.HasPrefix(line, "@@") {
+			m := unifiedHunkHeader.FindStringSubmatch(line)
+			if m != nil {
+				o0, _ := strconv.Atoi(m[1])
+				n0, _ := strconv.Atoi(m[3])
+				oldLine, newLine = o0, n0
+				inHunk = true
+			}
+			out = append(out, styleGitDiffLine(line, gap, contentWidth, hunkSt))
+			continue
+		}
+
+		if !inHunk || isGitDiffMetaLine(line) {
+			out = append(out, styleGitDiffLine(line, gap, contentWidth, metaSt))
+			continue
+		}
+
+		switch {
+		case strings.HasPrefix(line, " "):
+			g := gutterPair(oldLine, newLine, true, true, gutterW)
+			oldLine++
+			newLine++
+			out = append(out, styleGitDiffLine(line, g, contentWidth, ctxSt))
+		case strings.HasPrefix(line, "-"):
+			g := gutterPair(oldLine, 0, true, false, gutterW)
+			oldLine++
+			out = append(out, styleGitDiffLine(line, g, contentWidth, delSt))
+		case strings.HasPrefix(line, "+"):
+			g := gutterPair(0, newLine, false, true, gutterW)
+			newLine++
+			out = append(out, styleGitDiffLine(line, g, contentWidth, addSt))
+		default:
+			out = append(out, styleGitDiffLine(line, gap, contentWidth, metaSt))
+		}
 	}
 	return strings.Join(out, "\n")
 }
 
-func lineStyle(line string, addSt, delSt, ctxSt, metaSt, hunkSt lipgloss.Style) lipgloss.Style {
+func isGitDiffMetaLine(line string) bool {
 	switch {
 	case strings.HasPrefix(line, "diff --git "),
 		strings.HasPrefix(line, "index "),
@@ -53,19 +103,37 @@ func lineStyle(line string, addSt, delSt, ctxSt, metaSt, hunkSt lipgloss.Style) 
 		strings.HasPrefix(line, "similarity index "),
 		strings.HasPrefix(line, "rename from "),
 		strings.HasPrefix(line, "rename to "),
-		strings.HasPrefix(line, "Binary files "):
-		return metaSt
-	case strings.HasPrefix(line, "@@"):
-		return hunkSt
-	case strings.HasPrefix(line, "+"):
-		return addSt
-	case strings.HasPrefix(line, "-"):
-		return delSt
-	case strings.HasPrefix(line, " "):
-		return ctxSt
+		strings.HasPrefix(line, "Binary files "),
+		strings.HasPrefix(line, "\\"):
+		return true
 	default:
-		return metaSt
+		return false
 	}
+}
+
+func gutterPair(oldN, newN int, hasOld, hasNew bool, targetW int) string {
+	left, right := "    ", "    "
+	if hasOld {
+		left = fmt.Sprintf("%4d", oldN)
+	}
+	if hasNew {
+		right = fmt.Sprintf("%4d", newN)
+	}
+	s := left + "│" + right + " "
+	for runewidth.StringWidth(s) < targetW {
+		s += " "
+	}
+	return s
+}
+
+func styleGitDiffLine(line, gutter string, contentWidth int, st lipgloss.Style) string {
+	gw := runewidth.StringWidth(gutter)
+	avail := contentWidth - gw
+	if avail < 1 {
+		avail = 1
+	}
+	body := truncateVisual(line, avail)
+	return st.Width(contentWidth).Render(gutter + body)
 }
 
 func truncateVisual(s string, maxWidth int) string {
