@@ -64,6 +64,7 @@ func (m GraphModel) handleKeyMsg(msg tea.KeyMsg) (GraphModel, *Request, tea.Cmd)
 			m.selectionMode = SelectionNormal
 			m.rebaseSourceCommit = -1
 		}
+		m.rebasePressAnchor = -1
 		m.rebaseDragSource = -1
 		m.rebaseDragHoverDest = -1
 		return m, nil, nil

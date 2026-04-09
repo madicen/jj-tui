@@ -43,7 +43,8 @@ type GraphModel struct {
 	rebaseSourceCommit int // Index of commit being rebased
 
 	// Click-drag rebase: press on commit row, release on another (not used with keyboard rebase mode).
-	rebaseDragSource    int
+	rebasePressAnchor   int // commit index at mouse-down (-1 = none); does not affect styling until drag starts
+	rebaseDragSource    int // set when pointer leaves press row (motion) so simple clicks do not look like rebase
 	rebaseDragHoverDest int
 }
 
@@ -93,6 +94,7 @@ func NewGraphModel(zoneManager *zone.Manager) GraphModel {
 		graphFocused:        true, // default to graph pane focused so j/k navigate commits and wheel scrolls graph
 		viewport:            vp,
 		filesViewport:       filesVp,
+		rebasePressAnchor:   -1,
 		rebaseDragSource:    -1,
 		rebaseDragHoverDest: -1,
 	}
@@ -552,7 +554,8 @@ func (m *GraphModel) UpdateRepository(repo *internal.Repository) {
 	if m.selectedCommit >= len(commits) {
 		m.selectedCommit = max(0, len(commits)-1)
 	}
-	if m.rebaseDragSource >= len(commits) {
+	if m.rebaseDragSource >= len(commits) || m.rebasePressAnchor >= len(commits) {
+		m.rebasePressAnchor = -1
 		m.rebaseDragSource = -1
 		m.rebaseDragHoverDest = -1
 	}
@@ -708,6 +711,7 @@ func (m *GraphModel) GetFilesViewport() viewport.Model {
 func (m *GraphModel) StartRebaseMode(sourceCommitIdx int) {
 	m.selectionMode = SelectionRebaseDestination
 	m.rebaseSourceCommit = sourceCommitIdx
+	m.rebasePressAnchor = -1
 	m.rebaseDragSource = -1
 	m.rebaseDragHoverDest = -1
 }
@@ -716,6 +720,7 @@ func (m *GraphModel) StartRebaseMode(sourceCommitIdx int) {
 func (m *GraphModel) CancelRebaseMode() {
 	m.selectionMode = SelectionNormal
 	m.rebaseSourceCommit = -1
+	m.rebasePressAnchor = -1
 	m.rebaseDragSource = -1
 	m.rebaseDragHoverDest = -1
 }
