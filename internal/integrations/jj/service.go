@@ -1103,8 +1103,42 @@ func (s *Service) listEvolog(ctx context.Context, rev string, noHistory bool) ([
 
 const evologSplitDefaultMessage = "Follow-up (split via evolog)"
 
-// MoveBookmarkDeltaOntoEvologBase is the FAQ-style split: jj new <base>, restore tree from the selected
-// tip revision, optionally jj bookmark set, then abandon the old tip.
+// evologSplitParentForNewCommit returns the revision to pass to `jj new` for an evolog split.
+// If the user-picked base is empty (same tree as its parent), parenting the new commit directly
+// under that base would leave a useless no-description spacer in the graph (main → … → empty → B).
+// In that case we use the sole parent instead; diff(base, tip) equals diff(parent, tip), so the
+// split boundary is unchanged. For merges or missing parents, base is used as-is.
+func (s *Service) evologSplitParentForNewCommit(ctx context.Context, baseCommitID string) (string, error) {
+	baseCommitID = strings.TrimSpace(baseCommitID)
+	emptyOut, err := s.runJJOutputNoHistory(ctx, "log", "-r", baseCommitID, "--no-graph", "-T", "empty", "--limit", "1")
+	if err != nil {
+		return "", fmt.Errorf("log empty flag: %w", err)
+	}
+	if strings.TrimSpace(emptyOut) != "true" {
+		return baseCommitID, nil
+	}
+	parentsOut, err := s.runJJOutputNoHistory(ctx, "log", "-r", baseCommitID, "--no-graph", "-T", "parents.map(|p| p.commit_id()).join(\"\\n\")", "--limit", "1")
+	if err != nil {
+		return "", fmt.Errorf("log parents: %w", err)
+	}
+	var parents []string
+	for _, line := range strings.Split(parentsOut, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			parents = append(parents, line)
+		}
+	}
+	if len(parents) == 1 {
+		return parents[0], nil
+	}
+	return baseCommitID, nil
+}
+
+// MoveBookmarkDeltaOntoEvologBase is the FAQ-style split: jj new <parent>, restore tree from the selected
+// tip revision, optionally jj bookmark set, then abandon the old tip. Parent is the evolog base row,
+// or that row's parent when the base is an empty revision (see evologSplitParentForNewCommit).
+// A final describe @ reapplies evologSplitDefaultMessage so the working copy never ends up with no
+// description (e.g. jj metadata quirks after restore/abandon).
 // If bookmarkName is empty, the selected revision is the tip (no bookmark move). If non-empty, the
 // bookmark must point at the same commit as the selection (same rule as stack-on-origin flow).
 func (s *Service) MoveBookmarkDeltaOntoEvologBase(ctx context.Context, bookmarkName, localChangeID, localCommitID, baseCommitID string) error {
@@ -1159,7 +1193,14 @@ func (s *Service) MoveBookmarkDeltaOntoEvologBase(ctx context.Context, bookmarkN
 	if strings.TrimSpace(diffOut) == "" {
 		return fmt.Errorf("tree already matches base; nothing to split")
 	}
-	if err := s.runJJ(ctx, "new", baseCommitID, "-m", evologSplitDefaultMessage); err != nil {
+	parentForNew, err := s.evologSplitParentForNewCommit(ctx, baseCommitID)
+	if err != nil {
+		return err
+	}
+	if commitIDsEquivalent(tipCommitID, parentForNew) {
+		return fmt.Errorf("split parent would be the tip; pick a different evolog row")
+	}
+	if err := s.runJJ(ctx, "new", parentForNew, "-m", evologSplitDefaultMessage); err != nil {
 		return fmt.Errorf("jj new: %w", err)
 	}
 	if err := s.runJJ(ctx, "restore", "--into", "@", "--from", tipCommitID); err != nil {
@@ -1171,6 +1212,9 @@ func (s *Service) MoveBookmarkDeltaOntoEvologBase(ctx context.Context, bookmarkN
 		}
 	}
 	_ = s.runJJ(ctx, "abandon", tipCommitID)
+	if err := s.DescribeCommit(ctx, "@", evologSplitDefaultMessage); err != nil {
+		return fmt.Errorf("jj describe: %w", err)
+	}
 	return nil
 }
 

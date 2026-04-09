@@ -22,6 +22,22 @@ Show
 
 # === SCENE 1: Review current work ===
 Sleep 2s
+
+# Colored file diff overlay: changed-files load, Tab (files pane), o (View diff), scroll, Esc, Tab (graph)
+Sleep 2s
+Tab
+Sleep 1s
+Type "o"
+Sleep 3s
+Down
+Sleep 400ms
+Down
+Sleep 400ms
+Escape
+Sleep 1s
+Tab
+Sleep 800ms
+
 Down
 Sleep 500ms
 Down
