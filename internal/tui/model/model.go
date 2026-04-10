@@ -203,6 +203,9 @@ func (m *Model) refreshRepository() tea.Cmd {
 		cmds = append(cmds, data.InitializeServices(m.appState.DemoMode))
 	} else {
 		cmds = append(cmds, data.LoadRepository(m.appState.JJService))
+		// Branches tab keeps its own list (trunk graph, HasConflict); ^r must reload it too or diverged
+		// bookmarks look stale after resolve until the user switches tabs or something else loads branches.
+		cmds = append(cmds, branchestab.LoadBranchesCmd(m.appState.JJService, m.settingsTabModel.GetSettingsBranchLimit()))
 	}
 	if m.isGitHubAvailable() {
 		existing := 0

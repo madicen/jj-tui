@@ -32,7 +32,10 @@ Down
 Sleep 1.5s
 
 Enter
-Sleep 4s
+Sleep 2s
+# Explicit ^r refresh so the graph shows the post-resolve state clearly.
+Ctrl+r
+Sleep 3s
 
 Hide
 Ctrl+q

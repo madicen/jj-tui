@@ -594,6 +594,9 @@ func (s *Service) ResolveBookmarkConflictKeepLocal(ctx context.Context, bookmark
 	if err := s.runJJ(ctx, "git", "push", "--bookmark", util.JJExactBookmarkPattern(bookmarkName), "--remote", "origin"); err != nil {
 		return fmt.Errorf("git push: %w", err)
 	}
+	// Colocated git refs update on push, but jj's remote_bookmarks for list/HasConflict can lag until fetch.
+	// Ignore errors so a resolve+push success is not reported as failure if fetch is unavailable.
+	_ = s.FetchFromRemote(ctx, "origin")
 	return nil
 }
 
@@ -2237,6 +2240,9 @@ func (s *Service) ListBranches(ctx context.Context, statsLimit int) ([]internal.
 		case "main", "master":
 			continue
 		}
+		// Reconcile HasConflict from bookmark list + DAG. The first-pass parse can leave HasConflict
+		// true (e.g. ? on the name) after @origin already matches local; when originDiverged and the
+		// fork detector both say no, clear it.
 		if originDiverged[b.Name] {
 			b.HasConflict = true
 			continue
@@ -2246,6 +2252,8 @@ func (s *Service) ListBranches(ctx context.Context, statsLimit int) ([]internal.
 		}
 		if s.bookmarkDivergedFromOrigin(ctx, b.Name) {
 			b.HasConflict = true
+		} else {
+			b.HasConflict = false
 		}
 	}
 
@@ -2419,26 +2427,6 @@ func changeIDRootKey(s string) string {
 	return s
 }
 
-func (s *Service) changeIDRootAtCommit(ctx context.Context, commitID string) string {
-	rs := revsetCommitID(commitID)
-	if rs == "" {
-		return ""
-	}
-	out, err := s.runJJOutputNoHistory(ctx, "log", "-r", rs, "--no-graph", "-T", "change_id", "--limit", "1")
-	if err != nil {
-		return ""
-	}
-	return changeIDRootKey(out)
-}
-
-// commitIDsShareJJChangeRoot is true when both commits belong to the same jj change (evolution line),
-// e.g. olxoxuzz vs olxoxuzz/11 on remote. That is not a bookmark fork even if ancestry paths are odd.
-func (s *Service) commitIDsShareJJChangeRoot(ctx context.Context, localCommitID, remoteCommitID string) bool {
-	a := s.changeIDRootAtCommit(ctx, localCommitID)
-	b := s.changeIDRootAtCommit(ctx, remoteCommitID)
-	return a != "" && a == b
-}
-
 // commitIDsHaveAncestorDescendantRelationship is true when either commit is an ancestor of the other
 // in the jj DAG (pure ahead/behind). Used so we do not treat "N commits ahead of origin" as a
 // diverged bookmark: that case should offer "Forgot New Commit?" (HasDeltaVsBookmarkOrigin), not resolve.
@@ -2484,9 +2472,9 @@ func (s *Service) bookmarkDivergedFromOrigin(ctx context.Context, localName stri
 	if s.commitIDsHaveAncestorDescendantRelationship(ctx, localID, remoteID) {
 		return false
 	}
-	if s.commitIDsShareJJChangeRoot(ctx, localID, remoteID) {
-		return false
-	}
+	// Do not bail out on same jj change_id alone: amend-after-push keeps one change_id while local
+	// and @origin tips are sibling commits (ahead+behind on the bookmark list). That must stay a
+	// diverged bookmark until resolved; only a linear ancestor/descendant relationship is "not a fork".
 	return true
 }
 
