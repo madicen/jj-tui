@@ -354,6 +354,9 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		return m, evologsplittab.LoadEvologCmd(m.appState.JJService, bn, t.Commit)
 	case state.NavigateCloseFileDiff:
 		m.fileDiffModal.Hide()
+		if isStaleFileDiffGlobalStatus(m.appState.StatusMessage) {
+			m.appState.StatusMessage = ""
+		}
 		if m.evologSplitModal.IsShown() {
 			m.appState.ViewMode = state.ViewEvologSplit
 		} else {
@@ -1483,10 +1486,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case filedifftab.FileDiffLoadedMsg:
 		updated, cmd := m.fileDiffModal.Update(msg)
 		m.fileDiffModal = updated
+		// Modal header/footer already explain Esc/scroll. Do not set StatusMessage when Loading:
+		// another op may own StatusMessage, and the centered overlay would show misleading text after
+		// this modal closes (see shouldShowLoadingOverlay / NavigateCloseFileDiff).
 		if msg.Err != nil {
-			m.appState.StatusMessage = "File diff failed"
-		} else {
-			m.appState.StatusMessage = "File diff — Esc to close, scroll with j/k or wheel"
+			if !m.appState.Loading {
+				m.appState.StatusMessage = "File diff failed"
+			}
+		} else if !m.appState.Loading {
+			m.appState.StatusMessage = ""
 		}
 		return m, cmd
 	case loadChangedFilesTriggerMsg:
@@ -1557,4 +1565,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// isStaleFileDiffGlobalStatus reports status strings tied to the file-diff overlay that should not
+// linger on the status line (or a concurrent loading overlay) after the modal closes.
+func isStaleFileDiffGlobalStatus(msg string) bool {
+	s := strings.TrimSpace(msg)
+	if s == "File diff failed" {
+		return true
+	}
+	return strings.HasPrefix(s, "File diff —")
 }
