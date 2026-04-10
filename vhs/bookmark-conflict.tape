@@ -34,7 +34,10 @@ Sleep 1s
 Type "k"
 Sleep 1s
 Enter
-Sleep 5s
+Sleep 2s
+# Explicit ^r refresh so final frames show an updated branch list (no stale diverged row).
+Ctrl+r
+Sleep 3s
 
 Hide
 Ctrl+q

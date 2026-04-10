@@ -70,7 +70,8 @@ func HandleBookmarkConflictResolvedMsg(msg BookmarkConflictResolvedMsg, app *sta
 		resolutionDesc = "reset to remote"
 	}
 	app.StatusMessage = fmt.Sprintf("Bookmark '%s' conflict resolved (%s)", msg.BookmarkName, resolutionDesc)
-	return tea.Batch(
+	// Sequence so graph reload applies before branch list (trunk view uses branchList, not repo alone).
+	return tea.Sequence(
 		data.LoadRepository(app.JJService),
 		branches.LoadBranchesCmd(app.JJService, branchLimit),
 	)
