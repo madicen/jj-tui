@@ -1589,6 +1589,18 @@ func TestBookmarkConflictOverlayKeepsBranchesUnderlay(t *testing.T) {
 
 // Regression: centered busy overlay used to paint after the bookmark-conflict dialog, hiding it while
 // keystrokes still went to the modal (demo looked like instant resolve with no popup).
+func TestShouldShowLoadingOverlaySkipsDescriptionAndFileDiff(t *testing.T) {
+	if shouldShowLoadingOverlay(state.ViewEditDescription, "Saving description…") {
+		t.Fatal("expected no centered overlay while editing description")
+	}
+	if shouldShowLoadingOverlay(state.ViewFileDiff, "Pushing main…") {
+		t.Fatal("expected no centered overlay while file diff modal is open")
+	}
+	if !shouldShowLoadingOverlay(state.ViewCommitGraph, "Pushing main…") {
+		t.Fatal("expected overlay on graph when loading")
+	}
+}
+
 func TestBookmarkConflictDialogNotHiddenByLoadingOverlay(t *testing.T) {
 	m := newTestModel()
 	defer m.Close()

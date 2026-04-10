@@ -46,8 +46,9 @@ func (m *Model) View() string {
 
 	v := m.renderMainLayoutView()
 	v = m.applyFormModalsOverlay(v)
-	// Busy overlay sits under graph pickers (evolog / divergent / conflict) so keys still target them;
-	// form modals are composited before loading so submit/init shows the spinner on top.
+	// Busy overlay sits under graph pickers (evolog / divergent / conflict) so keys still target them.
+	// Form modals (PR, ticket, bookmark, GitHub login, init) are under loading so submit/init shows the
+	// spinner on top; description edit and file diff skip the centered overlay (see shouldShowLoadingOverlay).
 	v = m.applyLoadingOverlay(v)
 
 	if m.appState.ViewMode == state.ViewEvologSplit {
