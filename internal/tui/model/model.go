@@ -583,6 +583,11 @@ func (m *Model) startCreatePR() {
 
 // submitPR runs the PR creation command.
 func (m *Model) submitPR() tea.Cmd {
+	// Avoid duplicate CreatePRCmd (e.g. double mouse release or overlapping zone deliveries)
+	// while a create is already in flight.
+	if m.appState.ViewMode == state.ViewCreatePR && m.appState.Loading {
+		return nil
+	}
 	res := prformtab.SubmitPR(&m.prFormModal, m.appState.Repository, m.appState.JJService, m.appState.GitHubService, m.appState.DemoMode)
 	m.appState.StatusMessage = res.StatusMessage
 	if res.Cmd == nil {
