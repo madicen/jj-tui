@@ -3,6 +3,8 @@ package filediff
 import (
 	"strings"
 	"testing"
+
+	"github.com/mattn/go-runewidth"
 )
 
 func TestStyleGitUnifiedDiffLineNumberGutter(t *testing.T) {
@@ -30,5 +32,23 @@ func TestStyleGitUnifiedDiffNonGitPassthrough(t *testing.T) {
 	raw := "not a git diff\n"
 	if got := StyleGitUnifiedDiff(raw, 40); got != raw {
 		t.Fatalf("non-git diff should pass through unchanged, got %q", got)
+	}
+}
+
+func TestMinInnerWidthForDiffText_longHunkLine(t *testing.T) {
+	long := strings.Repeat("M", 100)
+	raw := "diff --git a/x b/x\nindex 1..2 100644\n--- a/x\n+++ b/x\n@@ -1,1 +1,1 @@\n-" + long + "\n+" + long + "\n"
+	got := MinInnerWidthForDiffText(raw)
+	want := unifiedDiffGutterColumns + runewidth.StringWidth("-"+long)
+	if got != want {
+		t.Fatalf("MinInnerWidthForDiffText = %d, want %d", got, want)
+	}
+}
+
+func TestMinInnerWidthForDiffText_nonGitWidestLine(t *testing.T) {
+	raw := "short\n" + strings.Repeat("Z", 55) + "\n"
+	got := MinInnerWidthForDiffText(raw)
+	if got < 55 {
+		t.Fatalf("MinInnerWidthForDiffText = %d, want >= 55", got)
 	}
 }
