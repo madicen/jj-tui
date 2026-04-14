@@ -175,12 +175,14 @@ func (m Model) ZoneIDs() []string {
 }
 
 func (m Model) resolveClickedZone(msg zone.MsgZoneInBounds) string {
-	if msg.Zone == nil {
+	if m.zoneManager == nil || msg.Zone == nil {
 		return ""
 	}
+	// bubblezone's AnyInBoundsAndUpdate calls Update once per overlapping zone (sorted by id).
+	// Use the zone from this message so each dispatch targets the correct control; do not
+	// re-scan "first InBounds" or every overlapping hit would act like the topmost zone.
 	for _, id := range m.ZoneIDs() {
-		z := m.zoneManager.Get(id)
-		if z != nil && z.InBounds(msg.Event) {
+		if z := m.zoneManager.Get(id); z != nil && z == msg.Zone {
 			return id
 		}
 	}

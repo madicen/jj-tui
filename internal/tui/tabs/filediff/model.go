@@ -14,6 +14,14 @@ import (
 	"github.com/madicen/jj-tui/internal/tui/styles"
 )
 
+// Horizontal layout: leave fileDiffTermSideColumns on each side of the bordered modal,
+// and reserve fileDiffOuterInnerDelta between outer box width and viewport inner width.
+const (
+	fileDiffTermSideColumns  = 2
+	fileDiffOuterInnerDelta  = 4
+	fileDiffInnerMinComfort  = 36
+)
+
 // Model is a scrollable full-file diff overlay for one changed file at a commit.
 type Model struct {
 	shown    bool
@@ -32,6 +40,7 @@ type Model struct {
 	zm        *zone.Manager
 	innerW    int
 	innerH    int
+	outerW    int
 	headerH   int
 	footerH   int
 }
@@ -40,7 +49,9 @@ type Model struct {
 func NewModel(zm *zone.Manager) Model {
 	vp := viewport.New(60, 10)
 	vp.MouseWheelEnabled = true
-	return Model{zm: zm, termW: 100, termH: 24, vp: vp, headerH: 3, footerH: 2}
+	m := Model{zm: zm, termW: 100, termH: 24, vp: vp, headerH: 3, footerH: 2}
+	m.layoutViewport()
+	return m
 }
 
 // SetDimensions records full terminal size for centered modal layout.
@@ -78,17 +89,30 @@ func (m Model) ShowPreloadedStyledDiff(title, subtitle, rawGit string) Model {
 }
 
 func (m *Model) layoutViewport() {
-	// Outer box: borders + title lines + footer
-	maxOuterW := min(m.termW-2, 110)
-	maxOuterH := min(m.termH-2, m.termH-2)
-	if maxOuterW < 40 {
-		maxOuterW = m.termW - 2
+	maxOuterFromTerm := m.termW - 2*fileDiffTermSideColumns
+	if maxOuterFromTerm < 1 {
+		maxOuterFromTerm = 1
 	}
+	innerCap := maxOuterFromTerm - fileDiffOuterInnerDelta
+	if innerCap < 1 {
+		innerCap = 1
+	}
+
+	contentWant := fileDiffInnerMinComfort
+	if strings.TrimSpace(m.body) != "" {
+		contentWant = max(fileDiffInnerMinComfort, MinInnerWidthForDiffText(m.body))
+	}
+	m.innerW = min(innerCap, contentWant)
+	m.outerW = m.innerW + fileDiffOuterInnerDelta
+	if m.outerW > maxOuterFromTerm {
+		m.outerW = maxOuterFromTerm
+		m.innerW = max(1, m.outerW-fileDiffOuterInnerDelta)
+	}
+
+	maxOuterH := m.termH - 2
 	if maxOuterH < 10 {
-		maxOuterH = m.termH - 2
+		maxOuterH = max(10, m.termH-2)
 	}
-	// inner = outer - 2 border - padding approximation: use outer-4 for text width
-	m.innerW = max(36, maxOuterW-4)
 	innerBodyH := maxOuterH - m.headerH - m.footerH - 2
 	if innerBodyH < 5 {
 		innerBodyH = 5
@@ -145,9 +169,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.errMsg = msg.Err.Error()
 			m.body = ""
 			m.vp.SetContent("")
+			m.layoutViewport()
 		} else {
 			m.errMsg = ""
 			m.body = msg.Text
+			m.layoutViewport()
 			m.vp.SetContent(StyleGitUnifiedDiff(msg.Text, m.innerW))
 			m.vp.GotoTop()
 		}
@@ -195,11 +221,11 @@ func (m Model) View() string {
 	if !m.shown {
 		return ""
 	}
-	maxOuterW := min(m.termW-2, 110)
-	maxOuterH := min(m.termH-2, m.termH-2)
-	if maxOuterW < 40 {
-		maxOuterW = max(40, m.termW-2)
+	maxOuterW := m.outerW
+	if maxOuterW < 1 {
+		maxOuterW = 1
 	}
+	maxOuterH := m.termH - 2
 	if maxOuterH < 10 {
 		maxOuterH = max(10, m.termH-2)
 	}
@@ -220,7 +246,7 @@ func (m Model) View() string {
 		}
 		subLine = fmt.Sprintf("%s  @ %s", pathDisp, m.shortID)
 	}
-	sub := lipgloss.NewStyle().Foreground(styles.ColorMuted).Width(maxOuterW - 4).Render(subLine)
+	sub := lipgloss.NewStyle().Foreground(styles.ColorMuted).Width(maxOuterW - fileDiffOuterInnerDelta).Render(subLine)
 
 	var body string
 	if m.loading {

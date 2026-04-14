@@ -14,6 +14,93 @@ import (
 // unifiedHunkHeader matches git unified diff hunk lines, e.g. @@ -10,6 +10,7 @@
 var unifiedHunkHeader = regexp.MustCompile(`^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@`)
 
+// unifiedDiffGutterColumns is the visual width reserved for the line-number gutter (or gap).
+const unifiedDiffGutterColumns = 12
+
+// MinInnerWidthForDiffText returns the minimum viewport inner width (columns) so
+// StyleGitUnifiedDiff can render each line without truncating the body. Non-git text
+// (passthrough from StyleGitUnifiedDiff) uses the widest raw line.
+func MinInnerWidthForDiffText(text string) int {
+	const minW = 8
+	normalized := strings.ReplaceAll(text, "\r\n", "\n")
+	lines := strings.Split(normalized, "\n")
+	if len(lines) == 0 || (len(lines) == 1 && lines[0] == "") {
+		return minW
+	}
+	if !strings.HasPrefix(lines[0], "diff --git") {
+		maxW := minW
+		for _, line := range lines {
+			if w := runewidth.StringWidth(line); w > maxW {
+				maxW = w
+			}
+		}
+		return maxW
+	}
+
+	gap := strings.Repeat(" ", unifiedDiffGutterColumns)
+	maxW := minW
+	var oldLine, newLine int
+	inHunk := false
+
+	for _, line := range lines {
+		if strings.HasPrefix(line, "diff --git ") {
+			inHunk = false
+		}
+
+		lineW := func(gutter string) int {
+			return runewidth.StringWidth(gutter) + runewidth.StringWidth(line)
+		}
+
+		if line == "" {
+			if w := lineW(gap); w > maxW {
+				maxW = w
+			}
+			continue
+		}
+
+		if strings.HasPrefix(line, "@@") {
+			m := unifiedHunkHeader.FindStringSubmatch(line)
+			if m != nil {
+				o0, _ := strconv.Atoi(m[1])
+				n0, _ := strconv.Atoi(m[3])
+				oldLine, newLine = o0, n0
+				inHunk = true
+			}
+			if w := lineW(gap); w > maxW {
+				maxW = w
+			}
+			continue
+		}
+
+		if !inHunk || isGitDiffMetaLine(line) {
+			if w := lineW(gap); w > maxW {
+				maxW = w
+			}
+			continue
+		}
+
+		var gutter string
+		switch {
+		case strings.HasPrefix(line, " "):
+			gutter = gutterPair(oldLine, newLine, true, true, unifiedDiffGutterColumns)
+			oldLine++
+			newLine++
+		case strings.HasPrefix(line, "-"):
+			gutter = gutterPair(oldLine, 0, true, false, unifiedDiffGutterColumns)
+			oldLine++
+		case strings.HasPrefix(line, "+"):
+			gutter = gutterPair(0, newLine, false, true, unifiedDiffGutterColumns)
+			newLine++
+		default:
+			gutter = gap
+		}
+		if w := lineW(gutter); w > maxW {
+			maxW = w
+		}
+	}
+	return maxW
+}
+
 // StyleGitUnifiedDiff applies per-line background colors to git unified diff output
 // (from `jj diff --git --color never`). When the text looks like a git diff, each line
 // gets an old/new line-number gutter; other formats are returned unchanged.
@@ -30,8 +117,7 @@ func StyleGitUnifiedDiff(text string, contentWidth int) string {
 		return normalized
 	}
 
-	const gutterW = 12
-	gap := strings.Repeat(" ", gutterW)
+	gap := strings.Repeat(" ", unifiedDiffGutterColumns)
 
 	fg := lipgloss.Color("#F8F8F2")
 	addSt := lipgloss.NewStyle().Background(lipgloss.Color("#1B4332")).Foreground(fg)
@@ -73,16 +159,16 @@ func StyleGitUnifiedDiff(text string, contentWidth int) string {
 
 		switch {
 		case strings.HasPrefix(line, " "):
-			g := gutterPair(oldLine, newLine, true, true, gutterW)
+			g := gutterPair(oldLine, newLine, true, true, unifiedDiffGutterColumns)
 			oldLine++
 			newLine++
 			out = append(out, styleGitDiffLine(line, g, contentWidth, ctxSt))
 		case strings.HasPrefix(line, "-"):
-			g := gutterPair(oldLine, 0, true, false, gutterW)
+			g := gutterPair(oldLine, 0, true, false, unifiedDiffGutterColumns)
 			oldLine++
 			out = append(out, styleGitDiffLine(line, g, contentWidth, delSt))
 		case strings.HasPrefix(line, "+"):
-			g := gutterPair(0, newLine, false, true, gutterW)
+			g := gutterPair(0, newLine, false, true, unifiedDiffGutterColumns)
 			newLine++
 			out = append(out, styleGitDiffLine(line, g, contentWidth, addSt))
 		default:
