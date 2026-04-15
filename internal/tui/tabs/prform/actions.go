@@ -26,15 +26,25 @@ type PrepareCreatePRResult struct {
 
 // PrepareCreatePR returns data needed to show the create-PR dialog (head branch, needs move, default title).
 // jiraTitles can be nil; if provided, default title is taken from jiraTitles[headBranch] when set.
+// Bookmarks that already have an open PR are skipped so that "Create PR" targets a fresh branch.
 func PrepareCreatePR(repo *internal.Repository, commitIdx int, jiraTitles map[string]string) PrepareCreatePRResult {
 	if repo == nil || commitIdx < 0 || commitIdx >= len(repo.Graph.Commits) {
 		return PrepareCreatePRResult{}
+	}
+	openPRBranches := make(map[string]bool)
+	for _, pr := range repo.PRs {
+		if pr.State == "open" {
+			openPRBranches[pr.HeadBranch] = true
+		}
 	}
 	commit := repo.Graph.Commits[commitIdx]
 	var headBranch string
 	var needsMove bool
 	if len(commit.Branches) > 0 {
-		headBranch = util.FirstOperableBookmarkName(commit.Branches)
+		headBranch = firstBookmarkWithoutOpenPR(commit.Branches, openPRBranches)
+		if headBranch == "" {
+			headBranch = util.FirstOperableBookmarkName(commit.Branches)
+		}
 		needsMove = false
 	} else {
 		headBranch = bookmark.FindBookmarkForCommit(repo, commitIdx)
@@ -264,4 +274,25 @@ func HandlePRCreatedMsg(input PRCreatedInput, app *state.AppState) tea.Cmd {
 type PRCreatedInput struct {
 	PRCreatedMsg
 	DemoMode bool
+}
+
+// firstBookmarkWithoutOpenPR returns the first operable bookmark name that does
+// not match any open PR head branch, or "" if none found.
+func firstBookmarkWithoutOpenPR(branches []string, openPRBranches map[string]bool) string {
+	for _, b := range branches {
+		b = strings.TrimSpace(b)
+		if b == "" {
+			continue
+		}
+		name, _ := util.NormalizeBookmarkListToken(b)
+		if name == "" || strings.Contains(name, "@") {
+			continue
+		}
+		local := util.LocalBookmarkName(name)
+		if openPRBranches[name] || openPRBranches[local] {
+			continue
+		}
+		return name
+	}
+	return ""
 }

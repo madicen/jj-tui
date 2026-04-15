@@ -476,10 +476,9 @@ func (m *GraphModel) buildGraphData() GraphData {
 		for changed {
 			changed = false
 			for i, commit := range m.repository.Graph.Commits {
-				if commitBookmark[i] != "" || commitPRBranch[i] != "" {
-					continue // Already has a bookmark or PR branch
+				if commitBookmark[i] != "" {
+					continue
 				}
-				// Check if any parent has a bookmark (without PR)
 				for _, parentID := range commit.Parents {
 					if parentIdx, ok := commitIDToIndex[parentID]; ok {
 						if branch := commitBookmark[parentIdx]; branch != "" {

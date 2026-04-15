@@ -343,20 +343,19 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 					actionButtons = append(actionButtons,
 						m.zoneManager.Mark(mouse.ZoneActionPush, styles.ButtonStyle.Render(buttonLabel)),
 					)
-				} else {
-					createPRBranch := ""
-					if data.CommitBookmark != nil {
-						createPRBranch = data.CommitBookmark[data.SelectedCommit]
+				}
+				createPRBranch := ""
+				if data.CommitBookmark != nil {
+					createPRBranch = data.CommitBookmark[data.SelectedCommit]
+				}
+				if createPRBranch != "" && !isDefaultBranch(createPRBranch) {
+					buttonLabel := "Create PR (c)"
+					if len(commit.Branches) == 0 || prBranch != "" {
+						buttonLabel = fmt.Sprintf("Create PR [%s] (c)", createPRBranch)
 					}
-					if createPRBranch != "" && !isDefaultBranch(createPRBranch) {
-						buttonLabel := "Create PR (c)"
-						if len(commit.Branches) == 0 {
-							buttonLabel = fmt.Sprintf("Create PR [%s] (c)", createPRBranch)
-						}
-						actionButtons = append(actionButtons,
-							m.zoneManager.Mark(mouse.ZoneActionCreatePR, styles.ButtonStyle.Render(buttonLabel)),
-						)
-					}
+					actionButtons = append(actionButtons,
+						m.zoneManager.Mark(mouse.ZoneActionCreatePR, styles.ButtonStyle.Render(buttonLabel)),
+					)
 				}
 				actionLines = append(actionLines, lipgloss.JoinHorizontal(lipgloss.Left, actionButtons...))
 			}
