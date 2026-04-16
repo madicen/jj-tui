@@ -5,7 +5,9 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
+	overlay "github.com/madicen/bubble-overlay"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/tickets"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
@@ -29,16 +31,25 @@ type Model struct {
 	// scrollToSelectedTicket: when true, next render will adjust listYOffset to keep selection in view (key/click only; mouse scroll can move selection off screen)
 	scrollToSelectedTicket bool
 	loadingTransitions     bool // true while loading available transitions for selected ticket
+
+	// Long-press context menu for ticket rows.
+	longPressItemIndex int
+	longPressPressID   int
+	longPressMouseX    int
+	longPressMouseY    int
+	contextMenu        *ContextMenuState
+	statusSubmenu      *StatusSubmenuState
 }
 
 // NewModel creates a new Tickets tab model. zoneManager may be nil (e.g. in tests).
 // Default dimensions (80x24) ensure wheel scroll works before first View()/SetDimensions, same as Graph viewports.
 func NewModel(zoneManager *zone.Manager) Model {
 	return Model{
-		zoneManager:    zoneManager,
-		selectedTicket: -1,
-		width:          80,
-		height:         24,
+		zoneManager:        zoneManager,
+		selectedTicket:     -1,
+		width:              80,
+		height:             24,
+		longPressItemIndex: -1,
 	}
 }
 
@@ -65,6 +76,20 @@ func (m Model) UpdateWithApp(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) 
 
 func (m Model) update(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case LongPressTickMsg:
+		if msg.PressID == m.longPressPressID && m.longPressItemIndex >= 0 {
+			m.contextMenu = &ContextMenuState{
+				TicketIndex: m.longPressItemIndex,
+				MouseX:      m.longPressMouseX,
+				MouseY:      m.longPressMouseY,
+				PressID:     msg.PressID,
+				HoverItem:   -1,
+			}
+			m.selectedTicket = m.longPressItemIndex
+			m.scrollToSelectedTicket = true
+		}
+		return m, nil
+
 	case TicketsLoadedInput:
 		m.UpdateTickets(msg.Tickets)
 		m.SetTicketServiceInfo(msg.ProviderName, msg.HasService)
@@ -89,6 +114,7 @@ func (m Model) update(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
 	case TransitionCompletedMsg:
 		m.SetTransitionInProgress(false)
 		m.SetStatusChangeMode(false)
+		m.statusSubmenu = nil
 		if msg.Err != nil {
 			if app != nil {
 				app.StatusMessage = fmt.Sprintf("Failed to transition %s: %v", msg.TicketKey, msg.Err)
@@ -155,7 +181,7 @@ func (m Model) update(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
 		}
 		return updated, cmd
 	case zone.MsgZoneInBounds:
-		updated, req, cmd := m.handleZoneClick(msg.Zone)
+		updated, req, cmd := m.handleZoneClick(msg.Zone, msg.Event)
 		if req != nil && app != nil {
 			if req.ToggleStatusChangeMode {
 				newMode := !updated.IsStatusChangeMode()
@@ -198,6 +224,9 @@ func (m Model) update(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		if cmd := m.handleLongPress(msg); cmd != nil {
+			return m, cmd
+		}
 	}
 	return m, nil
 }
@@ -207,7 +236,51 @@ func (m *Model) View() string {
 	if m.width == 0 || m.height == 0 {
 		return "Loading..."
 	}
-	return m.renderTickets()
+	v := m.renderTickets()
+
+	if m.contextMenu != nil {
+		menuView := m.renderContextMenu()
+		menuLines := strings.Split(menuView, "\n")
+		menuH := len(menuLines)
+		menuW := 0
+		for _, l := range menuLines {
+			if w := lipgloss.Width(l); w > menuW {
+				menuW = w
+			}
+		}
+		top := m.contextMenu.MouseY
+		left := m.contextMenu.MouseX
+		if top+menuH > m.height {
+			top = max(m.height-menuH, 0)
+		}
+		if left+menuW > m.width {
+			left = max(m.width-menuW, 0)
+		}
+		v = overlay.OverlayView(v, menuView, m.width, m.height, top, left)
+	}
+
+	if m.statusSubmenu != nil {
+		subView := m.renderStatusPopoverPanel(m.statusSubmenu.HoverItem)
+		subLines := strings.Split(subView, "\n")
+		subH := len(subLines)
+		subW := 0
+		for _, l := range subLines {
+			if w := lipgloss.Width(l); w > subW {
+				subW = w
+			}
+		}
+		top := m.statusSubmenu.MouseY
+		left := m.statusSubmenu.MouseX
+		if top+subH > m.height {
+			top = max(m.height-subH, 0)
+		}
+		if left+subW > m.width {
+			left = max(m.width-subW, 0)
+		}
+		v = overlay.OverlayView(v, subView, m.width, m.height, top, left)
+	}
+
+	return v
 }
 
 // SetTicketServiceInfo sets provider name and whether a ticket service is connected (used by main model)
@@ -248,6 +321,14 @@ func (m *Model) GetLoadingTransitions() bool {
 
 // handleKeyMsg handles keyboard input; returns (updated model, optional request, cmd).
 func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, *Request, tea.Cmd) {
+	if m.statusSubmenu != nil && msg.String() == "esc" {
+		m.statusSubmenu = nil
+		return m, nil, nil
+	}
+	if m.contextMenu != nil && msg.String() == "esc" {
+		m.contextMenu = nil
+		return m, nil, nil
+	}
 	switch msg.String() {
 	case "j", "down":
 		if m.selectedTicket < len(m.ticketList)-1 {
@@ -322,7 +403,68 @@ func (m *Model) transitionIDByKey(key string) string {
 }
 
 // handleZoneClick handles zone clicks; returns (updated model, optional request, cmd).
-func (m Model) handleZoneClick(z *zone.ZoneInfo) (Model, *Request, tea.Cmd) {
+func (m Model) handleZoneClick(z *zone.ZoneInfo, event tea.MouseMsg) (Model, *Request, tea.Cmd) {
+	inBounds := func(id string) bool {
+		zm := m.zoneManager.Get(id)
+		return zm != nil && zm.InBounds(event)
+	}
+
+	// Status submenu takes priority over everything else.
+	if m.statusSubmenu != nil {
+		if inBounds(mouse.ZoneStatusPopoverClose) {
+			m.statusSubmenu = nil
+			return m, nil, nil
+		}
+		for i, t := range m.availableTransitions {
+			zoneID := mouse.ZoneJiraTransition + fmt.Sprintf("%d", i)
+			if inBounds(zoneID) {
+				m.statusSubmenu = nil
+				req := Request{TransitionID: t.ID}
+				return m, &req, nil
+			}
+		}
+		m.statusSubmenu = nil
+		return m, nil, nil
+	}
+
+	if m.contextMenu != nil {
+		items := ticketContextMenuItems()
+		zoneIdx := 0
+		for _, item := range items {
+			i := zoneIdx
+			zoneIdx++
+			if item.RequireCreate && !m.canCreateTicket {
+				continue
+			}
+			if inBounds(mouse.ZoneTicketCtxMenuItem(i)) {
+				ti := m.contextMenu.TicketIndex
+				mouseX := m.contextMenu.MouseX
+				mouseY := m.contextMenu.MouseY
+				m.contextMenu = nil
+				m.selectedTicket = ti
+				m.scrollToSelectedTicket = true
+
+			if item.IsCascade {
+				m.statusSubmenu = &StatusSubmenuState{
+					MouseX:    mouseX,
+					MouseY:    mouseY,
+					HoverItem: -1,
+				}
+				// Always reload transitions to ensure freshness and to return
+				// a non-nil cmd that prevents the main model from falling
+				// through to handleZoneClick (which would double-process the
+				// event and immediately dismiss the just-created submenu).
+				return m, &Request{LoadTransitionsForSelection: true}, nil
+			}
+
+				req := item.Request
+				return m, &req, nil
+			}
+		}
+		m.contextMenu = nil
+		return m, nil, nil
+	}
+
 	if m.zoneManager == nil || z == nil {
 		return m, nil, nil
 	}
@@ -344,6 +486,9 @@ func (m Model) handleZoneClick(z *zone.ZoneInfo) (Model, *Request, tea.Cmd) {
 	}
 	if m.zoneManager.Get(mouse.ZoneTicketOpenBrowser) == z {
 		return m, &Request{OpenInBrowser: true}, nil
+	}
+	if m.statusChangeMode && inBounds(mouse.ZoneStatusPopoverClose) {
+		return m, &Request{ToggleStatusChangeMode: true}, nil
 	}
 	if m.statusChangeMode && !m.transitionInProgress && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
 		for i, t := range m.availableTransitions {

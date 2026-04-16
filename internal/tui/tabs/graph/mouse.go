@@ -8,15 +8,51 @@ import (
 
 // handleZoneClick handles zone click messages; returns (updated model, optional request, direct cmd).
 func (m GraphModel) handleZoneClick(msg zone.MsgZoneInBounds) (GraphModel, *Request, tea.Cmd) {
-	if msg.Zone == nil {
-		return m, nil, nil
-	}
-	z := msg.Zone
 	event := msg.Event
 	inBounds := func(id string) bool {
 		zm := m.zoneManager.Get(id)
 		return zm != nil && zm.InBounds(event)
 	}
+
+	// Context menu: if visible, check menu item zones first. Any other click dismisses.
+	if m.contextMenu != nil {
+		items := contextMenuItems()
+		for i, item := range items {
+			if inBounds(mouse.ZoneCtxMenuItem(i)) {
+				fileIdx := m.contextMenu.FileIndex
+				m.contextMenu = nil
+				m.graphFocused = false
+				m.selectedFile = fileIdx
+				req := item.Request
+				return m, &req, nil
+			}
+		}
+		m.contextMenu = nil
+		return m, nil, nil
+	}
+
+	// Commit context menu: same pattern as file context menu.
+	if m.commitContextMenu != nil {
+		firstParentImm := m.commitMenuFirstParentImmutable()
+		items := visibleCommitContextMenuItems(firstParentImm)
+		for i, item := range items {
+			if inBounds(mouse.ZoneCommitCtxMenuItem(i)) {
+				ci := m.commitContextMenu.CommitIndex
+				m.commitContextMenu = nil
+				m.graphFocused = true
+				m.selectedCommit = ci
+				req := item.Request
+				return m, &req, nil
+			}
+		}
+		m.commitContextMenu = nil
+		return m, nil, nil
+	}
+
+	if msg.Zone == nil {
+		return m, nil, nil
+	}
+	z := msg.Zone
 
 	// Click-drag rebase: resolve on mouse-up before other targets (source = active drag or press-only anchor).
 	dragSrc := -1

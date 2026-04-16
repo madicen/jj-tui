@@ -8,11 +8,12 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
+	overlay "github.com/madicen/bubble-overlay"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
-	"github.com/madicen/jj-tui/internal/tui/util"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/state"
+	"github.com/madicen/jj-tui/internal/tui/util"
 	"github.com/mattn/go-runewidth"
 )
 
@@ -46,6 +47,20 @@ type GraphModel struct {
 	rebasePressAnchor   int // commit index at mouse-down (-1 = none); does not affect styling until drag starts
 	rebaseDragSource    int // set when pointer leaves press row (motion) so simple clicks do not look like rebase
 	rebaseDragHoverDest int
+
+	// Long-press context menu for changed files.
+	longPressFileIndex int // file index at mouse-down (-1 = none)
+	longPressPressID   int // monotonic counter; tick msg carries this to match against stale ticks
+	longPressMouseX    int // terminal X at press
+	longPressMouseY    int // terminal Y at press
+	contextMenu        *ContextMenuState
+
+	// Long-press context menu for commit rows.
+	longPressCommitIndex   int // commit index at mouse-down (-1 = none)
+	longPressCommitPressID int
+	longPressCommitMouseX  int
+	longPressCommitMouseY  int
+	commitContextMenu      *CommitContextMenuState
 }
 
 // SelectionMode indicates what the user is selecting commits for
@@ -94,9 +109,11 @@ func NewGraphModel(zoneManager *zone.Manager) GraphModel {
 		graphFocused:        true, // default to graph pane focused so j/k navigate commits and wheel scrolls graph
 		viewport:            vp,
 		filesViewport:       filesVp,
-		rebasePressAnchor:   -1,
-		rebaseDragSource:    -1,
-		rebaseDragHoverDest: -1,
+		rebasePressAnchor:    -1,
+		rebaseDragSource:     -1,
+		rebaseDragHoverDest:  -1,
+		longPressFileIndex:   -1,
+		longPressCommitIndex: -1,
 	}
 }
 
@@ -159,6 +176,34 @@ func (m *GraphModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, req.Cmd()
 		}
 		return m, directCmd
+
+	case LongPressTickMsg:
+		if msg.PressID == m.longPressPressID && m.longPressFileIndex >= 0 {
+			m.contextMenu = &ContextMenuState{
+				FileIndex: m.longPressFileIndex,
+				MouseX:    m.longPressMouseX,
+				MouseY:    m.longPressMouseY,
+				PressID:   msg.PressID,
+				HoverItem: -1,
+			}
+			m.selectedFile = m.longPressFileIndex
+			m.scrollToSelectedFile = true
+		}
+		return m, nil
+
+	case CommitLongPressTickMsg:
+		if msg.PressID == m.longPressCommitPressID && m.longPressCommitIndex >= 0 {
+			m.commitContextMenu = &CommitContextMenuState{
+				CommitIndex: m.longPressCommitIndex,
+				MouseX:      m.longPressCommitMouseX,
+				MouseY:      m.longPressCommitMouseY,
+				PressID:     msg.PressID,
+				HoverItem:   -1,
+			}
+			m.selectedCommit = m.longPressCommitIndex
+			m.scrollToSelectedCommit = true
+		}
+		return m, nil
 	}
 
 	return m, nil
@@ -175,12 +220,46 @@ func (m *GraphModel) UpdateWithApp(msg tea.Msg, app *state.AppState) (GraphModel
 		return *m, nil
 	}
 	switch msg := msg.(type) {
+	case LongPressTickMsg:
+		if msg.PressID == m.longPressPressID && m.longPressFileIndex >= 0 {
+			m.contextMenu = &ContextMenuState{
+				FileIndex: m.longPressFileIndex,
+				MouseX:    m.longPressMouseX,
+				MouseY:    m.longPressMouseY,
+				PressID:   msg.PressID,
+				HoverItem: -1,
+			}
+			m.selectedFile = m.longPressFileIndex
+			m.scrollToSelectedFile = true
+		}
+		return *m, nil
+
+	case CommitLongPressTickMsg:
+		if msg.PressID == m.longPressCommitPressID && m.longPressCommitIndex >= 0 {
+			m.commitContextMenu = &CommitContextMenuState{
+				CommitIndex: m.longPressCommitIndex,
+				MouseX:      m.longPressCommitMouseX,
+				MouseY:      m.longPressCommitMouseY,
+				PressID:     msg.PressID,
+				HoverItem:   -1,
+			}
+			m.selectedCommit = m.longPressCommitIndex
+			m.scrollToSelectedCommit = true
+		}
+		return *m, nil
+
 	case tea.MouseMsg:
 		if tea.MouseEvent(msg).IsWheel() {
 			updated, cmd := m.Update(msg)
 			if g, ok := updated.(*GraphModel); ok {
 				return *g, cmd
 			}
+			return *m, cmd
+		}
+		if cmd := m.handleFileLongPress(msg); cmd != nil {
+			return *m, cmd
+		}
+		if cmd := m.handleCommitLongPress(msg); cmd != nil {
 			return *m, cmd
 		}
 		m.handleRebaseDragMouse(msg)
@@ -390,7 +469,54 @@ func (m *GraphModel) View() string {
 		filesPane,
 	)
 
-	// Return raw view so the main model can do a single Scan() on the full screen (avoids double-Scan breaking zone positions)
+	if m.contextMenu != nil {
+		isMutable := false
+		if m.selectedCommit >= 0 && m.repository != nil && m.selectedCommit < len(m.repository.Graph.Commits) {
+			isMutable = !m.repository.Graph.Commits[m.selectedCommit].Immutable
+		}
+		menuView := m.renderContextMenu(isMutable)
+		menuLines := strings.Split(menuView, "\n")
+		menuH := len(menuLines)
+		menuW := 0
+		for _, l := range menuLines {
+			if w := lipgloss.Width(l); w > menuW {
+				menuW = w
+			}
+		}
+		top := m.contextMenu.MouseY
+		left := m.contextMenu.MouseX
+		if top+menuH > m.height {
+			top = max(m.height-menuH, 0)
+		}
+		if left+menuW > m.width {
+			left = max(m.width-menuW, 0)
+		}
+		v = overlay.OverlayView(v, menuView, m.width, m.height, top, left)
+	}
+
+	if m.commitContextMenu != nil {
+		isMutable := m.commitMenuIsMutable()
+		firstParentImm := m.commitMenuFirstParentImmutable()
+		menuView := m.renderCommitContextMenu(isMutable, firstParentImm)
+		menuLines := strings.Split(menuView, "\n")
+		menuH := len(menuLines)
+		menuW := 0
+		for _, l := range menuLines {
+			if w := lipgloss.Width(l); w > menuW {
+				menuW = w
+			}
+		}
+		top := m.commitContextMenu.MouseY
+		left := m.commitContextMenu.MouseX
+		if top+menuH > m.height {
+			top = max(m.height-menuH, 0)
+		}
+		if left+menuW > m.width {
+			left = max(m.width-menuW, 0)
+		}
+		v = overlay.OverlayView(v, menuView, m.width, m.height, top, left)
+	}
+
 	return v
 }
 

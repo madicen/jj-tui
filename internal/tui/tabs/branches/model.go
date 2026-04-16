@@ -2,9 +2,12 @@ package branches
 
 import (
 	"fmt"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
+	overlay "github.com/madicen/bubble-overlay"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/util"
@@ -20,16 +23,24 @@ type Model struct {
 	listYOffset     int // Scroll offset for list (details stay fixed)
 	width  int
 	height int
+
+	// Long-press context menu for branch rows.
+	longPressItemIndex int
+	longPressPressID   int
+	longPressMouseX    int
+	longPressMouseY    int
+	contextMenu        *ContextMenuState
 }
 
 // NewModel creates a new Branches tab model. zoneManager may be nil (e.g. in tests).
 // Default dimensions (80x24) ensure wheel scroll works before first View()/SetDimensions, same as Graph viewports.
 func NewModel(zoneManager *zone.Manager) Model {
 	return Model{
-		zoneManager:    zoneManager,
-		selectedBranch: -1,
-		width:          80,
-		height:         24,
+		zoneManager:        zoneManager,
+		selectedBranch:     -1,
+		width:              80,
+		height:             24,
+		longPressItemIndex: -1,
 	}
 }
 
@@ -56,6 +67,19 @@ func (m Model) UpdateWithApp(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) 
 
 func (m Model) update(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case LongPressTickMsg:
+		if msg.PressID == m.longPressPressID && m.longPressItemIndex >= 0 {
+			m.contextMenu = &ContextMenuState{
+				BranchIndex: m.longPressItemIndex,
+				MouseX:      m.longPressMouseX,
+				MouseY:      m.longPressMouseY,
+				PressID:     msg.PressID,
+				HoverItem:   -1,
+			}
+			m.selectedBranch = m.longPressItemIndex
+		}
+		return m, nil
+
 	case BranchesLoadedInput:
 		if msg.Err != nil {
 			if app != nil {
@@ -137,7 +161,7 @@ func (m Model) update(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
 		}
 		return updated, cmd
 	case zone.MsgZoneInBounds:
-		updated, req, cmd := m.handleZoneClick(msg.Zone)
+		updated, req, cmd := m.handleZoneClick(msg.Zone, msg.Event)
 		if req != nil && app != nil {
 			ctx := BuildRequestContextFromApp(app, &updated)
 			statusMsg, runCmd := ExecuteRequest(*req, ctx)
@@ -168,6 +192,9 @@ func (m Model) update(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		if cmd := m.handleLongPress(msg); cmd != nil {
+			return m, cmd
+		}
 	}
 	return m, nil
 }
@@ -177,11 +204,40 @@ func (m *Model) View() string {
 	if m.width == 0 || m.height == 0 {
 		return "Loading..."
 	}
-	return m.renderBranches()
+	v := m.renderBranches()
+
+	if m.contextMenu != nil {
+		menuView := m.renderContextMenu()
+		if menuView != "" {
+			menuLines := strings.Split(menuView, "\n")
+			menuH := len(menuLines)
+			menuW := 0
+			for _, l := range menuLines {
+				if w := lipgloss.Width(l); w > menuW {
+					menuW = w
+				}
+			}
+			top := m.contextMenu.MouseY
+			left := m.contextMenu.MouseX
+			if top+menuH > m.height {
+				top = max(m.height-menuH, 0)
+			}
+			if left+menuW > m.width {
+				left = max(m.width-menuW, 0)
+			}
+			v = overlay.OverlayView(v, menuView, m.width, m.height, top, left)
+		}
+	}
+
+	return v
 }
 
 // handleKeyMsg handles keyboard input; returns (updated model, optional request, cmd).
 func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, *Request, tea.Cmd) {
+	if m.contextMenu != nil && msg.String() == "esc" {
+		m.contextMenu = nil
+		return m, nil, nil
+	}
 	switch msg.String() {
 	case "j", "down":
 		if m.selectedBranch < len(m.branchList)-1 {
@@ -212,7 +268,30 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, *Request, tea.Cmd) {
 }
 
 // handleZoneClick handles zone clicks; returns (updated model, optional request, cmd).
-func (m Model) handleZoneClick(z *zone.ZoneInfo) (Model, *Request, tea.Cmd) {
+func (m Model) handleZoneClick(z *zone.ZoneInfo, event tea.MouseMsg) (Model, *Request, tea.Cmd) {
+	inBounds := func(id string) bool {
+		zm := m.zoneManager.Get(id)
+		return zm != nil && zm.InBounds(event)
+	}
+
+	if m.contextMenu != nil {
+		bi := m.contextMenu.BranchIndex
+		if bi >= 0 && bi < len(m.branchList) {
+			branch := m.branchList[bi]
+			items := branchContextMenuItems(branch)
+			for i, item := range items {
+				if inBounds(mouse.ZoneBranchCtxMenuItem(i)) {
+					m.contextMenu = nil
+					m.selectedBranch = bi
+					req := item.Request
+					return m, &req, nil
+				}
+			}
+		}
+		m.contextMenu = nil
+		return m, nil, nil
+	}
+
 	if m.zoneManager == nil || z == nil {
 		return m, nil, nil
 	}
