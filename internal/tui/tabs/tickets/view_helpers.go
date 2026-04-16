@@ -237,7 +237,7 @@ func (m *Model) renderTickets() string {
 	}
 	outStr := strings.Join(outLines, "\n")
 	if showStatusPopover && len(m.availableTransitions) > 0 && !m.transitionInProgress {
-		outStr = overlayStatusPopover(outStr, m.renderStatusPopoverPanel(), m.width, m.height, popoverActionsRow, popoverAnchorLeft)
+		outStr = overlayStatusPopover(outStr, m.renderStatusPopoverPanel(-1), m.width, m.height, popoverActionsRow, popoverAnchorLeft)
 	}
 	return outStr
 }

@@ -914,9 +914,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case state.ViewTickets:
 			m.ticketsTabModel.SetDimensions(m.width, contentHeight)
-			cmds := util.PropagateUpdate(msg, &m.ticketsTabModel)
-			if len(cmds) > 0 && cmds[0] != nil {
-				return m, cmds[0]
+			updated, cmd := m.ticketsTabModel.UpdateWithApp(msg, &m.appState)
+			m.ticketsTabModel = updated
+			if cmd != nil {
+				return m, cmd
 			}
 		case state.ViewSettings:
 			cmds := util.PropagateUpdate(msg, &m.settingsTabModel)
@@ -1453,6 +1454,27 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	case graphtab.LongPressTickMsg:
+		updated, cmd := m.graphTabModel.UpdateWithApp(msg, &m.appState)
+		m.graphTabModel = updated
+		return m, cmd
+	case graphtab.CommitLongPressTickMsg:
+		updated, cmd := m.graphTabModel.UpdateWithApp(msg, &m.appState)
+		m.graphTabModel = updated
+		return m, cmd
+	case prstab.LongPressTickMsg:
+		updated, cmd := m.prsTabModel.UpdateWithApp(msg, &m.appState)
+		m.prsTabModel = updated
+		return m, cmd
+	case ticketstab.LongPressTickMsg:
+		updated, cmd := m.ticketsTabModel.UpdateWithApp(msg, &m.appState)
+		m.ticketsTabModel = updated
+		return m, cmd
+	case branchestab.LongPressTickMsg:
+		updated, cmd := m.branchesTabModel.UpdateWithApp(msg, &m.appState)
+		m.branchesTabModel = updated
+		return m, cmd
+
 	case descedittab.DescriptionSavedMsg:
 		cmd := descedittab.HandleDescriptionSavedMsg(msg, &m.appState)
 		m.desceditModal.Hide()

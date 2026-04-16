@@ -2,9 +2,12 @@ package prs
 
 import (
 	"fmt"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
+	overlay "github.com/madicen/bubble-overlay"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/state"
@@ -21,16 +24,24 @@ type Model struct {
 	githubService   bool // whether GitHub is connected (for rendering)
 	// scrollToSelectedPR: when true, next render will adjust listYOffset to keep selection in view (key/click only; mouse scroll can move selection off screen)
 	scrollToSelectedPR bool
+
+	// Long-press context menu for PR rows.
+	longPressItemIndex int
+	longPressPressID   int
+	longPressMouseX    int
+	longPressMouseY    int
+	contextMenu        *ContextMenuState
 }
 
 // NewModel creates a new PRs tab model. zoneManager may be nil (e.g. in tests).
 // Default dimensions (80x24) ensure wheel scroll works before first View()/SetDimensions, same as Graph viewports.
 func NewModel(zoneManager *zone.Manager) Model {
 	return Model{
-		zoneManager: zoneManager,
-		selectedPR:  -1,
-		width:       80,
-		height:      24,
+		zoneManager:        zoneManager,
+		selectedPR:         -1,
+		width:              80,
+		height:             24,
+		longPressItemIndex: -1,
 	}
 }
 
@@ -57,6 +68,20 @@ func (m Model) UpdateWithApp(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) 
 
 func (m Model) update(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case LongPressTickMsg:
+		if msg.PressID == m.longPressPressID && m.longPressItemIndex >= 0 {
+			m.contextMenu = &ContextMenuState{
+				PRIndex:   m.longPressItemIndex,
+				MouseX:    m.longPressMouseX,
+				MouseY:    m.longPressMouseY,
+				PressID:   msg.PressID,
+				HoverItem: -1,
+			}
+			m.selectedPR = m.longPressItemIndex
+			m.scrollToSelectedPR = true
+		}
+		return m, nil
+
 	case PrsLoadedMsg:
 		if msg.Prs == nil {
 			if app != nil {
@@ -171,7 +196,7 @@ func (m Model) update(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
 		}
 		return updated, cmd
 	case zone.MsgZoneInBounds:
-		updated, req, cmd := m.handleZoneClick(msg.Zone)
+		updated, req, cmd := m.handleZoneClick(msg.Zone, msg.Event)
 		if req != nil && app != nil {
 			ctx := BuildRequestContextFromApp(app, &updated)
 			statusMsg, runCmd := ExecuteRequest(*req, ctx)
@@ -198,6 +223,9 @@ func (m Model) update(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		if cmd := m.handleLongPress(msg); cmd != nil {
+			return m, cmd
+		}
 	}
 	return m, nil
 }
@@ -210,7 +238,37 @@ func (m *Model) View() string {
 	if m.repository == nil {
 		return "Loading pull requests..."
 	}
-	return m.renderPRs()
+	v := m.renderPRs()
+
+	if m.contextMenu != nil {
+		prIsOpen := false
+		if m.repository != nil {
+			pi := m.contextMenu.PRIndex
+			if pi >= 0 && pi < len(m.repository.PRs) {
+				prIsOpen = m.repository.PRs[pi].State == "open"
+			}
+		}
+		menuView := m.renderContextMenu(prIsOpen)
+		menuLines := strings.Split(menuView, "\n")
+		menuH := len(menuLines)
+		menuW := 0
+		for _, l := range menuLines {
+			if w := lipgloss.Width(l); w > menuW {
+				menuW = w
+			}
+		}
+		top := m.contextMenu.MouseY
+		left := m.contextMenu.MouseX
+		if top+menuH > m.height {
+			top = max(m.height-menuH, 0)
+		}
+		if left+menuW > m.width {
+			left = max(m.width-menuW, 0)
+		}
+		v = overlay.OverlayView(v, menuView, m.width, m.height, top, left)
+	}
+
+	return v
 }
 
 // SetGithubService sets whether GitHub is connected (used by main model when rendering)
@@ -221,6 +279,12 @@ func (m *Model) SetGithubService(connected bool) {
 // handleKeyMsg handles keyboard input; returns (updated model, optional request, cmd).
 func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, *Request, tea.Cmd) {
 	switch msg.String() {
+	case "esc":
+		if m.contextMenu != nil {
+			m.contextMenu = nil
+			return m, nil, nil
+		}
+		return m, nil, nil
 	case "j", "down":
 		if m.repository != nil && m.selectedPR < len(m.repository.PRs)-1 {
 			m.selectedPR++
@@ -268,7 +332,40 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, *Request, tea.Cmd) {
 }
 
 // handleZoneClick handles zone clicks; returns (updated model, optional request, cmd).
-func (m Model) handleZoneClick(z *zone.ZoneInfo) (Model, *Request, tea.Cmd) {
+func (m Model) handleZoneClick(z *zone.ZoneInfo, event tea.MouseMsg) (Model, *Request, tea.Cmd) {
+	inBounds := func(id string) bool {
+		zm := m.zoneManager.Get(id)
+		return zm != nil && zm.InBounds(event)
+	}
+
+	if m.contextMenu != nil {
+		prIsOpen := false
+		if m.repository != nil {
+			pi := m.contextMenu.PRIndex
+			if pi >= 0 && pi < len(m.repository.PRs) {
+				prIsOpen = m.repository.PRs[pi].State == "open"
+			}
+		}
+		items := prContextMenuItems()
+		zoneIdx := 0
+		for _, item := range items {
+			i := zoneIdx
+			zoneIdx++
+			if item.OpenOnly && !prIsOpen {
+				continue
+			}
+			if inBounds(mouse.ZonePRCtxMenuItem(i)) {
+				pi := m.contextMenu.PRIndex
+				m.contextMenu = nil
+				m.selectedPR = pi
+				req := item.Request
+				return m, &req, nil
+			}
+		}
+		m.contextMenu = nil
+		return m, nil, nil
+	}
+
 	if m.zoneManager == nil || z == nil {
 		return m, nil, nil
 	}

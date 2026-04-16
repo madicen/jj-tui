@@ -60,6 +60,14 @@ func (m GraphModel) handleKeyMsg(msg tea.KeyMsg) (GraphModel, *Request, tea.Cmd)
 		}
 
 	case "esc", "q":
+		if m.contextMenu != nil {
+			m.contextMenu = nil
+			return m, nil, nil
+		}
+		if m.commitContextMenu != nil {
+			m.commitContextMenu = nil
+			return m, nil, nil
+		}
 		if m.selectionMode == SelectionRebaseDestination {
 			m.selectionMode = SelectionNormal
 			m.rebaseSourceCommit = -1

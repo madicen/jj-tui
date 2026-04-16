@@ -89,6 +89,7 @@ const (
 	ZoneJiraSetDone       = "zone:jira:setdone"
 	ZoneJiraChangeStatus  = "zone:jira:changestatus" // Toggle status change mode
 	ZoneJiraTransition    = "zone:jira:transition:"  // Prefix for dynamic transitions
+	ZoneStatusPopoverClose = "zone:jira:statuspopover:close"
 
 	// PR action zones
 	ZonePROpenBrowser = "zone:pr:openbrowser"
@@ -279,4 +280,29 @@ func ZoneDivergentCommit(index int) string {
 // ZoneEvologSplitEntry returns the zone ID for an evolog row at the given index.
 func ZoneEvologSplitEntry(index int) string {
 	return fmt.Sprintf("zone:evologsplit:entry:%d", index)
+}
+
+// ZoneCtxMenuItem returns the zone ID for a file context menu item at the given index.
+func ZoneCtxMenuItem(index int) string {
+	return fmt.Sprintf("zone:ctxmenu:%d", index)
+}
+
+// ZoneCommitCtxMenuItem returns the zone ID for a commit context menu item at the given index.
+func ZoneCommitCtxMenuItem(index int) string {
+	return fmt.Sprintf("zone:commitctxmenu:%d", index)
+}
+
+// ZonePRCtxMenuItem returns the zone ID for a PR context menu item at the given index.
+func ZonePRCtxMenuItem(index int) string {
+	return fmt.Sprintf("zone:prctxmenu:%d", index)
+}
+
+// ZoneTicketCtxMenuItem returns the zone ID for a ticket context menu item at the given index.
+func ZoneTicketCtxMenuItem(index int) string {
+	return fmt.Sprintf("zone:ticketctxmenu:%d", index)
+}
+
+// ZoneBranchCtxMenuItem returns the zone ID for a branch context menu item at the given index.
+func ZoneBranchCtxMenuItem(index int) string {
+	return fmt.Sprintf("zone:branchctxmenu:%d", index)
 }
