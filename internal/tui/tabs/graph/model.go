@@ -593,6 +593,9 @@ func (m *GraphModel) buildGraphData() GraphData {
 			// Check if this commit has a bookmark without an open PR
 			for _, branch := range commit.Branches {
 				local := util.LocalBookmarkName(branch)
+				if local == "" || isDefaultBranch(local) {
+					continue
+				}
 				if !openPRBranches[branch] && !openPRBranches[local] {
 					commitBookmark[i] = local
 					break
@@ -610,7 +613,8 @@ func (m *GraphModel) buildGraphData() GraphData {
 				}
 				for _, parentID := range commit.Parents {
 					if parentIdx, ok := commitIDToIndex[parentID]; ok {
-						if branch := commitBookmark[parentIdx]; branch != "" {
+						branch := commitBookmark[parentIdx]
+						if branch != "" && !isDefaultBranch(branch) {
 							commitBookmark[i] = branch
 							changed = true
 							break
