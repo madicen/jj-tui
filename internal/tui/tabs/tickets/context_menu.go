@@ -182,27 +182,6 @@ func (m *Model) handleLongPress(msg tea.MouseMsg) tea.Cmd {
 
 	case tea.MouseActionRelease:
 		m.longPressItemIndex = -1
-		if m.statusSubmenu != nil {
-			for i := range m.availableTransitions {
-				zoneID := mouse.ZoneJiraTransition + fmt.Sprintf("%d", i)
-				z := m.zoneManager.Get(zoneID)
-				if z != nil && z.InBounds(msg) {
-					return nil
-				}
-			}
-			if z := m.zoneManager.Get(mouse.ZoneStatusPopoverClose); z != nil && z.InBounds(msg) {
-				return nil
-			}
-			m.statusSubmenu = nil
-		} else if m.contextMenu != nil {
-			for i := range ticketContextMenuItems() {
-				z := m.zoneManager.Get(mouse.ZoneTicketCtxMenuItem(i))
-				if z != nil && z.InBounds(msg) {
-					return nil
-				}
-			}
-			m.contextMenu = nil
-		}
 	}
 	return nil
 }

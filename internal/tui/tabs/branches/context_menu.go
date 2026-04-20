@@ -174,19 +174,6 @@ func (m *Model) handleLongPress(msg tea.MouseMsg) tea.Cmd {
 
 	case tea.MouseActionRelease:
 		m.longPressItemIndex = -1
-		if m.contextMenu != nil {
-			bi := m.contextMenu.BranchIndex
-			if bi >= 0 && bi < len(m.branchList) {
-				items := branchContextMenuItems(m.branchList[bi])
-				for i := range items {
-					z := m.zoneManager.Get(mouse.ZoneBranchCtxMenuItem(i))
-					if z != nil && z.InBounds(msg) {
-						return nil
-					}
-				}
-			}
-			m.contextMenu = nil
-		}
 	}
 	return nil
 }
