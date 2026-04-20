@@ -210,7 +210,8 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 		afterStatus := statusIndicator
 		var commitRow string
 		onSelectedRow := !data.InRebaseMode && data.RebaseDragSource < 0 && i == data.SelectedCommit
-		showForgot := onSelectedRow && commit.HasDeltaVsBookmarkOrigin && len(commit.ConflictedBranches) == 0
+		// (f) whenever origin-delta applies; bookmark may also show as diverged vs @origin for the same case.
+		showForgot := onSelectedRow && commit.HasDeltaVsBookmarkOrigin
 		// split (z): only when graph enrichment found a viable evolog split for this change.
 		showEvolog := onSelectedRow && commit.EvologSplitViable
 		showResolveBookmark := onSelectedRow && len(commit.ConflictedBranches) > 0

@@ -146,7 +146,7 @@ func (m GraphModel) handleKeyMsg(msg tea.KeyMsg) (GraphModel, *Request, tea.Cmd)
 	case "f":
 		if m.graphFocused && m.repository != nil && m.selectedCommit >= 0 && m.selectedCommit < len(m.repository.Graph.Commits) {
 			c := m.repository.Graph.Commits[m.selectedCommit]
-			if c.HasDeltaVsBookmarkOrigin && len(c.ConflictedBranches) == 0 {
+			if c.HasDeltaVsBookmarkOrigin {
 				return m, &Request{MoveDeltaOntoOrigin: true}, nil
 			}
 		}
