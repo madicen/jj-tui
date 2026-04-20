@@ -18,6 +18,9 @@ func (m *GraphModel) handleRebaseDragMouse(msg tea.MouseMsg) {
 	if m.repository == nil {
 		return
 	}
+	if m.contextMenu != nil || m.commitContextMenu != nil {
+		return
+	}
 	inBounds := func(id string) bool {
 		z := m.zoneManager.Get(id)
 		return z != nil && z.InBounds(msg)

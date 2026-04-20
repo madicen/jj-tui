@@ -423,7 +423,11 @@ func (m Model) handleZoneClick(z *zone.ZoneInfo, event tea.MouseMsg) (Model, *Re
 				return m, &req, nil
 			}
 		}
-		m.statusSubmenu = nil
+		// Don't dismiss unconditionally — AnyInBoundsAndUpdate fires multiple
+		// overlapping zones per release (e.g. ticket row + ctx menu item).
+		// The second zone fires after the submenu was just created but before
+		// it's rendered with transitions. Dismiss only via close button, a
+		// transition click, or Esc.
 		return m, nil, nil
 	}
 

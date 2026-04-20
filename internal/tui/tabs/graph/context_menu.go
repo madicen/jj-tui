@@ -125,6 +125,11 @@ func (m *GraphModel) handleFileLongPress(msg tea.MouseMsg) tea.Cmd {
 	}
 
 	switch msg.Action {
+	case tea.MouseActionMotion:
+		if m.contextMenu == nil && m.longPressFileIndex >= 0 {
+			m.longPressFileIndex = -1
+		}
+
 	case tea.MouseActionPress:
 		if msg.Button != tea.MouseButtonLeft {
 			return nil
