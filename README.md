@@ -70,7 +70,7 @@ When a bookmark was pushed and then amended or moved locally, **jj** may show th
 ### Homebrew (macOS/Linux)
 
 ```bash
-brew install madicen/tap/jj-tui
+brew install --cask madicen/tap/jj-tui
 ```
 
 ### Go Install
