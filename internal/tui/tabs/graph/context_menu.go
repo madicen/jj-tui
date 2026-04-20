@@ -153,6 +153,15 @@ func (m *GraphModel) handleFileLongPress(msg tea.MouseMsg) tea.Cmd {
 
 	case tea.MouseActionRelease:
 		m.longPressFileIndex = -1
+		if m.contextMenu != nil {
+			for i := range contextMenuItems() {
+				z := m.zoneManager.Get(mouse.ZoneCtxMenuItem(i))
+				if z != nil && z.InBounds(msg) {
+					return nil
+				}
+			}
+			m.contextMenu = nil
+		}
 	}
 	return nil
 }

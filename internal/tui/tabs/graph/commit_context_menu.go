@@ -165,6 +165,15 @@ func (m *GraphModel) handleCommitLongPress(msg tea.MouseMsg) tea.Cmd {
 
 	case tea.MouseActionRelease:
 		m.longPressCommitIndex = -1
+		if m.commitContextMenu != nil {
+			for i := range commitContextMenuItems() {
+				z := m.zoneManager.Get(mouse.ZoneCommitCtxMenuItem(i))
+				if z != nil && z.InBounds(msg) {
+					return nil
+				}
+			}
+			m.commitContextMenu = nil
+		}
 	}
 	return nil
 }

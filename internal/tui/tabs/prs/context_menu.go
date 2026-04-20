@@ -158,6 +158,15 @@ func (m *Model) handleLongPress(msg tea.MouseMsg) tea.Cmd {
 
 	case tea.MouseActionRelease:
 		m.longPressItemIndex = -1
+		if m.contextMenu != nil {
+			for i := range prContextMenuItems() {
+				z := m.zoneManager.Get(mouse.ZonePRCtxMenuItem(i))
+				if z != nil && z.InBounds(msg) {
+					return nil
+				}
+			}
+			m.contextMenu = nil
+		}
 	}
 	return nil
 }
