@@ -34,7 +34,7 @@ func (m GraphModel) handleZoneClick(msg zone.MsgZoneInBounds) (GraphModel, *Requ
 	// Commit context menu: same pattern as file context menu.
 	if m.commitContextMenu != nil {
 		firstParentImm := m.commitMenuFirstParentImmutable()
-		items := visibleCommitContextMenuItems(firstParentImm)
+		items := m.commitContextMenuRows(m.commitContextMenu.CommitIndex, firstParentImm)
 		for i, item := range items {
 			if inBounds(mouse.ZoneCommitCtxMenuItem(i)) {
 				ci := m.commitContextMenu.CommitIndex
