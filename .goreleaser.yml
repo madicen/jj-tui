@@ -57,23 +57,17 @@ changelog:
       - Merge pull request
       - Merge branch
 
-brews:
+homebrew_casks:
   - name: jj-tui
     repository:
       owner: madicen
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    directory: Formula
     homepage: "https://github.com/madicen/jj-tui"
     description: "A modern Terminal User Interface for managing Jujutsu repositories"
     license: "MIT"
-    dependencies:
-      - name: jj
-        type: optional
-    install: |
-      bin.install "jj-tui"
-    test: |
-      system "#{bin}/jj-tui", "--help"
+    binaries:
+      - jj-tui
 
 release:
   github:
