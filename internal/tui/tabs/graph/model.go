@@ -245,6 +245,9 @@ func (m *GraphModel) UpdateWithApp(msg tea.Msg, app *state.AppState) (GraphModel
 			}
 			m.selectedCommit = m.longPressCommitIndex
 			m.scrollToSelectedCommit = true
+			m.rebasePressAnchor = -1
+			m.rebaseDragSource = -1
+			m.rebaseDragHoverDest = -1
 		}
 		return *m, nil
 
@@ -256,13 +259,13 @@ func (m *GraphModel) UpdateWithApp(msg tea.Msg, app *state.AppState) (GraphModel
 			}
 			return *m, cmd
 		}
+		m.handleRebaseDragMouse(msg)
 		if cmd := m.handleFileLongPress(msg); cmd != nil {
 			return *m, cmd
 		}
 		if cmd := m.handleCommitLongPress(msg); cmd != nil {
 			return *m, cmd
 		}
-		m.handleRebaseDragMouse(msg)
 		return *m, nil
 
 	case tea.KeyMsg:
