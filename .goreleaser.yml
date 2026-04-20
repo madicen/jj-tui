@@ -68,6 +68,15 @@ homebrew_casks:
     license: "MIT"
     binaries:
       - jj-tui
+    # Unsigned GitHub release binaries are quarantined; without this, macOS shows
+    # "could not verify… malware" until the user runs xattr manually. Prefer real
+    # signing + notarization when feasible; see https://goreleaser.com/customization/publish/homebrew_casks/
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/jj-tui"]
+          end
 
 release:
   github:
