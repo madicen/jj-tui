@@ -1739,6 +1739,16 @@ func eligibleBookmarkForOriginDelta(branches []string) string {
 	return ""
 }
 
+// descendantRevsetForOriginEnrichment is the jj revset for this graph row when probing bookmark@origin
+// ancestry and tree diffs. Uses commit_id(...) so divergent changes (multiple revisions, one change ID)
+// do not make `jj diff` / `x::y` ambiguous or error.
+func descendantRevsetForOriginEnrichment(c internal.Commit) string {
+	if id := strings.TrimSpace(c.ID); id != "" {
+		return revsetCommitID(id)
+	}
+	return strings.TrimSpace(c.ChangeID)
+}
+
 func (s *Service) enrichCommitsDeltaVsOrigin(ctx context.Context, commits []internal.Commit) {
 	probes := 0
 	for i := range commits {
@@ -1750,6 +1760,10 @@ func (s *Service) enrichCommitsDeltaVsOrigin(ctx context.Context, commits []inte
 		if bn == "" {
 			continue
 		}
+		descRev := descendantRevsetForOriginEnrichment(*c)
+		if descRev == "" {
+			continue
+		}
 		if graphLoadMaxDeltaVsOriginProbes > 0 && probes >= graphLoadMaxDeltaVsOriginProbes {
 			c.HasDeltaVsBookmarkOrigin = false
 			continue
@@ -1757,12 +1771,12 @@ func (s *Service) enrichCommitsDeltaVsOrigin(ctx context.Context, commits []inte
 		probes++
 		// Already stacked on bookmark@origin (origin tip is an ancestor of this revision): push
 		// updates the remote bookmark; "(f)" restack is redundant (e.g. right after MoveBookmarkDeltaOntoOrigin).
-		if s.revisionBookmarkOriginIsAncestorOf(ctx, bn, c.ChangeID) {
+		if s.revisionBookmarkOriginIsAncestorOf(ctx, bn, descRev) {
 			c.HasDeltaVsBookmarkOrigin = false
 			continue
 		}
 		// Non-empty tree diff vs bookmark@origin and not in the ancestry chain above → offer Forgot.
-		ok, err := s.revisionDiffSummaryNonEmptyNoHistory(ctx, bn+"@origin", c.ChangeID)
+		ok, err := s.revisionDiffSummaryNonEmptyNoHistory(ctx, bn+"@origin", descRev)
 		if err != nil || !ok {
 			c.HasDeltaVsBookmarkOrigin = false
 			continue
@@ -1774,14 +1788,15 @@ func (s *Service) enrichCommitsDeltaVsOrigin(ctx context.Context, commits []inte
 // revisionBookmarkOriginIsAncestorOf is true when bn@origin lies on the ancestry of descendantRev
 // (jj revset x::y: commits below x and above y). Then the revision is already built on top of the
 // remembered remote tip — not the colocated "forgot to stack" case.
-func (s *Service) revisionBookmarkOriginIsAncestorOf(ctx context.Context, bookmarkLocalName, descendantChangeID string) bool {
+// Pass commit_id(...) via descendantRevsetForOriginEnrichment when the row may be divergent.
+func (s *Service) revisionBookmarkOriginIsAncestorOf(ctx context.Context, bookmarkLocalName, descendantRev string) bool {
 	bookmarkLocalName = strings.TrimSpace(bookmarkLocalName)
-	descendantChangeID = strings.TrimSpace(descendantChangeID)
-	if bookmarkLocalName == "" || descendantChangeID == "" {
+	descendantRev = strings.TrimSpace(descendantRev)
+	if bookmarkLocalName == "" || descendantRev == "" {
 		return false
 	}
 	originRef := bookmarkLocalName + "@origin"
-	rev := fmt.Sprintf("%s::%s", originRef, descendantChangeID)
+	rev := fmt.Sprintf("%s::%s", originRef, descendantRev)
 	out, err := s.runJJOutputNoHistory(ctx, "log", "-r", rev, "--no-graph", "-T", "commit_id", "--limit", "1")
 	return err == nil && strings.TrimSpace(out) != ""
 }

@@ -46,8 +46,54 @@ func commitContextMenuItems() []commitContextMenuItem {
 	}
 }
 
+// commitContextMenuRows is the full menu for a commit row: base actions plus Update PR / Create PR when
+// the same GraphData rules as the actions bar apply (see view_helpers Graph).
+func (m *GraphModel) commitContextMenuRows(ci int, firstParentImmutable bool) []commitContextMenuItem {
+	var out []commitContextMenuItem
+	for _, item := range commitContextMenuItems() {
+		if item.HideWhenFirstParentImmutable && firstParentImmutable {
+			continue
+		}
+		out = append(out, item)
+	}
+	if m.repository == nil || ci < 0 || ci >= len(m.repository.Graph.Commits) {
+		return out
+	}
+	if m.repository.Graph.Commits[ci].Immutable {
+		return out
+	}
+	data := m.buildGraphData()
+	prBranch := ""
+	if data.CommitPRBranch != nil {
+		prBranch = data.CommitPRBranch[ci]
+	}
+	if prBranch != "" {
+		label := "Update PR"
+		if len(m.repository.Graph.Commits[ci].Branches) == 0 {
+			label = fmt.Sprintf("Update PR [%s]", prBranch)
+		}
+		out = append(out, commitContextMenuItem{Label: label, Key: "u", Request: Request{UpdatePR: true}})
+	}
+	createPRBranch := ""
+	if data.CommitBookmark != nil {
+		createPRBranch = data.CommitBookmark[ci]
+	}
+	c := m.repository.Graph.Commits[ci]
+	if createPRBranch != "" && !isDefaultBranch(createPRBranch) && len(c.ConflictedBranches) == 0 {
+		label := "Create PR"
+		if len(c.Branches) == 0 || prBranch != "" {
+			label = fmt.Sprintf("Create PR [%s]", createPRBranch)
+		}
+		out = append(out, commitContextMenuItem{Label: label, Key: "c", Request: Request{CreatePR: true}})
+	}
+	return out
+}
+
 func (m *GraphModel) renderCommitContextMenu(isMutable bool, firstParentImmutable bool) string {
-	items := commitContextMenuItems()
+	if m.commitContextMenu == nil {
+		return ""
+	}
+	items := m.commitContextMenuRows(m.commitContextMenu.CommitIndex, firstParentImmutable)
 
 	menuBorder := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -121,7 +167,7 @@ func (m *GraphModel) renderCommitContextMenu(isMutable bool, firstParentImmutabl
 // context menu. Returns a tea.Cmd (the tick) on press, nil otherwise.
 func (m *GraphModel) handleCommitLongPress(msg tea.MouseMsg) tea.Cmd {
 	if m.commitContextMenu != nil && (msg.Action == tea.MouseActionMotion || msg.Action == tea.MouseActionPress) {
-		items := commitContextMenuItems()
+		items := m.commitContextMenuRows(m.commitContextMenu.CommitIndex, m.commitMenuFirstParentImmutable())
 		hit := -1
 		for i := range items {
 			z := m.zoneManager.Get(mouse.ZoneCommitCtxMenuItem(i))
@@ -167,20 +213,6 @@ func (m *GraphModel) handleCommitLongPress(msg tea.MouseMsg) tea.Cmd {
 		m.longPressCommitIndex = -1
 	}
 	return nil
-}
-
-// visibleCommitContextMenuItems returns the items that will actually be rendered,
-// filtered by firstParentImmutable. Used to map zone indices back to Request values.
-func visibleCommitContextMenuItems(firstParentImmutable bool) []commitContextMenuItem {
-	all := commitContextMenuItems()
-	var visible []commitContextMenuItem
-	for _, item := range all {
-		if item.HideWhenFirstParentImmutable && firstParentImmutable {
-			continue
-		}
-		visible = append(visible, item)
-	}
-	return visible
 }
 
 func (m *GraphModel) commitMenuIsMutable() bool {

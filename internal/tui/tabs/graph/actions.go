@@ -513,9 +513,6 @@ func executeMoveDeltaOntoOrigin(ctx *RequestContext) (tea.Cmd, string) {
 	if commit.Immutable {
 		return nil, "Cannot align with origin: commit is immutable"
 	}
-	if len(commit.ConflictedBranches) > 0 {
-		return nil, "Resolve bookmark conflict first (Branches tab)"
-	}
 	name := bookmarkNameForOriginSplit(commit.Branches)
 	if name == "" {
 		return nil, "Need a feature bookmark on this commit (main/master alone is not supported)"
