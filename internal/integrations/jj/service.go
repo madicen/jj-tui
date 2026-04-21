@@ -190,6 +190,43 @@ func (s *Service) GetCommitDescription(ctx context.Context, commitID string) (st
 	return strings.TrimSpace(out), nil
 }
 
+// GitFormatDiffForRevision returns a git-format unified diff for the revision against its parents.
+// If maxBytes > 0 and the output exceeds maxBytes, the diff is truncated and a trailer is appended.
+func (s *Service) GitFormatDiffForRevision(ctx context.Context, revision string, maxBytes int) (string, error) {
+	out, err := s.runJJOutput(ctx, "diff", "-r", revision, "--git", "--color", "never")
+	if err != nil {
+		return "", err
+	}
+	if maxBytes > 0 && len(out) > maxBytes {
+		trailer := "\n\n[diff truncated for AI context]\n"
+		keep := maxBytes - len(trailer)
+		if keep < 1 {
+			keep = maxBytes
+			trailer = ""
+		}
+		return out[:keep] + trailer, nil
+	}
+	return out, nil
+}
+
+// GitFormatDiffFromTo returns a git-format diff between two revisions (same semantics as jj diff --from --to).
+func (s *Service) GitFormatDiffFromTo(ctx context.Context, fromRev, toRev string, maxBytes int) (string, error) {
+	out, err := s.runJJOutput(ctx, "diff", "--from", fromRev, "--to", toRev, "--git", "--color", "never")
+	if err != nil {
+		return "", err
+	}
+	if maxBytes > 0 && len(out) > maxBytes {
+		trailer := "\n\n[diff truncated for AI context]\n"
+		keep := maxBytes - len(trailer)
+		if keep < 1 {
+			keep = maxBytes
+			trailer = ""
+		}
+		return out[:keep] + trailer, nil
+	}
+	return out, nil
+}
+
 // GetRevisionChangeID gets the change_id for any jj revision (e.g., "main@origin", "@", etc.)
 func (s *Service) GetRevisionChangeID(ctx context.Context, revision string) (string, error) {
 	out, err := s.runJJOutput(ctx, "log", "-r", revision, "--no-graph", "-T", "change_id")
@@ -567,8 +604,8 @@ func (s *Service) CreateBookmarkOnCommit(ctx context.Context, bookmarkName, comm
 
 // MoveBookmark moves an existing bookmark to a different commit
 func (s *Service) MoveBookmark(ctx context.Context, bookmarkName, commitID string) error {
-	// jj bookmark set <name> -r <revision>
-	return s.runJJ(ctx, "bookmark", "set", util.BookmarkArgForSetMove(bookmarkName), "-r", commitID)
+	// jj bookmark set <name> -r <revision> (--allow-backwards: target may be an ancestor of the current tip)
+	return s.runJJ(ctx, "bookmark", "set", util.BookmarkArgForSetMove(bookmarkName), "-r", commitID, "--allow-backwards")
 }
 
 // DeleteBookmark deletes a bookmark

@@ -34,21 +34,24 @@ const (
 	ZoneActionAbandon  = "zone:action:abandon"
 
 	// Description editor zones
-	ZoneDescSave   = "zone:desc:save"
-	ZoneDescCancel = "zone:desc:cancel"
-	ZoneDescClear  = "zone:desc:clear"
+	ZoneDescSave     = "zone:desc:save"
+	ZoneDescCancel   = "zone:desc:cancel"
+	ZoneDescClear    = "zone:desc:clear"
+	ZoneDescGenerate = "zone:desc:generate"
 
 	// PR creation zones
 	ZonePRTitle        = "zone:pr:title"
 	ZonePRBody         = "zone:pr:body"
 	ZonePRSubmit       = "zone:pr:submit"
 	ZonePRCancel       = "zone:pr:cancel"
+	ZonePRGenerate     = "zone:pr:generate"
 	ZoneActionCreatePR = "zone:action:createpr"
 
 	// Bookmark creation zones
 	ZoneBookmarkName      = "zone:bookmark:name"
 	ZoneBookmarkSubmit    = "zone:bookmark:submit"
 	ZoneBookmarkCancel    = "zone:bookmark:cancel"
+	ZoneBookmarkGenerate  = "zone:bookmark:generate"
 	ZoneActionBookmark    = "zone:action:bookmark"
 	ZoneActionDelBookmark = "zone:action:delbookmark"
 
@@ -151,6 +154,12 @@ const (
 	ZoneSettingsExternalEditorCustom       = "zone:settings:external_editor_custom"
 	ZoneSettingsAutoInProgress             = "zone:settings:auto_in_progress"
 	ZoneSettingsSanitizeBookmarks          = "zone:settings:sanitize_bookmarks"
+	ZoneSettingsAIEnabled                  = "zone:settings:ai:enabled"
+	ZoneSettingsAIBaseURL                  = "zone:settings:ai:base_url"
+	ZoneSettingsAIModel                    = "zone:settings:ai:model"
+	ZoneSettingsAIAPIKey                   = "zone:settings:ai:api_key"
+	// AI provider rows: zone:settings:ai:provider:N (0=openai_compatible, 1=gemini)
+	ZoneSettingsAIProviderPrefix = "zone:settings:ai:provider:"
 
 	// GitHub login zones
 	ZoneGitHubLoginCopyAndOpen = "zone:github_login:copy_and_open"
@@ -223,6 +232,11 @@ const (
 // ZoneSettingsExternalEditorPreset returns the zone ID for the external editor preset row at index (0..8).
 func ZoneSettingsExternalEditorPreset(index int) string {
 	return fmt.Sprintf("%s%d", ZoneSettingsExternalEditorPresetPrefix, index)
+}
+
+// ZoneSettingsAIProvider returns the zone ID for the AI provider preset row at index (0..1).
+func ZoneSettingsAIProvider(index int) string {
+	return fmt.Sprintf("%s%d", ZoneSettingsAIProviderPrefix, index)
 }
 
 // ZoneExistingBookmark returns the zone ID for an existing bookmark at the given index

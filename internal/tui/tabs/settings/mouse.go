@@ -270,7 +270,28 @@ func handleAdvancedZone(m *Model, zoneID string) (Model, tea.Cmd) {
 		return *m, m.SetFocusedField(14)
 	case mouse.ZoneSettingsExternalEditorCustom:
 		return *m, m.SetFocusedField(15)
+	case mouse.ZoneSettingsAIEnabled:
+		adv.ToggleAIEnabled()
+		return *m, nil
+	case mouse.ZoneSettingsAIBaseURL:
+		return *m, m.SetFocusedField(16)
+	case mouse.ZoneSettingsAIModel:
+		return *m, m.SetFocusedField(17)
+	case mouse.ZoneSettingsAIAPIKey:
+		return *m, m.SetFocusedField(18)
 	default:
+		if strings.HasPrefix(zoneID, mouse.ZoneSettingsAIProviderPrefix) {
+			s := strings.TrimPrefix(zoneID, mouse.ZoneSettingsAIProviderPrefix)
+			if idx, err := strconv.Atoi(s); err == nil {
+				switch idx {
+				case 1:
+					adv.SetAIProvider("gemini")
+				default:
+					adv.SetAIProvider("openai_compatible")
+				}
+			}
+			return *m, nil
+		}
 		if strings.HasPrefix(zoneID, mouse.ZoneSettingsExternalEditorPresetPrefix) {
 			s := strings.TrimPrefix(zoneID, mouse.ZoneSettingsExternalEditorPresetPrefix)
 			if idx, err := strconv.Atoi(s); err == nil {

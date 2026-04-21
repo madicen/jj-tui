@@ -38,6 +38,10 @@ const (
 	NavigateCloseBookmarkConflict // close diverged-bookmark dialog; main restores the tab stored when opening
 	NavigateOpenFileDiff  // show full jj diff for one changed file (graph modal) or preloaded raw git text (evolog)
 	NavigateCloseFileDiff // dismiss file diff overlay only (return to evolog split or graph)
+	// Optional LLM: modals request generation; main runs tea.Cmd and applies TextGeneratedMsg.
+	NavigateGenerateCommitDescription
+	NavigateGeneratePRForm
+	NavigateGenerateBookmarkName
 )
 
 // NavigateTarget describes a navigation request. Only main can perform these

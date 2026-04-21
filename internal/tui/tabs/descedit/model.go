@@ -73,6 +73,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+s":
 			return m, SaveRequestedCmd()
+		case "ctrl+g":
+			return m, state.NavigateTarget{Kind: state.NavigateGenerateCommitDescription}.Cmd()
 		case "esc":
 			return m, CancelRequestedCmd()
 		case "ctrl+shift+u":
@@ -86,7 +88,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 // ZoneIDs returns the zone IDs this modal uses when rendering. Used to resolve clicks.
 func (m Model) ZoneIDs() []string {
-	return []string{mouse.ZoneDescSave, mouse.ZoneDescCancel, mouse.ZoneDescClear}
+	return []string{mouse.ZoneDescSave, mouse.ZoneDescCancel, mouse.ZoneDescClear, mouse.ZoneDescGenerate}
 }
 
 func (m Model) resolveClickedZone(msg zone.MsgZoneInBounds) string {
@@ -111,6 +113,8 @@ func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
 		return m, CancelRequestedCmd()
 	case mouse.ZoneDescClear:
 		return m.clearDescription()
+	case mouse.ZoneDescGenerate:
+		return m, state.NavigateTarget{Kind: state.NavigateGenerateCommitDescription}.Cmd()
 	}
 	return m, nil
 }
@@ -138,14 +142,19 @@ func (m Model) View() string {
 		commitInfo = fmt.Sprintf("%s (%s)", m.commitShortID, changeIDShort)
 	}
 
-	header := titleStyle.Render("Edit Commit Description")
-	commitLine := subtitleStyle.Render(fmt.Sprintf("Commit: %s", commitInfo))
+	contentW := m.descriptionInput.Width()
+	if contentW < 12 {
+		contentW = 60
+	}
 	mark := func(id, s string) string {
 		if m.zoneManager == nil {
 			return s
 		}
 		return m.zoneManager.Mark(id, s)
 	}
+	genChip := mark(mouse.ZoneDescGenerate, styles.StyleAIGenerateIcon(styles.AIAssistGlyph))
+	headerRow := styles.SpreadRow(contentW, titleStyle.Render("Edit Commit Description"), genChip)
+	commitLine := subtitleStyle.Render(fmt.Sprintf("Commit: %s", commitInfo))
 	actionButtons := lipgloss.JoinHorizontal(
 		lipgloss.Left,
 		mark(mouse.ZoneDescSave, styles.ButtonStyle.Render("Save (Ctrl+S)")),
@@ -154,7 +163,7 @@ func (m Model) View() string {
 	)
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
-		header,
+		headerRow,
 		commitLine,
 		"",
 		m.descriptionInput.View(),
@@ -201,6 +210,11 @@ func (m *Model) SetDescription(value string) {
 // GetEditingCommitID returns the commit ID being edited
 func (m *Model) GetEditingCommitID() string {
 	return m.editingCommitID
+}
+
+// GetCommitShortID returns the short commit id for display / AI context (may be empty).
+func (m *Model) GetCommitShortID() string {
+	return m.commitShortID
 }
 
 // GetDescriptionValue returns the current description text

@@ -51,6 +51,9 @@ type RenderData struct {
 	SanitizeBookmarks      bool
 	ConfirmingCleanup      string
 	ExternalEditorPreset   int // Advanced: selected external editor preset index (radio rows)
+	AIEnabled              bool
+	AIProviderID           string // openai_compatible | gemini
+	AIAPIKeySet            bool   // key present (env overrides config)
 
 	// ThemeModel is set by BuildRenderData for rendering the Theme tab (swatches + bounds).
 	ThemeModel *theme.Model
@@ -85,9 +88,12 @@ func BuildRenderData(sm *Model, opts ViewOpts) RenderData {
 		AutoInProgressOnBranch: sm.GetSettingsAutoInProgress(),
 		BranchLimit:            sm.GetSettingsBranchLimit(),
 		SanitizeBookmarks:      sm.GetSettingsSanitizeBookmarks(),
-		ConfirmingCleanup:    sm.GetConfirmingCleanup(),
-		ExternalEditorPreset: sm.GetAdvancedModel().GetExternalEditorPreset(),
-		YOffset:              sm.GetSettingsYOffset(),
+		ConfirmingCleanup:      sm.GetConfirmingCleanup(),
+		ExternalEditorPreset:   sm.GetAdvancedModel().GetExternalEditorPreset(),
+		AIEnabled:              sm.GetAdvancedModel().GetAIEnabled(),
+		AIProviderID:           sm.GetAdvancedModel().GetAIProvider(),
+		AIAPIKeySet:            config.EffectiveAIAPIKey(opts.Config) != "",
+		YOffset:                sm.GetSettingsYOffset(),
 		ContentHeight:          opts.ContentHeight,
 		ThemeModel:             sm.GetThemeModel(),
 	}
@@ -510,6 +516,55 @@ func (r renderCtx) renderAdvanced(data RenderData) []string {
 		lines = append(lines, "  "+r.mark(mouse.ZoneSettingsGraphRevset, data.Inputs[14].View)+" "+r.mark(mouse.ZoneSettingsGraphRevsetClear, clearButtonStyle.Render("[Clear]")))
 	}
 	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    e.g. trunk() | (ancestors(@) - ancestors(trunk())) for main + your branch only"), "", "")
+
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render("Optional AI assist"), "")
+	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    API keys can be stored in config (0600) or provided via env ("+config.EnvAIAPIKey+" overrides). Sending a diff exposes code to the API."), "")
+	toggleAI := "[ ]"
+	if data.AIEnabled {
+		toggleAI = "[✓]"
+	}
+	lines = append(lines, "  "+r.mark(mouse.ZoneSettingsAIEnabled, lipgloss.NewStyle().Foreground(styles.ColorPrimary).Bold(true).Render(toggleAI+" Enable AI (Ctrl+G in description, PR, and bookmark modals)")))
+	curProv := strings.TrimSpace(data.AIProviderID)
+	if curProv == "" {
+		curProv = "openai_compatible"
+	}
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("  Provider:"), "")
+	renderAIProv := func(idx int, id string, label string) string {
+		selected := curProv == id
+		var radioText string
+		if selected {
+			radioText = toggleOnStyle.Render("(●) " + label)
+		} else {
+			radioText = lipgloss.NewStyle().Foreground(styles.ColorPrimary).Render("( ) " + label)
+		}
+		return r.mark(mouse.ZoneSettingsAIProvider(idx), radioText)
+	}
+	lines = append(lines, "    "+renderAIProv(0, "openai_compatible", "OpenAI-compatible (Chat Completions / Ollama)"))
+	lines = append(lines, "    "+renderAIProv(1, "gemini", "Google Gemini (Generative Language API)"))
+	lines = append(lines, "")
+	if data.AIAPIKeySet {
+		lines = append(lines, "  "+lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B")).Render("API key: configured"))
+	} else {
+		lines = append(lines, "  "+lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("API key: not set (field below or "+config.EnvAIAPIKey+")"))
+	}
+	lines = append(lines, "")
+	baseURLLabel := "  API base URL (OpenAI/Ollama; empty = OpenAI public):"
+	if curProv == "gemini" {
+		baseURLLabel = "  API base URL (ignored for Gemini):"
+	}
+	lines = append(lines, focusStyle(16).Render(baseURLLabel))
+	if len(data.Inputs) > 16 {
+		lines = append(lines, "  "+r.mark(mouse.ZoneSettingsAIBaseURL, data.Inputs[16].View))
+	}
+	lines = append(lines, focusStyle(17).Render("  Model (empty = default):"))
+	if len(data.Inputs) > 17 {
+		lines = append(lines, "  "+r.mark(mouse.ZoneSettingsAIModel, data.Inputs[17].View))
+	}
+	lines = append(lines, focusStyle(18).Render("  API key (optional; env overrides):"))
+	if len(data.Inputs) > 18 {
+		lines = append(lines, "  "+r.mark(mouse.ZoneSettingsAIAPIKey, data.Inputs[18].View))
+	}
+	lines = append(lines, "", "")
 
 	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render("Bookmark Settings"), "")
 	toggleStr := "[ ]"

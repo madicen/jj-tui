@@ -54,6 +54,11 @@ type SettingsParams struct {
 	ThemeMuted                   string
 	ExternalFileEditor           string
 	ExternalFileEditorCustom     string
+	AIEnabled                    bool
+	AIBaseURL                    string
+	AIModel                      string
+	AIProvider                   string
+	AIAPIKey                     string
 }
 
 // Status messages for cleanup flows.
@@ -173,6 +178,11 @@ func BuildSettingsParams(m *Model, githubOwner, githubRepo string) SettingsParam
 	preset, custom := adv.SavedExternalEditor()
 	params.ExternalFileEditor = preset
 	params.ExternalFileEditorCustom = custom
+	params.AIEnabled = adv.GetAIEnabled()
+	params.AIBaseURL = adv.GetAIBaseURL()
+	params.AIModel = adv.GetAIModel()
+	params.AIProvider = adv.GetAIProvider()
+	params.AIAPIKey = adv.GetAIAPIKey()
 	params.GitHubToken = strings.TrimSpace(gh.GetToken())
 	params.JiraURL = strings.TrimSpace(jr.GetURL())
 	params.JiraUser = strings.TrimSpace(jr.GetUser())
@@ -269,6 +279,12 @@ func SaveSettingsCmd(params SettingsParams) tea.Cmd {
 		cfg.ThemePrimary = params.ThemePrimary
 		cfg.ThemeSecondary = params.ThemeSecondary
 		cfg.ThemeMuted = params.ThemeMuted
+		aiOn := params.AIEnabled
+		cfg.AIEnabled = &aiOn
+		cfg.AIBaseURL = strings.TrimSpace(params.AIBaseURL)
+		cfg.AIModel = strings.TrimSpace(params.AIModel)
+		cfg.AIProvider = strings.TrimSpace(params.AIProvider)
+		cfg.AIAPIKey = strings.TrimSpace(params.AIAPIKey)
 		_ = cfg.Save()
 		return buildSettingsSavedMsg(params, false)
 	}
@@ -278,6 +294,7 @@ func SaveSettingsCmd(params SettingsParams) tea.Cmd {
 func SaveSettingsLocalCmd(params SettingsParams) tea.Cmd {
 	return func() tea.Msg {
 		setEnvParams(params)
+		aiOn := params.AIEnabled
 		cfg := &config.Config{
 			TicketProvider:               params.TicketProvider,
 			GitHubShowMerged:             &params.ShowMerged,
@@ -291,6 +308,11 @@ func SaveSettingsLocalCmd(params SettingsParams) tea.Cmd {
 			GraphRevset:                  params.GraphRevset,
 			ExternalFileEditor:           params.ExternalFileEditor,
 			ExternalFileEditorCustom:     params.ExternalFileEditorCustom,
+			AIEnabled:                    &aiOn,
+			AIBaseURL:                    strings.TrimSpace(params.AIBaseURL),
+			AIModel:                      strings.TrimSpace(params.AIModel),
+			AIProvider:                   strings.TrimSpace(params.AIProvider),
+			AIAPIKey:                     strings.TrimSpace(params.AIAPIKey),
 			ThemePrimary:                 params.ThemePrimary,
 			ThemeSecondary:               params.ThemeSecondary,
 			ThemeMuted:                   params.ThemeMuted,

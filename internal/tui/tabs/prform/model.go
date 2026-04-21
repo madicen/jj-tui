@@ -118,6 +118,13 @@ func (m Model) renderForm() string {
 		return m.zoneManager.Mark(id, s)
 	}
 
+	contentW := m.bodyInput.Width()
+	if contentW < 12 {
+		contentW = 60
+	}
+	genChip := mark(mouse.ZonePRGenerate, styles.StyleAIGenerateIcon(styles.AIAssistGlyph))
+	headerRow := styles.SpreadRow(contentW, titleStyle.Render("Create Pull Request"), genChip)
+
 	branchLine := subtitleStyle.Render(fmt.Sprintf("Branch: %s → %s", m.baseBranch, m.headBranch))
 	titleInput := mark(mouse.ZonePRTitle, m.titleInput.View())
 	bodyInput := mark(mouse.ZonePRBody, m.bodyInput.View())
@@ -126,7 +133,7 @@ func (m Model) renderForm() string {
 
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
-		titleStyle.Render("Create Pull Request"),
+		headerRow,
 		branchLine,
 		"",
 		"Title:",
@@ -144,6 +151,8 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		return m, CancelRequestedCmd()
+	case "ctrl+g":
+		return m, state.NavigateTarget{Kind: state.NavigateGeneratePRForm}.Cmd()
 	case "ctrl+s", "ctrl+enter":
 		return m, SubmitRequestedCmd()
 	case "tab":
@@ -171,7 +180,7 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 // ZoneIDs returns the zone IDs this modal uses when rendering. Used to resolve clicks.
 func (m Model) ZoneIDs() []string {
-	return []string{mouse.ZonePRTitle, mouse.ZonePRBody, mouse.ZonePRSubmit, mouse.ZonePRCancel}
+	return []string{mouse.ZonePRTitle, mouse.ZonePRBody, mouse.ZonePRSubmit, mouse.ZonePRGenerate, mouse.ZonePRCancel}
 }
 
 func (m Model) resolveClickedZone(msg zone.MsgZoneInBounds) string {
@@ -200,6 +209,8 @@ func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
 		return m, nil
 	case mouse.ZonePRSubmit:
 		return m, SubmitRequestedCmd()
+	case mouse.ZonePRGenerate:
+		return m, state.NavigateTarget{Kind: state.NavigateGeneratePRForm}.Cmd()
 	case mouse.ZonePRCancel:
 		return m, CancelRequestedCmd()
 	}

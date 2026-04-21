@@ -147,8 +147,23 @@ func SubmitBookmark(modal *Model, repo *internal.Repository, cfg *config.Config,
 			commitID = repo.Graph.Commits[wcIdx].ChangeID
 		}
 	}
-	if modal.GetSelectedBookmarkIdx() >= 0 {
-		return nil, "Moving existing bookmark not yet supported"
+	if sel := modal.GetSelectedBookmarkIdx(); sel >= 0 {
+		existing := modal.GetExistingBookmarks()
+		if sel >= len(existing) {
+			return nil, "Invalid bookmark selection"
+		}
+		if strings.TrimSpace(commitID) == "" {
+			return nil, "No commit to move bookmark to"
+		}
+		bookmarkToMove := strings.TrimSpace(util.LocalBookmarkName(existing[sel]))
+		if bookmarkToMove == "" {
+			return nil, "Invalid bookmark selection"
+		}
+		if errStr := ValidateBookmarkName(bookmarkToMove); errStr != "" {
+			return nil, errStr
+		}
+		return MoveBookmarkCmd(jjService, bookmarkToMove, commitID),
+			fmt.Sprintf("Moving bookmark '%s'...", bookmarkToMove)
 	}
 	sanitize := true
 	if cfg != nil {

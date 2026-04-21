@@ -19,21 +19,21 @@ import (
 
 // Model represents the bookmark creation dialog
 type Model struct {
-	shown               bool
-	nameInput           textinput.Model
-	commitIdx           int      // Index of commit to create bookmark on
-	existingBookmarks   []string // List of existing bookmarks
-	selectedBookmarkIdx int      // Index of selected existing bookmark (-1 for new)
-	fromJira            bool     // True if creating bookmark from Jira ticket
-	jiraTicketKey       string   // Jira ticket key if creating from Jira
-	jiraTicketTitle     string   // Jira ticket summary if creating from Jira
-	ticketDisplayKey    string   // Short display key (e.g., "$12u" for Codecks)
-	bookmarkNameExists  bool     // True if entered name matches an existing bookmark
-	jiraBookmarkTitles  map[string]string // Maps bookmark names to formatted PR titles ("KEY - Title")
+	shown                     bool
+	nameInput                 textinput.Model
+	commitIdx                 int               // Index of commit to create bookmark on
+	existingBookmarks         []string          // List of existing bookmarks
+	selectedBookmarkIdx       int               // Index of selected existing bookmark (-1 for new)
+	fromJira                  bool              // True if creating bookmark from Jira ticket
+	jiraTicketKey             string            // Jira ticket key if creating from Jira
+	jiraTicketTitle           string            // Jira ticket summary if creating from Jira
+	ticketDisplayKey          string            // Short display key (e.g., "$12u" for Codecks)
+	bookmarkNameExists        bool              // True if entered name matches an existing bookmark
+	jiraBookmarkTitles        map[string]string // Maps bookmark names to formatted PR titles ("KEY - Title")
 	ticketBookmarkDisplayKeys map[string]string // Maps bookmark names to ticket short IDs for commit messages
-	repository          *internal.Repository
-	nameConflictSources []string // Branch names + commit branch names (set by main); used for "name exists" check
-	zoneManager         *zone.Manager
+	repository                *internal.Repository
+	nameConflictSources       []string // Branch names + commit branch names (set by main); used for "name exists" check
+	zoneManager               *zone.Manager
 }
 
 // NewModel creates a new Bookmark model. zoneManager may be nil.
@@ -103,6 +103,11 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		return m, CancelRequestedCmd()
+	case "ctrl+g":
+		if m.selectedBookmarkIdx == -1 {
+			return m, state.NavigateTarget{Kind: state.NavigateGenerateBookmarkName}.Cmd()
+		}
+		return m, nil
 	case "enter", "ctrl+s":
 		return m, SubmitRequestedCmd()
 	case "tab":
@@ -147,7 +152,7 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 // ZoneIDs returns the zone IDs this modal uses when rendering (same IDs passed to Mark). Used to resolve clicks.
 func (m Model) ZoneIDs() []string {
-	ids := []string{mouse.ZoneBookmarkName, mouse.ZoneBookmarkSubmit, mouse.ZoneBookmarkCancel}
+	ids := []string{mouse.ZoneBookmarkName, mouse.ZoneBookmarkSubmit, mouse.ZoneBookmarkGenerate, mouse.ZoneBookmarkCancel}
 	for i := range m.existingBookmarks {
 		ids = append(ids, mouse.ZoneExistingBookmark(i))
 	}
@@ -174,6 +179,9 @@ func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
 	}
 	if zoneID == mouse.ZoneBookmarkCancel {
 		return m, CancelRequestedCmd()
+	}
+	if zoneID == mouse.ZoneBookmarkGenerate && m.selectedBookmarkIdx == -1 {
+		return m, state.NavigateTarget{Kind: state.NavigateGenerateBookmarkName}.Cmd()
 	}
 	if zoneID == mouse.ZoneBookmarkName {
 		m.selectedBookmarkIdx = -1
@@ -433,7 +441,18 @@ func (m Model) renderBookmark() string {
 	if m.selectedBookmarkIdx == -1 || m.fromJira {
 		inputStyle = inputStyle.Foreground(styles.ColorPrimary)
 	}
-	lines = append(lines, inputStyle.Render("Name:"))
+	nameW := m.nameInput.Width
+	if nameW < 8 {
+		nameW = 50
+	}
+	// Align sparkles with the indented input row ("  " + field, width 2+nameW).
+	nameRowW := 2 + nameW
+	if m.selectedBookmarkIdx == -1 {
+		genChip := mark(m.zoneManager, mouse.ZoneBookmarkGenerate, styles.StyleAIGenerateIcon(styles.AIAssistGlyph))
+		lines = append(lines, styles.SpreadRow(nameRowW, inputStyle.Render("  Name:"), genChip))
+	} else {
+		lines = append(lines, inputStyle.Render("Name:"))
+	}
 	lines = append(lines, mark(m.zoneManager, mouse.ZoneBookmarkName, "  "+m.nameInput.View()))
 	if m.bookmarkNameExists {
 		warningStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#E3B341")).Bold(true)
