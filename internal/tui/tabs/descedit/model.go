@@ -73,6 +73,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+s":
 			return m, SaveRequestedCmd()
+		case "ctrl+g":
+			return m, state.NavigateTarget{Kind: state.NavigateGenerateCommitDescription}.Cmd()
 		case "esc":
 			return m, CancelRequestedCmd()
 		case "ctrl+shift+u":
@@ -86,7 +88,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 // ZoneIDs returns the zone IDs this modal uses when rendering. Used to resolve clicks.
 func (m Model) ZoneIDs() []string {
-	return []string{mouse.ZoneDescSave, mouse.ZoneDescCancel, mouse.ZoneDescClear}
+	return []string{mouse.ZoneDescSave, mouse.ZoneDescCancel, mouse.ZoneDescClear, mouse.ZoneDescGenerate}
 }
 
 func (m Model) resolveClickedZone(msg zone.MsgZoneInBounds) string {
@@ -111,6 +113,8 @@ func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
 		return m, CancelRequestedCmd()
 	case mouse.ZoneDescClear:
 		return m.clearDescription()
+	case mouse.ZoneDescGenerate:
+		return m, state.NavigateTarget{Kind: state.NavigateGenerateCommitDescription}.Cmd()
 	}
 	return m, nil
 }
@@ -149,6 +153,7 @@ func (m Model) View() string {
 	actionButtons := lipgloss.JoinHorizontal(
 		lipgloss.Left,
 		mark(mouse.ZoneDescSave, styles.ButtonStyle.Render("Save (Ctrl+S)")),
+		mark(mouse.ZoneDescGenerate, styles.ButtonStyle.Render("Generate (Ctrl+G)")),
 		mark(mouse.ZoneDescClear, styles.ButtonStyle.Render("Clear (Ctrl+Shift+U)")),
 		mark(mouse.ZoneDescCancel, styles.ButtonStyle.Render("Cancel (Esc)")),
 	)
@@ -201,6 +206,11 @@ func (m *Model) SetDescription(value string) {
 // GetEditingCommitID returns the commit ID being edited
 func (m *Model) GetEditingCommitID() string {
 	return m.editingCommitID
+}
+
+// GetCommitShortID returns the short commit id for display / AI context (may be empty).
+func (m *Model) GetCommitShortID() string {
+	return m.commitShortID
 }
 
 // GetDescriptionValue returns the current description text

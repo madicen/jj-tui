@@ -418,11 +418,31 @@ jj-tui
   "external_file_editor_custom": "cursor -g {path}",
   "theme_primary": "#7E00AF",
   "theme_secondary": "#FF79C6",
-  "theme_muted": "#6272A4"
+  "theme_muted": "#6272A4",
+  "ai_enabled": false,
+  "ai_provider": "openai_compatible",
+  "ai_api_key": "",
+  "ai_base_url": "https://api.openai.com/v1",
+  "ai_model": "gpt-4o-mini",
+  "ai_timeout_seconds": 60
 }
 ```
 
 Omit keys you do not need. See `internal/config/config.go` for the full schema and merge rules.
+
+### Optional AI assist
+
+When **`ai_enabled`** is true and an API key is configured (**`ai_api_key`** in config and/or **`JJ_TUI_AI_API_KEY`** in the environment; the env var wins), jj-tui can call a provider to draft text:
+
+- **Ctrl+G** in the commit description editor, **Create PR** modal, or **bookmark** modal (new name only) runs generation; you always review before saving or submitting.
+- **`ai_provider`**: `openai_compatible` (default) or **`gemini`** (Google Generative Language API).
+- **`ai_base_url`**: For `openai_compatible`, API root without a trailing slash (default: `https://api.openai.com/v1`). Use e.g. `http://127.0.0.1:11434/v1` for Ollama. Ignored for Gemini (Google endpoint).
+- **`ai_model`**: Model id. Defaults: `gpt-4o-mini` (OpenAI-compatible) or `gemini-2.5-flash` (Gemini) when empty.
+- **`ai_timeout_seconds`**: HTTP timeout (optional; default 60).
+
+Configure from **Settings → Advanced** or JSON. Diffs are included in prompts; treat this as sending code to the provider unless you use a local endpoint.
+
+**Cursor / in-IDE models:** Cursor’s chat models are not exposed as a stable HTTP API for third-party apps to call from the TUI. Practical options are **your own API keys** (OpenAI, Google AI Studio for Gemini, Anthropic via an OpenAI-compatible gateway, local Ollama, etc.).
 
 ### Graph view revset
 

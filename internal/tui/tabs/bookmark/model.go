@@ -103,6 +103,11 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		return m, CancelRequestedCmd()
+	case "ctrl+g":
+		if m.selectedBookmarkIdx == -1 {
+			return m, state.NavigateTarget{Kind: state.NavigateGenerateBookmarkName}.Cmd()
+		}
+		return m, nil
 	case "enter", "ctrl+s":
 		return m, SubmitRequestedCmd()
 	case "tab":
@@ -147,7 +152,7 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 // ZoneIDs returns the zone IDs this modal uses when rendering (same IDs passed to Mark). Used to resolve clicks.
 func (m Model) ZoneIDs() []string {
-	ids := []string{mouse.ZoneBookmarkName, mouse.ZoneBookmarkSubmit, mouse.ZoneBookmarkCancel}
+	ids := []string{mouse.ZoneBookmarkName, mouse.ZoneBookmarkSubmit, mouse.ZoneBookmarkGenerate, mouse.ZoneBookmarkCancel}
 	for i := range m.existingBookmarks {
 		ids = append(ids, mouse.ZoneExistingBookmark(i))
 	}
@@ -174,6 +179,9 @@ func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
 	}
 	if zoneID == mouse.ZoneBookmarkCancel {
 		return m, CancelRequestedCmd()
+	}
+	if zoneID == mouse.ZoneBookmarkGenerate && m.selectedBookmarkIdx == -1 {
+		return m, state.NavigateTarget{Kind: state.NavigateGenerateBookmarkName}.Cmd()
 	}
 	if zoneID == mouse.ZoneBookmarkName {
 		m.selectedBookmarkIdx = -1
@@ -451,7 +459,15 @@ func (m Model) renderBookmark() string {
 		submitLabel = "Create (Enter)"
 	}
 	submitButton := mark(m.zoneManager, mouse.ZoneBookmarkSubmit, styles.ButtonStyle.Render(submitLabel))
+	var genButton string
+	if m.selectedBookmarkIdx == -1 {
+		genButton = mark(m.zoneManager, mouse.ZoneBookmarkGenerate, styles.ButtonStyle.Render("Generate (Ctrl+G)"))
+	}
 	cancelButton := mark(m.zoneManager, mouse.ZoneBookmarkCancel, styles.ButtonStyle.Render("Cancel (Esc)"))
-	lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Left, submitButton, " ", cancelButton))
+	if genButton != "" {
+		lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Left, submitButton, " ", genButton, " ", cancelButton))
+	} else {
+		lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Left, submitButton, " ", cancelButton))
+	}
 	return strings.Join(lines, "\n")
 }

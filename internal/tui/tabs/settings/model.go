@@ -257,6 +257,8 @@ func (m *Model) ZoneIDs() []string {
 		mouse.ZoneSettingsAdvancedConfirmYes, mouse.ZoneSettingsAdvancedConfirmNo,
 		mouse.ZoneSettingsAdvancedDeleteBookmarks, mouse.ZoneSettingsAdvancedAbandonOldCommits,
 		mouse.ZoneSettingsGraphRevset, mouse.ZoneSettingsGraphRevsetClear,
+		mouse.ZoneSettingsAIEnabled, mouse.ZoneSettingsAIProvider(0), mouse.ZoneSettingsAIProvider(1),
+		mouse.ZoneSettingsAIBaseURL, mouse.ZoneSettingsAIModel, mouse.ZoneSettingsAIAPIKey,
 	}
 	for i := range advanced.ExternalEditorPresetLabels {
 		ids = append(ids, mouse.ZoneSettingsExternalEditorPreset(i))
@@ -366,7 +368,7 @@ func (m *Model) forwardKeyToActiveSubmodel(msg tea.KeyMsg) {
 		adv := m.GetAdvancedModel()
 		switch msg.String() {
 		case "tab", "down", "j":
-			if adv.GetFocusedField() < 1 {
+			if adv.GetFocusedField() < 4 {
 				adv.SetFocusedField(adv.GetFocusedField() + 1)
 			}
 		case "shift+tab", "up", "k":
@@ -453,7 +455,7 @@ func (m *Model) SetSettingsTab(tab int) {
 	m.settingsTab = tab % 7
 }
 
-// GetFocusedField returns the currently focused input field (global index; Advanced uses 14–15 for text inputs).
+// GetFocusedField returns the currently focused input field (global index; Advanced text inputs use 14–18).
 func (m *Model) GetFocusedField() int {
 	switch m.settingsTab {
 	case 0:
@@ -472,13 +474,13 @@ func (m *Model) GetFocusedField() int {
 	case 5:
 		return 0 // Theme tab has no inputs
 	case 6:
-		return 14 + m.advancedModel.GetFocusedField()
+		return 14 + m.advancedModel.GetFocusedField() // 14..18
 	}
 	return 0
 }
 
 // SetFocusedField sets the focused input field (global index); used by zone handlers to focus an input.
-// Returns a tea.Cmd when focusing an Advanced text input (indices 14–15) so the cursor is shown.
+// Returns a tea.Cmd when focusing an Advanced text input (indices 14–18) so the cursor is shown.
 func (m *Model) SetFocusedField(idx int) tea.Cmd {
 	if idx < 1 {
 		m.githubModel.SetFocusedField(0)
@@ -568,8 +570,8 @@ func (m *Model) GetSettingsInputs() []struct{ View string } {
 	for _, v := range m.advancedModel.GetInputViews() {
 		out = append(out, struct{ View string }{v})
 	}
-	// Ensure exactly 16 elements so views can safely use data.Inputs[0..15] (14=revset, 15=custom editor).
-	for len(out) < 16 {
+	// Ensure exactly 19 elements: 14=revset, 15=custom editor, 16=AI base URL, 17=AI model, 18=AI key.
+	for len(out) < 19 {
 		out = append(out, struct{ View string }{""})
 	}
 	return out

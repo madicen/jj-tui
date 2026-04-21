@@ -253,3 +253,24 @@ func TestLoadFromNonExistentFile(t *testing.T) {
 	}
 }
 
+func TestAIModelResolved(t *testing.T) {
+	t.Run("explicitModel", func(t *testing.T) {
+		cfg := &Config{AIModel: "custom", AIProvider: "gemini"}
+		if got := cfg.AIModelResolved(); got != "custom" {
+			t.Fatalf("got %q", got)
+		}
+	})
+	t.Run("geminiDefault", func(t *testing.T) {
+		cfg := &Config{AIProvider: "gemini"}
+		if got := cfg.AIModelResolved(); got != "gemini-2.5-flash" {
+			t.Fatalf("got %q", got)
+		}
+	})
+	t.Run("openaiDefault", func(t *testing.T) {
+		cfg := &Config{}
+		if got := cfg.AIModelResolved(); got != "gpt-4o-mini" {
+			t.Fatalf("got %q", got)
+		}
+	})
+}
+

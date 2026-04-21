@@ -14,6 +14,7 @@ import (
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
+	aitab "github.com/madicen/jj-tui/internal/tui/ai"
 	"github.com/madicen/jj-tui/internal/tui/data"
 	"github.com/madicen/jj-tui/internal/tui/state"
 	bookmarktab "github.com/madicen/jj-tui/internal/tui/tabs/bookmark"
@@ -61,6 +62,8 @@ type Model struct {
 	// Silent background graph refresh (handleTickMsg) runs concurrently per Bubble Tea Batch;
 	// without this guard, overlapping GetRepository calls can retain multi-copy graphs and spike RSS.
 	silentReloadInFlight bool
+	// Monotonic id for optional LLM requests; stale responses are ignored.
+	aiGenReqID int
 
 	// Tab-specific models (own all tab/modal state; main model does not duplicate)
 	graphTabModel    graphtab.GraphModel
@@ -518,6 +521,53 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		return m, nil
 	case state.NavigateSubmitTicket:
 		return m, m.submitTicket()
+	case state.NavigateGenerateCommitDescription:
+		if m.appState.Config == nil || !m.appState.Config.AIConfiguredForGeneration() {
+			m.appState.StatusMessage = fmt.Sprintf("Enable AI in Settings → Advanced and set an API key (or %s)", config.EnvAIAPIKey)
+			return m, nil
+		}
+		changeID := m.desceditModal.GetEditingCommitID()
+		if changeID == "" {
+			return m, nil
+		}
+		m.aiGenReqID++
+		rid := m.aiGenReqID
+		m.appState.StatusMessage = "Generating description…"
+		return m, aitab.GenerateCommitDescriptionCmd(rid, m.appState.JJService, m.appState.Config, changeID, m.desceditModal.GetCommitShortID(), m.desceditModal.GetDescriptionValue())
+	case state.NavigateGeneratePRForm:
+		if m.appState.Config == nil || !m.appState.Config.AIConfiguredForGeneration() {
+			m.appState.StatusMessage = fmt.Sprintf("Enable AI in Settings → Advanced and set an API key (or %s)", config.EnvAIAPIKey)
+			return m, nil
+		}
+		repo := m.appState.Repository
+		idx := m.prFormModal.GetCommitIndex()
+		if repo == nil || idx < 0 || idx >= len(repo.Graph.Commits) {
+			return m, nil
+		}
+		changeID := repo.Graph.Commits[idx].ChangeID
+		m.aiGenReqID++
+		rid := m.aiGenReqID
+		m.appState.StatusMessage = "Generating PR title and body…"
+		return m, aitab.GeneratePRFormCmd(rid, m.appState.JJService, m.appState.Config, changeID, m.prFormModal.GetBaseBranch(), m.prFormModal.GetHeadBranch(), m.prFormModal.GetTitle())
+	case state.NavigateGenerateBookmarkName:
+		if m.appState.Config == nil || !m.appState.Config.AIConfiguredForGeneration() {
+			m.appState.StatusMessage = fmt.Sprintf("Enable AI in Settings → Advanced and set an API key (or %s)", config.EnvAIAPIKey)
+			return m, nil
+		}
+		repo := m.appState.Repository
+		idx := m.bookmarkModal.GetCommitIdx()
+		rev := "@"
+		if repo != nil && idx >= 0 && idx < len(repo.Graph.Commits) {
+			rev = repo.Graph.Commits[idx].ChangeID
+		}
+		hint := ""
+		if m.bookmarkModal.IsFromJira() {
+			hint = strings.TrimSpace(m.bookmarkModal.GetJiraKey() + " " + m.bookmarkModal.GetJiraTicketTitle())
+		}
+		m.aiGenReqID++
+		rid := m.aiGenReqID
+		m.appState.StatusMessage = "Generating bookmark name…"
+		return m, aitab.GenerateBookmarkNameCmd(rid, m.appState.JJService, m.appState.Config, rev, hint)
 	default:
 		return m, nil
 	}
@@ -994,6 +1044,65 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case state.NavigateMsg:
 		return m.handleNavigate(msg.Target)
+
+	case aitab.TextGeneratedMsg:
+		if msg.ReqID != m.aiGenReqID {
+			return m, nil
+		}
+		if msg.Err != nil {
+			var label string
+			switch msg.Kind {
+			case aitab.KindCommitDescription:
+				label = "Commit description (AI)"
+			case aitab.KindPR:
+				label = "Pull request (AI)"
+			case aitab.KindBookmark:
+				label = "Bookmark name (AI)"
+			default:
+				label = "AI"
+			}
+			return m.Update(errorMsg{Err: fmt.Errorf("%s: %w", label, msg.Err)})
+		}
+		switch msg.Kind {
+		case aitab.KindCommitDescription:
+			if m.appState.ViewMode != state.ViewEditDescription || m.desceditModal.GetEditingCommitID() != msg.CommitID {
+				return m, nil
+			}
+			cur := strings.TrimSpace(m.desceditModal.GetDescriptionValue())
+			next := strings.TrimSpace(msg.Text)
+			if next == "" {
+				return m, nil
+			}
+			if cur == "" {
+				m.desceditModal.SetDescription(next)
+			} else {
+				m.desceditModal.SetDescription(cur + "\n\n" + next)
+			}
+			m.appState.StatusMessage = "Description generated (review, then save)"
+		case aitab.KindPR:
+			if m.appState.ViewMode != state.ViewCreatePR {
+				return m, nil
+			}
+			if t := strings.TrimSpace(msg.Title); t != "" {
+				m.prFormModal.SetTitle(t)
+			}
+			if b := strings.TrimSpace(msg.Body); b != "" {
+				m.prFormModal.SetBody(b)
+			}
+			m.appState.StatusMessage = "PR fields generated (review, then create)"
+		case aitab.KindBookmark:
+			if m.appState.ViewMode != state.ViewCreateBookmark {
+				return m, nil
+			}
+			name := strings.TrimSpace(msg.Text)
+			if m.appState.Config != nil && m.appState.Config.ShouldSanitizeBookmarkNames() {
+				name = jj.SanitizeBookmarkName(name)
+			}
+			m.bookmarkModal.SetBookmarkName(name)
+			m.bookmarkModal.UpdateNameExistsFromInput(m.appState.Config != nil && m.appState.Config.ShouldSanitizeBookmarkNames())
+			m.appState.StatusMessage = "Bookmark name suggested (edit if needed)"
+		}
+		return m, nil
 
 	case commandhistory.Request:
 		return m.handleHelpRequest(msg)

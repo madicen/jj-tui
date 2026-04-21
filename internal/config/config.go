@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // GitHubAuthMethod represents how the user authenticated with GitHub
@@ -78,9 +79,20 @@ type Config struct {
 	ThemeSecondary string `json:"theme_secondary,omitempty"`
 	ThemeMuted     string `json:"theme_muted,omitempty"`
 
+	// Optional generative text. API key: config ai_api_key and/or env JJ_TUI_AI_API_KEY (env wins).
+	AIEnabled        *bool  `json:"ai_enabled,omitempty"`         // nil/false = off
+	AIBaseURL        string `json:"ai_base_url,omitempty"`        // empty = https://api.openai.com/v1
+	AIModel          string `json:"ai_model,omitempty"`           // empty = gpt-4o-mini
+	AITimeoutSeconds *int   `json:"ai_timeout_seconds,omitempty"` // nil/0 = 60
+	AIProvider       string `json:"ai_provider,omitempty"`        // empty = openai_compatible; allowed: openai_compatible, gemini
+	AIAPIKey         string `json:"ai_api_key,omitempty"`         // optional; env overrides when set
+
 	// Internal: tracks where the config was loaded from
 	loadedFrom string `json:"-"`
 }
+
+// EnvAIAPIKey is the environment variable for the LLM API key; when set, it overrides ai_api_key in config.
+const EnvAIAPIKey = "JJ_TUI_AI_API_KEY"
 
 // LocalConfigFileName is the name of the per-repo config file
 const LocalConfigFileName = ".jj-tui.json"
@@ -220,6 +232,24 @@ func mergeConfig(dest, source *Config) {
 	}
 	if source.ExternalFileEditorCustom != "" {
 		dest.ExternalFileEditorCustom = source.ExternalFileEditorCustom
+	}
+	if source.AIEnabled != nil {
+		dest.AIEnabled = source.AIEnabled
+	}
+	if source.AIBaseURL != "" {
+		dest.AIBaseURL = source.AIBaseURL
+	}
+	if source.AIModel != "" {
+		dest.AIModel = source.AIModel
+	}
+	if source.AITimeoutSeconds != nil {
+		dest.AITimeoutSeconds = source.AITimeoutSeconds
+	}
+	if source.AIProvider != "" {
+		dest.AIProvider = source.AIProvider
+	}
+	if source.AIAPIKey != "" {
+		dest.AIAPIKey = source.AIAPIKey
 	}
 }
 
@@ -596,4 +626,94 @@ func (c *Config) GetThemeMuted() string {
 		return "#6272A4"
 	}
 	return c.ThemeMuted
+}
+
+// AIGenerationEnabled is true when the user turned on AI assist in settings.
+func (c *Config) AIGenerationEnabled() bool {
+	if c == nil || c.AIEnabled == nil {
+		return false
+	}
+	return *c.AIEnabled
+}
+
+// AIBaseURLResolved returns the API base URL (no trailing slash), for OpenAI-compatible clients.
+func (c *Config) AIBaseURLResolved() string {
+	if c == nil {
+		return "https://api.openai.com/v1"
+	}
+	s := strings.TrimSpace(c.AIBaseURL)
+	if s == "" {
+		return "https://api.openai.com/v1"
+	}
+	return strings.TrimSuffix(s, "/")
+}
+
+// AIModelOrDefault returns the chat model name.
+func (c *Config) AIModelOrDefault() string {
+	if c == nil {
+		return "gpt-4o-mini"
+	}
+	s := strings.TrimSpace(c.AIModel)
+	if s == "" {
+		return "gpt-4o-mini"
+	}
+	return s
+}
+
+// AIModelResolved returns the model id to send to the provider, using provider-specific defaults when AIModel is empty.
+func (c *Config) AIModelResolved() string {
+	if c == nil {
+		return "gpt-4o-mini"
+	}
+	if s := strings.TrimSpace(c.AIModel); s != "" {
+		return s
+	}
+	switch c.AIProviderOrDefault() {
+	case "gemini":
+		return "gemini-2.5-flash"
+	default:
+		return "gpt-4o-mini"
+	}
+}
+
+// AITimeout returns the HTTP timeout for LLM requests (default 60s).
+func (c *Config) AITimeout() time.Duration {
+	if c == nil || c.AITimeoutSeconds == nil || *c.AITimeoutSeconds <= 0 {
+		return 60 * time.Second
+	}
+	return time.Duration(*c.AITimeoutSeconds) * time.Second
+}
+
+// EffectiveAIAPIKey returns the API key from the environment if set, otherwise from the loaded config.
+// This lets env override the stored key without needing to re-save config.
+func EffectiveAIAPIKey(cfg *Config) string {
+	if s := strings.TrimSpace(os.Getenv(EnvAIAPIKey)); s != "" {
+		return s
+	}
+	if cfg == nil {
+		return ""
+	}
+	return strings.TrimSpace(cfg.AIAPIKey)
+}
+
+// AIConfiguredForGeneration is true when AI is enabled and an API key is present.
+func (c *Config) AIConfiguredForGeneration() bool {
+	return c != nil && c.AIGenerationEnabled() && EffectiveAIAPIKey(c) != ""
+}
+
+// AIProviderOrDefault returns the configured provider.
+func (c *Config) AIProviderOrDefault() string {
+	if c == nil {
+		return "openai_compatible"
+	}
+	s := strings.ToLower(strings.TrimSpace(c.AIProvider))
+	if s == "" {
+		return "openai_compatible"
+	}
+	switch s {
+	case "openai_compatible", "gemini":
+		return s
+	default:
+		return "openai_compatible"
+	}
 }
