@@ -142,24 +142,28 @@ func (m Model) View() string {
 		commitInfo = fmt.Sprintf("%s (%s)", m.commitShortID, changeIDShort)
 	}
 
-	header := titleStyle.Render("Edit Commit Description")
-	commitLine := subtitleStyle.Render(fmt.Sprintf("Commit: %s", commitInfo))
+	contentW := m.descriptionInput.Width()
+	if contentW < 12 {
+		contentW = 60
+	}
 	mark := func(id, s string) string {
 		if m.zoneManager == nil {
 			return s
 		}
 		return m.zoneManager.Mark(id, s)
 	}
+	genChip := mark(mouse.ZoneDescGenerate, styles.StyleAIGenerateIcon(styles.AIAssistGlyph))
+	headerRow := styles.SpreadRow(contentW, titleStyle.Render("Edit Commit Description"), genChip)
+	commitLine := subtitleStyle.Render(fmt.Sprintf("Commit: %s", commitInfo))
 	actionButtons := lipgloss.JoinHorizontal(
 		lipgloss.Left,
 		mark(mouse.ZoneDescSave, styles.ButtonStyle.Render("Save (Ctrl+S)")),
-		mark(mouse.ZoneDescGenerate, styles.ButtonStyle.Render("Generate (Ctrl+G)")),
 		mark(mouse.ZoneDescClear, styles.ButtonStyle.Render("Clear (Ctrl+Shift+U)")),
 		mark(mouse.ZoneDescCancel, styles.ButtonStyle.Render("Cancel (Esc)")),
 	)
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
-		header,
+		headerRow,
 		commitLine,
 		"",
 		m.descriptionInput.View(),

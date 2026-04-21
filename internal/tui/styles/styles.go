@@ -18,6 +18,35 @@ var (
 // from many monospace fonts and from VHS GIF output (replacement boxes). U+2260 is widely supported.
 const DivergentMark = "≠"
 
+// AIAssistGlyph is the Unicode “sparkles” character (U+2728), the common compact affordance for
+// generative / LLM actions (Material “auto awesome”, many chat UIs). Width varies by terminal font.
+const AIAssistGlyph = "\u2728"
+
+// StyleAIGenerateIcon renders the compact AI control (sparkles) using the current theme primary.
+func StyleAIGenerateIcon(glyph string) string {
+	return lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#F8F8F2")).
+		Background(ColorPrimary).
+		Padding(0, 1).
+		Bold(true).
+		Render(glyph)
+}
+
+// SpreadRow lays out left and right so the row uses totalWidth terminal cells when possible
+// (spaces between). If totalWidth is too small, falls back to "left right" with a single space.
+func SpreadRow(totalWidth int, left, right string) string {
+	lw := lipgloss.Width(left)
+	rw := lipgloss.Width(right)
+	if totalWidth < lw+rw+1 {
+		return lipgloss.JoinHorizontal(lipgloss.Top, left, " ", right)
+	}
+	gap := totalWidth - lw - rw
+	if gap < 1 {
+		gap = 1
+	}
+	return lipgloss.JoinHorizontal(lipgloss.Top, left, strings.Repeat(" ", gap), right)
+}
+
 // SetTheme updates the global theme colors and rebuilds styles that use them.
 // Pass hex strings (e.g. "#7E00AF"). Empty strings are ignored (keep current).
 func SetTheme(primary, secondary, muted string) {

@@ -118,16 +118,22 @@ func (m Model) renderForm() string {
 		return m.zoneManager.Mark(id, s)
 	}
 
+	contentW := m.bodyInput.Width()
+	if contentW < 12 {
+		contentW = 60
+	}
+	genChip := mark(mouse.ZonePRGenerate, styles.StyleAIGenerateIcon(styles.AIAssistGlyph))
+	headerRow := styles.SpreadRow(contentW, titleStyle.Render("Create Pull Request"), genChip)
+
 	branchLine := subtitleStyle.Render(fmt.Sprintf("Branch: %s → %s", m.baseBranch, m.headBranch))
 	titleInput := mark(mouse.ZonePRTitle, m.titleInput.View())
 	bodyInput := mark(mouse.ZonePRBody, m.bodyInput.View())
 	submitBtn := mark(mouse.ZonePRSubmit, buttonStyle.Render("Create PR (Ctrl+S)"))
-	genBtn := mark(mouse.ZonePRGenerate, buttonStyle.Render("Generate (Ctrl+G)"))
 	cancelBtn := mark(mouse.ZonePRCancel, buttonStyle.Render("Cancel (Esc)"))
 
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
-		titleStyle.Render("Create Pull Request"),
+		headerRow,
 		branchLine,
 		"",
 		"Title:",
@@ -136,7 +142,7 @@ func (m Model) renderForm() string {
 		"Body:",
 		bodyInput,
 		"",
-		lipgloss.JoinHorizontal(lipgloss.Left, submitBtn, "  ", genBtn, "  ", cancelBtn),
+		lipgloss.JoinHorizontal(lipgloss.Left, submitBtn, "  ", cancelBtn),
 	)
 }
 

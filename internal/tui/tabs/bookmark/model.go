@@ -19,21 +19,21 @@ import (
 
 // Model represents the bookmark creation dialog
 type Model struct {
-	shown               bool
-	nameInput           textinput.Model
-	commitIdx           int      // Index of commit to create bookmark on
-	existingBookmarks   []string // List of existing bookmarks
-	selectedBookmarkIdx int      // Index of selected existing bookmark (-1 for new)
-	fromJira            bool     // True if creating bookmark from Jira ticket
-	jiraTicketKey       string   // Jira ticket key if creating from Jira
-	jiraTicketTitle     string   // Jira ticket summary if creating from Jira
-	ticketDisplayKey    string   // Short display key (e.g., "$12u" for Codecks)
-	bookmarkNameExists  bool     // True if entered name matches an existing bookmark
-	jiraBookmarkTitles  map[string]string // Maps bookmark names to formatted PR titles ("KEY - Title")
+	shown                     bool
+	nameInput                 textinput.Model
+	commitIdx                 int               // Index of commit to create bookmark on
+	existingBookmarks         []string          // List of existing bookmarks
+	selectedBookmarkIdx       int               // Index of selected existing bookmark (-1 for new)
+	fromJira                  bool              // True if creating bookmark from Jira ticket
+	jiraTicketKey             string            // Jira ticket key if creating from Jira
+	jiraTicketTitle           string            // Jira ticket summary if creating from Jira
+	ticketDisplayKey          string            // Short display key (e.g., "$12u" for Codecks)
+	bookmarkNameExists        bool              // True if entered name matches an existing bookmark
+	jiraBookmarkTitles        map[string]string // Maps bookmark names to formatted PR titles ("KEY - Title")
 	ticketBookmarkDisplayKeys map[string]string // Maps bookmark names to ticket short IDs for commit messages
-	repository          *internal.Repository
-	nameConflictSources []string // Branch names + commit branch names (set by main); used for "name exists" check
-	zoneManager         *zone.Manager
+	repository                *internal.Repository
+	nameConflictSources       []string // Branch names + commit branch names (set by main); used for "name exists" check
+	zoneManager               *zone.Manager
 }
 
 // NewModel creates a new Bookmark model. zoneManager may be nil.
@@ -441,7 +441,18 @@ func (m Model) renderBookmark() string {
 	if m.selectedBookmarkIdx == -1 || m.fromJira {
 		inputStyle = inputStyle.Foreground(styles.ColorPrimary)
 	}
-	lines = append(lines, inputStyle.Render("Name:"))
+	nameW := m.nameInput.Width
+	if nameW < 8 {
+		nameW = 50
+	}
+	// Align sparkles with the indented input row ("  " + field, width 2+nameW).
+	nameRowW := 2 + nameW
+	if m.selectedBookmarkIdx == -1 {
+		genChip := mark(m.zoneManager, mouse.ZoneBookmarkGenerate, styles.StyleAIGenerateIcon(styles.AIAssistGlyph))
+		lines = append(lines, styles.SpreadRow(nameRowW, inputStyle.Render("  Name:"), genChip))
+	} else {
+		lines = append(lines, inputStyle.Render("Name:"))
+	}
 	lines = append(lines, mark(m.zoneManager, mouse.ZoneBookmarkName, "  "+m.nameInput.View()))
 	if m.bookmarkNameExists {
 		warningStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#E3B341")).Bold(true)
@@ -459,15 +470,7 @@ func (m Model) renderBookmark() string {
 		submitLabel = "Create (Enter)"
 	}
 	submitButton := mark(m.zoneManager, mouse.ZoneBookmarkSubmit, styles.ButtonStyle.Render(submitLabel))
-	var genButton string
-	if m.selectedBookmarkIdx == -1 {
-		genButton = mark(m.zoneManager, mouse.ZoneBookmarkGenerate, styles.ButtonStyle.Render("Generate (Ctrl+G)"))
-	}
 	cancelButton := mark(m.zoneManager, mouse.ZoneBookmarkCancel, styles.ButtonStyle.Render("Cancel (Esc)"))
-	if genButton != "" {
-		lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Left, submitButton, " ", genButton, " ", cancelButton))
-	} else {
-		lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Left, submitButton, " ", cancelButton))
-	}
+	lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Left, submitButton, " ", cancelButton))
 	return strings.Join(lines, "\n")
 }
