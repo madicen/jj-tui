@@ -1,7 +1,6 @@
 package conflict
 
 import (
-	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -11,6 +10,7 @@ import (
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/styles"
+	"github.com/mattn/go-runewidth"
 )
 
 // Model represents the bookmark conflict resolution view
@@ -21,6 +21,8 @@ type Model struct {
 	remoteCommitID string
 	localSummary   string
 	remoteSummary  string
+	localWhen      string
+	remoteWhen     string
 	selectedOption int // 0=Keep Local, 1=Reset to Remote
 	zoneManager    *zone.Manager
 	termW          int
@@ -92,15 +94,14 @@ func (m *Model) mark(id, content string) string {
 }
 
 func (m *Model) layoutCols() (sideBySide bool, colW int) {
-	// Cap modal width on large terminals so columns do not stretch across empty space.
-	const maxModalOuter = 86
+	const maxModalOuter = 78
 	maxOuter := min(m.termW-6, maxModalOuter)
-	if maxOuter < 52 {
-		maxOuter = min(m.termW-4, 50)
+	if maxOuter < 48 {
+		maxOuter = min(m.termW-4, 46)
 	}
-	sideBySide = m.termW >= 72
+	sideBySide = m.termW >= 70
 	if sideBySide {
-		colW = max((maxOuter-2)/2, 24)
+		colW = max((maxOuter-2)/2, 26)
 	} else {
 		colW = max(maxOuter, 32)
 	}
@@ -109,142 +110,123 @@ func (m *Model) layoutCols() (sideBySide bool, colW int) {
 
 func (m *Model) renderConflict() string {
 	sideBySide, colW := m.layoutCols()
-	sumMax := max(colW-4, 20)
-
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(styles.ColorPrimary).
-		Padding(0, 1)
-
-	localHeader := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#50FA7B")).Render("Local")
-	localID := lipgloss.NewStyle().Foreground(styles.ColorPrimary).Render(m.localCommitID)
-	localBody := fmt.Sprintf("%s\n%s\n%s", localHeader, localID, truncateSummary(m.localSummary, sumMax))
-	localBox := boxStyle.Width(colW).Render(localBody)
-
-	remoteHeader := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#8BE9FD")).Render("Remote (origin)")
-	remoteID := lipgloss.NewStyle().Foreground(styles.ColorPrimary).Render(m.remoteCommitID)
-	remoteBody := fmt.Sprintf("%s\n%s\n%s", remoteHeader, remoteID, truncateSummary(m.remoteSummary, sumMax))
-	remoteBox := boxStyle.Width(colW).Render(remoteBody)
-
-	var versionRow string
-	if sideBySide {
-		gap := lipgloss.NewStyle().Width(2).Render("")
-		versionRow = lipgloss.JoinHorizontal(lipgloss.Top, localBox, gap, remoteBox)
-	} else {
-		versionRow = lipgloss.JoinVertical(lipgloss.Left, localBox, "", remoteBox)
-	}
+	sumMax := max(colW-4, 18)
 
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF5555"))
 	title := titleStyle.Render("⚠ Diverged bookmark: " + m.bookmarkName)
 
-	explanationStyle := lipgloss.NewStyle().Foreground(styles.ColorMuted)
-	explanation := explanationStyle.Render("Local and origin disagree. Pick a side, then confirm.")
+	muted := lipgloss.NewStyle().Foreground(styles.ColorMuted)
+	hint := muted.Render("Enter applies highlighted side · click a side to apply · Esc cancel · h / ← / l / →")
 
 	selectedStyle := lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary)
 	unselectedStyle := lipgloss.NewStyle().Foreground(styles.ColorMuted)
-	optBorder := lipgloss.RoundedBorder()
+	idStyle := lipgloss.NewStyle().Foreground(styles.ColorPrimary)
 
-	keepStyle := lipgloss.NewStyle().Border(optBorder).Padding(0, 1).Width(colW)
+	localTitle := "Keep local"
+	remoteTitle := "Match origin"
 	if m.selectedOption == 0 {
-		keepStyle = keepStyle.BorderForeground(styles.ColorPrimary)
+		localTitle = "► " + localTitle
 	} else {
-		keepStyle = keepStyle.BorderForeground(styles.ColorMuted)
+		remoteTitle = "► " + remoteTitle
 	}
-	resetStyle := lipgloss.NewStyle().Border(optBorder).Padding(0, 1).Width(colW)
-	if m.selectedOption == 1 {
-		resetStyle = resetStyle.BorderForeground(styles.ColorPrimary)
-	} else {
-		resetStyle = resetStyle.BorderForeground(styles.ColorMuted)
-	}
-
-	keepTitle := unselectedStyle
-	resetTitle := unselectedStyle
+	localTitleSt := unselectedStyle
+	remoteTitleSt := unselectedStyle
 	if m.selectedOption == 0 {
-		keepTitle = selectedStyle
-	}
-	if m.selectedOption == 1 {
-		resetTitle = selectedStyle
+		localTitleSt = selectedStyle
+	} else {
+		remoteTitleSt = selectedStyle
 	}
 
-	keepBlock := keepStyle.Render(fmt.Sprintf(
-		"%s\n%s\n%s",
-		keepTitle.Render("► Keep local"),
-		unselectedStyle.Render("jj bookmark set … then jj git push"),
-		unselectedStyle.Render("(overwrites remote if checks pass)"),
-	))
-	resetBlock := resetStyle.Render(fmt.Sprintf(
-		"%s\n%s\n%s",
-		resetTitle.Render("► Reset to origin"),
-		unselectedStyle.Render("jj bookmark set … @origin"),
-		unselectedStyle.Render("discard local tip"),
-	))
+	localWhenLine := ""
+	if strings.TrimSpace(m.localWhen) != "" {
+		localWhenLine = unselectedStyle.Render(m.localWhen)
+	}
+	remoteWhenLine := ""
+	if strings.TrimSpace(m.remoteWhen) != "" {
+		remoteWhenLine = unselectedStyle.Render(m.remoteWhen)
+	}
+
+	localParts := []string{
+		localTitleSt.Render(localTitle),
+		idStyle.Render(m.localCommitID),
+		truncateSummary(m.localSummary, sumMax),
+	}
+	if localWhenLine != "" {
+		localParts = append(localParts, localWhenLine)
+	}
+	localParts = append(localParts, muted.Render("Your tip wins when you push."))
+	localBody := lipgloss.JoinVertical(lipgloss.Left, localParts...)
+
+	remoteParts := []string{
+		remoteTitleSt.Render(remoteTitle),
+		idStyle.Render(m.remoteCommitID),
+		truncateSummary(m.remoteSummary, sumMax),
+	}
+	if remoteWhenLine != "" {
+		remoteParts = append(remoteParts, remoteWhenLine)
+	}
+	remoteParts = append(remoteParts, muted.Render("Bookmark follows origin; local-only tip is dropped."))
+	remoteBody := lipgloss.JoinVertical(lipgloss.Left, remoteParts...)
+
+	localBorder := styles.ColorMuted
+	remoteBorder := styles.ColorMuted
+	if m.selectedOption == 0 {
+		localBorder = styles.ColorPrimary
+	} else {
+		remoteBorder = styles.ColorPrimary
+	}
+
+	localBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(localBorder).
+		Padding(0, 1).
+		Width(colW).
+		Render(localBody)
+
+	remoteBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(remoteBorder).
+		Padding(0, 1).
+		Width(colW).
+		Render(remoteBody)
 
 	var choiceRow string
 	if sideBySide {
 		gap := lipgloss.NewStyle().Width(2).Render("")
 		choiceRow = lipgloss.JoinHorizontal(lipgloss.Top,
-			m.mark(mouse.ZoneConflictKeepLocal, keepBlock),
+			m.mark(mouse.ZoneConflictKeepLocal, localBox),
 			gap,
-			m.mark(mouse.ZoneConflictResetRemote, resetBlock),
+			m.mark(mouse.ZoneConflictResetRemote, remoteBox),
 		)
 	} else {
 		choiceRow = lipgloss.JoinVertical(lipgloss.Left,
-			m.mark(mouse.ZoneConflictKeepLocal, keepBlock),
+			m.mark(mouse.ZoneConflictKeepLocal, localBox),
 			"",
-			m.mark(mouse.ZoneConflictResetRemote, resetBlock),
+			m.mark(mouse.ZoneConflictResetRemote, remoteBox),
 		)
 	}
 
-	sepW := lipgloss.Width(versionRow)
-	if sepW < 32 {
-		sepW = 32
-	}
-	sep := lipgloss.NewStyle().Foreground(styles.ColorMuted).Render(strings.Repeat("─", min(sepW, m.termW-4)))
-
-	btnRow := lipgloss.JoinHorizontal(lipgloss.Left,
-		m.mark(mouse.ZoneConflictConfirm, styles.ButtonStyle.Render("Confirm (Enter)")),
-		"  ",
-		m.mark(mouse.ZoneConflictCancel, styles.ButtonSecondaryStyle.Render("Cancel (Esc)")),
-	)
-
-	hintStyle := lipgloss.NewStyle().Foreground(styles.ColorMuted)
-	hint := lipgloss.JoinVertical(
-		lipgloss.Left,
-		hintStyle.Render("j/k · Enter confirm · Esc cancel"),
-		hintStyle.Render("h / ← keep local · l / → / r reset to origin"),
-	)
-
+	cancel := m.mark(mouse.ZoneConflictCancel, muted.Render("Cancel"))
 	frame := lipgloss.JoinVertical(
 		lipgloss.Left,
 		title,
 		"",
-		explanation,
-		"",
-		versionRow,
-		"",
-		sep,
-		"",
-		lipgloss.NewStyle().Bold(true).Render("Resolution"),
+		hint,
 		"",
 		choiceRow,
 		"",
-		btnRow,
-		"",
-		hint,
+		cancel,
 	)
 
 	outer := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(styles.ColorMuted).
-		Padding(1, 2)
+		Padding(0, 1)
 	return outer.Render(frame)
 }
 
-func truncateSummary(summary string, maxLen int) string {
-	if len(summary) <= maxLen {
-		return summary
-	}
-	return summary[:maxLen-3] + "..."
+func truncateSummary(summary string, maxW int) string {
+	return runewidth.Truncate(summary, maxW, "…")
 }
 
 // handleKeyMsg handles keyboard input; returns PerformCancelCmd or PerformResolveCmd for main to handle.
@@ -284,7 +266,7 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 // ZoneIDs returns the zone IDs this modal uses when rendering. Used to resolve clicks.
 func (m Model) ZoneIDs() []string {
-	return []string{mouse.ZoneConflictKeepLocal, mouse.ZoneConflictResetRemote, mouse.ZoneConflictConfirm, mouse.ZoneConflictCancel}
+	return []string{mouse.ZoneConflictKeepLocal, mouse.ZoneConflictResetRemote, mouse.ZoneConflictCancel}
 }
 
 func (m Model) resolveClickedZone(msg zone.MsgZoneInBounds) string {
@@ -304,16 +286,16 @@ func (m Model) resolveClickedZone(msg zone.MsgZoneInBounds) string {
 func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
 	switch zoneID {
 	case mouse.ZoneConflictKeepLocal:
-		m.selectedOption = 0
-		return m, nil
-	case mouse.ZoneConflictResetRemote:
-		m.selectedOption = 1
-		return m, nil
-	case mouse.ZoneConflictConfirm:
 		return m, state.NavigateTarget{
 			Kind:                 state.NavigateResolveConflict,
 			ConflictBookmarkName: m.bookmarkName,
-			ConflictResolution:   m.GetSelectedOption(),
+			ConflictResolution:   "keep_local",
+		}.Cmd()
+	case mouse.ZoneConflictResetRemote:
+		return m, state.NavigateTarget{
+			Kind:                 state.NavigateResolveConflict,
+			ConflictBookmarkName: m.bookmarkName,
+			ConflictResolution:   "reset_remote",
 		}.Cmd()
 	case mouse.ZoneConflictCancel:
 		m.shown = false
@@ -330,13 +312,15 @@ func (m *Model) IsShown() bool {
 }
 
 // Show displays the conflict modal
-func (m *Model) Show(bookmarkName, localID, remoteID, localSummary, remoteSummary string) {
+func (m *Model) Show(bookmarkName, localID, remoteID, localSummary, remoteSummary, localWhen, remoteWhen string) {
 	m.shown = true
 	m.bookmarkName = bookmarkName
 	m.localCommitID = localID
 	m.remoteCommitID = remoteID
 	m.localSummary = localSummary
 	m.remoteSummary = remoteSummary
+	m.localWhen = localWhen
+	m.remoteWhen = remoteWhen
 	m.selectedOption = 0
 }
 
@@ -367,5 +351,5 @@ func (m *Model) SetSelectedOption(opt int) {
 
 // UpdateRepository updates the repository
 func (m *Model) UpdateRepository(repo *internal.Repository) {
-	// Conflict modal doesn't use repository directly
+	_ = repo
 }

@@ -39,6 +39,8 @@ type ShowConflictInfo struct {
 	RemoteID      string
 	LocalSummary  string
 	RemoteSummary string
+	LocalWhen     string
+	RemoteWhen    string
 }
 
 // HandleBookmarkConflictInfoMsg mutates app when err; otherwise returns info for main to show the modal.
@@ -54,6 +56,8 @@ func HandleBookmarkConflictInfoMsg(msg branches.BookmarkConflictInfoMsg, app *st
 		RemoteID:      msg.RemoteID,
 		LocalSummary:  msg.LocalSummary,
 		RemoteSummary: msg.RemoteSummary,
+		LocalWhen:     msg.LocalWhen,
+		RemoteWhen:    msg.RemoteWhen,
 	}
 }
 

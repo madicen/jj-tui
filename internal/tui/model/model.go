@@ -1361,7 +1361,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.bookmarkConflictReturnView = m.appState.ViewMode
 			m.bookmarkConflictReturnValid = true
 			m.conflictModal = m.conflictModal.SetDimensions(m.width, m.height)
-			m.conflictModal.Show(info.BookmarkName, info.LocalID, info.RemoteID, info.LocalSummary, info.RemoteSummary)
+			m.conflictModal.Show(info.BookmarkName, info.LocalID, info.RemoteID, info.LocalSummary, info.RemoteSummary, info.LocalWhen, info.RemoteWhen)
 			m.appState.ViewMode = state.ViewBookmarkConflict
 		}
 		return m, cmd
