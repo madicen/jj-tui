@@ -1,5 +1,7 @@
 # Binary
 jj-tui
+# Common mistaken build output (-o jira-tui); jj refuses >1MiB new files by default (snapshot.max-new-file-size)
+jira-tui
 
 # Config
 .jj-tui.json

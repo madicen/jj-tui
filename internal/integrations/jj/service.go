@@ -604,8 +604,8 @@ func (s *Service) CreateBookmarkOnCommit(ctx context.Context, bookmarkName, comm
 
 // MoveBookmark moves an existing bookmark to a different commit
 func (s *Service) MoveBookmark(ctx context.Context, bookmarkName, commitID string) error {
-	// jj bookmark set <name> -r <revision>
-	return s.runJJ(ctx, "bookmark", "set", util.BookmarkArgForSetMove(bookmarkName), "-r", commitID)
+	// jj bookmark set <name> -r <revision> (--allow-backwards: target may be an ancestor of the current tip)
+	return s.runJJ(ctx, "bookmark", "set", util.BookmarkArgForSetMove(bookmarkName), "-r", commitID, "--allow-backwards")
 }
 
 // DeleteBookmark deletes a bookmark
