@@ -199,11 +199,9 @@ const (
 	// Bookmark conflict resolution zones
 	ZoneConflictKeepLocal   = "zone:conflict:keep_local"
 	ZoneConflictResetRemote = "zone:conflict:reset_remote"
-	ZoneConflictConfirm     = "zone:conflict:confirm"
 	ZoneConflictCancel      = "zone:conflict:cancel"
 
 	// Divergent commit resolution zones
-	ZoneDivergentConfirm       = "zone:divergent:confirm"
 	ZoneDivergentCancel        = "zone:divergent:cancel"
 	ZoneActionResolveDivergent = "zone:action:resolve_divergent"
 

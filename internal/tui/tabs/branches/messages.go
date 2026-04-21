@@ -19,6 +19,8 @@ type BookmarkConflictInfoMsg struct {
 	RemoteID      string
 	LocalSummary  string
 	RemoteSummary string
+	LocalWhen     string
+	RemoteWhen    string
 	Err           error
 }
 

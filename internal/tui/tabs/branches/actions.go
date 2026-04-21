@@ -182,13 +182,15 @@ func LoadBookmarkConflictInfo(svc *jj.Service, bookmarkName string) tea.Cmd {
 	}
 	cleanName := util.BookmarkNameForRevset(bookmarkName)
 	return func() tea.Msg {
-		localID, remoteID, localSummary, remoteSummary, err := svc.GetBookmarkConflictInfo(context.Background(), cleanName)
+		localID, remoteID, localSummary, remoteSummary, localWhen, remoteWhen, err := svc.GetBookmarkConflictInfo(context.Background(), cleanName)
 		return BookmarkConflictInfoMsg{
 			BookmarkName:  cleanName,
 			LocalID:       localID,
 			RemoteID:      remoteID,
 			LocalSummary:  localSummary,
 			RemoteSummary: remoteSummary,
+			LocalWhen:     localWhen,
+			RemoteWhen:    remoteWhen,
 			Err:           err,
 		}
 	}

@@ -244,6 +244,7 @@ type DivergentVersion struct {
 	WhenDisplay   string        // compact local time for UI
 	ParentsShort  string        // short parent commit id(s), comma-separated
 	Bookmarks     string        // local bookmark names on this revision (may be empty)
+	Immutable     bool          // when true, other heads usually cannot be resolved by abandoning this row
 	ChangedFiles  []ChangedFile // vs parent (jj diff --summary -r); nil if listing failed, non-nil when loaded (may be empty)
 	FilesLine     string        // compact summary for logs / fallback
 }
@@ -613,57 +614,62 @@ func (s *Service) ResolveBookmarkConflictResetToRemote(ctx context.Context, book
 	return s.runJJ(ctx, "bookmark", "set", util.BookmarkArgForSetMove(bookmarkName), "-r", remoteRev)
 }
 
-// joinConflictLogLines parses jj log lines shaped as change_id|summary; multiple bookmark targets
-// become one display line each for id and summary.
-func joinConflictLogLines(out string) (idJoined, summaryJoined string) {
-	var ids, sums []string
+// joinConflictTabLog parses jj log lines as change_id\tsummary\ttimestamp (tab-separated).
+func joinConflictTabLog(out string) (idJoined, summaryJoined, whenJoined string) {
+	var ids, sums, whens []string
 	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-		parts := strings.SplitN(line, "|", 2)
+		parts := strings.Split(line, "\t")
 		ids = append(ids, strings.TrimSpace(parts[0]))
+		sum := ""
 		if len(parts) >= 2 {
-			sums = append(sums, strings.TrimSpace(parts[1]))
-		} else {
-			sums = append(sums, "")
+			sum = strings.TrimSpace(parts[1])
 		}
+		sums = append(sums, sum)
+		w := ""
+		if len(parts) >= 3 {
+			w = compactWhenDisplay(strings.TrimSpace(parts[2]))
+		}
+		whens = append(whens, w)
 	}
 	if len(ids) == 0 {
-		return "", ""
+		return "", "", ""
 	}
 	if len(ids) == 1 {
-		return ids[0], sums[0]
+		return ids[0], sums[0], whens[0]
 	}
-	return strings.Join(ids, ", "), strings.Join(sums, " · ")
+	return strings.Join(ids, ", "), strings.Join(sums, " · "), strings.Join(whens, " · ")
 }
 
 // GetBookmarkConflictInfo retrieves information about a conflicted bookmark
-// Returns local commit ID, remote commit ID, local summary, remote summary
-func (s *Service) GetBookmarkConflictInfo(ctx context.Context, bookmarkName string) (localID, remoteID, localSummary, remoteSummary string, err error) {
+// Returns local commit ID, remote commit ID, local summary, remote summary, and compact timestamps when available.
+func (s *Service) GetBookmarkConflictInfo(ctx context.Context, bookmarkName string) (localID, remoteID, localSummary, remoteSummary, localWhen, remoteWhen string, err error) {
 	bookmarkName = util.BookmarkNameForRevset(bookmarkName)
 	bookmarkName = util.LocalBookmarkName(bookmarkName)
 	if bookmarkName == "" {
-		return "", "", "", "", fmt.Errorf("bookmark name is required")
+		return "", "", "", "", "", "", fmt.Errorf("bookmark name is required")
 	}
+	logT := `change_id.short(8) ++ "\t" ++ if(description, description.first_line(), "(no description)") ++ "\t" ++ author.timestamp()`
 	// Conflicted bookmarks need bookmarks()/remote_bookmarks(), not a bare symbol (slashes, multi-target).
 	localRev := fmt.Sprintf("bookmarks(%s)", util.RevsetExactPattern(bookmarkName))
 	remoteRev := fmt.Sprintf("remote_bookmarks(%s, %s)",
 		util.RevsetExactPattern(bookmarkName), util.RevsetExactPattern("origin"))
-	localOut, err := s.runJJOutput(ctx, "log", "-r", localRev, "--no-graph", "-T", `change_id.short(8) ++ "|" ++ if(description, description.first_line(), "(no description)")`)
+	localOut, err := s.runJJOutput(ctx, "log", "-r", localRev, "--no-graph", "-T", logT)
 	if err != nil {
-		return "", "", "", "", fmt.Errorf("failed to get local bookmark info: %w", err)
+		return "", "", "", "", "", "", fmt.Errorf("failed to get local bookmark info: %w", err)
 	}
-	localID, localSummary = joinConflictLogLines(localOut)
+	localID, localSummary, localWhen = joinConflictTabLog(localOut)
 
-	remoteOut, err := s.runJJOutput(ctx, "log", "-r", remoteRev, "--no-graph", "-T", `change_id.short(8) ++ "|" ++ if(description, description.first_line(), "(no description)")`)
+	remoteOut, err := s.runJJOutput(ctx, "log", "-r", remoteRev, "--no-graph", "-T", logT)
 	if err != nil {
-		return localID, "", localSummary, "", fmt.Errorf("failed to get remote bookmark info: %w", err)
+		return localID, "", localSummary, "", localWhen, "", fmt.Errorf("failed to get remote bookmark info: %w", err)
 	}
-	remoteID, remoteSummary = joinConflictLogLines(remoteOut)
+	remoteID, remoteSummary, remoteWhen = joinConflictTabLog(remoteOut)
 
-	return localID, remoteID, localSummary, remoteSummary, nil
+	return localID, remoteID, localSummary, remoteSummary, localWhen, remoteWhen, nil
 }
 
 // GetDivergentCommitDetails returns one entry per visible revision with the same change ID,
@@ -673,7 +679,7 @@ func (s *Service) GetDivergentCommitDetails(ctx context.Context, changeID string
 	if changeID == "" {
 		return nil, fmt.Errorf("change ID is required")
 	}
-	const template = `commit_id ++ "\t" ++ commit_id.short(12) ++ "\t" ++ if(description, description.first_line(), "(no description)") ++ "\t" ++ author.email() ++ "\t" ++ author.timestamp() ++ "\t" ++ parents.map(|p| p.commit_id().short(8)).join(",") ++ "\t" ++ bookmarks.join(",") ++ "\n"`
+	const template = `commit_id ++ "\t" ++ commit_id.short(12) ++ "\t" ++ if(description, description.first_line(), "(no description)") ++ "\t" ++ author.email() ++ "\t" ++ author.timestamp() ++ "\t" ++ parents.map(|p| p.commit_id().short(8)).join(",") ++ "\t" ++ bookmarks.join(",") ++ "\t" ++ if(immutable, "true", "false") ++ "\n"`
 	out, err := s.runJJOutput(ctx, "log", "-r", fmt.Sprintf("change_id(%s)", changeID), "--no-graph", "-T", template)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get divergent commit info: %w", err)
@@ -705,6 +711,10 @@ func (s *Service) GetDivergentCommitDetails(ctx context.Context, changeID string
 		if len(parts) > 6 {
 			bookmarks = strings.TrimSpace(parts[6])
 		}
+		immutable := false
+		if len(parts) > 7 {
+			immutable = strings.TrimSpace(parts[7]) == "true"
+		}
 
 		files, ferr := s.GetChangedFiles(ctx, fullID)
 		filesLine := formatDivergentFilesLine(files)
@@ -726,6 +736,7 @@ func (s *Service) GetDivergentCommitDetails(ctx context.Context, changeID string
 			WhenDisplay:   compactWhenDisplay(tsRaw),
 			ParentsShort:  parents,
 			Bookmarks:     bookmarks,
+			Immutable:     immutable,
 			ChangedFiles:  storedFiles,
 			FilesLine:     filesLine,
 		})
