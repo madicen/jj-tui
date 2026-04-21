@@ -39,7 +39,8 @@ func CommitDescriptionUser(changeIDShort, currentDescription, diff string) strin
 const prSystem = `You write pull request titles and bodies for GitHub.
 Respond with a single JSON object only, no markdown fences, using exactly these keys:
 {"title":"...","body":"..."}
-Title: at most 200 characters. Body: markdown allowed, be clear and concise.`
+Title: at most 200 characters. Body: markdown allowed, be clear and concise.
+If the suggested title hint starts with an issue tracker key (e.g. Jira ABC-123, or [ABC-123]), keep that exact key and the same spacing or punctuation after it at the beginning of the JSON title; only improve the human-readable part after the key.`
 
 // PRUser builds the user message for PR title+body.
 func PRUser(baseBranch, headBranch, hintTitle, diff string) string {
@@ -52,7 +53,7 @@ func PRUser(baseBranch, headBranch, hintTitle, diff string) string {
 	b.WriteString(strings.TrimSpace(hintTitle))
 	b.WriteString("\n\nUnified diff:\n")
 	b.WriteString(truncateRunes(diff, maxPromptDiffRunes))
-	b.WriteString("\n\nWrite JSON with title and body for this pull request.")
+	b.WriteString("\n\nWrite JSON with title and body for this pull request. Preserve any leading issue key from the hint in the title exactly as required for branch/CI conventions.")
 	return b.String()
 }
 

@@ -16,3 +16,45 @@ func TestParsePRTitleBody_FallbackLines(t *testing.T) {
 		t.Fatalf("got title=%q body=%q", title, body)
 	}
 }
+
+func TestMergeGeneratedPRTitle_prependsDroppedJiraKey(t *testing.T) {
+	hint := "PROJ-456 - Original Jira summary"
+	gen := "Add retry logic for checkout"
+	want := "PROJ-456 - Add retry logic for checkout"
+	if got := MergeGeneratedPRTitle(hint, gen); got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
+func TestMergeGeneratedPRTitle_bracketedHint(t *testing.T) {
+	hint := "[TEAM-12] Some ticket title"
+	gen := "Fix flaky integration test"
+	want := "[TEAM-12] Fix flaky integration test"
+	if got := MergeGeneratedPRTitle(hint, gen); got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
+func TestMergeGeneratedPRTitle_noopWhenModelKeptKey(t *testing.T) {
+	hint := "ABC-1 - Old"
+	gen := "ABC-1 - New improved title"
+	if got := MergeGeneratedPRTitle(hint, gen); got != gen {
+		t.Fatalf("got %q want %q", got, gen)
+	}
+}
+
+func TestMergeGeneratedPRTitle_keyOnlyHint(t *testing.T) {
+	hint := "FOO-99"
+	gen := "Deploy config split"
+	want := "FOO-99 - Deploy config split"
+	if got := MergeGeneratedPRTitle(hint, gen); got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
+func TestMergeGeneratedPRTitle_noHintKey(t *testing.T) {
+	gen := "Plain title from model"
+	if got := MergeGeneratedPRTitle("Just words", gen); got != gen {
+		t.Fatalf("got %q want %q", got, gen)
+	}
+}

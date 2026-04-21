@@ -75,6 +75,7 @@ func GeneratePRFormCmd(reqID int, jjSvc *jj.Service, cfg *config.Config, changeI
 			return msg
 		}
 		msg.Title, msg.Body = ParsePRTitleBody(out)
+		msg.Title = MergeGeneratedPRTitle(hintTitle, msg.Title)
 		return msg
 	}
 }
