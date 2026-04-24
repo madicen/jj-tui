@@ -75,11 +75,36 @@ func (m *Model) View() string {
 	if warningContent := m.warningModal.View(); warningContent != "" {
 		v = applyBubbleOverlayCentered(v, warningContent, m.width, m.height)
 	}
+	if m.evologDescribePreviewActive {
+		v = applyBubbleOverlayCentered(v, m.renderEvologDescribePreview(), m.width, m.height)
+	}
 	if errorContent := m.errorModal.View(); errorContent != "" {
 		v = applyBubbleOverlayCentered(v, errorContent, m.width, m.height)
 	}
 
 	return m.zoneManager.Scan(v)
+}
+
+func (m *Model) renderEvologDescribePreview() string {
+	maxW := min(m.width-8, 78)
+	title := lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render("AI descriptions (@- and @)")
+	muted := lipgloss.NewStyle().Foreground(styles.ColorMuted)
+	p := runewidth.Truncate(m.evologDescribeParent, maxW, "…")
+	c := runewidth.Truncate(m.evologDescribeChild, maxW, "…")
+	var b strings.Builder
+	b.WriteString(title)
+	b.WriteString("\n\n")
+	b.WriteString(muted.Render("@- (parent):"))
+	b.WriteString("\n")
+	b.WriteString(p)
+	b.WriteString("\n\n")
+	b.WriteString(muted.Render("@ (working copy):"))
+	b.WriteString("\n")
+	b.WriteString(c)
+	b.WriteString("\n\n")
+	b.WriteString(muted.Render("y apply · n or Esc discard"))
+	box := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(styles.ColorMuted).Padding(1, 2).Width(min(m.width-4, 84))
+	return box.Render(b.String())
 }
 
 // renderMainLayoutView builds header + tab content + status (no error/warning/divergent full-screen branches).

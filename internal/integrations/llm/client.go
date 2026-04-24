@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -83,35 +82,32 @@ func (c *Client) Complete(ctx context.Context, systemPrompt, userPrompt string) 
 		return "", err
 	}
 	url := c.BaseURL + "/chat/completions"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(raw))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.APIKey)
-
 	client := c.HTTPClient
 	if client == nil {
 		client = http.DefaultClient
 	}
-	resp, err := client.Do(req)
+	respBody, err := withLLMHTTPRetry(ctx, "LLM", func(reqCtx context.Context) (*http.Response, error) {
+		req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, url, bytes.NewReader(raw))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+c.APIKey)
+		return client.Do(req)
+	})
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("LLM HTTP %d: %s", resp.StatusCode, truncate(string(respBody), 500))
-	}
+	return parseOpenAIChatCompletionBody(respBody)
+}
+
+func parseOpenAIChatCompletionBody(respBody []byte) (string, error) {
 	var parsed chatResponse
 	if err := json.Unmarshal(respBody, &parsed); err != nil {
 		return "", fmt.Errorf("LLM response JSON: %w", err)
 	}
 	if parsed.Error != nil && parsed.Error.Message != "" {
-		return "", fmt.Errorf("LLM API error: %s", parsed.Error.Message)
+		return "", fmt.Errorf("%s", formatOpenAIChatAPIError(parsed.Error.Message, parsed.Error.Type, respBody))
 	}
 	if len(parsed.Choices) == 0 || strings.TrimSpace(parsed.Choices[0].Message.Content) == "" {
 		return "", fmt.Errorf("LLM: empty response")

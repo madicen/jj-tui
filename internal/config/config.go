@@ -87,6 +87,13 @@ type Config struct {
 	AIProvider       string `json:"ai_provider,omitempty"`        // empty = openai_compatible; allowed: openai_compatible, gemini
 	AIAPIKey         string `json:"ai_api_key,omitempty"`         // optional; env overrides when set
 
+	// AI evolog split (optional; nil = defaults below)
+	AIEvologDescribeAfterSplitDefault *bool  `json:"ai_evolog_describe_after_split_default,omitempty"` // nil/false = off when opening split modal
+	AIEvologFileSplitEnabled          *bool  `json:"ai_evolog_file_split_enabled,omitempty"`           // nil/true = honor LLM files_first_commit; false = ignore
+	AIEvologHunkSplitEnabled          *bool  `json:"ai_evolog_hunk_split_enabled,omitempty"`         // nil/true = honor hunk_prefix_first_commit + hunk prompt; false = ignore
+	AIEvologMultiSplitMax             *int   `json:"ai_evolog_multi_split_max,omitempty"`              // nil = full cap; clamp 1–EvologAIMultiSplitHardMax
+	AIEvologMultiSplitMode            string `json:"ai_evolog_multi_split_mode,omitempty"`             // empty or "batch" = one cmd; "stepwise" = one base per confirm
+
 	// Internal: tracks where the config was loaded from
 	loadedFrom string `json:"-"`
 }
@@ -250,6 +257,21 @@ func mergeConfig(dest, source *Config) {
 	}
 	if source.AIAPIKey != "" {
 		dest.AIAPIKey = source.AIAPIKey
+	}
+	if source.AIEvologDescribeAfterSplitDefault != nil {
+		dest.AIEvologDescribeAfterSplitDefault = source.AIEvologDescribeAfterSplitDefault
+	}
+	if source.AIEvologFileSplitEnabled != nil {
+		dest.AIEvologFileSplitEnabled = source.AIEvologFileSplitEnabled
+	}
+	if source.AIEvologHunkSplitEnabled != nil {
+		dest.AIEvologHunkSplitEnabled = source.AIEvologHunkSplitEnabled
+	}
+	if source.AIEvologMultiSplitMax != nil {
+		dest.AIEvologMultiSplitMax = source.AIEvologMultiSplitMax
+	}
+	if source.AIEvologMultiSplitMode != "" {
+		dest.AIEvologMultiSplitMode = source.AIEvologMultiSplitMode
 	}
 }
 
@@ -715,5 +737,60 @@ func (c *Config) AIProviderOrDefault() string {
 		return s
 	default:
 		return "openai_compatible"
+	}
+}
+
+// EvologAIMultiSplitHardMax is the upper bound for ai_evolog_multi_split_max (JSON + Settings UI).
+// jj-tui loads at most 80 evolog rows, so N-1 ≤ 79; the extra headroom leaves room if that limit grows.
+const EvologAIMultiSplitHardMax = 128
+
+// DefaultEvologPostSplitDescribe is true when the evolog split modal should open with post-split AI describe enabled.
+func (c *Config) DefaultEvologPostSplitDescribe() bool {
+	return c != nil && c.AIEvologDescribeAfterSplitDefault != nil && *c.AIEvologDescribeAfterSplitDefault
+}
+
+// EvologAIFilePhaseEnabled is false when LLM-suggested file lists for jj split should be ignored.
+func (c *Config) EvologAIFilePhaseEnabled() bool {
+	if c == nil || c.AIEvologFileSplitEnabled == nil {
+		return true
+	}
+	return *c.AIEvologFileSplitEnabled
+}
+
+// EvologAIHunkPhaseEnabled is false when LLM hunk_prefix_first_commit and hunk prompt excerpts are ignored.
+func (c *Config) EvologAIHunkPhaseEnabled() bool {
+	if c == nil || c.AIEvologHunkSplitEnabled == nil {
+		return true
+	}
+	return *c.AIEvologHunkSplitEnabled
+}
+
+// EvologAIMultiSplitMaxCap returns the max number of bases in an AI multi-split plan (1..EvologAIMultiSplitHardMax).
+// When unset in config, the hard max is used so the model is not truncated below evolog depth.
+func (c *Config) EvologAIMultiSplitMaxCap() int {
+	def := EvologAIMultiSplitHardMax
+	if c == nil || c.AIEvologMultiSplitMax == nil {
+		return def
+	}
+	v := *c.AIEvologMultiSplitMax
+	if v < 1 {
+		return 1
+	}
+	if v > EvologAIMultiSplitHardMax {
+		return EvologAIMultiSplitHardMax
+	}
+	return v
+}
+
+// EvologAIMultiSplitStepwise is true when multi-split runs one FAQ step per user confirm with evolog reload between steps.
+func (c *Config) EvologAIMultiSplitStepwise() bool {
+	if c == nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(c.AIEvologMultiSplitMode)) {
+	case "stepwise":
+		return true
+	default:
+		return false
 	}
 }

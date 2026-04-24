@@ -1,4 +1,6 @@
 # split (z): evolog picker + step file list; o opens colored step diff overlay; Enter splits.
+# Also: s requests an AI split-row hint (needs AI in Settings); fixture uses ai_enabled:false and the
+# subshell unsets JJ_TUI_AI_API_KEY so `s` shows the in-modal "Enable AI…" line without network calls.
 # Run: make evolog-split-gif
 # Requires: VHS, bash, jj, git, fixtures/setup-evolog-split-vhs-repo.sh
 
@@ -13,7 +15,7 @@ Set TypingSpeed 75ms
 
 # Subshell so cd does not stick after quit (same pattern as vhs/after-origin.tape).
 Hide
-Type "( bash fixtures/setup-evolog-split-vhs-repo.sh && cd fixtures/evolog-split-vhs-repo && ../../jj-tui --demo )"
+Type "( unset JJ_TUI_AI_API_KEY; bash fixtures/setup-evolog-split-vhs-repo.sh && cd fixtures/evolog-split-vhs-repo && ../../jj-tui --demo )"
 Enter
 Sleep 4s
 Show
@@ -27,6 +29,10 @@ Type "z"
 Sleep 3s
 
 Type "j"
+Sleep 1s
+
+# AI suggest split row (s): with AI off, modal shows a short hint — no API traffic.
+Type "s"
 Sleep 1s
 
 # Colored step diff overlay (same styling as graph file diff), scroll, then dismiss

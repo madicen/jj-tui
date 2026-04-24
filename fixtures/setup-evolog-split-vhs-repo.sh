@@ -69,4 +69,12 @@ jj squash -m "Add feature flag"
 
 jj edit demo/feature >/dev/null
 
+# Local jj-tui defaults for VHS: AI off so `s` shows the in-modal hint without calling the network.
+# (Unset JJ_TUI_AI_API_KEY in the tape shell if you need a deterministic recording with a real API key in your environment.)
+cat > .jj-tui.json <<'EOF'
+{
+  "ai_enabled": false
+}
+EOF
+
 echo "Evolog split VHS repo ready: $REPO"

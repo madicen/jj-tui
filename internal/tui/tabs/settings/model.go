@@ -259,6 +259,8 @@ func (m *Model) ZoneIDs() []string {
 		mouse.ZoneSettingsGraphRevset, mouse.ZoneSettingsGraphRevsetClear,
 		mouse.ZoneSettingsAIEnabled, mouse.ZoneSettingsAIProvider(0), mouse.ZoneSettingsAIProvider(1),
 		mouse.ZoneSettingsAIBaseURL, mouse.ZoneSettingsAIModel, mouse.ZoneSettingsAIAPIKey,
+		mouse.ZoneSettingsAIEvologDescribeDefault, mouse.ZoneSettingsAIEvologFileSplit, mouse.ZoneSettingsAIEvologMultiStepwise,
+		mouse.ZoneSettingsAIEvologMultiMaxDecrease, mouse.ZoneSettingsAIEvologMultiMaxIncrease,
 	}
 	for i := range advanced.ExternalEditorPresetLabels {
 		ids = append(ids, mouse.ZoneSettingsExternalEditorPreset(i))

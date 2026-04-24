@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
@@ -21,13 +23,31 @@ func EvologDiffLoadRequestedCmd() tea.Cmd {
 	}
 }
 
+// EvologSplitSuggestRequestedMsg tells main to run the LLM evolog-split suggestion with current modal entries.
+type EvologSplitSuggestRequestedMsg struct {
+	ReqID int
+}
+
+// OverlaySpinTickMsg advances the AI-suggest overlay spinner. Scheduled via OverlaySpinCmd so animation
+// keeps running even when bubbles spinner.TickMsg is dropped or starved on the main message queue.
+type OverlaySpinTickMsg struct {
+	Time time.Time
+}
+
+// OverlaySpinCmd schedules the next overlay spinner tick (same cadence as spinner.MiniDot).
+func OverlaySpinCmd() tea.Cmd {
+	return tea.Tick(spinner.MiniDot.FPS, func(t time.Time) tea.Msg {
+		return OverlaySpinTickMsg{Time: t}
+	})
+}
+
 // EvologSplitDiffLoadedMsg carries jj diff --summary for selected row vs the newer neighbor above it,
 // plus the full git unified diff for the same revision pair (colored in the modal).
 type EvologSplitDiffLoadedMsg struct {
-	Seq    int
-	Files  []jj.ChangedFile
+	Seq     int
+	Files   []jj.ChangedFile
 	GitDiff string
-	Err    error
+	Err     error
 }
 
 // LoadEvologSplitDiffCmd loads changed files for one evolog step (async). prevStepFrom/prevStepTo may be
@@ -92,19 +112,31 @@ type EvologSplitCompletedMsg struct {
 	Repository *internal.Repository
 }
 
-// MoveBookmarkDeltaOntoEvologBaseCmd runs the FAQ-style split using the chosen evolog base.
-// bookmarkName may be empty to split the selected change only (no jj bookmark set).
-func MoveBookmarkDeltaOntoEvologBaseCmd(svc *jj.Service, bookmarkName, localChangeID, localCommitID, baseCommitID string) tea.Cmd {
+// PerformEvologSplitCmd runs FAQ-style evolog split(s) and optional `jj split` by fileset or hunk prefix.
+// When len(multiBaseCommitIDs) > 1, runs EvologMultiSplit (deepest-first list); otherwise a single MoveBookmarkDeltaOntoEvologBase using baseFromSelection or multiBaseCommitIDs[0].
+func PerformEvologSplitCmd(svc *jj.Service, bookmarkName, localChangeID, localCommitHint, baseFromSelection string, multiBaseCommitIDs []string, splitFilesetsFirst []string, hunkPrefixFirst map[string]int) tea.Cmd {
 	if svc == nil {
 		return nil
 	}
 	return func() tea.Msg {
-		if err := svc.MoveBookmarkDeltaOntoEvologBase(context.Background(), bookmarkName, localChangeID, localCommitID, baseCommitID); err != nil {
+		ctx := context.Background()
+		bases := append([]string(nil), multiBaseCommitIDs...)
+		var err error
+		if len(bases) > 1 {
+			err = svc.EvologMultiSplit(ctx, bookmarkName, localChangeID, localCommitHint, bases, splitFilesetsFirst, hunkPrefixFirst)
+		} else {
+			base := strings.TrimSpace(baseFromSelection)
+			if len(bases) == 1 {
+				base = strings.TrimSpace(bases[0])
+			}
+			err = svc.MoveBookmarkDeltaOntoEvologBase(ctx, bookmarkName, localChangeID, localCommitHint, base, splitFilesetsFirst, hunkPrefixFirst)
+		}
+		if err != nil {
 			return util.ErrorMsg{Err: fmt.Errorf("evolog split: %w", err)}
 		}
-		repo, err := svc.GetRepository(context.Background(), "")
-		if err != nil {
-			return util.ErrorMsg{Err: err}
+		repo, rerr := svc.GetRepository(ctx, "")
+		if rerr != nil {
+			return util.ErrorMsg{Err: rerr}
 		}
 		return EvologSplitCompletedMsg{Repository: repo}
 	}

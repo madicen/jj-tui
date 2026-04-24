@@ -22,6 +22,12 @@ type Model struct {
 	aiAPIKeyInput        textinput.Model
 	focusedField         int // 0 = graph revset, 1 = custom editor, 2 = AI base URL, 3 = AI model, 4 = AI key
 	externalEditorPreset int // 0..8 — see externalEditorPresetLabels
+	// AI evolog split defaults (persisted in config)
+	evologDescribeDefault   bool
+	evologFileSplitEnabled  bool
+	evologHunkSplitEnabled  bool
+	evologMultiStepwise    bool
+	evologMultiMax         int // 1..config.EvologAIMultiSplitHardMax, cap for AI multi-split plan length
 }
 
 // ExternalEditorPresetLabels are UI labels for each editor preset (same order as config values below).
@@ -79,17 +85,20 @@ func NewModel() Model {
 	aiKey.EchoCharacter = '•'
 
 	return Model{
-		sanitizeBookmarks:    true,
-		aiEnabled:            false,
-		aiProvider:           "openai_compatible",
-		confirmingCleanup:    "",
-		graphRevsetInput:     revsetInput,
-		customEditorInput:    customIn,
-		aiBaseURLInput:       aiURL,
-		aiModelInput:         aiModel,
-		aiAPIKeyInput:        aiKey,
-		focusedField:         0,
-		externalEditorPreset: 0,
+		sanitizeBookmarks:      true,
+		aiEnabled:              false,
+		aiProvider:             "openai_compatible",
+		evologFileSplitEnabled: true,
+		evologHunkSplitEnabled: true,
+		evologMultiMax:         config.EvologAIMultiSplitHardMax,
+		confirmingCleanup:      "",
+		graphRevsetInput:       revsetInput,
+		customEditorInput:      customIn,
+		aiBaseURLInput:         aiURL,
+		aiModelInput:           aiModel,
+		aiAPIKeyInput:          aiKey,
+		focusedField:           0,
+		externalEditorPreset:   0,
 	}
 }
 
@@ -106,6 +115,11 @@ func NewModelFromConfig(cfg *config.Config) Model {
 		m.aiBaseURLInput.SetValue(cfg.AIBaseURL)
 		m.aiModelInput.SetValue(cfg.AIModel)
 		m.aiAPIKeyInput.SetValue(cfg.AIAPIKey)
+		m.evologDescribeDefault = cfg.DefaultEvologPostSplitDescribe()
+		m.evologFileSplitEnabled = cfg.EvologAIFilePhaseEnabled()
+		m.evologHunkSplitEnabled = cfg.EvologAIHunkPhaseEnabled()
+		m.evologMultiStepwise = cfg.EvologAIMultiSplitStepwise()
+		m.evologMultiMax = cfg.EvologAIMultiSplitMaxCap()
 	}
 	return m
 }
@@ -183,6 +197,44 @@ func (m *Model) SetAIEnabled(v bool) {
 // ToggleAIEnabled flips the AI assist toggle.
 func (m *Model) ToggleAIEnabled() {
 	m.aiEnabled = !m.aiEnabled
+}
+
+func (m *Model) GetEvologDescribeAfterSplitDefault() bool { return m.evologDescribeDefault }
+
+func (m *Model) ToggleEvologDescribeAfterSplitDefault() {
+	m.evologDescribeDefault = !m.evologDescribeDefault
+}
+
+func (m *Model) GetEvologFileSplitEnabled() bool { return m.evologFileSplitEnabled }
+
+func (m *Model) ToggleEvologFileSplitEnabled() {
+	m.evologFileSplitEnabled = !m.evologFileSplitEnabled
+}
+
+func (m *Model) GetEvologHunkSplitEnabled() bool { return m.evologHunkSplitEnabled }
+
+func (m *Model) ToggleEvologHunkSplitEnabled() {
+	m.evologHunkSplitEnabled = !m.evologHunkSplitEnabled
+}
+
+func (m *Model) GetEvologMultiStepwise() bool { return m.evologMultiStepwise }
+
+func (m *Model) ToggleEvologMultiStepwise() {
+	m.evologMultiStepwise = !m.evologMultiStepwise
+}
+
+func (m *Model) GetEvologMultiMax() int { return m.evologMultiMax }
+
+func (m *Model) IncEvologMultiMax() {
+	if m.evologMultiMax < config.EvologAIMultiSplitHardMax {
+		m.evologMultiMax++
+	}
+}
+
+func (m *Model) DecEvologMultiMax() {
+	if m.evologMultiMax > 1 {
+		m.evologMultiMax--
+	}
 }
 
 // GetAIProvider returns the selected provider id.

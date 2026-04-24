@@ -13,6 +13,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/madicen/jj-tui/internal/config"
+	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tui"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 	"github.com/madicen/jj-tui/internal/tui/util"
@@ -21,6 +22,15 @@ import (
 )
 
 func main() {
+	// Non-TUI helper: jj invokes this as ui.diff-editor for AI hunk-level evolog split.
+	if len(os.Args) >= 5 && os.Args[1] == "diff-editor-evolog-hunk-split" {
+		if err := jj.RunEvologHunkSplitDiffEditor(os.Args[2], os.Args[3], os.Args[4]); err != nil {
+			fmt.Fprintf(os.Stderr, "%v\n", err)
+			os.Exit(2)
+		}
+		return
+	}
+
 	// Parse command-line flags
 	demoMode := flag.Bool("demo", false, "Run in demo mode with mock services (for screenshots/testing)")
 	cpuProfile := flag.String("cpuprofile", "", "Write CPU profile to file (on exit)")

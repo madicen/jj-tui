@@ -68,7 +68,7 @@ after-origin-gif: build after-origin-vhs-repo
 	@echo "GIF saved to screenshots/after-origin.gif"
 	@if [ -f screenshots/mem.prof ]; then echo "Memory profile: screenshots/mem.prof (go tool pprof screenshots/mem.prof)"; fi
 
-# Dedicated GIF for experimental Evolog split (z); see vhs/evolog-split.tape
+# Dedicated GIF for experimental Evolog split (z); see vhs/evolog-split.tape (includes s AI hint when AI is off).
 evolog-split-vhs-repo:
 	bash fixtures/setup-evolog-split-vhs-repo.sh
 

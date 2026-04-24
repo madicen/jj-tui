@@ -32,12 +32,12 @@ const (
 	NavigateBackFromPRForm // back to graph and hide PR form modal
 	NavigateCreateTicket   // open Create Ticket modal (from Tickets tab)
 	NavigateBackFromTicketForm
-	NavigateSubmitTicket // run create ticket and close modal
-	NavigateOpenEvologSplit    // experimental: show evolog picker for stack split
-	NavigatePerformEvologSplit // run jj new + restore (+ bookmark set if EvologBookmarkName set) after user picked base
+	NavigateSubmitTicket          // run create ticket and close modal
+	NavigateOpenEvologSplit       // experimental: show evolog picker for stack split
+	NavigatePerformEvologSplit    // run jj new + restore (+ bookmark set if EvologBookmarkName set) after user picked base
 	NavigateCloseBookmarkConflict // close diverged-bookmark dialog; main restores the tab stored when opening
-	NavigateOpenFileDiff  // show full jj diff for one changed file (graph modal) or preloaded raw git text (evolog)
-	NavigateCloseFileDiff // dismiss file diff overlay only (return to evolog split or graph)
+	NavigateOpenFileDiff          // show full jj diff for one changed file (graph modal) or preloaded raw git text (evolog)
+	NavigateCloseFileDiff         // dismiss file diff overlay only (return to evolog split or graph)
 	// Optional LLM: modals request generation; main runs tea.Cmd and applies TextGeneratedMsg.
 	NavigateGenerateCommitDescription
 	NavigateGeneratePRForm
@@ -51,24 +51,24 @@ type NavigateTarget struct {
 	Kind NavigateKind
 
 	// Payloads for specific kinds (only one set per kind).
-	Commit            internal.Commit
-	WarningTitle      string
-	WarningMessage    string
-	WarningCommits    []internal.Commit
-	TicketKey         string
-	TicketTitle       string
-	TicketDisplayKey  string
-	StatusMessage     string
-	ClearError        bool
-	ClearInit         bool
+	Commit           internal.Commit
+	WarningTitle     string
+	WarningMessage   string
+	WarningCommits   []internal.Commit
+	TicketKey        string
+	TicketTitle      string
+	TicketDisplayKey string
+	StatusMessage    string
+	ClearError       bool
+	ClearInit        bool
 	// Save description
-	SaveCommitID   string
+	SaveCommitID    string
 	SaveDescription string
 	// Resolve conflict
 	ConflictBookmarkName string
-	ConflictResolution  string
+	ConflictResolution   string
 	// Resolve divergent
-	DivergentChangeID   string
+	DivergentChangeID     string
 	DivergentKeepCommitID string
 	// Dismiss error and then run refresh
 	RefreshAfterDismiss bool
@@ -77,6 +77,16 @@ type NavigateTarget struct {
 	EvologTipChangeID   string
 	EvologTipCommitHint string
 	EvologBaseCommitID  string
+	// EvologDescribeAfterSplit runs AI jj describe on @- and @ after a successful split.
+	EvologDescribeAfterSplit bool
+	// EvologFilesetsFirst optional paths for jj split -r @ after FAQ split(s).
+	EvologFilesetsFirst []string
+	// EvologHunkPrefixFirst optional path → first k hunks into first child after FAQ split(s).
+	EvologHunkPrefixFirst map[string]int
+	// EvologMultiBaseCommitIDs optional deepest-first bases for sequential FAQ splits (len>1 triggers multi-split).
+	EvologMultiBaseCommitIDs []string
+	// EvologStepwiseRemainder, when non-empty, is bases still to run after this split (stepwise mode); main reloads evolog without closing the modal.
+	EvologStepwiseRemainder []string
 	// File diff modal (graph): path relative to repo; Commit holds change id / short id.
 	FileDiffPath string
 	// When non-empty, NavigateOpenFileDiff shows this git unified diff immediately (no jj call). Used by evolog split.
