@@ -587,6 +587,11 @@ func (r renderCtx) renderAdvanced(data RenderData) []string {
 		tEvFile = "[✓]"
 	}
 	lines = append(lines, "  "+r.mark(mouse.ZoneSettingsAIEvologFileSplit, lipgloss.NewStyle().Foreground(styles.ColorPrimary).Bold(true).Render(tEvFile+" Honor AI file lists for jj split after row split")))
+	tEvHunk := "[ ]"
+	if data.EvologHunkSplitEnabled {
+		tEvHunk = "[✓]"
+	}
+	lines = append(lines, "  "+r.mark(mouse.ZoneSettingsAIEvologHunkSplit, lipgloss.NewStyle().Foreground(styles.ColorPrimary).Bold(true).Render(tEvHunk+" Honor AI hunk_prefix (@@-level) split after row split")))
 	tEvStep := "[ ]"
 	if data.EvologMultiStepwise {
 		tEvStep = "[✓]"

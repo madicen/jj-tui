@@ -66,6 +66,21 @@ func TestParseEvologSplitJSONNoSplitIndexZero(t *testing.T) {
 	}
 }
 
+func TestParseEvologSplitJSONHunkPrefix(t *testing.T) {
+	entries := []jj.EvologEntry{{CommitID: "a"}, {CommitID: "b"}, {CommitID: "c"}}
+	raw := `{"recommended_index": 1, "rationale": "split", "hunk_prefix_first_commit": {"./foo.go": 2, "bar.go": 1}}`
+	res, err := parseEvologSplitJSON(raw, 2, entries, 99)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.PickIndex != 1 {
+		t.Fatalf("pick=%d", res.PickIndex)
+	}
+	if res.HunkPrefixFirstCommit["foo.go"] != 2 || res.HunkPrefixFirstCommit["bar.go"] != 1 {
+		t.Fatalf("hunk map=%v", res.HunkPrefixFirstCommit)
+	}
+}
+
 func TestParseEvologSplitJSONMultiBaseCommitIDs(t *testing.T) {
 	entries := []jj.EvologEntry{
 		{CommitID: "full11111111111111111111111111111111"},

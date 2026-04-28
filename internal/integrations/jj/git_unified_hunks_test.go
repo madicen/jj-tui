@@ -42,6 +42,25 @@ index 111..222 100644
 	}
 }
 
+func TestValidateHunkPrefixPlan(t *testing.T) {
+	const git = `diff --git a/x.go b/x.go
+--- a/x.go
++++ b/x.go
+@@ -1,1 +1,2 @@
+ a
++b
+`
+	if err := ValidateHunkPrefixPlan(git, map[string]int{"x.go": 1}); err == nil {
+		t.Fatal("expected error when k equals hunk count (all hunks to first commit)")
+	}
+	if err := ValidateHunkPrefixPlan(git, map[string]int{"x.go": 0}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateHunkPrefixPlan(git, map[string]int{"x.go": 2}); err == nil {
+		t.Fatal("expected error when k exceeds hunk count")
+	}
+}
+
 func TestParseTwoHunksPrefix(t *testing.T) {
 	const git = `diff --git a/a.go b/a.go
 --- a/a.go

@@ -285,6 +285,9 @@ func handleAdvancedZone(m *Model, zoneID string) (Model, tea.Cmd) {
 	case mouse.ZoneSettingsAIEvologFileSplit:
 		adv.ToggleEvologFileSplitEnabled()
 		return *m, nil
+	case mouse.ZoneSettingsAIEvologHunkSplit:
+		adv.ToggleEvologHunkSplitEnabled()
+		return *m, nil
 	case mouse.ZoneSettingsAIEvologMultiStepwise:
 		adv.ToggleEvologMultiStepwise()
 		return *m, nil

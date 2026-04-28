@@ -113,7 +113,7 @@ func (s *Service) directRevisionChildrenCommitIDs(ctx context.Context, rev strin
 	return ids, nil
 }
 
-func (s *Service) runJJWithExtraEnv(ctx context.Context, extraEnv, args []string) error {
+func (s *Service) runJJWithExtraEnv(ctx context.Context, extraEnv []string, args []string) error {
 	cmdStr := "jj " + strings.Join(args, " ")
 	startTime := time.Now()
 	cmd := exec.CommandContext(ctx, "jj", args...)
