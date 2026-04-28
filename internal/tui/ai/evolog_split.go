@@ -44,10 +44,6 @@ const evologSplitMaxPromptRunes = 48_000
 // evologSplitStepDiffConcurrency limits parallel jj processes while building step summaries.
 const evologSplitStepDiffConcurrency = 8
 
-// evologSplitPromptBuildTimeout is the max time allowed to run all jj diff --summary calls for the user prompt.
-// This is separate from AITimeout so a slow repo does not consume the LLM budget.
-const evologSplitPromptBuildTimeout = 5 * time.Minute
-
 // evologSplitFileValidateTimeout caps jj diff for post-LLM file-path validation.
 const evologSplitFileValidateTimeout = 45 * time.Second
 
@@ -472,32 +468,6 @@ func fetchEvologStepDiffLinesRange(ctx context.Context, jjSvc *jj.Service, entri
 		return nil, err
 	}
 	return out, nil
-}
-
-// fetchEvologStepDiffLines runs jj diff --summary for each step i (from row i to row i-1) concurrently.
-// Returns a slice indexed by step number (1..stepLimit); index 0 is unused.
-func fetchEvologStepDiffLines(ctx context.Context, jjSvc *jj.Service, entries []jj.EvologEntry, stepLimit int) ([][]string, error) {
-	return fetchEvologStepDiffLinesRange(ctx, jjSvc, entries, 1, stepLimit)
-}
-
-func buildEvologSplitUserPrompt(ctx context.Context, jjSvc *jj.Service, entries []jj.EvologEntry) (string, error) {
-	prefix, stepLimit, err := buildEvologSplitPromptPrefix(entries)
-	if err != nil {
-		return "", err
-	}
-	stepLines, err := fetchEvologStepDiffLines(ctx, jjSvc, entries, stepLimit)
-	if err != nil {
-		return "", err
-	}
-	var b strings.Builder
-	b.WriteString(prefix)
-	appendStepsToPrompt(&b, entries, 1, stepLimit, stepLines)
-	n := len(entries)
-	if n-1 > evologSplitMaxDiffSteps {
-		fmt.Fprintf(&b, "\n(Only the first %d step summaries are included; you may still choose any valid index 1..%d using row descriptions.)\n", evologSplitMaxDiffSteps, n-1)
-	}
-	out := strings.TrimSpace(b.String())
-	return TrimEvologUserPrompt(out), nil
 }
 
 type evologSplitJSON struct {

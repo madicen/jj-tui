@@ -33,7 +33,8 @@ func isRetryableNetErr(err error) bool {
 	}
 	var ne net.Error
 	if errors.As(err, &ne) {
-		return ne.Timeout() || ne.Temporary()
+		// Do not use net.Error.Temporary() (deprecated since Go 1.18); timeouts cover the common retry case.
+		return ne.Timeout()
 	}
 	return false
 }
