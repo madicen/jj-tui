@@ -16,9 +16,12 @@ index 111..222 100644
 +new2
 +line3
 `
-	hm, err := ParseGitUnifiedHunksPerPath(git)
+	hm, bin, err := ParseGitUnifiedHunksPerPath(git)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(bin) != 0 {
+		t.Fatalf("unexpected binary paths: %v", bin)
 	}
 	hunks := hm["foo.txt"]
 	if len(hunks) != 1 {
@@ -74,9 +77,12 @@ func TestParseTwoHunksPrefix(t *testing.T) {
 +	fmt.Println()
  }
 `
-	hm, err := ParseGitUnifiedHunksPerPath(git)
+	hm, bin, err := ParseGitUnifiedHunksPerPath(git)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(bin) != 0 {
+		t.Fatalf("unexpected binary paths: %v", bin)
 	}
 	hunks := hm["a.go"]
 	if len(hunks) != 2 {
@@ -94,5 +100,52 @@ func TestParseTwoHunksPrefix(t *testing.T) {
 	// After first hunk only: import added
 	if !strings.Contains(mid, `import "fmt"`) || strings.Contains(mid, "fmt.Println") {
 		t.Fatalf("unexpected mid %q", mid)
+	}
+}
+
+func TestParseGitUnifiedHunksBinaryMarker(t *testing.T) {
+	const git = `diff --git a/logo.png b/logo.png
+index 111..222 100644
+Binary files a/logo.png and b/logo.png differ
+diff --git a/x.go b/x.go
+--- a/x.go
++++ b/x.go
+@@ -1,1 +1,2 @@
+ a
++b
+`
+	hm, bin, err := ParseGitUnifiedHunksPerPath(git)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := bin["logo.png"]; !ok {
+		t.Fatalf("expected logo.png in binaryPaths, got %v", bin)
+	}
+	if len(hm["logo.png"]) != 0 {
+		t.Fatalf("binary path should have no @@ hunks, got %d", len(hm["logo.png"]))
+	}
+	if len(hm["x.go"]) != 1 {
+		t.Fatalf("x.go hunks: %d", len(hm["x.go"]))
+	}
+}
+
+func TestValidateHunkPrefixPlanWithBinaryInDiff(t *testing.T) {
+	const git = `diff --git a/logo.png b/logo.png
+Binary files a/logo.png and b/logo.png differ
+diff --git a/x.go b/x.go
+--- a/x.go
++++ b/x.go
+@@ -1,1 +1,2 @@
+ a
++b
+`
+	if err := ValidateHunkPrefixPlan(git, map[string]int{"x.go": 0}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateHunkPrefixPlan(git, map[string]int{"x.go": 0, "logo.png": 0}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateHunkPrefixPlan(git, map[string]int{"logo.png": 1}); err == nil {
+		t.Fatal("expected error for binary path with k!=0")
 	}
 }

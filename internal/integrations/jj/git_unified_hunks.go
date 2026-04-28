@@ -15,10 +15,14 @@ type UnifiedHunk struct {
 	Lines    []string // including prefix + - space or "\ No newline..."
 }
 
-// ParseGitUnifiedHunksPerPath parses a git-format unified diff into ordered hunks per b/ path.
-func ParseGitUnifiedHunksPerPath(gitDiff string) (map[string][]UnifiedHunk, error) {
+// ParseGitUnifiedHunksPerPath parses a git unified diff into ordered @@ hunks per b/ path, plus
+// binaryPaths for "Binary files … differ" sections (no @@). Hunk split only allows k=0 for those
+// (parent snapshot on the peeled side; delta stays on @); use jj split -- paths / files_first_commit
+// to move a whole binary file into the child.
+func ParseGitUnifiedHunksPerPath(gitDiff string) (map[string][]UnifiedHunk, map[string]struct{}, error) {
 	lines := strings.Split(strings.ReplaceAll(gitDiff, "\r\n", "\n"), "\n")
 	out := make(map[string][]UnifiedHunk)
+	binaryPaths := make(map[string]struct{})
 	var curPath string
 	var cur []UnifiedHunk
 	var curH *UnifiedHunk
@@ -47,7 +51,10 @@ func ParseGitUnifiedHunksPerPath(gitDiff string) (map[string][]UnifiedHunk, erro
 			continue
 		}
 		if strings.HasPrefix(line, "Binary files ") && strings.Contains(line, " differ") {
-			return nil, fmt.Errorf("binary file change in %s (hunk split not supported for this diff)", curPath)
+			if curPath != "" {
+				binaryPaths[curPath] = struct{}{}
+			}
+			continue
 		}
 		if strings.HasPrefix(line, "@@ ") {
 			if curH != nil {
@@ -55,7 +62,7 @@ func ParseGitUnifiedHunksPerPath(gitDiff string) (map[string][]UnifiedHunk, erro
 			}
 			h, err := parseUnifiedHunkHeader(line)
 			if err != nil {
-				return nil, fmt.Errorf("%s: %w", curPath, err)
+				return nil, nil, fmt.Errorf("%s: %w", curPath, err)
 			}
 			curH = &h
 			continue
@@ -74,7 +81,7 @@ func ParseGitUnifiedHunksPerPath(gitDiff string) (map[string][]UnifiedHunk, erro
 		cur = append(cur, *curH)
 	}
 	flushFile()
-	return out, nil
+	return out, binaryPaths, nil
 }
 
 func parseUnifiedHunkHeader(line string) (UnifiedHunk, error) {
@@ -249,13 +256,22 @@ func ValidateHunkPrefixPlan(gitDiff string, prefixByPath map[string]int) error {
 	if strings.TrimSpace(gitDiff) == "" {
 		return fmt.Errorf("empty diff for hunk validation")
 	}
-	hunksPerPath, err := ParseGitUnifiedHunksPerPath(gitDiff)
+	hunksPerPath, binaryPaths, err := ParseGitUnifiedHunksPerPath(gitDiff)
 	if err != nil {
 		return err
 	}
 	for p, k := range prefixByPath {
 		p = strings.TrimSpace(p)
 		if p == "" {
+			continue
+		}
+		if _, bin := binaryPaths[p]; bin {
+			if k < 0 {
+				return fmt.Errorf("negative hunk prefix for %s", p)
+			}
+			if k != 0 {
+				return fmt.Errorf("binary file %s: @@-level split cannot apply (use k=0 here and files_first_commit to peel the whole path, or split the binary outside hunk mode)", p)
+			}
 			continue
 		}
 		hunks := hunksPerPath[p]
@@ -280,7 +296,19 @@ func ValidateHunkPrefixPlan(gitDiff string, prefixByPath map[string]int) error {
 			break
 		}
 	}
-	if len(hunksPerPath) > 0 && !remainder {
+	if !remainder {
+		for p := range binaryPaths {
+			k := 0
+			if kv, ok := prefixByPath[p]; ok {
+				k = kv
+			}
+			if k == 0 {
+				remainder = true
+				break
+			}
+		}
+	}
+	if (len(hunksPerPath) > 0 || len(binaryPaths) > 0) && !remainder {
 		return fmt.Errorf("hunk selection would leave no change on @")
 	}
 	return nil
