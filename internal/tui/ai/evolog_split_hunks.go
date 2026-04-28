@@ -8,7 +8,7 @@ import (
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 )
 
-const evologSplitMaxHunkPreviewSteps = 6
+const evologSplitMaxHunkPreviewSteps = 10
 const evologSplitMaxHunkPreviewBytesPerStep = 24_000
 
 // buildEvologHunkHintBlock appends git unified diff excerpts so the model can name @@ hunks by path
@@ -21,7 +21,7 @@ func buildEvologHunkHintBlock(ctx context.Context, jjSvc *jj.Service, entries []
 	maxStep := min(stepLimit, evologSplitMaxHunkPreviewSteps, n-1)
 	var b strings.Builder
 	b.WriteString("\n## Hunk reference (git unified diff excerpts per step; for each path, hunks are numbered 0,1,… in file order)\n")
-	b.WriteString("Optional JSON field \"hunk_prefix_first_commit\" maps repo-relative path → integer k: the first k hunks of that path go into the FIRST commit after jj split; remaining hunks stay on @. Omit paths unchanged. k must be < total hunks for any path you list. At least one changed path must keep a remainder.\n")
+	b.WriteString("Use \"hunk_peel_rounds\" for multiple sequential jj splits on @ (one map per split). \"hunk_prefix_first_commit\" is a single peel (same as one element of hunk_peel_rounds). path → k: first k hunks go into the child commit; k < total hunks per path; at least one path must keep a remainder after each peel.\n")
 	for i := 1; i <= maxStep; i++ {
 		from := strings.TrimSpace(entries[i].CommitID)
 		to := strings.TrimSpace(entries[i-1].CommitID)

@@ -90,7 +90,7 @@ type Config struct {
 	// AI evolog split (optional; nil = defaults below)
 	AIEvologDescribeAfterSplitDefault *bool  `json:"ai_evolog_describe_after_split_default,omitempty"` // nil/false = off when opening split modal
 	AIEvologFileSplitEnabled          *bool  `json:"ai_evolog_file_split_enabled,omitempty"`           // nil/true = honor LLM files_first_commit; false = ignore
-	AIEvologHunkSplitEnabled          *bool  `json:"ai_evolog_hunk_split_enabled,omitempty"`         // nil/true = honor hunk_prefix_first_commit + hunk prompt; false = ignore
+	AIEvologHunkSplitEnabled          *bool  `json:"ai_evolog_hunk_split_enabled,omitempty"`           // nil/true = honor hunk_prefix_first_commit + hunk prompt; false = ignore
 	AIEvologMultiSplitMax             *int   `json:"ai_evolog_multi_split_max,omitempty"`              // nil = full cap; clamp 1–EvologAIMultiSplitHardMax
 	AIEvologMultiSplitMode            string `json:"ai_evolog_multi_split_mode,omitempty"`             // empty or "batch" = one cmd; "stepwise" = one base per confirm
 
@@ -741,7 +741,7 @@ func (c *Config) AIProviderOrDefault() string {
 }
 
 // EvologAIMultiSplitHardMax is the upper bound for ai_evolog_multi_split_max (JSON + Settings UI).
-// jj-tui loads at most 80 evolog rows, so N-1 ≤ 79; the extra headroom leaves room if that limit grows.
+// jj-tui's `jj evolog -n` limit is 128 rows; N-1 FAQ bases cannot exceed what evolog returns.
 const EvologAIMultiSplitHardMax = 128
 
 // DefaultEvologPostSplitDescribe is true when the evolog split modal should open with post-split AI describe enabled.

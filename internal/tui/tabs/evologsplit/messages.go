@@ -114,7 +114,7 @@ type EvologSplitCompletedMsg struct {
 
 // PerformEvologSplitCmd runs FAQ-style evolog split(s) and optional `jj split` by fileset or hunk prefix.
 // When len(multiBaseCommitIDs) > 1, runs EvologMultiSplit (deepest-first list); otherwise a single MoveBookmarkDeltaOntoEvologBase using baseFromSelection or multiBaseCommitIDs[0].
-func PerformEvologSplitCmd(svc *jj.Service, bookmarkName, localChangeID, localCommitHint, baseFromSelection string, multiBaseCommitIDs []string, splitFilesetsFirst []string, hunkPrefixFirst map[string]int) tea.Cmd {
+func PerformEvologSplitCmd(svc *jj.Service, bookmarkName, localChangeID, localCommitHint, baseFromSelection string, multiBaseCommitIDs []string, splitFilesetsFirst []string, hunkPeelRounds []map[string]int) tea.Cmd {
 	if svc == nil {
 		return nil
 	}
@@ -123,13 +123,13 @@ func PerformEvologSplitCmd(svc *jj.Service, bookmarkName, localChangeID, localCo
 		bases := append([]string(nil), multiBaseCommitIDs...)
 		var err error
 		if len(bases) > 1 {
-			err = svc.EvologMultiSplit(ctx, bookmarkName, localChangeID, localCommitHint, bases, splitFilesetsFirst, hunkPrefixFirst)
+			err = svc.EvologMultiSplit(ctx, bookmarkName, localChangeID, localCommitHint, bases, splitFilesetsFirst, hunkPeelRounds)
 		} else {
 			base := strings.TrimSpace(baseFromSelection)
 			if len(bases) == 1 {
 				base = strings.TrimSpace(bases[0])
 			}
-			err = svc.MoveBookmarkDeltaOntoEvologBase(ctx, bookmarkName, localChangeID, localCommitHint, base, splitFilesetsFirst, hunkPrefixFirst)
+			err = svc.MoveBookmarkDeltaOntoEvologBase(ctx, bookmarkName, localChangeID, localCommitHint, base, splitFilesetsFirst, hunkPeelRounds)
 		}
 		if err != nil {
 			return util.ErrorMsg{Err: fmt.Errorf("evolog split: %w", err)}

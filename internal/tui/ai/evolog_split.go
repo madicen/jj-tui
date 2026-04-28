@@ -22,15 +22,24 @@ type EvologSplitSuggestMsg struct {
 	Rationale string
 	// FilesForFirstCommit, when non-empty, triggers jj split -r @ with these filesets after the FAQ row-split (optional second phase).
 	FilesForFirstCommit []string
-	// HunkPrefixFirstCommit maps path → first k hunks into the first child commit (optional second phase; preferred over files when both set).
+	// HunkPrefixFirstCommit maps path → first k hunks (single peel); ignored when HunkPeelRounds is set.
 	HunkPrefixFirstCommit map[string]int
+	// HunkPeelRounds is an ordered list of peels (each map is one jj split on @); use for full multi-commit partition.
+	HunkPeelRounds []map[string]int
 	// MultiSplitBaseCommitIDs is an ordered deepest-first list of base commit ids for sequential FAQ splits (length capped by settings and evolog row count).
 	MultiSplitBaseCommitIDs []string
 	Err                     error
 }
 
-const evologSplitMaxDiffSteps = 72
-const evologSplitMaxPromptRunes = 14_000
+// evologSplitMaxHunkPeelRounds caps how many jj split rounds we run from one AI suggestion (safety).
+const evologSplitMaxHunkPeelRounds = 64
+
+// evologSplitMaxDiffSteps limits jj diff --summary sections in the AI user prompt (each step is several lines).
+const evologSplitMaxDiffSteps = 120
+
+// evologSplitMaxPromptRunes caps the user prompt sent to the LLM. Large values improve “split everything”
+// suggestions on deep evologs; very large strings are trimmed on the prep goroutine (not the UI thread).
+const evologSplitMaxPromptRunes = 48_000
 
 // evologSplitStepDiffConcurrency limits parallel jj processes while building step summaries.
 const evologSplitStepDiffConcurrency = 8
@@ -59,23 +68,44 @@ const evologSplitSystem = `You help developers split one jj change using an "evo
 
 The evolog is listed newest-first: index 0 is the current tip, index 1 is its parent along that rewrite history, etc.
 
-You may recommend a single split boundary (BASE row index between 1 and N-1), recommend NO split, optionally suggest filesets OR per-file hunk prefixes for a second-phase split of the working copy after the row split, and optionally suggest as many sequential FAQ row splits as are justified using commit ids from the table (see split_base_commit_ids).
+Your job is to propose a COMPLETE automation plan when the working copy or history mixes several logical commits: (1) zero or more FAQ-style row moves via split_base_commit_ids (deepest-first), (2) zero or more hunk-scoped jj splits on @ via hunk_peel_rounds (or a single hunk_prefix_first_commit), (3) optional file paths if hunks are not available. Do not minimize the plan to "one peel" when multiple peels are genuinely needed — the user can confirm once and run the whole sequence.
 
-You receive each row's short id, full commit id, and first-line description, plus for some rows a jj diff --summary for the step from row i to row i-1. When hunk excerpts are included, they are git unified diffs for early steps — use them to count hunks per path (0-based in order of @@ blocks for that path).
+You receive each row's short id, full commit id, and first-line description, plus for some rows a jj diff --summary for the step from row i to row i-1 (only the first many steps may appear when N is large). When hunk excerpts are included, they are git unified diffs for early steps — use them to count hunks per path (0-based in order of @@ blocks for that path). If the message ends with a truncation note, treat missing older steps as unknown detail but still use the full "## Rows" list: when N is large or summaries show stacked unrelated work, propose as many split_base_commit_ids as are justified (up to the client cap), not a single minimal peel.
 
 Reply with a single JSON object only (no markdown fences, no commentary):
 {"no_split": <bool>, "recommended_index": <int>, "rationale": "<short plain text>", "confidence": "high"|"medium"|"low",
  "files_first_commit": ["<path>", ...],
  "hunk_prefix_first_commit": {"<path>": <int>, ...},
+ "hunk_peel_rounds": [{"<path>": <int>, ...}, ...],
  "split_base_commit_ids": ["<full commit id from table>", ...]}
 
 Rules:
-- If a single row split is not warranted (e.g. noise-only evolog, or one coherent change), set "no_split": true and "recommended_index": 0. Still provide rationale.
-- If you recommend a split, set "no_split": false and set "recommended_index" to an integer from 1 through N-1 (N = number of evolog rows). That row is the BASE for the FAQ split.
-- "split_base_commit_ids": optional array of commit_id values copied EXACTLY from the evolog rows' commit ids, for running multiple FAQ splits in order. When you need more than one peel to isolate distinct changes, list every base commit id required: deepest first (larger row index / older work toward smaller index / newer work), so each step applies cleanly after the previous one. You may list up to N-1 ids (N = row count in the user message) when that many separations are warranted; otherwise use fewer. Each id MUST appear in the "## Rows" list. Omit or use a one-element array equal to the chosen row's commit id when only one FAQ split is needed.
-- "files_first_commit": optional list of repo-relative paths for ONE extra peel of the working copy after the first FAQ split, using only paths that appear in the diff for the chosen recommended_index step. Paths must be a strict subset of changed paths: NEVER list every file in that step (at least one changed path must stay on @). Omit or [] if not needed. Do not use together with "hunk_prefix_first_commit" when hunks give a finer plan — the UI prefers hunks and will ignore file lists if both are set.
-- "hunk_prefix_first_commit": optional object mapping repo-relative path → integer k. For that path in the chosen recommended_index step diff, the first k hunks (indices 0..k-1) go into the FIRST child commit after jj split; remaining hunks for that path stay on @. k must be strictly less than the number of hunks for any path you include. Across the whole change, at least one path must still have hunks left on @ (do not peel every hunk of every file). Omit or {} when not needed, when excerpts were not provided, or when file-level split is enough.
+- If no split is warranted (e.g. noise-only evolog, or one coherent change), set "no_split": true and "recommended_index": 0. Still provide rationale.
+- If you recommend work to separate, set "no_split": false and set "recommended_index" to an integer from 1 through N-1 (N = number of evolog rows). Use the shallowest row index among the FAQ bases you intend (closest to tip / smallest index) so the UI previews the first separation from the tip; split_base_commit_ids still lists every FAQ base when more than one FAQ move is needed.
+- "split_base_commit_ids": array of commit_id values copied EXACTLY from the evolog rows' "## Rows" list. When multiple FAQ peels are needed to untangle stacked work, list EVERY base id required, ordered deepest-first (first id = largest row index among your bases / oldest separation, last id = smallest row index among your bases / closest to tip). A one-element array is only for a single FAQ move. You may list up to N-1 ids when warranted. If you omit the field or send [], the client defaults to one FAQ base derived from recommended_index.
+- "files_first_commit": optional list of repo-relative paths for ONE extra peel of the working copy after FAQ step(s), using only paths that appear in the diff for the chosen recommended_index step. Paths must be a strict subset of changed paths: NEVER list every file in that step (at least one changed path must stay on @). Omit or [] if not needed. Do not use together with hunk fields when hunks give a finer plan — the UI prefers hunks and will ignore file lists if both are set.
+- "hunk_prefix_first_commit": optional object for a SINGLE hunk peel after FAQ (same semantics as one element of hunk_peel_rounds). Prefer "hunk_peel_rounds" whenever more than one jj split on @ is needed to finish partitioning.
+- "hunk_peel_rounds": optional array of objects; each object maps path → k for ONE jj split on @ after all FAQ step(s). Round 1 uses the same path/k semantics as hunk_prefix_first_commit against the current @ vs @- diff. After each split, @ has a smaller diff; round 2's k values apply to THAT new diff (re-count @@ hunks from the updated working tree). To fully partition into G commits from the current tree slice, use G-1 rounds; each round must be a strict proper subset of the diff at that moment (every path you mention: 0 < k < current hunk count for that path). The final @ holds the last segment (do not add a round that would peel every remaining hunk). Omit or [] when no hunk peel is needed. Do not send both hunk_peel_rounds and hunk_prefix_first_commit — if both appear, hunk_peel_rounds wins.
 `
+
+func appendEvologSplitAutomationHint(b *strings.Builder, cfg *config.Config) {
+	if b == nil {
+		return
+	}
+	mode := "batch — all split_base_commit_ids in one user confirm, then all hunk_peel_rounds in order."
+	if cfg != nil && cfg.EvologAIMultiSplitStepwise() {
+		mode = "stepwise — one split_base_commit_id per user confirm; hunk_peel_rounds run after the last FAQ confirm."
+	}
+	maxBases := "evolog depth and Settings → Advanced (AI evolog multi-split max)"
+	if cfg != nil {
+		maxBases = fmt.Sprintf("min(evolog depth−1, %d) from Settings → Advanced", cfg.EvologAIMultiSplitMaxCap())
+	}
+	b.WriteString("\n## Client automation (for planning only; do not echo this heading in your JSON)\n")
+	fmt.Fprintf(b, "- FAQ bases: %s\n", mode)
+	b.WriteString("- Execution order: run every split_base_commit_id in array order (deepest first), then each hunk_peel_rounds map as its own jj split on @.\n")
+	fmt.Fprintf(b, "- Limits: %s FAQ ids; up to %d hunk peel rounds per suggestion.\n", maxBases, evologSplitMaxHunkPeelRounds)
+	b.WriteString("- Prefer returning the full split_base_commit_ids and hunk_peel_rounds arrays in one response whenever multiple steps are correct — do not collapse to a single step out of convenience.\n")
+}
 
 // EvologSplitJJStepTotal returns how many jj diff --summary steps are used when building the AI suggest prompt.
 func EvologSplitJJStepTotal(entryCount int) int {
@@ -160,6 +190,9 @@ func EvologSuggestPrepChainStartCmd(reqID int, jjSvc *jj.Service, cfg *config.Co
 					acc.WriteString(hint)
 				}
 			}
+			if batchEnd == jjTotal {
+				appendEvologSplitAutomationHint(&acc, cfg)
+			}
 			if acc.Len() > evologSuggestMaxPromptBytes {
 				return EvologSuggestPrepDoneMsg{ReqID: reqID, JJTotal: jjTotal, Err: fmt.Errorf("AI suggest: prompt exceeded internal size limit (%d bytes)", evologSuggestMaxPromptBytes)}
 			}
@@ -220,6 +253,7 @@ func runEvologSuggestLLM(reqID int, jjSvc *jj.Service, cfg *config.Config, entri
 	msg.Rationale = res.Rationale
 	msg.FilesForFirstCommit = res.FilesForFirstCommit
 	msg.HunkPrefixFirstCommit = res.HunkPrefixFirstCommit
+	msg.HunkPeelRounds = res.HunkPeelRounds
 	msg.MultiSplitBaseCommitIDs = res.MultiSplitBaseCommitIDs
 	capMulti := cfg.EvologAIMultiSplitMaxCap()
 	if capMulti < 1 {
@@ -233,32 +267,50 @@ func runEvologSuggestLLM(reqID int, jjSvc *jj.Service, cfg *config.Config, entri
 	}
 	if !cfg.EvologAIHunkPhaseEnabled() {
 		msg.HunkPrefixFirstCommit = nil
+		msg.HunkPeelRounds = nil
 	}
 	if !cfg.EvologAIFilePhaseEnabled() {
 		msg.FilesForFirstCommit = nil
 	}
-	if len(msg.HunkPrefixFirstCommit) > 0 && len(msg.FilesForFirstCommit) > 0 {
-		msg.FilesForFirstCommit = nil
-		if strings.TrimSpace(msg.Rationale) != "" {
-			msg.Rationale = msg.Rationale + " — file list ignored because hunk_prefix_first_commit is set"
-		} else {
-			msg.Rationale = "file list ignored because hunk_prefix_first_commit is set"
+	if len(msg.HunkPeelRounds) == 0 && len(msg.HunkPrefixFirstCommit) > 0 {
+		one := make(map[string]int, len(msg.HunkPrefixFirstCommit))
+		for k, v := range msg.HunkPrefixFirstCommit {
+			one[k] = v
+		}
+		msg.HunkPeelRounds = []map[string]int{one}
+	}
+	if len(msg.HunkPeelRounds) > 0 {
+		msg.HunkPrefixFirstCommit = nil
+		if len(msg.FilesForFirstCommit) > 0 {
+			msg.FilesForFirstCommit = nil
+			if strings.TrimSpace(msg.Rationale) != "" {
+				msg.Rationale = msg.Rationale + " — file list ignored because hunk peel plan is set"
+			} else {
+				msg.Rationale = "file list ignored because hunk peel plan is set"
+			}
 		}
 	}
-	if cfg.EvologAIHunkPhaseEnabled() && !res.NoSplit && len(msg.HunkPrefixFirstCommit) > 0 {
+	if cfg.EvologAIHunkPhaseEnabled() && !res.NoSplit && len(msg.HunkPeelRounds) > 0 {
 		valCtx, cancelVal := context.WithTimeout(context.Background(), evologSplitFileValidateTimeout)
 		defer cancelVal()
-		clean, note, herr := ValidateEvologHunkPrefixAgainstStep(valCtx, jjSvc, entries, res.PickIndex, msg.HunkPrefixFirstCommit)
+		clean, note, herr := ValidateEvologHunkPrefixAgainstStep(valCtx, jjSvc, entries, res.PickIndex, msg.HunkPeelRounds[0])
 		if herr != nil {
 			msg.Err = herr
 			return msg
 		}
-		msg.HunkPrefixFirstCommit = clean
+		msg.HunkPeelRounds[0] = clean
 		if note != "" {
 			if strings.TrimSpace(msg.Rationale) != "" {
 				msg.Rationale = msg.Rationale + " — " + note
 			} else {
 				msg.Rationale = note
+			}
+		}
+		if res.HunkPeelRoundsTruncated {
+			if strings.TrimSpace(msg.Rationale) != "" {
+				msg.Rationale = msg.Rationale + fmt.Sprintf(" — hunk_peel_rounds truncated to %d rounds", evologSplitMaxHunkPeelRounds)
+			} else {
+				msg.Rationale = fmt.Sprintf("hunk_peel_rounds truncated to %d rounds", evologSplitMaxHunkPeelRounds)
 			}
 		}
 	}
@@ -303,6 +355,7 @@ func truncateEvologUserPromptRunes(s string, max int) string {
 	for _, r := range s {
 		if n >= max {
 			b.WriteString("\n…(truncated for size)")
+			b.WriteString("\n(AI: early sections are preserved; tail may be missing. Use full ## Rows; prefer broad split_base_commit_ids + hunk_peel_rounds when the change is mixed.)\n")
 			return b.String()
 		}
 		b.WriteRune(r)
@@ -448,13 +501,14 @@ func buildEvologSplitUserPrompt(ctx context.Context, jjSvc *jj.Service, entries 
 }
 
 type evologSplitJSON struct {
-	NoSplit                 bool            `json:"no_split"`
-	RecommendedIndex        int             `json:"recommended_index"`
-	Rationale               string          `json:"rationale"`
-	Confidence              string          `json:"confidence"`
-	FilesFirstCommit        []string        `json:"files_first_commit"`
-	HunkPrefixFirstCommit   map[string]int  `json:"hunk_prefix_first_commit"`
-	SplitBaseCommitIDs      []string        `json:"split_base_commit_ids"`
+	NoSplit               bool             `json:"no_split"`
+	RecommendedIndex      int              `json:"recommended_index"`
+	Rationale             string           `json:"rationale"`
+	Confidence            string           `json:"confidence"`
+	FilesFirstCommit      []string         `json:"files_first_commit"`
+	HunkPrefixFirstCommit map[string]int   `json:"hunk_prefix_first_commit"`
+	HunkPeelRounds        []map[string]int `json:"hunk_peel_rounds"`
+	SplitBaseCommitIDs    []string         `json:"split_base_commit_ids"`
 }
 
 // EvologSplitParseResult is the parsed LLM output for evolog split suggestions.
@@ -462,8 +516,10 @@ type EvologSplitParseResult struct {
 	NoSplit                 bool
 	PickIndex               int
 	Rationale               string
-	FilesForFirstCommit       []string
+	FilesForFirstCommit     []string
 	HunkPrefixFirstCommit   map[string]int
+	HunkPeelRounds          []map[string]int
+	HunkPeelRoundsTruncated bool // true when hunk_peel_rounds exceeded evologSplitMaxHunkPeelRounds before cap
 	MultiSplitBaseCommitIDs []string
 }
 
@@ -490,6 +546,37 @@ func normalizeEvologCommitID(id string, entries []jj.EvologEntry) string {
 		}
 	}
 	return match
+}
+
+func capAndNormalizeHunkPeelRounds(list []map[string]int) []map[string]int {
+	if len(list) == 0 {
+		return nil
+	}
+	if len(list) > evologSplitMaxHunkPeelRounds {
+		list = list[:evologSplitMaxHunkPeelRounds]
+	}
+	var out []map[string]int
+	for _, m := range list {
+		if len(m) == 0 {
+			continue
+		}
+		nm := make(map[string]int)
+		for k, v := range m {
+			kk := normalizeRepoPathForDiff(k)
+			if kk == "" || v <= 0 {
+				continue
+			}
+			nm[kk] = v
+		}
+		if len(nm) == 0 {
+			continue
+		}
+		out = append(out, nm)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func parseEvologSplitJSON(raw string, maxPick int, entries []jj.EvologEntry, maxMultiIDs int) (EvologSplitParseResult, error) {
@@ -560,12 +647,19 @@ func parseEvologSplitJSON(raw string, maxPick int, entries []jj.EvologEntry, max
 			hunkPrefix[kk] = v
 		}
 	}
+	truncated := len(parsed.HunkPeelRounds) > evologSplitMaxHunkPeelRounds
+	peelRounds := capAndNormalizeHunkPeelRounds(parsed.HunkPeelRounds)
+	if len(peelRounds) > 0 {
+		hunkPrefix = nil
+	}
 	return EvologSplitParseResult{
 		NoSplit:                 false,
 		PickIndex:               idx,
 		Rationale:               r,
 		FilesForFirstCommit:     files,
 		HunkPrefixFirstCommit:   hunkPrefix,
+		HunkPeelRounds:          peelRounds,
+		HunkPeelRoundsTruncated: truncated,
 		MultiSplitBaseCommitIDs: multi,
 	}, nil
 }

@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -78,6 +79,64 @@ func TestParseEvologSplitJSONHunkPrefix(t *testing.T) {
 	}
 	if res.HunkPrefixFirstCommit["foo.go"] != 2 || res.HunkPrefixFirstCommit["bar.go"] != 1 {
 		t.Fatalf("hunk map=%v", res.HunkPrefixFirstCommit)
+	}
+	if len(res.HunkPeelRounds) != 0 {
+		t.Fatalf("expected no peel rounds when only hunk_prefix_first_commit: %v", res.HunkPeelRounds)
+	}
+}
+
+func TestParseEvologSplitJSONHunkPeelRounds(t *testing.T) {
+	entries := []jj.EvologEntry{{CommitID: "a"}, {CommitID: "b"}, {CommitID: "c"}}
+	raw := `{"recommended_index": 1, "rationale": "partition", "hunk_peel_rounds": [{"./a.go": 1}, {"b.go": 2}]}`
+	res, err := parseEvologSplitJSON(raw, 2, entries, 99)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.HunkPeelRounds) != 2 {
+		t.Fatalf("rounds=%v", res.HunkPeelRounds)
+	}
+	if res.HunkPeelRounds[0]["a.go"] != 1 || res.HunkPeelRounds[1]["b.go"] != 2 {
+		t.Fatalf("round maps wrong: %#v", res.HunkPeelRounds)
+	}
+	if res.HunkPrefixFirstCommit != nil {
+		t.Fatalf("hunk_prefix should be cleared when peel rounds present: %v", res.HunkPrefixFirstCommit)
+	}
+	if res.HunkPeelRoundsTruncated {
+		t.Fatal("unexpected truncation flag")
+	}
+}
+
+func TestParseEvologSplitJSONHunkPeelRoundsWinsOverPrefix(t *testing.T) {
+	entries := []jj.EvologEntry{{CommitID: "a"}, {CommitID: "b"}, {CommitID: "c"}}
+	raw := `{"recommended_index": 1, "rationale": "x", "hunk_prefix_first_commit": {"x.go": 9}, "hunk_peel_rounds": [{"y.go": 1}]}`
+	res, err := parseEvologSplitJSON(raw, 2, entries, 99)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.HunkPrefixFirstCommit != nil {
+		t.Fatalf("expected prefix cleared: %v", res.HunkPrefixFirstCommit)
+	}
+	if len(res.HunkPeelRounds) != 1 || res.HunkPeelRounds[0]["y.go"] != 1 {
+		t.Fatalf("rounds=%v", res.HunkPeelRounds)
+	}
+}
+
+func TestParseEvologSplitJSONHunkPeelRoundsTruncated(t *testing.T) {
+	entries := []jj.EvologEntry{{CommitID: "a"}, {CommitID: "b"}, {CommitID: "c"}}
+	var parts []string
+	for i := 0; i < evologSplitMaxHunkPeelRounds+1; i++ {
+		parts = append(parts, `{"z.go":1}`)
+	}
+	raw := fmt.Sprintf(`{"recommended_index": 1, "rationale": "x", "hunk_peel_rounds": [%s]}`, strings.Join(parts, ","))
+	res, err := parseEvologSplitJSON(raw, 2, entries, 99)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.HunkPeelRoundsTruncated {
+		t.Fatal("expected HunkPeelRoundsTruncated")
+	}
+	if len(res.HunkPeelRounds) != evologSplitMaxHunkPeelRounds {
+		t.Fatalf("got %d rounds want %d", len(res.HunkPeelRounds), evologSplitMaxHunkPeelRounds)
 	}
 }
 
@@ -160,13 +219,15 @@ func TestTrimEvologUserPromptUnderCapUnchanged(t *testing.T) {
 }
 
 func TestTrimEvologUserPromptTruncatesRunes(t *testing.T) {
-	// evologSplitMaxPromptRunes is 14_000 — build something clearly over cap in runes
 	s := strings.Repeat("é", evologSplitMaxPromptRunes+50) // 2 UTF-8 bytes per rune
 	got := TrimEvologUserPrompt(s)
 	if !strings.Contains(got, "…(truncated for size)") {
 		t.Fatal("expected truncation marker")
 	}
-	if len([]rune(got)) > evologSplitMaxPromptRunes+30 { // small slack for trailer runes
-		t.Fatalf("expected capped rune count, got %d", len([]rune(got)))
+	if !strings.Contains(got, "split_base_commit_ids") {
+		t.Fatal("expected truncation tail hint for AI")
+	}
+	if len([]rune(got)) > evologSplitMaxPromptRunes+200 { // slack for truncation + hint line
+		t.Fatalf("expected near-capped rune count, got %d", len([]rune(got)))
 	}
 }

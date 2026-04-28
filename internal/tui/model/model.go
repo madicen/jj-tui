@@ -422,7 +422,7 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 				t.EvologBaseCommitID,
 				t.EvologMultiBaseCommitIDs,
 				t.EvologFilesetsFirst,
-				t.EvologHunkPrefixFirst,
+				t.EvologHunkPeelRounds,
 			),
 			m.startBusySpinnerCmd(),
 		)

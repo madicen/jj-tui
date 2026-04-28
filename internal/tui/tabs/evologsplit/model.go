@@ -22,6 +22,9 @@ import (
 	"github.com/mattn/go-runewidth"
 )
 
+// evologAIWrapMaxLines caps wrapped AI rationale / errors so short terminals stay usable.
+const evologAIWrapMaxLines = 18
+
 // Model is an experimental evolog-driven split picker (FAQ: move recent work into a new change).
 type Model struct {
 	shown         bool
@@ -47,21 +50,21 @@ type Model struct {
 	suggestCfg       *config.Config
 	suggestReqID     int
 	suggestLoading   bool
-	suggestSpinIdx   int // mini-dot frame for overlay (driven by OverlaySpinTickMsg, not bubbles spinner)
+	suggestSpinIdx   int       // mini-dot frame for overlay (driven by OverlaySpinTickMsg, not bubbles spinner)
 	suggestStartedAt time.Time // wall clock when AI suggest began (for overlay hints)
 	// suggestPrep* / suggestPhase: JJ batched diff summaries vs LLM (shown on suggest overlay).
 	suggestPrepJJDone  int
 	suggestPrepJJTotal int
 	suggestPhase       string // "", "jj", "llm"
-	suggestRationale string
-	suggestErrLine   string
+	suggestRationale   string
+	suggestErrLine     string
 	// describeAfterSplit: user toggle (d); sent on NavigatePerformEvologSplit.
-	describeAfterSplit  bool
-	suggestNoSplit      bool // last AI recommendation
-	pendingFilesFirst    []string
-	pendingHunkPrefix    map[string]int // path → first k hunks into first child (AI); nil when empty
-	pendingMultiBaseIDs  []string
-	noSplitConfirm       noSplitConfirm // double-Enter on same row after AI no_split
+	describeAfterSplit    bool
+	suggestNoSplit        bool // last AI recommendation
+	pendingFilesFirst     []string
+	pendingHunkPeelRounds []map[string]int // AI hunk peel plan (each map = one jj split); nil when empty
+	pendingMultiBaseIDs   []string
+	noSplitConfirm        noSplitConfirm // double-Enter on same row after AI no_split
 }
 
 // NewModel creates the evolog split modal. zoneManager may be nil.
@@ -149,7 +152,7 @@ func (m *Model) Show(commit internal.Commit, bookmarkName string, describeAfterS
 		m.suggestCfg != nil && m.suggestCfg.AIConfiguredForGeneration()
 	m.suggestNoSplit = false
 	m.pendingFilesFirst = nil
-	m.pendingHunkPrefix = nil
+	m.pendingHunkPeelRounds = nil
 	m.pendingMultiBaseIDs = nil
 	m.noSplitConfirm.reset()
 }
@@ -175,7 +178,7 @@ func (m *Model) Hide() {
 	m.describeAfterSplit = false
 	m.suggestNoSplit = false
 	m.pendingFilesFirst = nil
-	m.pendingHunkPrefix = nil
+	m.pendingHunkPeelRounds = nil
 	m.pendingMultiBaseIDs = nil
 	m.noSplitConfirm.reset()
 }
@@ -293,13 +296,7 @@ func (m Model) openStepPatchNavigate() tea.Cmd {
 func (m Model) performSplitNavigateCmd() tea.Cmd {
 	bases := append([]string(nil), m.pendingMultiBaseIDs...)
 	filesets := append([]string(nil), m.pendingFilesFirst...)
-	var hunkPrefix map[string]int
-	if len(m.pendingHunkPrefix) > 0 {
-		hunkPrefix = make(map[string]int, len(m.pendingHunkPrefix))
-		for k, v := range m.pendingHunkPrefix {
-			hunkPrefix[k] = v
-		}
-	}
+	hunkPeels := cloneHunkPeelRounds(m.pendingHunkPeelRounds)
 	var remainder []string
 	runBases := bases
 	if m.suggestCfg != nil && m.suggestCfg.EvologAIMultiSplitStepwise() && len(bases) > 1 {
@@ -307,7 +304,7 @@ func (m Model) performSplitNavigateCmd() tea.Cmd {
 		runBases = []string{bases[0]}
 		if len(remainder) > 0 {
 			filesets = nil
-			hunkPrefix = nil
+			hunkPeels = nil
 		}
 	}
 	baseID := m.entries[m.selectedIdx].CommitID
@@ -322,7 +319,7 @@ func (m Model) performSplitNavigateCmd() tea.Cmd {
 		EvologBaseCommitID:       baseID,
 		EvologDescribeAfterSplit: m.describeAfterSplit,
 		EvologFilesetsFirst:      filesets,
-		EvologHunkPrefixFirst:     hunkPrefix,
+		EvologHunkPeelRounds:     hunkPeels,
 		EvologMultiBaseCommitIDs: runBases,
 		EvologStepwiseRemainder:  remainder,
 	}.Cmd()
@@ -360,7 +357,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.suggestErrLine = ""
 		m.suggestNoSplit = false
 		m.pendingFilesFirst = nil
-		m.pendingHunkPrefix = nil
+		m.pendingHunkPeelRounds = nil
 		m.pendingMultiBaseIDs = nil
 		m.noSplitConfirm.reset()
 		if msg.Err != nil {
@@ -411,20 +408,17 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.suggestRationale = ""
 			m.suggestNoSplit = false
 			m.pendingFilesFirst = nil
-			m.pendingHunkPrefix = nil
+			m.pendingHunkPeelRounds = nil
 			m.pendingMultiBaseIDs = nil
 			m.noSplitConfirm.reset()
 			return m, nil
 		}
 		m.suggestNoSplit = msg.NoSplit
 		m.pendingFilesFirst = append([]string(nil), msg.FilesForFirstCommit...)
-		if len(msg.HunkPrefixFirstCommit) > 0 {
-			m.pendingHunkPrefix = make(map[string]int, len(msg.HunkPrefixFirstCommit))
-			for k, v := range msg.HunkPrefixFirstCommit {
-				m.pendingHunkPrefix[k] = v
-			}
+		if len(msg.HunkPeelRounds) > 0 {
+			m.pendingHunkPeelRounds = cloneHunkPeelRounds(msg.HunkPeelRounds)
 		} else {
-			m.pendingHunkPrefix = nil
+			m.pendingHunkPeelRounds = nil
 		}
 		m.pendingMultiBaseIDs = append([]string(nil), msg.MultiSplitBaseCommitIDs...)
 		m.suggestRationale = msg.Rationale
@@ -517,8 +511,8 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 		if len(m.pendingFilesFirst) > 0 {
 			m.pendingFilesFirst = nil
 		}
-		if len(m.pendingHunkPrefix) > 0 {
-			m.pendingHunkPrefix = nil
+		if len(m.pendingHunkPeelRounds) > 0 {
+			m.pendingHunkPeelRounds = nil
 		}
 		return m, nil
 	case "o":
@@ -869,18 +863,35 @@ func (m Model) View() string {
 	lines = append(lines, patchBtn+"  "+suggestBtn)
 	lines = append(lines, confirm+"  "+cancel)
 	lines = append(lines, "")
+	textWrapW := max(16, modalW-6)
 	if m.suggestNoSplit && strings.TrimSpace(m.suggestRationale) != "" {
-		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#E3B341")).Render(
-			runewidth.Truncate("AI: no split recommended — "+m.suggestRationale, max(20, modalW-6), "…")))
+		lines = append(lines, renderEvologModalWrapped(
+			"AI: no split recommended — "+m.suggestRationale,
+			textWrapW,
+			evologAIWrapMaxLines,
+			lipgloss.NewStyle().Foreground(lipgloss.Color("#E3B341")),
+			muted,
+		))
 		if noSplitFirstEnterOnlyArms(m.suggestNoSplit, m.selectedIdx, m.noSplitConfirm) {
 			lines = append(lines, muted.Render("Press Enter again to split at this row, or j/k to pick another row."))
 		}
 	} else if m.suggestRationale != "" {
-		aiLine := "AI: " + m.suggestRationale
-		lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorSecondary).Render(runewidth.Truncate(aiLine, max(20, modalW-6), "…")))
+		lines = append(lines, renderEvologModalWrapped(
+			"AI: "+m.suggestRationale,
+			textWrapW,
+			evologAIWrapMaxLines,
+			lipgloss.NewStyle().Foreground(styles.ColorSecondary),
+			muted,
+		))
 	}
 	if m.suggestErrLine != "" {
-		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#F85149")).Render(runewidth.Truncate(m.suggestErrLine, max(20, modalW-6), "…")))
+		lines = append(lines, renderEvologModalWrapped(
+			m.suggestErrLine,
+			textWrapW,
+			evologAIWrapMaxLines,
+			lipgloss.NewStyle().Foreground(lipgloss.Color("#F85149")),
+			muted,
+		))
 	}
 	if m.suggestCfg != nil && m.suggestCfg.AIConfiguredForGeneration() {
 		dstate := "off"
@@ -891,27 +902,28 @@ func (m Model) View() string {
 	}
 	if len(m.pendingMultiBaseIDs) > 1 {
 		lines = append(lines, muted.Render(fmt.Sprintf("AI plan: %d sequential FAQ splits (deepest first)", len(m.pendingMultiBaseIDs))))
+		if m.suggestCfg != nil && m.suggestCfg.EvologAIMultiSplitStepwise() {
+			lines = append(lines, muted.Render("Stepwise multi-split: one FAQ base per Enter. Disable it in Settings → Advanced to run every FAQ base in one Enter (batch)."))
+		}
 	}
 	if len(m.pendingFilesFirst) > 0 {
 		preview := strings.Join(m.pendingFilesFirst, ", ")
-		maxPrev := min(60, max(1, modalW-8))
-		if len(preview) > maxPrev {
-			preview = preview[:maxPrev] + "…"
-		}
-		lines = append(lines, muted.Render("AI file split (after FAQ): "+preview+" (c clears)"))
+		fileLine := "AI file split (after FAQ): " + preview + " (c clears)"
+		lines = append(lines, renderEvologModalWrapped(fileLine, textWrapW, evologAIWrapMaxLines, muted, muted))
 	}
-	if len(m.pendingHunkPrefix) > 0 {
+	if len(m.pendingHunkPeelRounds) > 0 {
 		var parts []string
-		for p, k := range m.pendingHunkPrefix {
-			parts = append(parts, fmt.Sprintf("%s:%d", p, k))
+		for ri, round := range m.pendingHunkPeelRounds {
+			var rp []string
+			for p, k := range round {
+				rp = append(rp, fmt.Sprintf("%s:%d", p, k))
+			}
+			sort.Strings(rp)
+			parts = append(parts, fmt.Sprintf("r%d:%s", ri+1, strings.Join(rp, ",")))
 		}
-		sort.Strings(parts)
-		prev := strings.Join(parts, ", ")
-		maxPrev := min(72, max(1, modalW-8))
-		if len(prev) > maxPrev {
-			prev = prev[:maxPrev] + "…"
-		}
-		lines = append(lines, muted.Render("AI hunk split (after FAQ): "+prev+" (c clears)"))
+		prev := strings.Join(parts, " · ")
+		hunkLine := fmt.Sprintf("AI hunk peel (%d round(s) after FAQ): %s (c clears)", len(m.pendingHunkPeelRounds), prev)
+		lines = append(lines, renderEvologModalWrapped(hunkLine, textWrapW, evologAIWrapMaxLines, muted, muted))
 	}
 	lines = append(lines, "")
 	lines = append(lines, muted.Render("Wheel scrolls history · o step diff · s AI suggest · d post-split describe · c clear AI file/hunk plan · Do not pick the tip row as base"))
@@ -926,4 +938,40 @@ func (m Model) View() string {
 		out = renderEvologSuggestSpinnerOverlay(out, evologSuggestMiniDotFrame(m.suggestSpinIdx), elapsed, modalW-4, m.suggestPrepJJDone, m.suggestPrepJJTotal, m.suggestPhase)
 	}
 	return out
+}
+
+func cloneHunkPeelRounds(in []map[string]int) []map[string]int {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]map[string]int, len(in))
+	for i, m := range in {
+		out[i] = make(map[string]int, len(m))
+		for k, v := range m {
+			out[i][k] = v
+		}
+	}
+	return out
+}
+
+// renderEvologModalWrapped word-wraps plain text to wrapW and limits how many
+// lines are shown so the split modal stays readable (replaces one-line truncation).
+func renderEvologModalWrapped(text string, wrapW, maxLines int, sty lipgloss.Style, omitNote lipgloss.Style) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return ""
+	}
+	if wrapW < 12 {
+		wrapW = 12
+	}
+	out := sty.Width(wrapW).Render(text)
+	if maxLines <= 0 {
+		return out
+	}
+	ls := strings.Split(out, "\n")
+	if len(ls) <= maxLines {
+		return out
+	}
+	return strings.Join(ls[:maxLines], "\n") + "\n" +
+		omitNote.Render(fmt.Sprintf("… +%d line(s) — widen terminal or enlarge window for more", len(ls)-maxLines))
 }

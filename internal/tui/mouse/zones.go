@@ -161,7 +161,7 @@ const (
 	ZoneSettingsAIAPIKey                   = "zone:settings:ai:api_key"
 	ZoneSettingsAIEvologDescribeDefault    = "zone:settings:ai:evolog_describe_default"
 	ZoneSettingsAIEvologFileSplit          = "zone:settings:ai:evolog_file_split"
-	ZoneSettingsAIEvologHunkSplit         = "zone:settings:ai:evolog_hunk_split"
+	ZoneSettingsAIEvologHunkSplit          = "zone:settings:ai:evolog_hunk_split"
 	ZoneSettingsAIEvologMultiStepwise      = "zone:settings:ai:evolog_multi_stepwise"
 	ZoneSettingsAIEvologMultiMaxDecrease   = "zone:settings:ai:evolog_multi_max_dec"
 	ZoneSettingsAIEvologMultiMaxIncrease   = "zone:settings:ai:evolog_multi_max_inc"

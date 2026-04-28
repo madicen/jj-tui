@@ -14,6 +14,22 @@ import (
 
 const evologHunkSplitDiffMaxBytes = 4 << 20
 
+// SplitRevisionByHunkPeelRounds runs several hunk-scoped jj splits in order on the same revision
+// (typically "@"): each round peels another prefix subset from the current @ vs @- diff.
+// Fully partitioning into G logical commits requires G-1 non-empty rounds (each a strict proper subset
+// of the diff at that step); the last hunk(s) remain on @ after the final round.
+func (s *Service) SplitRevisionByHunkPeelRounds(ctx context.Context, revision, message string, rounds []map[string]int) error {
+	for i, m := range rounds {
+		if len(m) == 0 {
+			continue
+		}
+		if err := s.SplitRevisionByHunkPrefix(ctx, revision, message, m); err != nil {
+			return fmt.Errorf("hunk peel round %d/%d: %w", i+1, len(rounds), err)
+		}
+	}
+	return nil
+}
+
 // SplitRevisionByHunkPrefix runs non-interactive `jj split` using a one-shot ui.diff-editor that
 // rewrites the output tree to parent + the first k hunks per path (see prefixByPath).
 // revision is typically "@"; diff is always read from @- → @.
@@ -82,9 +98,11 @@ func (s *Service) SplitRevisionByHunkPrefix(ctx context.Context, revision, messa
 		"split", "-r", rev, "-m", msg,
 		"--tool", "jj-tui-hunk-split",
 	}
-	// When @ already has one direct child, default jj split rebases that child onto the new
-	// remainder commit; successive peels pile into the same descendant. --insert-before inserts
-	// the peeled commit between @ and that child (omit if 0 or 2+ children).
+	// Default jj split puts the remainder in a new child of the selected (first) commit and rebases
+	// any existing descendants of @ onto that remainder. When @ already has a direct child, repeated
+	// peels then pile into the same descendant instead of forming @ → peel₁ → peel₂ → … → child.
+	// --insert-before keeps the remainder on @ and inserts the peeled commit between @ and that child
+	// (omit if 0 or 2+ direct children).
 	if kids, err := s.directRevisionChildrenCommitIDs(ctx, rev); err == nil && len(kids) == 1 {
 		args = append(args, "--insert-before", kids[0])
 	}
@@ -98,6 +116,7 @@ func (s *Service) directRevisionChildrenCommitIDs(ctx context.Context, rev strin
 	if rev == "" {
 		rev = "@"
 	}
+	// children(rev) is a revset; limit keeps the query bounded if the graph is unusual.
 	rs := fmt.Sprintf("children(%s)", rev)
 	out, err := s.runJJOutputNoHistory(ctx, "log", "-r", rs, "--no-graph", "-T", "commit_id ++ \"\\n\"", "--limit", "16")
 	if err != nil {

@@ -54,9 +54,9 @@ type RenderData struct {
 	AIEnabled              bool
 	AIProviderID           string // openai_compatible | gemini
 	AIAPIKeySet            bool   // key present (env overrides config)
-	EvologDescribeDefault   bool
-	EvologFileSplitEnabled  bool
-	EvologHunkSplitEnabled  bool
+	EvologDescribeDefault  bool
+	EvologFileSplitEnabled bool
+	EvologHunkSplitEnabled bool
 	EvologMultiStepwise    bool
 	EvologMultiMax         int
 
@@ -98,9 +98,9 @@ func BuildRenderData(sm *Model, opts ViewOpts) RenderData {
 		AIEnabled:              sm.GetAdvancedModel().GetAIEnabled(),
 		AIProviderID:           sm.GetAdvancedModel().GetAIProvider(),
 		AIAPIKeySet:            config.EffectiveAIAPIKey(opts.Config) != "",
-		EvologDescribeDefault:   sm.GetAdvancedModel().GetEvologDescribeAfterSplitDefault(),
-		EvologFileSplitEnabled:  sm.GetAdvancedModel().GetEvologFileSplitEnabled(),
-		EvologHunkSplitEnabled:  sm.GetAdvancedModel().GetEvologHunkSplitEnabled(),
+		EvologDescribeDefault:  sm.GetAdvancedModel().GetEvologDescribeAfterSplitDefault(),
+		EvologFileSplitEnabled: sm.GetAdvancedModel().GetEvologFileSplitEnabled(),
+		EvologHunkSplitEnabled: sm.GetAdvancedModel().GetEvologHunkSplitEnabled(),
 		EvologMultiStepwise:    sm.GetAdvancedModel().GetEvologMultiStepwise(),
 		EvologMultiMax:         sm.GetAdvancedModel().GetEvologMultiMax(),
 		YOffset:                sm.GetSettingsYOffset(),

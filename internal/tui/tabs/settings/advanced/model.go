@@ -23,9 +23,9 @@ type Model struct {
 	focusedField         int // 0 = graph revset, 1 = custom editor, 2 = AI base URL, 3 = AI model, 4 = AI key
 	externalEditorPreset int // 0..8 — see externalEditorPresetLabels
 	// AI evolog split defaults (persisted in config)
-	evologDescribeDefault   bool
-	evologFileSplitEnabled  bool
-	evologHunkSplitEnabled  bool
+	evologDescribeDefault  bool
+	evologFileSplitEnabled bool
+	evologHunkSplitEnabled bool
 	evologMultiStepwise    bool
 	evologMultiMax         int // 1..config.EvologAIMultiSplitHardMax, cap for AI multi-split plan length
 }

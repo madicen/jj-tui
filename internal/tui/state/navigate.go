@@ -81,8 +81,8 @@ type NavigateTarget struct {
 	EvologDescribeAfterSplit bool
 	// EvologFilesetsFirst optional paths for jj split -r @ after FAQ split(s).
 	EvologFilesetsFirst []string
-	// EvologHunkPrefixFirst optional path → first k hunks into first child after FAQ split(s).
-	EvologHunkPrefixFirst map[string]int
+	// EvologHunkPeelRounds optional sequence of path→prefix hunk peels after FAQ split(s); each round is one jj split on @.
+	EvologHunkPeelRounds []map[string]int
 	// EvologMultiBaseCommitIDs optional deepest-first bases for sequential FAQ splits (len>1 triggers multi-split).
 	EvologMultiBaseCommitIDs []string
 	// EvologStepwiseRemainder, when non-empty, is bases still to run after this split (stepwise mode); main reloads evolog without closing the modal.
