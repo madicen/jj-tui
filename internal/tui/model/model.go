@@ -80,12 +80,21 @@ type Model struct {
 	conflictModal    conflicttab.Model
 	divergentModal   divergenttab.Model
 	evologSplitModal evologsplittab.Model
-	fileDiffModal    filedifftab.Model
-	bookmarkModal    bookmarktab.Model
-	prFormModal      prformtab.Model
-	ticketFormModal  ticketformtab.Model
-	desceditModal    descedittab.Model
-	githubLoginModel githublogintab.Model
+	// evologPostSplitDescribe is set when the user confirms split with “AI describe after split”; cleared after describe runs or on graph return.
+	evologPostSplitDescribe bool
+	// evologStepwiseRemainderAfterSplit: after an intermediate stepwise FAQ split, reload evolog without closing the modal.
+	evologStepwiseRemainderAfterSplit []string
+	evologStepwiseBookmarkName        string
+	// Post-split AI describe preview (y apply / n discard).
+	evologDescribePreviewActive bool
+	evologDescribeParent        string
+	evologDescribeChild         string
+	fileDiffModal               filedifftab.Model
+	bookmarkModal               bookmarktab.Model
+	prFormModal                 prformtab.Model
+	ticketFormModal             ticketformtab.Model
+	desceditModal               descedittab.Model
+	githubLoginModel            githublogintab.Model
 
 	busySpinner spinner.Model
 }
@@ -352,9 +361,16 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case state.NavigateOpenEvologSplit:
+		m.evologPostSplitDescribe = false
+		m.evologStepwiseRemainderAfterSplit = nil
+		m.evologStepwiseBookmarkName = ""
+		m.evologDescribePreviewActive = false
+		m.evologDescribeParent = ""
+		m.evologDescribeChild = ""
 		bn := graphtab.FeatureBookmarkForSplit(t.Commit.Branches)
-		m.evologSplitModal = m.evologSplitModal.SetDimensions(m.width, m.height)
-		m.evologSplitModal.Show(t.Commit, bn)
+		m.evologSplitModal = m.evologSplitModal.SetDimensions(m.width, m.height).WithSuggestConfig(m.appState.Config)
+		descDef := m.appState.Config != nil && m.appState.Config.DefaultEvologPostSplitDescribe()
+		m.evologSplitModal.Show(t.Commit, bn, descDef)
 		m.appState.ViewMode = state.ViewEvologSplit
 		m.appState.StatusMessage = "Loading jj evolog…"
 		return m, evologsplittab.LoadEvologCmd(m.appState.JJService, bn, t.Commit)
@@ -392,15 +408,21 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		m.appState.StatusMessage = "Loading file diff…"
 		return m, filedifftab.LoadFileDiffCmd(m.appState.JJService, seq, t.Commit.ChangeID, path)
 	case state.NavigatePerformEvologSplit:
+		m.evologPostSplitDescribe = t.EvologDescribeAfterSplit
+		m.evologStepwiseRemainderAfterSplit = append([]string(nil), t.EvologStepwiseRemainder...)
+		m.evologStepwiseBookmarkName = t.EvologBookmarkName
 		m.appState.StatusMessage = "Splitting change…"
 		m.appState.Loading = true
 		return m, tea.Batch(
-			evologsplittab.MoveBookmarkDeltaOntoEvologBaseCmd(
+			evologsplittab.PerformEvologSplitCmd(
 				m.appState.JJService,
 				t.EvologBookmarkName,
 				t.EvologTipChangeID,
 				t.EvologTipCommitHint,
 				t.EvologBaseCommitID,
+				t.EvologMultiBaseCommitIDs,
+				t.EvologFilesetsFirst,
+				t.EvologHunkPeelRounds,
 			),
 			m.startBusySpinnerCmd(),
 		)
@@ -801,7 +823,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ticketsTabModel.SetDimensions(m.width, contentHeight)
 		m.settingsTabModel.SetDimensions(m.width, contentHeight)
 		m.helpTabModel.SetDimensions(m.width, contentHeight)
-		m.evologSplitModal = m.evologSplitModal.SetDimensions(m.width, m.height)
+		m.evologSplitModal = m.evologSplitModal.SetDimensions(m.width, m.height).WithSuggestConfig(m.appState.Config)
 		m.fileDiffModal = m.fileDiffModal.SetDimensions(m.width, m.height)
 		m.divergentModal = m.divergentModal.SetDimensions(m.width, m.height)
 		m.conflictModal = m.conflictModal.SetDimensions(m.width, m.height)
@@ -811,6 +833,27 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		if m.evologDescribePreviewActive {
+			switch msg.String() {
+			case "y", "Y":
+				pd, cd := m.evologDescribeParent, m.evologDescribeChild
+				m.evologDescribePreviewActive = false
+				m.evologDescribeParent, m.evologDescribeChild = "", ""
+				m.appState.Loading = true
+				m.appState.StatusMessage = "Applying descriptions…"
+				return m, tea.Batch(
+					aitab.ApplyEvologSplitDescriptionsCmd(0, m.appState.JJService, m.appState.Config, pd, cd),
+					m.startBusySpinnerCmd(),
+				)
+			case "n", "N", "esc":
+				m.evologDescribePreviewActive = false
+				m.evologDescribeParent, m.evologDescribeChild = "", ""
+				m.appState.StatusMessage = "Descriptions preview dismissed"
+				return m, nil
+			default:
+				return m, nil
+			}
+		}
 		// When an overlay or blocking modal is showing, route keys to handleKeyMsg (init, error, warning) or view modals.
 		if m.initRepoModel.Path() != "" || m.errorModal.GetError() != nil || m.warningModal.IsShown() {
 			return m.handleKeyMsg(msg)
@@ -1220,6 +1263,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case errorMsg:
+		m.evologDescribePreviewActive = false
+		m.evologDescribeParent = ""
+		m.evologDescribeChild = ""
 		if m.appState.ViewMode == state.ViewEvologSplit || m.appState.ViewMode == state.ViewFileDiff {
 			m.appState.Loading = false
 		}
@@ -1381,6 +1427,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.errorModal.SetError(errInfo.Err, false, "")
 			return m, nil
 		}
+		// Reloaded config pointer; keep evolog split modal in sync if user returns to split (z) after saving AI settings.
+		m.evologSplitModal = m.evologSplitModal.WithSuggestConfig(m.appState.Config)
 		if wasSettings {
 			m.settingsTabModel.SetViewOpts(m.buildSettingsViewOpts())
 		}
@@ -1512,15 +1560,129 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, evologsplittab.LoadEvologSplitDiffCmd(m.appState.JJService, seq, from, to, prevFrom, prevTo)
+	case evologsplittab.OverlaySpinTickMsg:
+		if m.appState.ViewMode != state.ViewEvologSplit || !m.evologSplitModal.IsShown() {
+			return m, nil
+		}
+		updated, cmd := m.evologSplitModal.Update(msg)
+		m.evologSplitModal = updated
+		return m, cmd
+	case evologsplittab.EvologSplitSuggestRequestedMsg:
+		if m.appState.JJService == nil {
+			return m, func() tea.Msg {
+				return aitab.EvologSplitSuggestMsg{ReqID: msg.ReqID, Err: fmt.Errorf("jj service not available")}
+			}
+		}
+		if m.appState.Config == nil || !m.appState.Config.AIConfiguredForGeneration() {
+			return m, func() tea.Msg {
+				return aitab.EvologSplitSuggestMsg{ReqID: msg.ReqID, Err: fmt.Errorf("AI is disabled or no API key (Settings → Advanced, or %s)", config.EnvAIAPIKey)}
+			}
+		}
+		return m, aitab.EvologSuggestPrepChainStartCmd(msg.ReqID, m.appState.JJService, m.appState.Config, m.evologSplitModal.EvologEntries())
+
+	case aitab.EvologSuggestPrepProgressMsg:
+		if !m.evologSplitModal.IsShown() || msg.ReqID != m.evologSplitModal.SuggestReqID() {
+			return m, nil
+		}
+		m.evologSplitModal = m.evologSplitModal.WithSuggestPrepProgress(msg.JJDone, msg.JJTotal, "jj")
+		return m, nil
+
+	case aitab.EvologSuggestPrepDoneMsg:
+		if !m.evologSplitModal.IsShown() || msg.ReqID != m.evologSplitModal.SuggestReqID() {
+			return m, nil
+		}
+		if msg.Err != nil {
+			return m, func() tea.Msg {
+				return aitab.EvologSplitSuggestMsg{ReqID: msg.ReqID, Err: msg.Err}
+			}
+		}
+		m.evologSplitModal = m.evologSplitModal.WithSuggestPrepProgress(msg.JJTotal, msg.JJTotal, "llm")
+		return m, aitab.EvologSuggestLLMCmd(msg.ReqID, m.appState.JJService, m.appState.Config, m.evologSplitModal.EvologEntries(), msg.UserPrompt)
 	case evologsplittab.EvologSplitDiffLoadedMsg:
 		updated, cmd := m.evologSplitModal.Update(msg)
 		m.evologSplitModal = updated
 		return m, cmd
+	case aitab.EvologSplitSuggestMsg:
+		if !m.evologSplitModal.IsShown() {
+			return m, nil
+		}
+		var warnCmd tea.Cmd
+		if msg.Err != nil {
+			msgText := strings.TrimSpace(msg.Err.Error())
+			if r := []rune(msgText); len(r) > 900 {
+				msgText = string(r[:900]) + "…"
+			}
+			warnCmd = state.NavigateTarget{
+				Kind:           state.NavigateWarning,
+				WarningTitle:   "AI suggest split failed",
+				WarningMessage: msgText + "\n\nPress Esc to dismiss.",
+				WarningCommits: nil,
+			}.Cmd()
+		}
+		updated, sub := m.evologSplitModal.Update(msg)
+		m.evologSplitModal = updated
+		if msg.Err == nil && !msg.NoSplit && msg.PickIndex > 0 && strings.TrimSpace(msg.Rationale) != "" {
+			m.appState.StatusMessage = fmt.Sprintf("AI suggested evolog row %d — review diff, then Enter to split", msg.PickIndex)
+		}
+		if msg.Err == nil && msg.NoSplit {
+			m.appState.StatusMessage = "AI suggests no split — review rationale in the modal"
+		}
+		if warnCmd != nil && sub != nil {
+			return m, tea.Batch(sub, warnCmd)
+		}
+		if warnCmd != nil {
+			return m, warnCmd
+		}
+		return m, sub
 	case evologsplittab.EvologSplitCompletedMsg:
+		if len(m.evologStepwiseRemainderAfterSplit) > 0 {
+			rem := m.evologStepwiseRemainderAfterSplit
+			m.evologStepwiseRemainderAfterSplit = nil
+			m.evologSplitModal.SetPendingMultiSplitIDs(rem)
+			m2, cmd := m.applyRepositoryLoaded(msg.Repository)
+			m2.appState.ViewMode = state.ViewEvologSplit
+			m2.appState.StatusMessage = fmt.Sprintf("Stepwise split: %d base(s) left — review evolog, then Enter", len(rem))
+			wc := msg.Repository.WorkingCopy
+			bn := m2.evologStepwiseBookmarkName
+			loadCmd := evologsplittab.LoadEvologCmd(m2.appState.JJService, bn, wc)
+			if cmd != nil {
+				return m2, tea.Batch(cmd, loadCmd)
+			}
+			return m2, loadCmd
+		}
+		m.evologStepwiseBookmarkName = ""
 		m.evologSplitModal.Hide()
 		m.appState.ViewMode = state.ViewCommitGraph
 		m2, cmd := m.applyRepositoryLoaded(msg.Repository)
 		m2.appState.StatusMessage = "Split complete — describe new commit if needed"
+		if m2.evologPostSplitDescribe && m2.appState.JJService != nil && m2.appState.Config != nil && m2.appState.Config.AIConfiguredForGeneration() {
+			m2.evologPostSplitDescribe = false
+			m2.appState.StatusMessage = "Split complete — generating descriptions with AI…"
+			m2.appState.Loading = true
+			if cmd != nil {
+				return m2, tea.Batch(cmd, aitab.SuggestEvologSplitDescriptionsCmd(0, m2.appState.JJService, m2.appState.Config), m2.startBusySpinnerCmd())
+			}
+			return m2, tea.Batch(aitab.SuggestEvologSplitDescriptionsCmd(0, m2.appState.JJService, m2.appState.Config), m2.startBusySpinnerCmd())
+		}
+		m2.evologPostSplitDescribe = false
+		return m2, cmd
+	case aitab.EvologDescribeSplitPreviewMsg:
+		m.appState.Loading = false
+		if msg.Err != nil {
+			return m.Update(errorMsg{Err: fmt.Errorf("post-split describe preview: %w", msg.Err)})
+		}
+		m.evologDescribePreviewActive = true
+		m.evologDescribeParent = msg.ParentDescription
+		m.evologDescribeChild = msg.ChildDescription
+		m.appState.StatusMessage = "AI descriptions ready — y apply, n discard, Esc cancel"
+		return m, nil
+	case aitab.EvologDescribeSplitDoneMsg:
+		m.appState.Loading = false
+		if msg.Err != nil {
+			return m.Update(errorMsg{Err: fmt.Errorf("post-split describe: %w", msg.Err)})
+		}
+		m2, cmd := m.applyRepositoryLoaded(msg.Repository)
+		m2.appState.StatusMessage = "Descriptions updated for @- and @"
 		return m2, cmd
 	case graphtab.FileMoveCompletedMsg:
 		graphtab.HandleFileMoveCompletedMsg(graphtab.FileMoveInput{
@@ -1700,6 +1862,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.appState.StatusMessage = util.StatusStringFromError(msg.Err, 220)
 			return m, nil
 		}
+		m.evologPostSplitDescribe = false
+		m.evologDescribePreviewActive = false
+		m.evologDescribeParent = ""
+		m.evologDescribeChild = ""
 		return m.Update(errorMsg{Err: msg.Err})
 	}
 

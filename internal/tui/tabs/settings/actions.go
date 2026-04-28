@@ -23,42 +23,47 @@ import (
 
 // SettingsParams contains all settings values.
 type SettingsParams struct {
-	GitHubToken                  string
-	JiraURL                      string
-	JiraUser                     string
-	JiraToken                    string
-	JiraProject                  string
-	JiraProjectFilter            string
-	JiraIssueType                string
-	JiraJQL                      string
-	JiraExcludedStatuses         string
-	CodecksSubdomain             string
-	CodecksToken                 string
-	CodecksProject               string
-	CodecksExcludedStatuses      string
-	GitHubIssuesExcludedStatuses string
-	TicketProvider               string
-	ShowMerged                   bool
-	ShowClosed                   bool
-	OnlyMine                     bool
-	PRLimit                      int
-	PRRefreshInterval            int
-	AutoInProgress               bool
-	BranchLimit                  int
-	SanitizeBookmarks            bool
-	GraphRevset                  string
-	GitHubOwner                  string
-	GitHubRepo                   string
-	ThemePrimary                 string
-	ThemeSecondary               string
-	ThemeMuted                   string
-	ExternalFileEditor           string
-	ExternalFileEditorCustom     string
-	AIEnabled                    bool
-	AIBaseURL                    string
-	AIModel                      string
-	AIProvider                   string
-	AIAPIKey                     string
+	GitHubToken                       string
+	JiraURL                           string
+	JiraUser                          string
+	JiraToken                         string
+	JiraProject                       string
+	JiraProjectFilter                 string
+	JiraIssueType                     string
+	JiraJQL                           string
+	JiraExcludedStatuses              string
+	CodecksSubdomain                  string
+	CodecksToken                      string
+	CodecksProject                    string
+	CodecksExcludedStatuses           string
+	GitHubIssuesExcludedStatuses      string
+	TicketProvider                    string
+	ShowMerged                        bool
+	ShowClosed                        bool
+	OnlyMine                          bool
+	PRLimit                           int
+	PRRefreshInterval                 int
+	AutoInProgress                    bool
+	BranchLimit                       int
+	SanitizeBookmarks                 bool
+	GraphRevset                       string
+	GitHubOwner                       string
+	GitHubRepo                        string
+	ThemePrimary                      string
+	ThemeSecondary                    string
+	ThemeMuted                        string
+	ExternalFileEditor                string
+	ExternalFileEditorCustom          string
+	AIEnabled                         bool
+	AIBaseURL                         string
+	AIModel                           string
+	AIProvider                        string
+	AIAPIKey                          string
+	AIEvologDescribeAfterSplitDefault bool
+	AIEvologFileSplitEnabled          bool
+	AIEvologHunkSplitEnabled          bool
+	AIEvologMultiSplitMax             int
+	AIEvologMultiSplitMode            string // "batch" or "stepwise"
 }
 
 // Status messages for cleanup flows.
@@ -183,6 +188,15 @@ func BuildSettingsParams(m *Model, githubOwner, githubRepo string) SettingsParam
 	params.AIModel = adv.GetAIModel()
 	params.AIProvider = adv.GetAIProvider()
 	params.AIAPIKey = adv.GetAIAPIKey()
+	params.AIEvologDescribeAfterSplitDefault = adv.GetEvologDescribeAfterSplitDefault()
+	params.AIEvologFileSplitEnabled = adv.GetEvologFileSplitEnabled()
+	params.AIEvologHunkSplitEnabled = adv.GetEvologHunkSplitEnabled()
+	params.AIEvologMultiSplitMax = adv.GetEvologMultiMax()
+	if adv.GetEvologMultiStepwise() {
+		params.AIEvologMultiSplitMode = "stepwise"
+	} else {
+		params.AIEvologMultiSplitMode = "batch"
+	}
 	params.GitHubToken = strings.TrimSpace(gh.GetToken())
 	params.JiraURL = strings.TrimSpace(jr.GetURL())
 	params.JiraUser = strings.TrimSpace(jr.GetUser())
@@ -285,6 +299,21 @@ func SaveSettingsCmd(params SettingsParams) tea.Cmd {
 		cfg.AIModel = strings.TrimSpace(params.AIModel)
 		cfg.AIProvider = strings.TrimSpace(params.AIProvider)
 		cfg.AIAPIKey = strings.TrimSpace(params.AIAPIKey)
+		d := params.AIEvologDescribeAfterSplitDefault
+		cfg.AIEvologDescribeAfterSplitDefault = &d
+		f := params.AIEvologFileSplitEnabled
+		cfg.AIEvologFileSplitEnabled = &f
+		h := params.AIEvologHunkSplitEnabled
+		cfg.AIEvologHunkSplitEnabled = &h
+		mm := params.AIEvologMultiSplitMax
+		if mm < 1 {
+			mm = 1
+		}
+		if mm > config.EvologAIMultiSplitHardMax {
+			mm = config.EvologAIMultiSplitHardMax
+		}
+		cfg.AIEvologMultiSplitMax = &mm
+		cfg.AIEvologMultiSplitMode = strings.TrimSpace(params.AIEvologMultiSplitMode)
 		_ = cfg.Save()
 		return buildSettingsSavedMsg(params, false)
 	}
@@ -295,35 +324,51 @@ func SaveSettingsLocalCmd(params SettingsParams) tea.Cmd {
 	return func() tea.Msg {
 		setEnvParams(params)
 		aiOn := params.AIEnabled
+		evDesc := params.AIEvologDescribeAfterSplitDefault
+		evFile := params.AIEvologFileSplitEnabled
+		evHunk := params.AIEvologHunkSplitEnabled
+		evMax := params.AIEvologMultiSplitMax
+		if evMax < 1 {
+			evMax = 1
+		}
+		if evMax > config.EvologAIMultiSplitHardMax {
+			evMax = config.EvologAIMultiSplitHardMax
+		}
+		evMode := strings.TrimSpace(params.AIEvologMultiSplitMode)
 		cfg := &config.Config{
-			TicketProvider:               params.TicketProvider,
-			GitHubShowMerged:             &params.ShowMerged,
-			GitHubShowClosed:             &params.ShowClosed,
-			GitHubOnlyMine:               &params.OnlyMine,
-			GitHubPRLimit:                &params.PRLimit,
-			GitHubRefreshInterval:        &params.PRRefreshInterval,
-			TicketAutoInProgress:         &params.AutoInProgress,
-			BranchStatsLimit:             &params.BranchLimit,
-			SanitizeBookmarkNames:        &params.SanitizeBookmarks,
-			GraphRevset:                  params.GraphRevset,
-			ExternalFileEditor:           params.ExternalFileEditor,
-			ExternalFileEditorCustom:     params.ExternalFileEditorCustom,
-			AIEnabled:                    &aiOn,
-			AIBaseURL:                    strings.TrimSpace(params.AIBaseURL),
-			AIModel:                      strings.TrimSpace(params.AIModel),
-			AIProvider:                   strings.TrimSpace(params.AIProvider),
-			AIAPIKey:                     strings.TrimSpace(params.AIAPIKey),
-			ThemePrimary:                 params.ThemePrimary,
-			ThemeSecondary:               params.ThemeSecondary,
-			ThemeMuted:                   params.ThemeMuted,
-			JiraProject:                  params.JiraProject,
-			JiraProjectFilter:            params.JiraProjectFilter,
-			JiraIssueType:                params.JiraIssueType,
-			JiraJQL:                      params.JiraJQL,
-			JiraExcludedStatuses:         params.JiraExcludedStatuses,
-			CodecksProject:               params.CodecksProject,
-			CodecksExcludedStatuses:      params.CodecksExcludedStatuses,
-			GitHubIssuesExcludedStatuses: params.GitHubIssuesExcludedStatuses,
+			TicketProvider:                    params.TicketProvider,
+			GitHubShowMerged:                  &params.ShowMerged,
+			GitHubShowClosed:                  &params.ShowClosed,
+			GitHubOnlyMine:                    &params.OnlyMine,
+			GitHubPRLimit:                     &params.PRLimit,
+			GitHubRefreshInterval:             &params.PRRefreshInterval,
+			TicketAutoInProgress:              &params.AutoInProgress,
+			BranchStatsLimit:                  &params.BranchLimit,
+			SanitizeBookmarkNames:             &params.SanitizeBookmarks,
+			GraphRevset:                       params.GraphRevset,
+			ExternalFileEditor:                params.ExternalFileEditor,
+			ExternalFileEditorCustom:          params.ExternalFileEditorCustom,
+			AIEnabled:                         &aiOn,
+			AIBaseURL:                         strings.TrimSpace(params.AIBaseURL),
+			AIModel:                           strings.TrimSpace(params.AIModel),
+			AIProvider:                        strings.TrimSpace(params.AIProvider),
+			AIAPIKey:                          strings.TrimSpace(params.AIAPIKey),
+			AIEvologDescribeAfterSplitDefault: &evDesc,
+			AIEvologFileSplitEnabled:          &evFile,
+			AIEvologHunkSplitEnabled:          &evHunk,
+			AIEvologMultiSplitMax:             &evMax,
+			AIEvologMultiSplitMode:            evMode,
+			ThemePrimary:                      params.ThemePrimary,
+			ThemeSecondary:                    params.ThemeSecondary,
+			ThemeMuted:                        params.ThemeMuted,
+			JiraProject:                       params.JiraProject,
+			JiraProjectFilter:                 params.JiraProjectFilter,
+			JiraIssueType:                     params.JiraIssueType,
+			JiraJQL:                           params.JiraJQL,
+			JiraExcludedStatuses:              params.JiraExcludedStatuses,
+			CodecksProject:                    params.CodecksProject,
+			CodecksExcludedStatuses:           params.CodecksExcludedStatuses,
+			GitHubIssuesExcludedStatuses:      params.GitHubIssuesExcludedStatuses,
 		}
 		cfg.GitHubToken = params.GitHubToken
 		cfg.JiraURL = params.JiraURL

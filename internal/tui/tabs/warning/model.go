@@ -90,9 +90,14 @@ func (m Model) View() string {
 func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
+		hadCommits := len(m.commits) > 0
 		m.shown = false
 		m.commits = nil
-		return m, state.NavigateTarget{Kind: state.NavigateWarningCancel, StatusMessage: "Cancelled"}.Cmd()
+		st := ""
+		if hadCommits {
+			st = "Cancelled"
+		}
+		return m, state.NavigateTarget{Kind: state.NavigateWarningCancel, StatusMessage: st}.Cmd()
 	case "enter":
 		if len(m.commits) > 0 && m.selectedIdx < len(m.commits) {
 			commit := m.commits[m.selectedIdx]
@@ -149,9 +154,14 @@ func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
 		m.commits = nil
 		return m, nil
 	case mouse.ZoneWarningDismiss:
+		hadCommits := len(m.commits) > 0
 		m.shown = false
 		m.commits = nil
-		return m, state.NavigateTarget{Kind: state.NavigateWarningCancel, StatusMessage: "Cancelled"}.Cmd()
+		st := ""
+		if hadCommits {
+			st = "Cancelled"
+		}
+		return m, state.NavigateTarget{Kind: state.NavigateWarningCancel, StatusMessage: st}.Cmd()
 	}
 	return m, nil
 }

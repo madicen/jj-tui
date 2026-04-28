@@ -279,6 +279,24 @@ func handleAdvancedZone(m *Model, zoneID string) (Model, tea.Cmd) {
 		return *m, m.SetFocusedField(17)
 	case mouse.ZoneSettingsAIAPIKey:
 		return *m, m.SetFocusedField(18)
+	case mouse.ZoneSettingsAIEvologDescribeDefault:
+		adv.ToggleEvologDescribeAfterSplitDefault()
+		return *m, nil
+	case mouse.ZoneSettingsAIEvologFileSplit:
+		adv.ToggleEvologFileSplitEnabled()
+		return *m, nil
+	case mouse.ZoneSettingsAIEvologHunkSplit:
+		adv.ToggleEvologHunkSplitEnabled()
+		return *m, nil
+	case mouse.ZoneSettingsAIEvologMultiStepwise:
+		adv.ToggleEvologMultiStepwise()
+		return *m, nil
+	case mouse.ZoneSettingsAIEvologMultiMaxDecrease:
+		adv.DecEvologMultiMax()
+		return *m, nil
+	case mouse.ZoneSettingsAIEvologMultiMaxIncrease:
+		adv.IncEvologMultiMax()
+		return *m, nil
 	default:
 		if strings.HasPrefix(zoneID, mouse.ZoneSettingsAIProviderPrefix) {
 			s := strings.TrimPrefix(zoneID, mouse.ZoneSettingsAIProviderPrefix)

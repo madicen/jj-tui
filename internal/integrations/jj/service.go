@@ -425,6 +425,51 @@ func (s *Service) getChangedFilesSummaryOnly(ctx context.Context, commitID strin
 	return files, nil
 }
 
+// DiffSummaryLinesFromTo returns trimmed non-empty lines from `jj diff --from --to --summary`.
+// Used for lightweight multi-step summaries (e.g. AI-assisted evolog split hints) without loading full git patches.
+func (s *Service) DiffSummaryLinesFromTo(ctx context.Context, fromCommitID, toRev string) ([]string, error) {
+	fromCommitID = strings.TrimSpace(fromCommitID)
+	toRev = strings.TrimSpace(toRev)
+	if fromCommitID == "" || toRev == "" {
+		return nil, fmt.Errorf("from and to revisions are required")
+	}
+	out, err := s.runJJOutputNoHistory(ctx, "diff", "--from", fromCommitID, "--to", toRev, "--summary")
+	if err != nil {
+		return nil, err
+	}
+	var lines []string
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			lines = append(lines, line)
+		}
+	}
+	return lines, nil
+}
+
+// DiffNameOnlyLinesFromTo returns trimmed non-empty paths from `jj diff --from --to --name-only`
+// (repo-relative, one path per line). Complements DiffSummaryLinesFromTo for callers that need a
+// reliable path set regardless of summary line formatting.
+func (s *Service) DiffNameOnlyLinesFromTo(ctx context.Context, fromCommitID, toRev string) ([]string, error) {
+	fromCommitID = strings.TrimSpace(fromCommitID)
+	toRev = strings.TrimSpace(toRev)
+	if fromCommitID == "" || toRev == "" {
+		return nil, fmt.Errorf("from and to revisions are required")
+	}
+	out, err := s.runJJOutputNoHistory(ctx, "diff", "--from", fromCommitID, "--to", toRev, "--name-only")
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			paths = append(paths, line)
+		}
+	}
+	return paths, nil
+}
+
 // DiffChangedFilesFromTo lists paths changed between two revisions (from..to), using jj diff --summary,
 // and fills per-file line counts from a git-format diff when possible. The string is the full unified
 // git diff (same source as stats) for UI coloring.
@@ -1098,6 +1143,9 @@ func (s *Service) abandonDivergentDuplicateCommitsOffWCPath(ctx context.Context)
 	return nil
 }
 
+// EvologListMaxEntries is the `-n` limit for `jj evolog` in the split modal and AI prep (deep rewrite chains).
+const EvologListMaxEntries = 128
+
 // EvologEntry is one revision line from jj evolog (newest first).
 type EvologEntry struct {
 	CommitIDShort string
@@ -1119,9 +1167,9 @@ func (s *Service) listEvolog(ctx context.Context, rev string, noHistory bool) ([
 	var out string
 	var err error
 	if noHistory {
-		out, err = s.runJJOutputNoHistory(ctx, "evolog", "-r", rev, "-G", "-n", "80", "-T", tmpl)
+		out, err = s.runJJOutputNoHistory(ctx, "evolog", "-r", rev, "-G", "-n", strconv.Itoa(EvologListMaxEntries), "-T", tmpl)
 	} else {
-		out, err = s.runJJOutput(ctx, "evolog", "-r", rev, "-G", "-n", "80", "-T", tmpl)
+		out, err = s.runJJOutput(ctx, "evolog", "-r", rev, "-G", "-n", strconv.Itoa(EvologListMaxEntries), "-T", tmpl)
 	}
 	if err != nil {
 		return nil, err
@@ -1152,7 +1200,16 @@ func (s *Service) listEvolog(ctx context.Context, rev string, noHistory bool) ([
 	return entries, nil
 }
 
-const evologSplitDefaultMessage = "Follow-up (split via evolog)"
+// EvologSplitDefaultMessage is the placeholder description used during FAQ-style evolog split.
+const EvologSplitDefaultMessage = "Follow-up (split via evolog)"
+
+// reconcileColocatedGitBeforeEvologSplit best-effort sync of colocated Git with jj before `jj new`.
+// When Git HEAD and jj disagree (e.g. `git checkout` without `jj git import`), `jj new` can fail with
+// "reference HEAD should have content …, actual content was …". Export updates Git to match jj.
+func (s *Service) reconcileColocatedGitBeforeEvologSplit(ctx context.Context) {
+	_ = s.runJJ(ctx, "workspace", "update-stale")
+	_ = s.runJJ(ctx, "git", "export")
+}
 
 // evologSplitParentForNewCommit returns the revision to pass to `jj new` for an evolog split.
 // If the user-picked base is empty (same tree as its parent), parenting the new commit directly
@@ -1185,14 +1242,120 @@ func (s *Service) evologSplitParentForNewCommit(ctx context.Context, baseCommitI
 	return baseCommitID, nil
 }
 
+// RevisionImmutable reports whether the given revision is immutable in jj's config.
+func (s *Service) RevisionImmutable(ctx context.Context, revision string) (bool, error) {
+	out, err := s.runJJOutputNoHistory(ctx, "log", "-r", revision, "--no-graph", "-T", `if(immutable, "true", "false")`, "--limit", "1")
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(out) == "true", nil
+}
+
+// SplitRevisionByFilesets runs non-interactive `jj split -r REV -m MSG -- paths...` (filesets go into the first commit).
+// Requires a jj version that supports non-interactive split with path arguments (typically jj 0.14+).
+func (s *Service) SplitRevisionByFilesets(ctx context.Context, revision, firstMessage string, paths []string) error {
+	if len(paths) == 0 {
+		return nil
+	}
+	revision = strings.TrimSpace(revision)
+	if revision == "" {
+		revision = "@"
+	}
+	args := []string{"split", "-r", revision, "-m", strings.TrimSpace(firstMessage), "--"}
+	for _, p := range paths {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			args = append(args, p)
+		}
+	}
+	if len(args) <= 5 { // split -r -m msg -- only
+		return nil
+	}
+	return s.runJJ(ctx, args...)
+}
+
+func evologContainsCommitID(entries []EvologEntry, commitID string) bool {
+	commitID = strings.TrimSpace(commitID)
+	if commitID == "" {
+		return false
+	}
+	for _, e := range entries {
+		ec := strings.TrimSpace(e.CommitID)
+		if ec == "" {
+			continue
+		}
+		if ec == commitID {
+			return true
+		}
+		if len(commitID) >= 8 && strings.HasPrefix(ec, commitID) {
+			return true
+		}
+		if len(ec) >= 8 && strings.HasPrefix(commitID, ec) {
+			return true
+		}
+	}
+	return false
+}
+
+// EvologMultiSplit runs several FAQ-style evolog splits in order, updating the working-copy tip after each step.
+// baseCommitIDs must be ordered deepest-first (larger evolog row index first). splitFilesetsFirst runs once at the end if non-empty.
+// hunkPeelRounds, when non-empty, runs one or more hunk-level jj splits after FAQ steps (mutually exclusive with splitFilesetsFirst in practice).
+func (s *Service) EvologMultiSplit(ctx context.Context, bookmarkName, initialTipChangeID, initialTipCommitHint string, baseCommitIDs []string, splitFilesetsFirst []string, hunkPeelRounds []map[string]int) error {
+	tipCH := strings.TrimSpace(initialTipChangeID)
+	tipH := strings.TrimSpace(initialTipCommitHint)
+	for i, base := range baseCommitIDs {
+		base = strings.TrimSpace(base)
+		if base == "" {
+			continue
+		}
+		if err := s.MoveBookmarkDeltaOntoEvologBase(ctx, bookmarkName, tipCH, tipH, base, nil, nil); err != nil {
+			return fmt.Errorf("evolog multi-split step %d/%d: %w", i+1, len(baseCommitIDs), err)
+		}
+		var err error
+		tipCH, err = s.GetRevisionChangeID(ctx, "@")
+		if err != nil {
+			return fmt.Errorf("wc change id after step %d: %w", i+1, err)
+		}
+		tipH, err = s.runJJOutputNoHistory(ctx, "log", "-r", "@", "--no-graph", "-T", "commit_id", "--limit", "1")
+		if err != nil {
+			return fmt.Errorf("wc commit id after step %d: %w", i+1, err)
+		}
+		tipH = strings.TrimSpace(tipH)
+		if i+1 < len(baseCommitIDs) {
+			nextBase := strings.TrimSpace(baseCommitIDs[i+1])
+			ev, lerr := s.ListEvolog(ctx, tipCH)
+			if lerr != nil {
+				return fmt.Errorf("evolog reload after step %d/%d: %w", i+1, len(baseCommitIDs), lerr)
+			}
+			if !evologContainsCommitID(ev, nextBase) {
+				return fmt.Errorf("evolog multi-split step %d/%d: next base %s no longer appears in evolog (graph changed); aborting", i+1, len(baseCommitIDs), nextBase)
+			}
+		}
+	}
+	if len(hunkPeelRounds) > 0 {
+		if err := s.SplitRevisionByHunkPeelRounds(ctx, "@", EvologSplitDefaultMessage, hunkPeelRounds); err != nil {
+			return fmt.Errorf("jj split (by hunk): %w", err)
+		}
+		return nil
+	}
+	if len(splitFilesetsFirst) > 0 {
+		if err := s.SplitRevisionByFilesets(ctx, "@", EvologSplitDefaultMessage, splitFilesetsFirst); err != nil {
+			return fmt.Errorf("jj split (by file): %w", err)
+		}
+	}
+	return nil
+}
+
 // MoveBookmarkDeltaOntoEvologBase is the FAQ-style split: jj new <parent>, restore tree from the selected
 // tip revision, optionally jj bookmark set, then abandon the old tip. Parent is the evolog base row,
 // or that row's parent when the base is an empty revision (see evologSplitParentForNewCommit).
-// A final describe @ reapplies evologSplitDefaultMessage so the working copy never ends up with no
+// A final describe @ reapplies EvologSplitDefaultMessage so the working copy never ends up with no
 // description (e.g. jj metadata quirks after restore/abandon).
 // If bookmarkName is empty, the selected revision is the tip (no bookmark move). If non-empty, the
 // bookmark must point at the same commit as the selection (same rule as stack-on-origin flow).
-func (s *Service) MoveBookmarkDeltaOntoEvologBase(ctx context.Context, bookmarkName, localChangeID, localCommitID, baseCommitID string) error {
+// splitFilesetsFirst, when non-empty, runs `jj split -r @` after the FAQ steps to peel paths into the first child commit.
+// hunkPeelRounds, when non-empty, runs hunk-scoped jj split(s) instead of filesets (splitFilesetsFirst should be empty).
+func (s *Service) MoveBookmarkDeltaOntoEvologBase(ctx context.Context, bookmarkName, localChangeID, localCommitID, baseCommitID string, splitFilesetsFirst []string, hunkPeelRounds []map[string]int) error {
 	if strings.TrimSpace(localChangeID) == "" {
 		return fmt.Errorf("local revision is required")
 	}
@@ -1251,8 +1414,14 @@ func (s *Service) MoveBookmarkDeltaOntoEvologBase(ctx context.Context, bookmarkN
 	if commitIDsEquivalent(tipCommitID, parentForNew) {
 		return fmt.Errorf("split parent would be the tip; pick a different evolog row")
 	}
-	if err := s.runJJ(ctx, "new", parentForNew, "-m", evologSplitDefaultMessage); err != nil {
-		return fmt.Errorf("jj new: %w", err)
+	s.reconcileColocatedGitBeforeEvologSplit(ctx)
+	if err := s.runJJ(ctx, "new", parentForNew, "-m", EvologSplitDefaultMessage); err != nil {
+		wrapped := fmt.Errorf("jj new: %w", err)
+		es := err.Error()
+		if strings.Contains(es, "HEAD") && strings.Contains(es, "should have content") {
+			return fmt.Errorf("%w\n\nIn a colocated repo, Git’s HEAD can drift from jj (often after `git checkout` without jj). Try: `jj git import` to follow Git, or `jj git export` to push jj’s view to Git, then retry the split.", wrapped)
+		}
+		return wrapped
 	}
 	if err := s.runJJ(ctx, "restore", "--into", "@", "--from", tipCommitID); err != nil {
 		return fmt.Errorf("jj restore: %w", err)
@@ -1263,8 +1432,17 @@ func (s *Service) MoveBookmarkDeltaOntoEvologBase(ctx context.Context, bookmarkN
 		}
 	}
 	_ = s.runJJ(ctx, "abandon", tipCommitID)
-	if err := s.DescribeCommit(ctx, "@", evologSplitDefaultMessage); err != nil {
+	if err := s.DescribeCommit(ctx, "@", EvologSplitDefaultMessage); err != nil {
 		return fmt.Errorf("jj describe: %w", err)
+	}
+	if len(hunkPeelRounds) > 0 {
+		if err := s.SplitRevisionByHunkPeelRounds(ctx, "@", EvologSplitDefaultMessage, hunkPeelRounds); err != nil {
+			return fmt.Errorf("jj split (by hunk): %w", err)
+		}
+		return nil
+	}
+	if err := s.SplitRevisionByFilesets(ctx, "@", EvologSplitDefaultMessage, splitFilesetsFirst); err != nil {
+		return fmt.Errorf("jj split (by file): %w", err)
 	}
 	return nil
 }

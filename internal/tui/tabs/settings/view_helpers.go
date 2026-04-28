@@ -54,6 +54,11 @@ type RenderData struct {
 	AIEnabled              bool
 	AIProviderID           string // openai_compatible | gemini
 	AIAPIKeySet            bool   // key present (env overrides config)
+	EvologDescribeDefault  bool
+	EvologFileSplitEnabled bool
+	EvologHunkSplitEnabled bool
+	EvologMultiStepwise    bool
+	EvologMultiMax         int
 
 	// ThemeModel is set by BuildRenderData for rendering the Theme tab (swatches + bounds).
 	ThemeModel *theme.Model
@@ -93,6 +98,11 @@ func BuildRenderData(sm *Model, opts ViewOpts) RenderData {
 		AIEnabled:              sm.GetAdvancedModel().GetAIEnabled(),
 		AIProviderID:           sm.GetAdvancedModel().GetAIProvider(),
 		AIAPIKeySet:            config.EffectiveAIAPIKey(opts.Config) != "",
+		EvologDescribeDefault:  sm.GetAdvancedModel().GetEvologDescribeAfterSplitDefault(),
+		EvologFileSplitEnabled: sm.GetAdvancedModel().GetEvologFileSplitEnabled(),
+		EvologHunkSplitEnabled: sm.GetAdvancedModel().GetEvologHunkSplitEnabled(),
+		EvologMultiStepwise:    sm.GetAdvancedModel().GetEvologMultiStepwise(),
+		EvologMultiMax:         sm.GetAdvancedModel().GetEvologMultiMax(),
 		YOffset:                sm.GetSettingsYOffset(),
 		ContentHeight:          opts.ContentHeight,
 		ThemeModel:             sm.GetThemeModel(),
@@ -564,6 +574,34 @@ func (r renderCtx) renderAdvanced(data RenderData) []string {
 	if len(data.Inputs) > 18 {
 		lines = append(lines, "  "+r.mark(mouse.ZoneSettingsAIAPIKey, data.Inputs[18].View))
 	}
+	lines = append(lines, "", "")
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render("AI evolog split (graph z)"), "")
+	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render(fmt.Sprintf("    Multi-split cap limits how many FAQ bases the model may suggest (1–%d; also capped by evolog row count). Stepwise: one split per Enter with evolog reload between steps.", config.EvologAIMultiSplitHardMax)), "")
+	tEvDesc := "[ ]"
+	if data.EvologDescribeDefault {
+		tEvDesc = "[✓]"
+	}
+	lines = append(lines, "  "+r.mark(mouse.ZoneSettingsAIEvologDescribeDefault, lipgloss.NewStyle().Foreground(styles.ColorPrimary).Bold(true).Render(tEvDesc+" Open split modal with post-split AI describe on (still toggle with d)")))
+	tEvFile := "[ ]"
+	if data.EvologFileSplitEnabled {
+		tEvFile = "[✓]"
+	}
+	lines = append(lines, "  "+r.mark(mouse.ZoneSettingsAIEvologFileSplit, lipgloss.NewStyle().Foreground(styles.ColorPrimary).Bold(true).Render(tEvFile+" Honor AI file lists for jj split after row split")))
+	tEvHunk := "[ ]"
+	if data.EvologHunkSplitEnabled {
+		tEvHunk = "[✓]"
+	}
+	lines = append(lines, "  "+r.mark(mouse.ZoneSettingsAIEvologHunkSplit, lipgloss.NewStyle().Foreground(styles.ColorPrimary).Bold(true).Render(tEvHunk+" Honor AI hunk_prefix (@@-level) split after row split")))
+	tEvStep := "[ ]"
+	if data.EvologMultiStepwise {
+		tEvStep = "[✓]"
+	}
+	lines = append(lines, "  "+r.mark(mouse.ZoneSettingsAIEvologMultiStepwise, lipgloss.NewStyle().Foreground(styles.ColorPrimary).Bold(true).Render(tEvStep+" Stepwise multi-split (reload evolog between steps)")))
+	lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Left,
+		"  "+r.mark(mouse.ZoneSettingsAIEvologMultiMaxDecrease, lipgloss.NewStyle().Foreground(styles.ColorPrimary).Render("−")),
+		"  ", lipgloss.NewStyle().Foreground(styles.ColorMuted).Render(fmt.Sprintf("AI multi-split max bases: %d", data.EvologMultiMax)),
+		"  "+r.mark(mouse.ZoneSettingsAIEvologMultiMaxIncrease, lipgloss.NewStyle().Foreground(styles.ColorPrimary).Render("+")),
+	))
 	lines = append(lines, "", "")
 
 	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render("Bookmark Settings"), "")

@@ -23,7 +23,7 @@ If you already pushed a feature bookmark but kept editing on the same jj revisio
 
 ### Split
 
-**Split** (`z`) opens an **jj evolog** picker for the selected change: pick an older evolution revision as the parent, preview which files differ from the tip, then run the FAQ-style flow (`jj new`, `jj restore`, optional bookmark move, `jj abandon` old tip). The recording below uses a small fixture repo (`fixtures/setup-evolog-split-vhs-repo.sh`) so the modal shows a clear two-file rollout delta.
+**Split** (`z`) opens an **jj evolog** picker for the selected change: pick an older evolution revision as the parent, preview which files differ from the tip, then run the FAQ-style flow (`jj new`, `jj restore`, optional bookmark move, `jj abandon` old tip). Optional AI-assisted **file** split uses non-interactive `jj split -r @ -- <paths>`; use a recent **jj** (0.14+) so path arguments to `jj split` behave as expected. The recording below uses a small fixture repo (`fixtures/setup-evolog-split-vhs-repo.sh`) so the modal shows a clear two-file rollout delta.
 
 ![Split](screenshots/evolog-split.gif)
 

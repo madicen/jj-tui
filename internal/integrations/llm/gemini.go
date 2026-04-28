@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -101,34 +100,32 @@ func (p *GeminiProvider) Complete(ctx context.Context, systemPrompt, userPrompt 
 		return "", err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), bytes.NewReader(raw))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
 	client := p.HTTPClient
 	if client == nil {
 		client = http.DefaultClient
 	}
-	resp, err := client.Do(req)
+	targetURL := u.String()
+	respBody, err := withLLMHTTPRetry(ctx, "gemini", func(reqCtx context.Context) (*http.Response, error) {
+		req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, targetURL, bytes.NewReader(raw))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		return client.Do(req)
+	})
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("gemini HTTP %d: %s", resp.StatusCode, truncate(string(respBody), 500))
-	}
+	return parseGeminiGenerateBody(respBody)
+}
+
+func parseGeminiGenerateBody(respBody []byte) (string, error) {
 	var parsed geminiGenerateResponse
 	if err := json.Unmarshal(respBody, &parsed); err != nil {
 		return "", fmt.Errorf("gemini response JSON: %w", err)
 	}
 	if parsed.Error != nil && parsed.Error.Message != "" {
-		return "", fmt.Errorf("gemini API error: %s", parsed.Error.Message)
+		return "", fmt.Errorf("%s", formatGeminiAPIError(parsed.Error.Message, respBody))
 	}
 	if len(parsed.Candidates) == 0 || len(parsed.Candidates[0].Content.Parts) == 0 {
 		return "", fmt.Errorf("gemini: empty response")

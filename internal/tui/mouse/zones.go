@@ -66,6 +66,7 @@ const (
 	ZoneWarningDismiss    = "zone:warning:dismiss"
 
 	// Evolog split modal (prefix zone:evologsplit:entry: for dynamic row zones)
+	ZoneEvologSplitSuggest   = "zone:evologsplit:suggest"
 	ZoneEvologSplitConfirm   = "zone:evologsplit:confirm"
 	ZoneEvologSplitCancel    = "zone:evologsplit:cancel"
 	ZoneEvologSplitViewPatch = "zone:evologsplit:viewpatch"
@@ -158,6 +159,12 @@ const (
 	ZoneSettingsAIBaseURL                  = "zone:settings:ai:base_url"
 	ZoneSettingsAIModel                    = "zone:settings:ai:model"
 	ZoneSettingsAIAPIKey                   = "zone:settings:ai:api_key"
+	ZoneSettingsAIEvologDescribeDefault    = "zone:settings:ai:evolog_describe_default"
+	ZoneSettingsAIEvologFileSplit          = "zone:settings:ai:evolog_file_split"
+	ZoneSettingsAIEvologHunkSplit          = "zone:settings:ai:evolog_hunk_split"
+	ZoneSettingsAIEvologMultiStepwise      = "zone:settings:ai:evolog_multi_stepwise"
+	ZoneSettingsAIEvologMultiMaxDecrease   = "zone:settings:ai:evolog_multi_max_dec"
+	ZoneSettingsAIEvologMultiMaxIncrease   = "zone:settings:ai:evolog_multi_max_inc"
 	// AI provider rows: zone:settings:ai:provider:N (0=openai_compatible, 1=gemini)
 	ZoneSettingsAIProviderPrefix = "zone:settings:ai:provider:"
 

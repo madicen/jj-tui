@@ -2,19 +2,28 @@ package evologsplit
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
+	overlay "github.com/madicen/bubble-overlay"
 	"github.com/madicen/jj-tui/internal"
+	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
+	aitab "github.com/madicen/jj-tui/internal/tui/ai"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 	"github.com/mattn/go-runewidth"
 )
+
+// evologAIWrapMaxLines caps wrapped AI rationale / errors so short terminals stay usable.
+const evologAIWrapMaxLines = 18
 
 // Model is an experimental evolog-driven split picker (FAQ: move recent work into a new change).
 type Model struct {
@@ -37,14 +46,61 @@ type Model struct {
 	diffFiles   []jj.ChangedFile
 	diffGitRaw  string // cached jj --git for the step; opened via overlay (o)
 	zoneManager *zone.Manager
+
+	suggestCfg       *config.Config
+	suggestReqID     int
+	suggestLoading   bool
+	suggestSpinIdx   int       // mini-dot frame for overlay (driven by OverlaySpinTickMsg, not bubbles spinner)
+	suggestStartedAt time.Time // wall clock when AI suggest began (for overlay hints)
+	// suggestPrep* / suggestPhase: JJ batched diff summaries vs LLM (shown on suggest overlay).
+	suggestPrepJJDone  int
+	suggestPrepJJTotal int
+	suggestPhase       string // "", "jj", "llm"
+	suggestRationale   string
+	suggestErrLine     string
+	// describeAfterSplit: user toggle (d); sent on NavigatePerformEvologSplit.
+	describeAfterSplit    bool
+	suggestNoSplit        bool // last AI recommendation
+	pendingFilesFirst     []string
+	pendingHunkPeelRounds []map[string]int // AI hunk peel plan (each map = one jj split); nil when empty
+	pendingMultiBaseIDs   []string
+	noSplitConfirm        noSplitConfirm // double-Enter on same row after AI no_split
 }
 
 // NewModel creates the evolog split modal. zoneManager may be nil.
 func NewModel(zm *zone.Manager) Model {
-	return Model{zoneManager: zm, listViewportRows: 6, termW: 100, termH: 24}
+	return Model{
+		zoneManager:      zm,
+		listViewportRows: 6,
+		termW:            100,
+		termH:            24,
+	}
+}
+
+func evologSuggestMiniDotFrame(idx int) string {
+	fr := spinner.MiniDot.Frames
+	if len(fr) == 0 {
+		return "·"
+	}
+	idx %= len(fr)
+	if idx < 0 {
+		idx = 0
+	}
+	return fr[idx]
 }
 
 func (m *Model) SetZoneManager(zm *zone.Manager) { m.zoneManager = zm }
+
+// WithSuggestConfig stores config for optional AI split suggestions (main sets when opening modal).
+func (m Model) WithSuggestConfig(cfg *config.Config) Model {
+	m.suggestCfg = cfg
+	return m
+}
+
+// EvologEntries returns a copy of loaded evolog rows for async AI commands.
+func (m Model) EvologEntries() []jj.EvologEntry {
+	return append([]jj.EvologEntry(nil), m.entries...)
+}
 
 // SetDimensions records terminal size and viewport row count for scrolling.
 func (m Model) SetDimensions(w, h int) Model {
@@ -67,7 +123,8 @@ func (m Model) SetDimensions(w, h int) Model {
 }
 
 // Show resets state for a new session (caller should batch LoadEvologCmd).
-func (m *Model) Show(commit internal.Commit, bookmarkName string) {
+// describeAfterSplitDefault seeds the post-split AI describe toggle when AI is configured (user can still press d).
+func (m *Model) Show(commit internal.Commit, bookmarkName string, describeAfterSplitDefault bool) {
 	m.shown = true
 	m.loading = true
 	m.loadErr = ""
@@ -82,6 +139,22 @@ func (m *Model) Show(commit internal.Commit, bookmarkName string) {
 	m.diffErr = ""
 	m.diffFiles = nil
 	m.diffGitRaw = ""
+	m.suggestReqID = 0
+	m.suggestLoading = false
+	m.suggestSpinIdx = 0
+	m.suggestStartedAt = time.Time{}
+	m.suggestPrepJJDone = 0
+	m.suggestPrepJJTotal = 0
+	m.suggestPhase = ""
+	m.suggestRationale = ""
+	m.suggestErrLine = ""
+	m.describeAfterSplit = describeAfterSplitDefault &&
+		m.suggestCfg != nil && m.suggestCfg.AIConfiguredForGeneration()
+	m.suggestNoSplit = false
+	m.pendingFilesFirst = nil
+	m.pendingHunkPeelRounds = nil
+	m.pendingMultiBaseIDs = nil
+	m.noSplitConfirm.reset()
 }
 
 // Hide clears the modal.
@@ -94,10 +167,38 @@ func (m *Model) Hide() {
 	m.diffErr = ""
 	m.diffLoading = false
 	m.diffGitRaw = ""
+	m.suggestLoading = false
+	m.suggestSpinIdx = 0
+	m.suggestStartedAt = time.Time{}
+	m.suggestPrepJJDone = 0
+	m.suggestPrepJJTotal = 0
+	m.suggestPhase = ""
+	m.suggestRationale = ""
+	m.suggestErrLine = ""
+	m.describeAfterSplit = false
+	m.suggestNoSplit = false
+	m.pendingFilesFirst = nil
+	m.pendingHunkPeelRounds = nil
+	m.pendingMultiBaseIDs = nil
+	m.noSplitConfirm.reset()
 }
 
 // IsShown reports whether the modal is active.
 func (m *Model) IsShown() bool { return m.shown }
+
+// SuggestLoading is true while the async AI evolog-split suggestion is running.
+func (m Model) SuggestLoading() bool { return m.suggestLoading }
+
+// SuggestReqID is the id for the in-flight suggest request (stale async messages are ignored).
+func (m Model) SuggestReqID() int { return m.suggestReqID }
+
+// WithSuggestPrepProgress updates JJ-summary vs LLM phase for the suggest overlay.
+func (m Model) WithSuggestPrepProgress(jjDone, jjTotal int, phase string) Model {
+	m.suggestPrepJJDone = jjDone
+	m.suggestPrepJJTotal = jjTotal
+	m.suggestPhase = phase
+	return m
+}
 
 func (m Model) mark(id, s string) string {
 	if m.zoneManager == nil {
@@ -192,14 +293,73 @@ func (m Model) openStepPatchNavigate() tea.Cmd {
 	}.Cmd()
 }
 
+func (m Model) performSplitNavigateCmd() tea.Cmd {
+	bases := append([]string(nil), m.pendingMultiBaseIDs...)
+	filesets := append([]string(nil), m.pendingFilesFirst...)
+	hunkPeels := cloneHunkPeelRounds(m.pendingHunkPeelRounds)
+	var remainder []string
+	runBases := bases
+	if m.suggestCfg != nil && m.suggestCfg.EvologAIMultiSplitStepwise() && len(bases) > 1 {
+		remainder = append([]string(nil), bases[1:]...)
+		runBases = []string{bases[0]}
+		if len(remainder) > 0 {
+			filesets = nil
+			hunkPeels = nil
+		}
+	}
+	baseID := m.entries[m.selectedIdx].CommitID
+	if len(runBases) == 1 {
+		baseID = runBases[0]
+	}
+	return state.NavigateTarget{
+		Kind:                     state.NavigatePerformEvologSplit,
+		EvologBookmarkName:       m.bookmarkName,
+		EvologTipChangeID:        m.tipChangeID,
+		EvologTipCommitHint:      m.tipCommitHint,
+		EvologBaseCommitID:       baseID,
+		EvologDescribeAfterSplit: m.describeAfterSplit,
+		EvologFilesetsFirst:      filesets,
+		EvologHunkPeelRounds:     hunkPeels,
+		EvologMultiBaseCommitIDs: runBases,
+		EvologStepwiseRemainder:  remainder,
+	}.Cmd()
+}
+
+// SetPendingMultiSplitIDs updates AI multi-split bases shown after a stepwise step (main calls after reload).
+func (m *Model) SetPendingMultiSplitIDs(ids []string) {
+	m.pendingMultiBaseIDs = append([]string(nil), ids...)
+}
+
 // Update handles keys, zone clicks, mouse wheel, and async messages.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	if !m.shown {
 		return m, nil
 	}
 	switch msg := msg.(type) {
+	case OverlaySpinTickMsg:
+		if !m.suggestLoading {
+			return m, nil
+		}
+		if n := len(spinner.MiniDot.Frames); n > 0 {
+			m.suggestSpinIdx = (m.suggestSpinIdx + 1) % n
+		}
+		return m, OverlaySpinCmd()
+
 	case EvologLoadedMsg:
 		m.loading = false
+		m.suggestLoading = false
+		m.suggestSpinIdx = 0
+		m.suggestStartedAt = time.Time{}
+		m.suggestPrepJJDone = 0
+		m.suggestPrepJJTotal = 0
+		m.suggestPhase = ""
+		m.suggestRationale = ""
+		m.suggestErrLine = ""
+		m.suggestNoSplit = false
+		m.pendingFilesFirst = nil
+		m.pendingHunkPeelRounds = nil
+		m.pendingMultiBaseIDs = nil
+		m.noSplitConfirm.reset()
 		if msg.Err != nil {
 			m.loadErr = msg.Err.Error()
 			return m, nil
@@ -230,6 +390,49 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.diffFiles = msg.Files
 			m.diffGitRaw = msg.GitDiff
 		}
+		return m, nil
+
+	case aitab.EvologSplitSuggestMsg:
+		if msg.ReqID != m.suggestReqID {
+			return m, nil
+		}
+		m.suggestLoading = false
+		m.suggestSpinIdx = 0
+		m.suggestStartedAt = time.Time{}
+		m.suggestPrepJJDone = 0
+		m.suggestPrepJJTotal = 0
+		m.suggestPhase = ""
+		m.suggestErrLine = ""
+		if msg.Err != nil {
+			m.suggestErrLine = msg.Err.Error()
+			m.suggestRationale = ""
+			m.suggestNoSplit = false
+			m.pendingFilesFirst = nil
+			m.pendingHunkPeelRounds = nil
+			m.pendingMultiBaseIDs = nil
+			m.noSplitConfirm.reset()
+			return m, nil
+		}
+		m.suggestNoSplit = msg.NoSplit
+		m.pendingFilesFirst = append([]string(nil), msg.FilesForFirstCommit...)
+		if len(msg.HunkPeelRounds) > 0 {
+			m.pendingHunkPeelRounds = cloneHunkPeelRounds(msg.HunkPeelRounds)
+		} else {
+			m.pendingHunkPeelRounds = nil
+		}
+		m.pendingMultiBaseIDs = append([]string(nil), msg.MultiSplitBaseCommitIDs...)
+		m.suggestRationale = msg.Rationale
+		if msg.NoSplit {
+			m.noSplitConfirm.onAISuggestNoSplit(m.selectedIdx)
+			return m, nil
+		}
+		m.noSplitConfirm.reset()
+		if msg.PickIndex >= 1 && msg.PickIndex < len(m.entries) {
+			m.selectedIdx = msg.PickIndex
+			m = m.syncListScroll()
+			return m.refreshDiffPreview()
+		}
+		m.suggestErrLine = "Model returned an invalid row index"
 		return m, nil
 
 	case tea.MouseMsg:
@@ -293,14 +496,25 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 		if len(m.entries) == 0 || m.selectedIdx < 0 || m.selectedIdx >= len(m.entries) {
 			return m, nil
 		}
-		baseID := m.entries[m.selectedIdx].CommitID
-		return m, state.NavigateTarget{
-			Kind:                state.NavigatePerformEvologSplit,
-			EvologBookmarkName:  m.bookmarkName,
-			EvologTipChangeID:   m.tipChangeID,
-			EvologTipCommitHint: m.tipCommitHint,
-			EvologBaseCommitID:  baseID,
-		}.Cmd()
+		if noSplitFirstEnterOnlyArms(m.suggestNoSplit, m.selectedIdx, m.noSplitConfirm) {
+			m.noSplitConfirm.armed = true
+			return m, nil
+		}
+		m.noSplitConfirm.reset()
+		return m, m.performSplitNavigateCmd()
+	case "d":
+		if m.suggestCfg != nil && m.suggestCfg.AIConfiguredForGeneration() {
+			m.describeAfterSplit = !m.describeAfterSplit
+		}
+		return m, nil
+	case "c":
+		if len(m.pendingFilesFirst) > 0 {
+			m.pendingFilesFirst = nil
+		}
+		if len(m.pendingHunkPeelRounds) > 0 {
+			m.pendingHunkPeelRounds = nil
+		}
+		return m, nil
 	case "o":
 		cmd := m.openStepPatchNavigate()
 		if cmd == nil {
@@ -310,6 +524,7 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "j", "down":
 		if m.selectedIdx < len(m.entries)-1 {
 			m.selectedIdx++
+			m.noSplitConfirm.onSelectedIdxChange(m.selectedIdx)
 			m = m.syncListScroll()
 			return m.refreshDiffPreview()
 		}
@@ -317,6 +532,7 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "k", "up":
 		if m.selectedIdx > 0 {
 			m.selectedIdx--
+			m.noSplitConfirm.onSelectedIdxChange(m.selectedIdx)
 			m = m.syncListScroll()
 			return m.refreshDiffPreview()
 		}
@@ -327,6 +543,27 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "pgup", "ctrl+b":
 		m.listScrollTop = max(0, m.listScrollTop-vr)
 		return m, nil
+	case "s":
+		if m.suggestLoading || len(m.entries) < 2 {
+			return m, nil
+		}
+		if m.suggestCfg == nil || !m.suggestCfg.AIConfiguredForGeneration() {
+			m.suggestErrLine = "Enable AI (Settings → Advanced) and set an API key"
+			return m, nil
+		}
+		m.suggestReqID++
+		rid := m.suggestReqID
+		m.suggestLoading = true
+		m.suggestStartedAt = time.Now()
+		m.suggestPrepJJTotal = aitab.EvologSplitJJStepTotal(len(m.entries))
+		m.suggestPrepJJDone = 0
+		m.suggestPhase = "jj"
+		m.suggestErrLine = ""
+		m.suggestRationale = ""
+		return m, tea.Batch(
+			func() tea.Msg { return EvologSplitSuggestRequestedMsg{ReqID: rid} },
+			func() tea.Msg { return OverlaySpinTickMsg{Time: time.Now()} },
+		)
 	}
 	return m, nil
 }
@@ -336,7 +573,7 @@ func (m Model) ZoneIDs() []string {
 	for i := range m.entries {
 		ids = append(ids, mouse.ZoneEvologSplitEntry(i))
 	}
-	ids = append(ids, mouse.ZoneEvologSplitConfirm, mouse.ZoneEvologSplitCancel, mouse.ZoneEvologSplitViewPatch)
+	ids = append(ids, mouse.ZoneEvologSplitSuggest, mouse.ZoneEvologSplitConfirm, mouse.ZoneEvologSplitCancel, mouse.ZoneEvologSplitViewPatch)
 	return ids
 }
 
@@ -359,22 +596,25 @@ func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
 		idx, err := strconv.Atoi(strings.TrimPrefix(zoneID, prefix))
 		if err == nil && idx >= 0 && idx < len(m.entries) {
 			m.selectedIdx = idx
+			m.noSplitConfirm.onSelectedIdxChange(m.selectedIdx)
 			m = m.syncListScroll()
 			return m.refreshDiffPreview()
 		}
+	}
+	if zoneID == mouse.ZoneEvologSplitSuggest {
+		upd, cmd := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+		return upd, cmd
 	}
 	if zoneID == mouse.ZoneEvologSplitConfirm {
 		if len(m.entries) == 0 || m.selectedIdx < 0 || m.selectedIdx >= len(m.entries) {
 			return m, nil
 		}
-		baseID := m.entries[m.selectedIdx].CommitID
-		return m, state.NavigateTarget{
-			Kind:                state.NavigatePerformEvologSplit,
-			EvologBookmarkName:  m.bookmarkName,
-			EvologTipChangeID:   m.tipChangeID,
-			EvologTipCommitHint: m.tipCommitHint,
-			EvologBaseCommitID:  baseID,
-		}.Cmd()
+		if noSplitFirstEnterOnlyArms(m.suggestNoSplit, m.selectedIdx, m.noSplitConfirm) {
+			m.noSplitConfirm.armed = true
+			return m, nil
+		}
+		m.noSplitConfirm.reset()
+		return m, m.performSplitNavigateCmd()
 	}
 	if zoneID == mouse.ZoneEvologSplitCancel {
 		m.shown = false
@@ -444,6 +684,75 @@ func buildEvologSplitRightColumn(m Model, vr, rightW int, muted lipgloss.Style) 
 		body[last] = muted.Render("—")
 	}
 	return append([]string{title}, body...)
+}
+
+func formatSuggestWaitDuration(d time.Duration) string {
+	d = d.Round(time.Second)
+	if d < time.Second {
+		return "0s"
+	}
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	}
+	m := int(d.Minutes())
+	s := int(d.Seconds()) % 60
+	return fmt.Sprintf("%dm%02ds", m, s)
+}
+
+// renderEvologSuggestSpinnerOverlay draws a centered box on the modal; elapsed drives “still working” hints.
+func renderEvologSuggestSpinnerOverlay(base, spinGlyph string, elapsed time.Duration, maxLine int, jjDone, jjTotal int, phase string) string {
+	if maxLine < 36 {
+		maxLine = 36
+	}
+	muted := lipgloss.NewStyle().Foreground(styles.ColorMuted)
+	spin := lipgloss.NewStyle().Foreground(styles.ColorSecondary).Render(spinGlyph)
+	row1 := lipgloss.JoinHorizontal(lipgloss.Center, spin, " ", muted.Render("Analyzing evolog with AI…"))
+	var rows []string
+	rows = append(rows, row1)
+	if phase == "llm" {
+		rows = append(rows, muted.Render(runewidth.Truncate("Calling AI model…", maxLine, "…")))
+	} else if phase == "jj" && jjTotal > 0 {
+		t := fmt.Sprintf("JJ diff summaries: %d / %d", jjDone, jjTotal)
+		rows = append(rows, muted.Render(runewidth.Truncate(t, maxLine, "…")))
+	}
+	if elapsed >= 12*time.Second {
+		t := "Elapsed " + formatSuggestWaitDuration(elapsed) + " — jj diff prep + LLM can take minutes on large histories."
+		rows = append(rows, muted.Render(runewidth.Truncate(t, maxLine, "…")))
+	}
+	if elapsed >= 75*time.Second {
+		t := "If the spinner moves, the app is still working (not frozen)."
+		rows = append(rows, muted.Render(runewidth.Truncate(t, maxLine, "…")))
+	}
+	if elapsed >= 3*time.Minute {
+		t := "Still no reply — when this finishes, check API/network; raise ai_timeout_seconds (Settings → Advanced) if errors mention timeout."
+		rows = append(rows, muted.Render(runewidth.Truncate(t, maxLine, "…")))
+	}
+	inner := strings.Join(rows, "\n")
+	box := lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder()).
+		BorderForeground(styles.ColorMuted).
+		Background(styles.HeaderBarBackground).
+		Padding(0, 1).
+		Render(inner)
+	baseLines := strings.Split(base, "\n")
+	bh := len(baseLines)
+	bw := 0
+	for _, l := range baseLines {
+		if w := lipgloss.Width(l); w > bw {
+			bw = w
+		}
+	}
+	boxLines := strings.Split(box, "\n")
+	h := len(boxLines)
+	mw := 0
+	for _, l := range boxLines {
+		if w := lipgloss.Width(l); w > mw {
+			mw = w
+		}
+	}
+	top := max((bh-h)/2, 0)
+	left := max((bw-mw)/2, 0)
+	return overlay.OverlayView(base, box, bw, bh, top, left)
 }
 
 // View renders the modal.
@@ -534,12 +843,135 @@ func (m Model) View() string {
 	} else {
 		patchBtn = lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("View patch (o)")
 	}
-	confirm := m.mark(mouse.ZoneEvologSplitConfirm, styles.ButtonStyle.Render("Split here (Enter)"))
+	aiReady := m.suggestCfg != nil && m.suggestCfg.AIConfiguredForGeneration() && len(m.entries) >= 2 && !m.suggestLoading
+	var suggestBtn string
+	switch {
+	case m.suggestLoading:
+		suggestBtn = lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("Suggesting…")
+	case aiReady:
+		suggestBtn = m.mark(mouse.ZoneEvologSplitSuggest, styles.ButtonStyle.Render("Suggest split (s)"))
+	default:
+		suggestBtn = lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("Suggest (s) — AI off")
+	}
+	var confirm string
+	if noSplitFirstEnterOnlyArms(m.suggestNoSplit, m.selectedIdx, m.noSplitConfirm) {
+		confirm = m.mark(mouse.ZoneEvologSplitConfirm, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("Split here (Enter again to confirm)"))
+	} else {
+		confirm = m.mark(mouse.ZoneEvologSplitConfirm, styles.ButtonStyle.Render("Split here (Enter)"))
+	}
 	cancel := m.mark(mouse.ZoneEvologSplitCancel, styles.ButtonSecondaryStyle.Render("Cancel (Esc)"))
-	lines = append(lines, patchBtn+"  "+confirm+"  "+cancel)
+	lines = append(lines, patchBtn+"  "+suggestBtn)
+	lines = append(lines, confirm+"  "+cancel)
 	lines = append(lines, "")
-	lines = append(lines, muted.Render("Wheel scrolls history · o opens colored step diff when a row below the tip is selected · Do not pick the current tip row as base"))
+	textWrapW := max(16, modalW-6)
+	if m.suggestNoSplit && strings.TrimSpace(m.suggestRationale) != "" {
+		lines = append(lines, renderEvologModalWrapped(
+			"AI: no split recommended — "+m.suggestRationale,
+			textWrapW,
+			evologAIWrapMaxLines,
+			lipgloss.NewStyle().Foreground(lipgloss.Color("#E3B341")),
+			muted,
+		))
+		if noSplitFirstEnterOnlyArms(m.suggestNoSplit, m.selectedIdx, m.noSplitConfirm) {
+			lines = append(lines, muted.Render("Press Enter again to split at this row, or j/k to pick another row."))
+		}
+	} else if m.suggestRationale != "" {
+		lines = append(lines, renderEvologModalWrapped(
+			"AI: "+m.suggestRationale,
+			textWrapW,
+			evologAIWrapMaxLines,
+			lipgloss.NewStyle().Foreground(styles.ColorSecondary),
+			muted,
+		))
+	}
+	if m.suggestErrLine != "" {
+		lines = append(lines, renderEvologModalWrapped(
+			m.suggestErrLine,
+			textWrapW,
+			evologAIWrapMaxLines,
+			lipgloss.NewStyle().Foreground(lipgloss.Color("#F85149")),
+			muted,
+		))
+	}
+	if m.suggestCfg != nil && m.suggestCfg.AIConfiguredForGeneration() {
+		dstate := "off"
+		if m.describeAfterSplit {
+			dstate = "on"
+		}
+		lines = append(lines, muted.Render("d — AI describe @- and @ after split: "+dstate))
+	}
+	if len(m.pendingMultiBaseIDs) > 1 {
+		lines = append(lines, muted.Render(fmt.Sprintf("AI plan: %d sequential FAQ splits (deepest first)", len(m.pendingMultiBaseIDs))))
+		if m.suggestCfg != nil && m.suggestCfg.EvologAIMultiSplitStepwise() {
+			lines = append(lines, muted.Render("Stepwise multi-split: one FAQ base per Enter. Disable it in Settings → Advanced to run every FAQ base in one Enter (batch)."))
+		}
+	}
+	if len(m.pendingFilesFirst) > 0 {
+		preview := strings.Join(m.pendingFilesFirst, ", ")
+		fileLine := "AI file split (after FAQ): " + preview + " (c clears)"
+		lines = append(lines, renderEvologModalWrapped(fileLine, textWrapW, evologAIWrapMaxLines, muted, muted))
+	}
+	if len(m.pendingHunkPeelRounds) > 0 {
+		var parts []string
+		for ri, round := range m.pendingHunkPeelRounds {
+			var rp []string
+			for p, k := range round {
+				rp = append(rp, fmt.Sprintf("%s:%d", p, k))
+			}
+			sort.Strings(rp)
+			parts = append(parts, fmt.Sprintf("r%d:%s", ri+1, strings.Join(rp, ",")))
+		}
+		prev := strings.Join(parts, " · ")
+		hunkLine := fmt.Sprintf("AI hunk peel (%d round(s) after FAQ): %s (c clears)", len(m.pendingHunkPeelRounds), prev)
+		lines = append(lines, renderEvologModalWrapped(hunkLine, textWrapW, evologAIWrapMaxLines, muted, muted))
+	}
+	lines = append(lines, "")
+	lines = append(lines, muted.Render("Wheel scrolls history · o step diff · s AI suggest · d post-split describe · c clear AI file/hunk plan · Do not pick the tip row as base"))
 
 	box := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(styles.ColorMuted).Padding(1, 2).Width(modalW)
-	return box.Render(strings.Join(lines, "\n"))
+	out := box.Render(strings.Join(lines, "\n"))
+	if m.suggestLoading {
+		var elapsed time.Duration
+		if !m.suggestStartedAt.IsZero() {
+			elapsed = time.Since(m.suggestStartedAt)
+		}
+		out = renderEvologSuggestSpinnerOverlay(out, evologSuggestMiniDotFrame(m.suggestSpinIdx), elapsed, modalW-4, m.suggestPrepJJDone, m.suggestPrepJJTotal, m.suggestPhase)
+	}
+	return out
+}
+
+func cloneHunkPeelRounds(in []map[string]int) []map[string]int {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]map[string]int, len(in))
+	for i, m := range in {
+		out[i] = make(map[string]int, len(m))
+		for k, v := range m {
+			out[i][k] = v
+		}
+	}
+	return out
+}
+
+// renderEvologModalWrapped word-wraps plain text to wrapW and limits how many
+// lines are shown so the split modal stays readable (replaces one-line truncation).
+func renderEvologModalWrapped(text string, wrapW, maxLines int, sty lipgloss.Style, omitNote lipgloss.Style) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return ""
+	}
+	if wrapW < 12 {
+		wrapW = 12
+	}
+	out := sty.Width(wrapW).Render(text)
+	if maxLines <= 0 {
+		return out
+	}
+	ls := strings.Split(out, "\n")
+	if len(ls) <= maxLines {
+		return out
+	}
+	return strings.Join(ls[:maxLines], "\n") + "\n" +
+		omitNote.Render(fmt.Sprintf("… +%d line(s) — widen terminal or enlarge window for more", len(ls)-maxLines))
 }
