@@ -543,7 +543,7 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "pgup", "ctrl+b":
 		m.listScrollTop = max(0, m.listScrollTop-vr)
 		return m, nil
-	case "s":
+	case "s", "ctrl+g":
 		if m.suggestLoading || len(m.entries) < 2 {
 			return m, nil
 		}
@@ -762,34 +762,60 @@ func (m Model) View() string {
 	}
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#8BE9FD"))
 	muted := lipgloss.NewStyle().Foreground(styles.ColorMuted)
+	modalW := min(m.termW-4, 120)
+	if modalW < 72 {
+		modalW = 72
+	}
+	innerW := max(48, modalW-6)
+
+	if m.loading {
+		headerRow := styles.SpreadRow(innerW, titleStyle.Render("Split"), "")
+		var lines []string
+		lines = append(lines, headerRow)
+		lines = append(lines, "")
+		lines = append(lines, muted.Render("Loading jj evolog…"))
+		box := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(styles.ColorMuted).Padding(1, 2).Width(modalW)
+		return box.Render(strings.Join(lines, "\n"))
+	}
+	if m.loadErr != "" {
+		headerRow := styles.SpreadRow(innerW, titleStyle.Render("Split"), "")
+		var lines []string
+		lines = append(lines, headerRow)
+		lines = append(lines, "")
+		if strings.TrimSpace(m.bookmarkName) != "" {
+			lines = append(lines, muted.Render(fmt.Sprintf("Bookmark: %s  ·  change: %s", m.bookmarkName, m.tipChangeID)))
+		} else {
+			lines = append(lines, muted.Render(fmt.Sprintf("Change: %s", m.tipChangeID)))
+		}
+		lines = append(lines, "")
+		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#F85149")).Render("Error: "+m.loadErr))
+		lines = append(lines, "")
+		lines = append(lines, muted.Render("Esc or Enter to close"))
+		box := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(styles.ColorMuted).Padding(1, 2).Width(modalW)
+		return box.Render(strings.Join(lines, "\n"))
+	}
+
 	var lines []string
-	lines = append(lines, titleStyle.Render("Split"))
+	aiReady := m.suggestCfg != nil && m.suggestCfg.AIConfiguredForGeneration() && len(m.entries) >= 2 && !m.suggestLoading
+	var genChip string
+	switch {
+	case m.suggestLoading:
+		genChip = lipgloss.NewStyle().Foreground(styles.ColorMuted).Render(styles.AIAssistGlyph + " …")
+	case aiReady:
+		genChip = m.mark(mouse.ZoneEvologSplitSuggest, styles.StyleAIGenerateIcon(styles.AIAssistGlyph))
+	default:
+		genChip = lipgloss.NewStyle().Foreground(styles.ColorMuted).Render(styles.AIAssistGlyph)
+	}
+	headerRow := styles.SpreadRow(innerW, titleStyle.Render("Split"), genChip)
+	lines = append(lines, headerRow)
 	lines = append(lines, "")
 	if strings.TrimSpace(m.bookmarkName) != "" {
 		lines = append(lines, muted.Render(fmt.Sprintf("Bookmark: %s  ·  change: %s", m.bookmarkName, m.tipChangeID)))
 	} else {
 		lines = append(lines, muted.Render(fmt.Sprintf("Change: %s (no bookmark — only this revision is moved)", m.tipChangeID)))
 	}
-	lines = append(lines, muted.Render("Pick a parent revision; the new commit gets the current tip’s tree."))
+	lines = append(lines, muted.Render("Pick a parent row; the new commit keeps the tip’s tree."))
 	lines = append(lines, "")
-
-	if m.loading {
-		lines = append(lines, "Loading jj evolog…")
-		box := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(styles.ColorMuted).Padding(1, 2).Width(min(m.termW-4, 120))
-		return box.Render(strings.Join(lines, "\n"))
-	}
-	if m.loadErr != "" {
-		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#F85149")).Render("Error: "+m.loadErr))
-		lines = append(lines, "")
-		lines = append(lines, muted.Render("Esc or Enter to close"))
-		box := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(styles.ColorMuted).Padding(1, 2).Width(min(m.termW-4, 120))
-		return box.Render(strings.Join(lines, "\n"))
-	}
-
-	modalW := min(m.termW-4, 120)
-	if modalW < 72 {
-		modalW = 72
-	}
 	leftW := max(38, modalW*42/100)
 	rightW := modalW - leftW - 3
 	if rightW < 28 {
@@ -839,29 +865,19 @@ func (m Model) View() string {
 	lines = append(lines, "")
 	var patchBtn string
 	if m.canOpenStepPatchOverlay() {
-		patchBtn = m.mark(mouse.ZoneEvologSplitViewPatch, styles.ButtonStyle.Render("View patch (o)"))
+		patchBtn = m.mark(mouse.ZoneEvologSplitViewPatch, styles.ButtonStyle.Render("Patch (o)"))
 	} else {
-		patchBtn = lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("View patch (o)")
-	}
-	aiReady := m.suggestCfg != nil && m.suggestCfg.AIConfiguredForGeneration() && len(m.entries) >= 2 && !m.suggestLoading
-	var suggestBtn string
-	switch {
-	case m.suggestLoading:
-		suggestBtn = lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("Suggesting…")
-	case aiReady:
-		suggestBtn = m.mark(mouse.ZoneEvologSplitSuggest, styles.ButtonStyle.Render("Suggest split (s)"))
-	default:
-		suggestBtn = lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("Suggest (s) — AI off")
+		patchBtn = lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("Patch (o)")
 	}
 	var confirm string
 	if noSplitFirstEnterOnlyArms(m.suggestNoSplit, m.selectedIdx, m.noSplitConfirm) {
-		confirm = m.mark(mouse.ZoneEvologSplitConfirm, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("Split here (Enter again to confirm)"))
+		confirm = m.mark(mouse.ZoneEvologSplitConfirm, styles.ButtonStyle.Render("Confirm (Enter)"))
 	} else {
-		confirm = m.mark(mouse.ZoneEvologSplitConfirm, styles.ButtonStyle.Render("Split here (Enter)"))
+		confirm = m.mark(mouse.ZoneEvologSplitConfirm, styles.ButtonStyle.Render("Split (Enter)"))
 	}
 	cancel := m.mark(mouse.ZoneEvologSplitCancel, styles.ButtonSecondaryStyle.Render("Cancel (Esc)"))
-	lines = append(lines, patchBtn+"  "+suggestBtn)
-	lines = append(lines, confirm+"  "+cancel)
+	buttonRow := lipgloss.JoinHorizontal(lipgloss.Left, patchBtn, "  ", confirm, "  ", cancel)
+	lines = append(lines, buttonRow)
 	lines = append(lines, "")
 	textWrapW := max(16, modalW-6)
 	if m.suggestNoSplit && strings.TrimSpace(m.suggestRationale) != "" {
@@ -873,7 +889,7 @@ func (m Model) View() string {
 			muted,
 		))
 		if noSplitFirstEnterOnlyArms(m.suggestNoSplit, m.selectedIdx, m.noSplitConfirm) {
-			lines = append(lines, muted.Render("Press Enter again to split at this row, or j/k to pick another row."))
+			lines = append(lines, muted.Render("Enter again to split here, or j/k for another row."))
 		}
 	} else if m.suggestRationale != "" {
 		lines = append(lines, renderEvologModalWrapped(
@@ -901,9 +917,9 @@ func (m Model) View() string {
 		lines = append(lines, muted.Render("d — AI describe @- and @ after split: "+dstate))
 	}
 	if len(m.pendingMultiBaseIDs) > 1 {
-		lines = append(lines, muted.Render(fmt.Sprintf("AI plan: %d sequential FAQ splits (deepest first)", len(m.pendingMultiBaseIDs))))
+		lines = append(lines, muted.Render(fmt.Sprintf("AI: %d FAQ bases (deepest first)", len(m.pendingMultiBaseIDs))))
 		if m.suggestCfg != nil && m.suggestCfg.EvologAIMultiSplitStepwise() {
-			lines = append(lines, muted.Render("Stepwise multi-split: one FAQ base per Enter. Disable it in Settings → Advanced to run every FAQ base in one Enter (batch)."))
+			lines = append(lines, muted.Render("Stepwise: one base per Enter · batch: Settings → Advanced"))
 		}
 	}
 	if len(m.pendingFilesFirst) > 0 {
@@ -926,7 +942,9 @@ func (m Model) View() string {
 		lines = append(lines, renderEvologModalWrapped(hunkLine, textWrapW, evologAIWrapMaxLines, muted, muted))
 	}
 	lines = append(lines, "")
-	lines = append(lines, muted.Render("Wheel scrolls history · o step diff · s AI suggest · d post-split describe · c clear AI file/hunk plan · Do not pick the tip row as base"))
+	lines = append(lines, muted.Render("Scroll: j/k · PgUp/Dn · wheel"))
+	lines = append(lines, muted.Render("o patch · s / ^g AI row · d after-split describe · c clear AI path"))
+	lines = append(lines, muted.Render("Pick a parent below the tip (not the tip row)."))
 
 	box := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(styles.ColorMuted).Padding(1, 2).Width(modalW)
 	out := box.Render(strings.Join(lines, "\n"))
