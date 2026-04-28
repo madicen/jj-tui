@@ -1220,12 +1220,34 @@ func (s *Service) listEvolog(ctx context.Context, rev string, noHistory bool) ([
 // EvologSplitDefaultMessage is the placeholder description used during FAQ-style evolog split.
 const EvologSplitDefaultMessage = "Follow-up (split via evolog)"
 
-// reconcileColocatedGitBeforeEvologSplit best-effort sync of colocated Git with jj before `jj new`.
+// reconcileColocatedGitBeforeEvologSplit syncs colocated Git with jj before `jj new`.
 // When Git HEAD and jj disagree (e.g. `git checkout` without `jj git import`), `jj new` can fail with
-// "reference HEAD should have content …, actual content was …". Export updates Git to match jj.
-func (s *Service) reconcileColocatedGitBeforeEvologSplit(ctx context.Context) {
-	_ = s.runJJ(ctx, "workspace", "update-stale")
-	_ = s.runJJ(ctx, "git", "export")
+// "reference HEAD should have content …, actual content was …". `jj git export` updates Git to match jj.
+func (s *Service) reconcileColocatedGitBeforeEvologSplit(ctx context.Context) error {
+	if err := s.runJJ(ctx, "workspace", "update-stale"); err != nil {
+		return fmt.Errorf("jj workspace update-stale: %w", err)
+	}
+	if err := s.runJJ(ctx, "git", "export"); err != nil {
+		return fmt.Errorf("jj git export: %w", err)
+	}
+	return nil
+}
+
+func isJJColocatedHeadContentMismatch(errMsg string) bool {
+	es := strings.ToLower(errMsg)
+	return strings.Contains(es, "head") && strings.Contains(es, "should have content")
+}
+
+func wrapEvologJjNewError(err error) error {
+	if err == nil {
+		return nil
+	}
+	wrapped := fmt.Errorf("jj new: %w", err)
+	es := err.Error()
+	if isJJColocatedHeadContentMismatch(es) {
+		return fmt.Errorf("%w\n\nIn a colocated repo, Git’s HEAD can drift from jj (often after `git checkout` without jj). Try: `jj git import` to follow Git, or `jj git export` to push jj’s view to Git, then retry the split.", wrapped)
+	}
+	return wrapped
 }
 
 // evologSplitParentForNewCommit returns the revision to pass to `jj new` for an evolog split.
@@ -1431,14 +1453,21 @@ func (s *Service) MoveBookmarkDeltaOntoEvologBase(ctx context.Context, bookmarkN
 	if commitIDsEquivalent(tipCommitID, parentForNew) {
 		return fmt.Errorf("split parent would be the tip; pick a different evolog row")
 	}
-	s.reconcileColocatedGitBeforeEvologSplit(ctx)
+	if err := s.reconcileColocatedGitBeforeEvologSplit(ctx); err != nil {
+		return fmt.Errorf("prepare evolog split (colocated git sync): %w", err)
+	}
 	if err := s.runJJ(ctx, "new", parentForNew, "-m", EvologSplitDefaultMessage); err != nil {
-		wrapped := fmt.Errorf("jj new: %w", err)
-		es := err.Error()
-		if strings.Contains(es, "HEAD") && strings.Contains(es, "should have content") {
-			return fmt.Errorf("%w\n\nIn a colocated repo, Git’s HEAD can drift from jj (often after `git checkout` without jj). Try: `jj git import` to follow Git, or `jj git export` to push jj’s view to Git, then retry the split.", wrapped)
+		if isJJColocatedHeadContentMismatch(err.Error()) {
+			// One more sync + retry: export can race with other tools, or a prior export failed transiently.
+			if syncErr := s.reconcileColocatedGitBeforeEvologSplit(ctx); syncErr != nil {
+				return fmt.Errorf("jj new: %w\n\ncolocated git re-sync failed: %v", err, syncErr)
+			}
+			if err2 := s.runJJ(ctx, "new", parentForNew, "-m", EvologSplitDefaultMessage); err2 != nil {
+				return wrapEvologJjNewError(err2)
+			}
+		} else {
+			return wrapEvologJjNewError(err)
 		}
-		return wrapped
 	}
 	if err := s.runJJ(ctx, "restore", "--into", "@", "--from", tipCommitID); err != nil {
 		return fmt.Errorf("jj restore: %w", err)
