@@ -1238,6 +1238,17 @@ func isJJColocatedHeadContentMismatch(errMsg string) bool {
 	return strings.Contains(es, "head") && strings.Contains(es, "should have content")
 }
 
+// isJJColocatedGitCheckoutFailure matches jj colocated errors when Git cannot materialize a tree
+// for `jj new` (often fixable by re-exporting jj state to Git before retry).
+func isJJColocatedGitCheckoutFailure(errMsg string) bool {
+	es := strings.ToLower(errMsg)
+	return strings.Contains(es, "failed to check out")
+}
+
+func shouldRetryEvologJjNewAfterColocatedSync(errMsg string) bool {
+	return isJJColocatedHeadContentMismatch(errMsg) || isJJColocatedGitCheckoutFailure(errMsg)
+}
+
 func wrapEvologJjNewError(err error) error {
 	if err == nil {
 		return nil
@@ -1246,6 +1257,9 @@ func wrapEvologJjNewError(err error) error {
 	es := err.Error()
 	if isJJColocatedHeadContentMismatch(es) {
 		return fmt.Errorf("%w\n\nIn a colocated repo, Git’s HEAD can drift from jj (often after `git checkout` without jj). Try: `jj git import` to follow Git, or `jj git export` to push jj’s view to Git, then retry the split.", wrapped)
+	}
+	if isJJColocatedGitCheckoutFailure(es) {
+		return fmt.Errorf("%w\n\nGit could not check out a revision while creating the new change (colocated repo). Try: `jj workspace update-stale` then `jj git export`, ensure the working tree is not blocked by another process, then retry the split. If you only moved HEAD with Git, run `jj git import` or `jj git export` to reconcile.", wrapped)
 	}
 	return wrapped
 }
@@ -1398,6 +1412,11 @@ func (s *Service) MoveBookmarkDeltaOntoEvologBase(ctx context.Context, bookmarkN
 	if strings.TrimSpace(localChangeID) == "" {
 		return fmt.Errorf("local revision is required")
 	}
+	// Export jj commits to the Git backend early so `jj log` / `jj diff` / `jj new` all see the same
+	// trees Git can check out (avoids intermittent "Failed to check out commit …" in colocated repos).
+	if err := s.reconcileColocatedGitBeforeEvologSplit(ctx); err != nil {
+		return fmt.Errorf("prepare evolog split (initial colocated git sync): %w", err)
+	}
 	baseCommitID = strings.TrimSpace(baseCommitID)
 	if baseCommitID == "" {
 		return fmt.Errorf("base revision is required")
@@ -1457,10 +1476,9 @@ func (s *Service) MoveBookmarkDeltaOntoEvologBase(ctx context.Context, bookmarkN
 		return fmt.Errorf("prepare evolog split (colocated git sync): %w", err)
 	}
 	if err := s.runJJ(ctx, "new", parentForNew, "-m", EvologSplitDefaultMessage); err != nil {
-		if isJJColocatedHeadContentMismatch(err.Error()) {
-			// One more sync + retry: export can race with other tools, or a prior export failed transiently.
+		if shouldRetryEvologJjNewAfterColocatedSync(err.Error()) {
 			if syncErr := s.reconcileColocatedGitBeforeEvologSplit(ctx); syncErr != nil {
-				return fmt.Errorf("jj new: %w\n\ncolocated git re-sync failed: %v", err, syncErr)
+				return fmt.Errorf("jj new: %w\n\nevolog split: colocated git re-sync failed: %v", err, syncErr)
 			}
 			if err2 := s.runJJ(ctx, "new", parentForNew, "-m", EvologSplitDefaultMessage); err2 != nil {
 				return wrapEvologJjNewError(err2)
