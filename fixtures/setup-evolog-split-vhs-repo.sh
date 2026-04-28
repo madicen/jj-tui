@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 # Small jj repo for vhs/evolog-split.tape: feature bookmark whose change has multiple jj evolog
+#
+# Automated regression: from repo root run
+#   go test ./integration_tests/... -run TestEvologSplitMoveBookmarkDeltaColocated -count=1
+# (same colocated history; the test builds an isolated copy under t.TempDir().)
 # revisions after squashing edits from a child WC into the feature commit.
 # The main "Add feature flag" commit touches several files; only 1–2 files change in the squash
 # so evolog base→tip diff is small and the split (rollout vs rest) reads clearly in the modal.
