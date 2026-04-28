@@ -22,6 +22,7 @@ func buildEvologHunkHintBlock(ctx context.Context, jjSvc *jj.Service, entries []
 	var b strings.Builder
 	b.WriteString("\n## Hunk reference (git unified diff excerpts per step; for each path, hunks are numbered 0,1,… in file order)\n")
 	b.WriteString("Use \"hunk_peel_rounds\" for multiple sequential jj splits on @ (one map per split). \"hunk_prefix_first_commit\" is a single peel (same as one element of hunk_peel_rounds). path → k: first k hunks go into the child commit; k < total hunks per path; at least one path must keep a remainder after each peel.\n")
+	b.WriteString("Sections that say \"Binary files … differ\" have no @@ hunks — do not put those paths in hunk maps with k>0; use files_first_commit in the main JSON to peel the whole file.\n")
 	for i := 1; i <= maxStep; i++ {
 		from := strings.TrimSpace(entries[i].CommitID)
 		to := strings.TrimSpace(entries[i-1].CommitID)
@@ -77,7 +78,7 @@ func ValidateEvologHunkPrefixAgainstStep(ctx context.Context, jjSvc *jj.Service,
 	if err != nil {
 		return nil, "", fmt.Errorf("git diff for hunk validation: %w", err)
 	}
-	hunksPerPath, err := jj.ParseGitUnifiedHunksPerPath(diff)
+	hunksPerPath, binaryPaths, err := jj.ParseGitUnifiedHunksPerPath(diff)
 	if err != nil {
 		return nil, "", err
 	}
@@ -87,6 +88,13 @@ func ValidateEvologHunkPrefixAgainstStep(ctx context.Context, jjSvc *jj.Service,
 	for orig, k := range prefix {
 		key := normalizeRepoPathForDiff(orig)
 		if key == "" {
+			continue
+		}
+		if _, bin := binaryPaths[key]; bin {
+			if k != 0 {
+				return nil, "", fmt.Errorf("binary path %q cannot use hunk peel (k=%d); use files_first_commit for a whole-file peel or k=0", orig, k)
+			}
+			clean[key] = 0
 			continue
 		}
 		if _, has := hunksPerPath[key]; !has {

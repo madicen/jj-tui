@@ -178,7 +178,24 @@ func (s *Service) CreateNewCommit(ctx context.Context, description string) error
 // DescribeCommit sets a new description for a commit (non-interactive)
 func (s *Service) DescribeCommit(ctx context.Context, commitID string, message string) error {
 	_, err := s.runJJOutput(ctx, "describe", commitID, "-m", message)
-	return err
+	if err == nil {
+		return nil
+	}
+	if !isJJStaleWorkingCopyError(err) {
+		return err
+	}
+	if uerr := s.runJJ(ctx, "workspace", "update-stale"); uerr != nil {
+		return fmt.Errorf("%w\n\nCould not refresh stale working copy (jj workspace update-stale): %v", err, uerr)
+	}
+	_, err2 := s.runJJOutput(ctx, "describe", commitID, "-m", message)
+	return err2
+}
+
+func isJJStaleWorkingCopyError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "working copy is stale")
 }
 
 // GetCommitDescription gets the full description of a commit
@@ -1298,8 +1315,9 @@ func evologContainsCommitID(entries []EvologEntry, commitID string) bool {
 }
 
 // EvologMultiSplit runs several FAQ-style evolog splits in order, updating the working-copy tip after each step.
-// baseCommitIDs must be ordered deepest-first (larger evolog row index first). splitFilesetsFirst runs once at the end if non-empty.
-// hunkPeelRounds, when non-empty, runs one or more hunk-level jj splits after FAQ steps (mutually exclusive with splitFilesetsFirst in practice).
+// baseCommitIDs must be ordered deepest-first (larger evolog row index first). After the FAQ steps,
+// splitFilesetsFirst runs first (if non-empty), then hunkPeelRounds (if non-empty), so whole-file peels
+// (e.g. binaries) can precede @@-level splits on the reduced diff.
 func (s *Service) EvologMultiSplit(ctx context.Context, bookmarkName, initialTipChangeID, initialTipCommitHint string, baseCommitIDs []string, splitFilesetsFirst []string, hunkPeelRounds []map[string]int) error {
 	tipCH := strings.TrimSpace(initialTipChangeID)
 	tipH := strings.TrimSpace(initialTipCommitHint)
@@ -1332,15 +1350,14 @@ func (s *Service) EvologMultiSplit(ctx context.Context, bookmarkName, initialTip
 			}
 		}
 	}
-	if len(hunkPeelRounds) > 0 {
-		if err := s.SplitRevisionByHunkPeelRounds(ctx, "@", EvologSplitDefaultMessage, hunkPeelRounds); err != nil {
-			return fmt.Errorf("jj split (by hunk): %w", err)
-		}
-		return nil
-	}
 	if len(splitFilesetsFirst) > 0 {
 		if err := s.SplitRevisionByFilesets(ctx, "@", EvologSplitDefaultMessage, splitFilesetsFirst); err != nil {
 			return fmt.Errorf("jj split (by file): %w", err)
+		}
+	}
+	if len(hunkPeelRounds) > 0 {
+		if err := s.SplitRevisionByHunkPeelRounds(ctx, "@", EvologSplitDefaultMessage, hunkPeelRounds); err != nil {
+			return fmt.Errorf("jj split (by hunk): %w", err)
 		}
 	}
 	return nil
@@ -1353,8 +1370,8 @@ func (s *Service) EvologMultiSplit(ctx context.Context, bookmarkName, initialTip
 // description (e.g. jj metadata quirks after restore/abandon).
 // If bookmarkName is empty, the selected revision is the tip (no bookmark move). If non-empty, the
 // bookmark must point at the same commit as the selection (same rule as stack-on-origin flow).
-// splitFilesetsFirst, when non-empty, runs `jj split -r @` after the FAQ steps to peel paths into the first child commit.
-// hunkPeelRounds, when non-empty, runs hunk-scoped jj split(s) instead of filesets (splitFilesetsFirst should be empty).
+// splitFilesetsFirst, when non-empty, runs `jj split -r @ -- <paths>` after the FAQ steps (before any hunk peels).
+// hunkPeelRounds, when non-empty, runs hunk-scoped jj split(s) after filesets (if both are set, file peel runs first).
 func (s *Service) MoveBookmarkDeltaOntoEvologBase(ctx context.Context, bookmarkName, localChangeID, localCommitID, baseCommitID string, splitFilesetsFirst []string, hunkPeelRounds []map[string]int) error {
 	if strings.TrimSpace(localChangeID) == "" {
 		return fmt.Errorf("local revision is required")
@@ -1435,14 +1452,15 @@ func (s *Service) MoveBookmarkDeltaOntoEvologBase(ctx context.Context, bookmarkN
 	if err := s.DescribeCommit(ctx, "@", EvologSplitDefaultMessage); err != nil {
 		return fmt.Errorf("jj describe: %w", err)
 	}
+	if len(splitFilesetsFirst) > 0 {
+		if err := s.SplitRevisionByFilesets(ctx, "@", EvologSplitDefaultMessage, splitFilesetsFirst); err != nil {
+			return fmt.Errorf("jj split (by file): %w", err)
+		}
+	}
 	if len(hunkPeelRounds) > 0 {
 		if err := s.SplitRevisionByHunkPeelRounds(ctx, "@", EvologSplitDefaultMessage, hunkPeelRounds); err != nil {
 			return fmt.Errorf("jj split (by hunk): %w", err)
 		}
-		return nil
-	}
-	if err := s.SplitRevisionByFilesets(ctx, "@", EvologSplitDefaultMessage, splitFilesetsFirst); err != nil {
-		return fmt.Errorf("jj split (by file): %w", err)
 	}
 	return nil
 }

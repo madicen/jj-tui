@@ -35,7 +35,7 @@ func RunEvologHunkSplitDiffEditor(leftDir, rightDir, outputDir string) error {
 	if strings.TrimSpace(spec.GitDiff) == "" {
 		return fmt.Errorf("empty git_diff in hunk split spec")
 	}
-	hunksPerPath, err := ParseGitUnifiedHunksPerPath(spec.GitDiff)
+	hunksPerPath, binaryPaths, err := ParseGitUnifiedHunksPerPath(spec.GitDiff)
 	if err != nil {
 		return fmt.Errorf("parse hunks: %w", err)
 	}
@@ -43,10 +43,10 @@ func RunEvologHunkSplitDiffEditor(leftDir, rightDir, outputDir string) error {
 	if prefix == nil {
 		prefix = map[string]int{}
 	}
-	return writeHunkSplitOutputDirs(leftDir, rightDir, outputDir, hunksPerPath, prefix)
+	return writeHunkSplitOutputDirs(leftDir, rightDir, outputDir, hunksPerPath, binaryPaths, prefix)
 }
 
-func writeHunkSplitOutputDirs(leftDir, rightDir, outputDir string, hunksPerPath map[string][]UnifiedHunk, prefix map[string]int) error {
+func writeHunkSplitOutputDirs(leftDir, rightDir, outputDir string, hunksPerPath map[string][]UnifiedHunk, binaryPaths map[string]struct{}, prefix map[string]int) error {
 	return filepath.WalkDir(rightDir, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -85,6 +85,25 @@ func writeHunkSplitOutputDirs(leftDir, rightDir, outputDir string, hunksPerPath 
 			return fmt.Errorf("read right %s: %w", rel, err)
 		}
 		rightStr := string(rightBytes)
+		if _, isBin := binaryPaths[rel]; isBin {
+			k := 0
+			if kv, ok := prefix[rel]; ok {
+				k = kv
+			}
+			if k != 0 {
+				return fmt.Errorf("%s: binary file cannot use non-zero hunk prefix (use jj split with paths or files_first_commit)", rel)
+			}
+			if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
+				return err
+			}
+			if os.IsNotExist(lerr) {
+				if err := os.Remove(outPath); err != nil && !os.IsNotExist(err) {
+					return err
+				}
+				return nil
+			}
+			return os.WriteFile(outPath, leftBytes, 0o644)
+		}
 		hunks := hunksPerPath[rel]
 		k, ok := prefix[rel]
 		if !ok {
