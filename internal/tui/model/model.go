@@ -590,6 +590,28 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		rid := m.aiGenReqID
 		m.appState.StatusMessage = "Generating bookmark name…"
 		return m, aitab.GenerateBookmarkNameCmd(rid, m.appState.JJService, m.appState.Config, rev, hint)
+	case state.NavigateGenerateTicketForm:
+		if m.appState.Config == nil || !m.appState.Config.AIConfiguredForGeneration() {
+			m.appState.StatusMessage = fmt.Sprintf("Enable AI in Settings → Advanced and set an API key (or %s)", config.EnvAIAPIKey)
+			return m, nil
+		}
+		repo := m.appState.Repository
+		idx := m.GetSelectedCommit()
+		changeID := "@"
+		changeShort := "@"
+		if repo != nil && idx >= 0 && idx < len(repo.Graph.Commits) {
+			c := repo.Graph.Commits[idx]
+			changeID = c.ChangeID
+			if strings.TrimSpace(c.ShortID) != "" {
+				changeShort = strings.TrimSpace(c.ShortID)
+			} else {
+				changeShort = changeID
+			}
+		}
+		m.aiGenReqID++
+		rid := m.aiGenReqID
+		m.appState.StatusMessage = "Generating ticket title and description…"
+		return m, aitab.GenerateTicketFormCmd(rid, m.appState.JJService, m.appState.Config, changeID, changeShort, m.ticketFormModal.GetSummary(), m.ticketFormModal.GetDescription())
 	default:
 		return m, nil
 	}
@@ -799,7 +821,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.prFormModal.GetBodyInput().SetHeight(bodyH)
 		}
 		if m.appState.ViewMode == state.ViewCreateTicket {
-			const fixedFormLines = 10
+			const fixedFormLines = 12
 			bodyH := contentHeight - fixedFormLines
 			if bodyH < 3 {
 				bodyH = 3
@@ -1101,6 +1123,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				label = "Pull request (AI)"
 			case aitab.KindBookmark:
 				label = "Bookmark name (AI)"
+			case aitab.KindTicket:
+				label = "Create ticket (AI)"
 			default:
 				label = "AI"
 			}
@@ -1144,6 +1168,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.bookmarkModal.SetBookmarkName(name)
 			m.bookmarkModal.UpdateNameExistsFromInput(m.appState.Config != nil && m.appState.Config.ShouldSanitizeBookmarkNames())
 			m.appState.StatusMessage = "Bookmark name suggested (edit if needed)"
+		case aitab.KindTicket:
+			if m.appState.ViewMode != state.ViewCreateTicket {
+				return m, nil
+			}
+			if t := strings.TrimSpace(msg.Title); t != "" {
+				m.ticketFormModal.SetSummary(t)
+			}
+			if b := strings.TrimSpace(msg.Body); b != "" {
+				m.ticketFormModal.SetDescription(b)
+			}
+			m.appState.StatusMessage = "Ticket fields generated from graph revision (review, then create)"
 		}
 		return m, nil
 

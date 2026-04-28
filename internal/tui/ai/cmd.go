@@ -14,6 +14,7 @@ import (
 const diffBytesCommit = 120_000
 const diffBytesPR = 120_000
 const diffBytesBookmark = 80_000
+const diffBytesTicket = 120_000
 
 // GenerateCommitDescriptionCmd runs the LLM and returns TextGeneratedMsg.
 func GenerateCommitDescriptionCmd(reqID int, jjSvc *jj.Service, cfg *config.Config, commitID, changeShort, currentDesc string) tea.Cmd {
@@ -76,6 +77,45 @@ func GeneratePRFormCmd(reqID int, jjSvc *jj.Service, cfg *config.Config, changeI
 		}
 		msg.Title, msg.Body = ParsePRTitleBody(out)
 		msg.Title = MergeGeneratedPRTitle(hintTitle, msg.Title)
+		return msg
+	}
+}
+
+// GenerateTicketFormCmd generates issue title and body from a revision's diff (ticket the change would close).
+func GenerateTicketFormCmd(reqID int, jjSvc *jj.Service, cfg *config.Config, changeID, changeShort, hintSummary, hintDescription string) tea.Cmd {
+	return func() tea.Msg {
+		msg := TextGeneratedMsg{ReqID: reqID, Kind: KindTicket, CommitID: changeID}
+		if jjSvc == nil || cfg == nil || !cfg.AIConfiguredForGeneration() {
+			msg.Err = fmt.Errorf("AI is disabled or no API key (Settings → Advanced, or %s)", config.EnvAIAPIKey)
+			return msg
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), cfg.AITimeout())
+		defer cancel()
+		rev := strings.TrimSpace(changeID)
+		if rev == "" {
+			rev = "@"
+		}
+		diff, err := jjSvc.GitFormatDiffForRevision(ctx, rev, diffBytesTicket)
+		if err != nil {
+			msg.Err = fmt.Errorf("diff: %w", err)
+			return msg
+		}
+		provider, err := llm.NewProviderForConfig(cfg)
+		if err != nil {
+			msg.Err = err
+			return msg
+		}
+		short := strings.TrimSpace(changeShort)
+		if short == "" {
+			short = rev
+		}
+		out, err := provider.Complete(ctx, ticketSystem, TicketUser(short, hintSummary, hintDescription, diff))
+		if err != nil {
+			msg.Err = err
+			return msg
+		}
+		msg.Title, msg.Body = ParsePRTitleBody(out)
+		msg.Title = MergeGeneratedPRTitle(hintSummary, msg.Title)
 		return msg
 	}
 }

@@ -224,10 +224,11 @@ const (
 	ZoneJiraOpenBrowser = "zone:jira:openbrowser"
 
 	// Create ticket form zones
-	ZoneTicketFormTitle  = "zone:ticketform:title"
-	ZoneTicketFormBody   = "zone:ticketform:body"
-	ZoneTicketFormSubmit = "zone:ticketform:submit"
-	ZoneTicketFormCancel = "zone:ticketform:cancel"
+	ZoneTicketFormTitle    = "zone:ticketform:title"
+	ZoneTicketFormBody     = "zone:ticketform:body"
+	ZoneTicketFormSubmit   = "zone:ticketform:submit"
+	ZoneTicketFormCancel   = "zone:ticketform:cancel"
+	ZoneTicketFormGenerate = "zone:ticketform:generate"
 
 	// Push action zone
 	ZoneActionPush = "zone:action:push"

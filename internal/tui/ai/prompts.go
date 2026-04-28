@@ -57,6 +57,27 @@ func PRUser(baseBranch, headBranch, hintTitle, diff string) string {
 	return b.String()
 }
 
+const ticketSystem = `You draft issue-tracker tickets (title + description) that a code change would address or close.
+The user supplies a unified diff of a proposed fix. Infer what problem or task the change solves, and write the ticket as if filed before the fix: clear title, markdown body with symptoms, expected vs actual where inferable, and scope. Stay conservative—only state what the diff reasonably supports; say what is unknown rather than guessing.
+Respond with a single JSON object only, no markdown fences, using exactly these keys:
+{"title":"...","body":"..."}
+Title: at most 300 characters. Body: markdown allowed. If the draft title hint starts with an issue tracker key (e.g. Jira ABC-123), keep that exact key and spacing at the start of the JSON title; only improve the rest.`
+
+// TicketUser builds the user message for AI-filled create-ticket fields.
+func TicketUser(changeIDShort, hintSummary, hintDescription, diff string) string {
+	var b strings.Builder
+	b.WriteString("Revision (short id or @): ")
+	b.WriteString(changeIDShort)
+	b.WriteString("\n\nDraft title already in form (may be empty):\n")
+	b.WriteString(strings.TrimSpace(hintSummary))
+	b.WriteString("\n\nDraft description already in form (may be empty):\n")
+	b.WriteString(strings.TrimSpace(hintDescription))
+	b.WriteString("\n\nUnified diff (vs parents):\n")
+	b.WriteString(truncateRunes(diff, maxPromptDiffRunes))
+	b.WriteString("\n\nWrite JSON with title and body for the tracker ticket this change would fix or implement.")
+	return b.String()
+}
+
 // ParsePRTitleBody extracts title and body from model output (JSON preferred).
 func ParsePRTitleBody(raw string) (title, body string) {
 	raw = strings.TrimSpace(raw)
