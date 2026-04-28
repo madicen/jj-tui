@@ -476,6 +476,11 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case state.NavigateSaveDescription:
+		// A second save while the first describe is still running causes parallel jj operations on the
+		// same revision → divergent commits (same message, sibling children of one parent).
+		if m.appState.Loading {
+			return m, nil
+		}
 		if t.SaveCommitID != "" && m.appState.JJService != nil {
 			m.appState.Loading = true
 			m.appState.StatusMessage = "Saving description…"
@@ -1301,7 +1306,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.evologDescribePreviewActive = false
 		m.evologDescribeParent = ""
 		m.evologDescribeChild = ""
-		if m.appState.ViewMode == state.ViewEvologSplit || m.appState.ViewMode == state.ViewFileDiff {
+		if m.appState.ViewMode == state.ViewEvologSplit || m.appState.ViewMode == state.ViewFileDiff || m.appState.ViewMode == state.ViewEditDescription {
 			m.appState.Loading = false
 		}
 		cmd, info := errortab.HandleError(errortab.ErrorInput{NotJJRepo: msg.NotJJRepo, CurrentPath: msg.CurrentPath, Err: msg.Err}, &m.appState)
