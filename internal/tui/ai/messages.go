@@ -7,6 +7,7 @@ const (
 	KindCommitDescription Kind = iota
 	KindPR
 	KindBookmark
+	KindTicket
 )
 
 // TextGeneratedMsg is sent when an LLM request finishes (success or failure).

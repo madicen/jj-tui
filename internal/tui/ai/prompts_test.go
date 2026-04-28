@@ -1,6 +1,16 @@
 package ai
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+func TestTicketUser_includesRevisionAndHints(t *testing.T) {
+	u := TicketUser("abc123", "Draft title", "Draft body", "diff here")
+	if !strings.Contains(u, "abc123") || !strings.Contains(u, "Draft title") || !strings.Contains(u, "Draft body") || !strings.Contains(u, "diff here") {
+		t.Fatalf("unexpected TicketUser output: %q", u)
+	}
+}
 
 func TestParsePRTitleBody_JSON(t *testing.T) {
 	title, body := ParsePRTitleBody(`Here is JSON:

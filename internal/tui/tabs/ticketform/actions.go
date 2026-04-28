@@ -25,7 +25,7 @@ func OpenCreateTicket(modal *Model, ticketService tickets.Service, width, height
 	modal.Show(providerName)
 	modal.GetTitleInput().Width = width
 	modal.GetBodyInput().SetWidth(width)
-	const fixedFormLines = 10
+	const fixedFormLines = 12
 	bodyHeight := height - fixedFormLines
 	if bodyHeight < 3 {
 		bodyHeight = 3
@@ -39,10 +39,10 @@ func OpenCreateTicket(modal *Model, ticketService tickets.Service, width, height
 
 // SubmitTicketInput contains everything needed to submit the create-ticket request
 type SubmitTicketInput struct {
-	Summary        string
-	Description    string
-	TicketService  tickets.Service
-	DemoMode       bool
+	Summary       string
+	Description   string
+	TicketService tickets.Service
+	DemoMode      bool
 }
 
 // SubmitTicketCmd validates and runs CreateTicket; returns (cmd, validationError).

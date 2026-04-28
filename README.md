@@ -434,7 +434,7 @@ Omit keys you do not need. See `internal/config/config.go` for the full schema a
 
 When **`ai_enabled`** is true and an API key is configured (**`ai_api_key`** in config and/or **`JJ_TUI_AI_API_KEY`** in the environment; the env var wins), jj-tui can call a provider to draft text:
 
-- **Ctrl+G** in the commit description editor, **Create PR** modal, or **bookmark** modal (new name only) runs generation; you always review before saving or submitting.
+- **Ctrl+G** in the commit description editor, **Create PR** modal, **Create Ticket** modal, or **bookmark** modal (new name only) runs generation; you always review before saving or submitting.
 - **`ai_provider`**: `openai_compatible` (default) or **`gemini`** (Google Generative Language API).
 - **`ai_base_url`**: For `openai_compatible`, API root without a trailing slash (default: `https://api.openai.com/v1`). Use e.g. `http://127.0.0.1:11434/v1` for Ollama. Ignored for Gemini (Google endpoint).
 - **`ai_model`**: Model id. Defaults: `gpt-4o-mini` (OpenAI-compatible) or `gemini-2.5-flash` (Gemini) when empty.

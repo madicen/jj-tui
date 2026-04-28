@@ -42,6 +42,7 @@ const (
 	NavigateGenerateCommitDescription
 	NavigateGeneratePRForm
 	NavigateGenerateBookmarkName
+	NavigateGenerateTicketForm
 )
 
 // NavigateTarget describes a navigation request. Only main can perform these

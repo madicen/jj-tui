@@ -114,13 +114,22 @@ func (m Model) renderForm() string {
 	if m.providerName != "" {
 		providerLine = subtitleStyle.Render(fmt.Sprintf("Provider: %s", m.providerName))
 	}
+	contentW := m.bodyInput.Width()
+	if contentW < 12 {
+		contentW = 60
+	}
+	genChip := mark(mouse.ZoneTicketFormGenerate, styles.StyleAIGenerateIcon(styles.AIAssistGlyph))
+	headerRow := styles.SpreadRow(contentW, titleStyle.Render("Create Ticket"), genChip)
+	hintLine := subtitleStyle.Render("AI (Ctrl+G): uses diff for selected graph revision, or @ if none selected")
+
 	titleInput := mark(mouse.ZoneTicketFormTitle, m.titleInput.View())
 	bodyInput := mark(mouse.ZoneTicketFormBody, m.bodyInput.View())
 	submitBtn := mark(mouse.ZoneTicketFormSubmit, buttonStyle.Render("Create (Ctrl+S)"))
 	cancelBtn := mark(mouse.ZoneTicketFormCancel, buttonStyle.Render("Cancel (Esc)"))
 
 	blocks := []string{
-		titleStyle.Render("Create Ticket"),
+		headerRow,
+		hintLine,
 		providerLine,
 		"",
 		"Title:",
@@ -138,6 +147,8 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		return m, CancelRequestedCmd()
+	case "ctrl+g":
+		return m, state.NavigateTarget{Kind: state.NavigateGenerateTicketForm}.Cmd()
 	case "ctrl+s", "ctrl+enter":
 		return m, SubmitRequestedCmd()
 	case "tab":
@@ -163,16 +174,15 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 // ZoneIDs returns the zone IDs this modal uses
 func (m Model) ZoneIDs() []string {
-	return []string{mouse.ZoneTicketFormTitle, mouse.ZoneTicketFormBody, mouse.ZoneTicketFormSubmit, mouse.ZoneTicketFormCancel}
+	return []string{mouse.ZoneTicketFormTitle, mouse.ZoneTicketFormBody, mouse.ZoneTicketFormSubmit, mouse.ZoneTicketFormCancel, mouse.ZoneTicketFormGenerate}
 }
 
 func (m Model) resolveClickedZone(msg zone.MsgZoneInBounds) string {
-	if msg.Zone == nil {
+	if m.zoneManager == nil || msg.Zone == nil {
 		return ""
 	}
 	for _, id := range m.ZoneIDs() {
-		z := m.zoneManager.Get(id)
-		if z != nil && z.InBounds(msg.Event) {
+		if z := m.zoneManager.Get(id); z != nil && z == msg.Zone {
 			return id
 		}
 	}
@@ -191,6 +201,8 @@ func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
 		return m, SubmitRequestedCmd()
 	case mouse.ZoneTicketFormCancel:
 		return m, CancelRequestedCmd()
+	case mouse.ZoneTicketFormGenerate:
+		return m, state.NavigateTarget{Kind: state.NavigateGenerateTicketForm}.Cmd()
 	}
 	return m, nil
 }
@@ -231,6 +243,16 @@ func (m *Model) GetSummary() string {
 // GetDescription returns the description
 func (m *Model) GetDescription() string {
 	return m.bodyInput.Value()
+}
+
+// SetSummary sets the ticket title / summary field.
+func (m *Model) SetSummary(summary string) {
+	m.titleInput.SetValue(summary)
+}
+
+// SetDescription sets the ticket description field.
+func (m *Model) SetDescription(description string) {
+	m.bodyInput.SetValue(description)
 }
 
 // GetFocusedField returns the focused field (0=title, 1=body)
