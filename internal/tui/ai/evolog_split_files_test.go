@@ -65,3 +65,31 @@ func TestNormalizeRepoPathForDiffLeadingSlash(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestFilterEvologSplitFilePaths_gitStyleAPrefix(t *testing.T) {
+	allowed := map[string]struct{}{"internal/x.go": {}, "other.go": {}}
+	kept, full, err := filterEvologSplitFilePaths(allowed, []string{"a/internal/x.go"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if full {
+		t.Fatal("unexpected fullPartition")
+	}
+	if len(kept) != 1 || kept[0] != "internal/x.go" {
+		t.Fatalf("got %v", kept)
+	}
+}
+
+func TestFilterEvologSplitFilePaths_equalFold(t *testing.T) {
+	allowed := map[string]struct{}{"pkg/File.go": {}, "b.go": {}}
+	kept, full, err := filterEvologSplitFilePaths(allowed, []string{"pkg/file.go"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if full {
+		t.Fatal("unexpected fullPartition")
+	}
+	if len(kept) != 1 || kept[0] != "pkg/File.go" {
+		t.Fatalf("got %v", kept)
+	}
+}
