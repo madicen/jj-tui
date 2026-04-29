@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/madicen/jj-tui/internal/integrations/jj"
@@ -25,6 +26,86 @@ func normalizeRepoPathForDiff(p string) string {
 	return p
 }
 
+// matchAllowedPath maps a normalized model path to a key in allowed when the model echoes git-style
+// a/… or b/… prefixes, uses different casing than jj, etc.
+func matchAllowedPath(allowed map[string]struct{}, key string) (canonical string, ok bool) {
+	if key == "" || len(allowed) == 0 {
+		return "", false
+	}
+	if _, ok := allowed[key]; ok {
+		return key, true
+	}
+	for _, alt := range []string{
+		strings.TrimPrefix(key, "a/"),
+		strings.TrimPrefix(key, "b/"),
+	} {
+		if alt != "" && alt != key {
+			if _, ok := allowed[alt]; ok {
+				return alt, true
+			}
+		}
+	}
+	for cand := range allowed {
+		if strings.EqualFold(cand, key) {
+			return cand, true
+		}
+		for _, alt := range []string{strings.TrimPrefix(key, "a/"), strings.TrimPrefix(key, "b/")} {
+			if alt != "" && strings.EqualFold(cand, alt) {
+				return cand, true
+			}
+		}
+	}
+	return "", false
+}
+
+func formatSuggestedOriginalSample(suggested []string, max int) string {
+	var parts []string
+	for _, f := range suggested {
+		f = strings.TrimSpace(f)
+		if f == "" {
+			continue
+		}
+		parts = append(parts, f)
+		if len(parts) >= max {
+			break
+		}
+	}
+	if len(parts) == 0 {
+		return "(empty)"
+	}
+	sort.Strings(parts)
+	s := strings.Join(parts, ", ")
+	if nonEmptySuggestedCount(suggested) > len(parts) {
+		return s + " …"
+	}
+	return s
+}
+
+func formatPathSetSample(m map[string]struct{}, max int) string {
+	if len(m) == 0 {
+		return "(none)"
+	}
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	if len(keys) > max {
+		return strings.Join(keys[:max], ", ") + fmt.Sprintf(" … +%d", len(keys)-max)
+	}
+	return strings.Join(keys, ", ")
+}
+
+func nonEmptySuggestedCount(suggested []string) int {
+	n := 0
+	for _, f := range suggested {
+		if strings.TrimSpace(f) != "" {
+			n++
+		}
+	}
+	return n
+}
+
 // pathsFromJJSummaryLines extracts repo-relative paths from `jj diff --summary` lines (e.g. "M foo.go").
 func pathsFromJJSummaryLines(lines []string) map[string]struct{} {
 	out := make(map[string]struct{})
@@ -33,11 +114,12 @@ func pathsFromJJSummaryLines(lines []string) map[string]struct{} {
 		if line == "" {
 			continue
 		}
-		parts := strings.SplitN(line, " ", 2)
-		if len(parts) < 2 {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
 			continue
 		}
-		p := normalizeRepoPathForDiff(parts[1])
+		// Status is first token (A/M/D/…); path may contain spaces.
+		p := normalizeRepoPathForDiff(strings.Join(fields[1:], " "))
 		if p != "" {
 			out[p] = struct{}{}
 		}
@@ -49,6 +131,7 @@ func pathsFromJJSummaryLines(lines []string) map[string]struct{} {
 // If the model lists every changed path, fullPartition is true and kept is nil (caller should skip file-phase split).
 // Returns an error only when the model suggested paths but none match allowed.
 func filterEvologSplitFilePaths(allowed map[string]struct{}, suggested []string) (kept []string, fullPartition bool, err error) {
+	seen := make(map[string]struct{})
 	for _, f := range suggested {
 		f = strings.TrimSpace(f)
 		if f == "" {
@@ -58,12 +141,20 @@ func filterEvologSplitFilePaths(allowed map[string]struct{}, suggested []string)
 		if key == "" {
 			continue
 		}
-		if _, ok := allowed[key]; ok {
-			kept = append(kept, key)
+		canonical, ok := matchAllowedPath(allowed, key)
+		if !ok {
+			continue
 		}
+		if _, dup := seen[canonical]; dup {
+			continue
+		}
+		seen[canonical] = struct{}{}
+		kept = append(kept, canonical)
 	}
-	if len(suggested) > 0 && len(kept) == 0 {
-		return nil, false, fmt.Errorf("no suggested file paths appear in the diff for this split boundary")
+	if nonEmptySuggestedCount(suggested) > 0 && len(kept) == 0 {
+		return nil, false, fmt.Errorf("no suggested file paths appear in the diff for this split boundary (model: %s; jj diff for this evolog step — from newer row to row above: %s)",
+			formatSuggestedOriginalSample(suggested, 8),
+			formatPathSetSample(allowed, 12))
 	}
 	if len(allowed) > 0 && len(kept) == len(allowed) && len(kept) > 0 {
 		// jj split with filesets cannot move every path into the peeled commit — @ would have no tree delta.
@@ -116,7 +207,7 @@ func ValidateAndFilterEvologSplitFiles(ctx context.Context, jjSvc *jj.Service, e
 		if key == "" {
 			continue
 		}
-		if _, ok := allowed[key]; !ok {
+		if _, ok := matchAllowedPath(allowed, key); !ok {
 			note = note + " dropped unknown path " + f + ";"
 		}
 	}

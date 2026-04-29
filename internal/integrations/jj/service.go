@@ -1357,6 +1357,9 @@ func (s *Service) SplitRevisionByFilesets(ctx context.Context, revision, firstMe
 // EvologMultiSplit runs several FAQ-style evolog splits in order, updating the working-copy tip after each step.
 // baseCommitIDs should be ordered deepest-first (larger evolog row index first); when len > 1, ids are
 // re-sorted using jj evolog for tipCH so shallow-first lists (e.g. from the LLM) still yield a linear stack.
+// Steps after the first are skipped when jj reports an empty tree diff vs that base (already satisfied
+// after a prior FAQ move, redundant LLM base ids, or duplicate bases after sort) so the run can continue
+// to file/hunk peels instead of failing with "tree already matches base".
 // After the FAQ steps, splitFilesetsFirst runs first (if non-empty), then hunkPeelRounds (if non-empty), so whole-file peels
 // (e.g. binaries) can precede @@-level splits on the reduced diff.
 func (s *Service) EvologMultiSplit(ctx context.Context, bookmarkName, initialTipChangeID, initialTipCommitHint string, baseCommitIDs []string, splitFilesetsFirst []string, hunkPeelRounds []map[string]int) error {
@@ -1374,6 +1377,15 @@ func (s *Service) EvologMultiSplit(ctx context.Context, bookmarkName, initialTip
 		base = strings.TrimSpace(base)
 		if base == "" {
 			continue
+		}
+		if i > 0 {
+			diffOut, derr := s.runJJOutputWithGlobal(ctx, jjEvologSplitPrepareGlobals, "diff", "--from", base, "--to", tipCH, "--summary")
+			if derr != nil {
+				return fmt.Errorf("evolog multi-split step %d/%d: diff vs base: %w", i+1, len(bases), derr)
+			}
+			if strings.TrimSpace(diffOut) == "" {
+				continue
+			}
 		}
 		if err := s.MoveBookmarkDeltaOntoEvologBase(ctx, bookmarkName, tipCH, tipH, base, nil, nil); err != nil {
 			return fmt.Errorf("evolog multi-split step %d/%d: %w", i+1, len(bases), err)
