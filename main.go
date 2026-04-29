@@ -25,7 +25,7 @@ func main() {
 	// Non-TUI helper: jj invokes this as ui.diff-editor for AI hunk-level evolog split.
 	if len(os.Args) >= 5 && os.Args[1] == "diff-editor-evolog-hunk-split" {
 		if err := jj.RunEvologHunkSplitDiffEditor(os.Args[2], os.Args[3], os.Args[4]); err != nil {
-			fmt.Fprintf(os.Stderr, "%v\n", err)
+			fmt.Fprintf(os.Stderr, "jj-tui diff-editor-evolog-hunk-split: %v\n", err)
 			os.Exit(2)
 		}
 		return
