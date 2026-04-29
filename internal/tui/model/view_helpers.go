@@ -88,21 +88,36 @@ func (m *Model) View() string {
 func (m *Model) renderEvologDescribePreview() string {
 	maxW := min(m.width-8, 78)
 	title := lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render("AI descriptions (@- and @)")
+	if m.evologDescribeSkipParent {
+		title = lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render("AI description (@)")
+	}
+	if m.evologDescribePreviewFromPlan {
+		title = lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render("Review descriptions (from split plan preview)")
+		if m.evologDescribeSkipParent {
+			title = lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render("Review @ description (from split plan preview)")
+		}
+	}
 	muted := lipgloss.NewStyle().Foreground(styles.ColorMuted)
 	p := runewidth.Truncate(m.evologDescribeParent, maxW, "…")
 	c := runewidth.Truncate(m.evologDescribeChild, maxW, "…")
 	var b strings.Builder
 	b.WriteString(title)
 	b.WriteString("\n\n")
-	b.WriteString(muted.Render("@- (parent):"))
-	b.WriteString("\n")
-	b.WriteString(p)
-	b.WriteString("\n\n")
+	if !m.evologDescribeSkipParent {
+		b.WriteString(muted.Render("@- (parent):"))
+		b.WriteString("\n")
+		b.WriteString(p)
+		b.WriteString("\n\n")
+	}
 	b.WriteString(muted.Render("@ (working copy):"))
 	b.WriteString("\n")
 	b.WriteString(c)
 	b.WriteString("\n\n")
-	b.WriteString(muted.Render("y apply · n or Esc discard"))
+	if m.evologDescribePreviewFromPlan {
+		b.WriteString(muted.Render("Compare to the graph and evolog; y apply · n or Esc discard"))
+	} else {
+		b.WriteString(muted.Render("y apply · n or Esc discard"))
+	}
 	box := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(styles.ColorMuted).Padding(1, 2).Width(min(m.width-4, 84))
 	return box.Render(b.String())
 }

@@ -25,6 +25,9 @@ import (
 // evologAIWrapMaxLines caps wrapped AI rationale / errors so short terminals stay usable.
 const evologAIWrapMaxLines = 18
 
+// evologOutcomeOverlayBodyLines is the scrollable body height inside the outcome preview overlay.
+const evologOutcomeOverlayBodyLines = 18
+
 // Model is an experimental evolog-driven split picker (FAQ: move recent work into a new change).
 type Model struct {
 	shown         bool
@@ -64,7 +67,19 @@ type Model struct {
 	pendingFilesFirst     []string
 	pendingHunkPeelRounds []map[string]int // AI hunk peel plan (each map = one jj split); nil when empty
 	pendingMultiBaseIDs   []string
-	noSplitConfirm        noSplitConfirm // double-Enter on same row after AI no_split
+	// pendingExpectedChain / pendingPrecomputedDescribe* mirror the last AI suggest (chain preview LLM).
+	pendingExpectedChain         []aitab.EvologSplitExpectedChainStep
+	pendingPrecomputedParentDesc string
+	pendingPrecomputedChildDesc  string
+	noSplitConfirm               noSplitConfirm // double-Enter on same row after AI no_split
+
+	// outcome preview overlay (p): synthetic graph + @- → @ diff summary
+	outcomePreviewOpen    bool
+	outcomePreviewSeq     int
+	outcomePreviewScroll  int
+	outcomePreviewSummary []string
+	outcomePreviewErr     string
+	outcomePreviewLoading bool
 }
 
 // NewModel creates the evolog split modal. zoneManager may be nil.
@@ -154,7 +169,11 @@ func (m *Model) Show(commit internal.Commit, bookmarkName string, describeAfterS
 	m.pendingFilesFirst = nil
 	m.pendingHunkPeelRounds = nil
 	m.pendingMultiBaseIDs = nil
+	m.pendingExpectedChain = nil
+	m.pendingPrecomputedParentDesc = ""
+	m.pendingPrecomputedChildDesc = ""
 	m.noSplitConfirm.reset()
+	m.resetOutcomePreview()
 }
 
 // Hide clears the modal.
@@ -180,7 +199,11 @@ func (m *Model) Hide() {
 	m.pendingFilesFirst = nil
 	m.pendingHunkPeelRounds = nil
 	m.pendingMultiBaseIDs = nil
+	m.pendingExpectedChain = nil
+	m.pendingPrecomputedParentDesc = ""
+	m.pendingPrecomputedChildDesc = ""
 	m.noSplitConfirm.reset()
+	m.resetOutcomePreview()
 }
 
 // IsShown reports whether the modal is active.
@@ -278,6 +301,65 @@ func (m Model) canOpenStepPatchOverlay() bool {
 		strings.TrimSpace(m.diffGitRaw) != ""
 }
 
+func (m Model) canOpenOutcomePreview() bool {
+	return !m.loading && m.loadErr == "" && len(m.entries) > 0 && !m.suggestLoading
+}
+
+// canRunSuggestedSplit is true when Enter would start a split (parent row below tip is selected).
+func (m Model) canRunSuggestedSplit() bool {
+	return len(m.entries) > 0 && m.selectedIdx > 0 && m.selectedIdx < len(m.entries)
+}
+
+// commitSplitOrArmNoSplit runs the same logic as Enter on the modal: arm no_split confirm, or NavigatePerformEvologSplit.
+// closeOverlay is true when the outcome preview should close (armed no_split or split started).
+func (m Model) commitSplitOrArmNoSplit() (Model, tea.Cmd, bool) {
+	if len(m.entries) == 0 || m.selectedIdx < 0 || m.selectedIdx >= len(m.entries) {
+		return m, nil, false
+	}
+	if m.selectedIdx == 0 {
+		return m, nil, false
+	}
+	if noSplitFirstEnterOnlyArms(m.suggestNoSplit, m.selectedIdx, m.noSplitConfirm) {
+		m.noSplitConfirm.armed = true
+		return m, nil, true
+	}
+	m.noSplitConfirm.reset()
+	return m, m.performSplitNavigateCmd(), true
+}
+
+func (m Model) hasAISplitPlan() bool {
+	if len(m.pendingExpectedChain) > 0 || len(m.pendingFilesFirst) > 0 || len(m.pendingHunkPeelRounds) > 0 {
+		return true
+	}
+	if len(m.pendingMultiBaseIDs) > 0 {
+		return true
+	}
+	return strings.TrimSpace(m.pendingPrecomputedChildDesc) != "" || strings.TrimSpace(m.pendingPrecomputedParentDesc) != ""
+}
+
+// openOutcomePreviewWithLoad opens the outcome overlay and schedules jj diff --summary @- → @.
+func (m Model) openOutcomePreviewWithLoad() (Model, tea.Cmd) {
+	if !m.canOpenOutcomePreview() {
+		return m, nil
+	}
+	m.outcomePreviewSeq++
+	seq := m.outcomePreviewSeq
+	m.outcomePreviewOpen = true
+	m.outcomePreviewScroll = 0
+	m.outcomePreviewLoading = true
+	m.outcomePreviewErr = ""
+	m.outcomePreviewSummary = nil
+	return m, EvologOutcomePreviewRequestedCmd(seq)
+}
+
+func (m Model) outcomePreviewWrapW() int {
+	modalW := min(m.termW-4, 120)
+	if modalW < 72 {
+		modalW = 72
+	}
+	return max(40, modalW-10)
+}
+
 func (m Model) openStepPatchNavigate() tea.Cmd {
 	if !m.canOpenStepPatchOverlay() {
 		return nil
@@ -312,23 +394,43 @@ func (m Model) performSplitNavigateCmd() tea.Cmd {
 		baseID = runBases[0]
 	}
 	return state.NavigateTarget{
-		Kind:                     state.NavigatePerformEvologSplit,
-		EvologBookmarkName:       m.bookmarkName,
-		EvologTipChangeID:        m.tipChangeID,
-		EvologTipCommitHint:      m.tipCommitHint,
-		EvologBaseCommitID:       baseID,
-		EvologDescribeAfterSplit: m.describeAfterSplit,
-		EvologFilesetsFirst:      filesets,
-		EvologHunkPeelRounds:     hunkPeels,
-		EvologMultiBaseCommitIDs: runBases,
-		EvologStepwiseRemainder:  remainder,
+		Kind:                            state.NavigatePerformEvologSplit,
+		EvologBookmarkName:              m.bookmarkName,
+		EvologTipChangeID:               m.tipChangeID,
+		EvologTipCommitHint:             m.tipCommitHint,
+		EvologBaseCommitID:              baseID,
+		EvologDescribeAfterSplit:        m.describeAfterSplit,
+		EvologPrecomputedDescribeParent: m.pendingPrecomputedParentDesc,
+		EvologPrecomputedDescribeChild:  m.pendingPrecomputedChildDesc,
+		EvologFilesetsFirst:             filesets,
+		EvologHunkPeelRounds:            hunkPeels,
+		EvologMultiBaseCommitIDs:        runBases,
+		EvologStepwiseRemainder:         remainder,
 	}.Cmd()
 }
 
 // SetPendingMultiSplitIDs updates AI multi-split bases shown after a stepwise step (main calls after reload).
 func (m *Model) SetPendingMultiSplitIDs(ids []string) {
 	m.pendingMultiBaseIDs = append([]string(nil), ids...)
+	// Outcome preview was for the full plan; after a partial FAQ step it is no longer trustworthy.
+	m.pendingExpectedChain = nil
+	m.pendingPrecomputedParentDesc = ""
+	m.pendingPrecomputedChildDesc = ""
+	m.resetOutcomePreview()
 }
+
+func (m *Model) resetOutcomePreview() {
+	m.outcomePreviewOpen = false
+	m.outcomePreviewSeq = 0
+	m.outcomePreviewScroll = 0
+	m.outcomePreviewSummary = nil
+	m.outcomePreviewErr = ""
+	m.outcomePreviewLoading = false
+}
+
+// ResetOutcomePreviewForPerformSplit closes the plan preview and invalidates in-flight preview loads.
+// Main calls this when starting NavigatePerformEvologSplit so UI state matches the keyboard Enter path.
+func (m *Model) ResetOutcomePreviewForPerformSplit() { m.resetOutcomePreview() }
 
 // Update handles keys, zone clicks, mouse wheel, and async messages.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
@@ -359,7 +461,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.pendingFilesFirst = nil
 		m.pendingHunkPeelRounds = nil
 		m.pendingMultiBaseIDs = nil
+		m.pendingExpectedChain = nil
+		m.pendingPrecomputedParentDesc = ""
+		m.pendingPrecomputedChildDesc = ""
 		m.noSplitConfirm.reset()
+		m.resetOutcomePreview()
 		if msg.Err != nil {
 			m.loadErr = msg.Err.Error()
 			return m, nil
@@ -392,6 +498,21 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case EvologOutcomePreviewLoadedMsg:
+		if msg.Seq != m.outcomePreviewSeq {
+			return m, nil
+		}
+		m.outcomePreviewLoading = false
+		if msg.Err != nil {
+			m.outcomePreviewErr = msg.Err.Error()
+			m.outcomePreviewSummary = nil
+		} else {
+			m.outcomePreviewErr = ""
+			m.outcomePreviewSummary = append([]string(nil), msg.Lines...)
+		}
+		m.outcomePreviewScroll = 0
+		return m, nil
+
 	case aitab.EvologSplitSuggestMsg:
 		if msg.ReqID != m.suggestReqID {
 			return m, nil
@@ -410,7 +531,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.pendingFilesFirst = nil
 			m.pendingHunkPeelRounds = nil
 			m.pendingMultiBaseIDs = nil
+			m.pendingExpectedChain = nil
+			m.pendingPrecomputedParentDesc = ""
+			m.pendingPrecomputedChildDesc = ""
 			m.noSplitConfirm.reset()
+			m.resetOutcomePreview()
 			return m, nil
 		}
 		m.suggestNoSplit = msg.NoSplit
@@ -422,6 +547,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		m.pendingMultiBaseIDs = append([]string(nil), msg.MultiSplitBaseCommitIDs...)
 		m.suggestRationale = msg.Rationale
+		m.pendingExpectedChain = append([]aitab.EvologSplitExpectedChainStep(nil), msg.ExpectedOutcomeChain...)
+		m.pendingPrecomputedParentDesc = strings.TrimSpace(msg.PrecomputedDescribeParent)
+		m.pendingPrecomputedChildDesc = strings.TrimSpace(msg.PrecomputedDescribeChild)
+		m.resetOutcomePreview()
 		if msg.NoSplit {
 			m.noSplitConfirm.onAISuggestNoSplit(m.selectedIdx)
 			return m, nil
@@ -430,13 +559,33 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		if msg.PickIndex >= 1 && msg.PickIndex < len(m.entries) {
 			m.selectedIdx = msg.PickIndex
 			m = m.syncListScroll()
-			return m.refreshDiffPreview()
+			m, diffCmd := m.refreshDiffPreview()
+			if !m.suggestNoSplit {
+				m2, prevCmd := m.openOutcomePreviewWithLoad()
+				m = m2
+				if diffCmd != nil {
+					return m, tea.Batch(diffCmd, prevCmd)
+				}
+				return m, prevCmd
+			}
+			return m, diffCmd
 		}
 		m.suggestErrLine = "Model returned an invalid row index"
 		return m, nil
 
 	case tea.MouseMsg:
 		isWheel := tea.MouseEvent(msg).IsWheel() || msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown
+		if m.outcomePreviewOpen && isWheel && !m.loading && m.loadErr == "" {
+			wrapW := m.outcomePreviewWrapW()
+			total := len(m.buildOutcomePreviewAllLines(wrapW))
+			maxScroll := max(0, total-evologOutcomeOverlayBodyLines)
+			if msg.Button == tea.MouseButtonWheelUp {
+				m.outcomePreviewScroll = max(0, m.outcomePreviewScroll-3)
+			} else {
+				m.outcomePreviewScroll = min(maxScroll, m.outcomePreviewScroll+3)
+			}
+			return m, nil
+		}
 		if !isWheel || m.loading || m.loadErr != "" || len(m.entries) == 0 {
 			break
 		}
@@ -482,6 +631,38 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	if m.outcomePreviewOpen {
+		wrapW := m.outcomePreviewWrapW()
+		total := len(m.buildOutcomePreviewAllLines(wrapW))
+		maxScroll := max(0, total-evologOutcomeOverlayBodyLines)
+		switch msg.String() {
+		case "esc", "q":
+			m.outcomePreviewOpen = false
+			m.outcomePreviewScroll = 0
+			return m, nil
+		case "j", "down":
+			m.outcomePreviewScroll = min(maxScroll, m.outcomePreviewScroll+1)
+			return m, nil
+		case "k", "up":
+			m.outcomePreviewScroll = max(0, m.outcomePreviewScroll-1)
+			return m, nil
+		case "pgdown", "ctrl+f":
+			m.outcomePreviewScroll = min(maxScroll, m.outcomePreviewScroll+evologOutcomeOverlayBodyLines)
+			return m, nil
+		case "pgup", "ctrl+b":
+			m.outcomePreviewScroll = max(0, m.outcomePreviewScroll-evologOutcomeOverlayBodyLines)
+			return m, nil
+		case "enter":
+			upd, cmd, closeOverlay := m.commitSplitOrArmNoSplit()
+			if closeOverlay {
+				upd.outcomePreviewOpen = false
+				upd.outcomePreviewScroll = 0
+			}
+			return upd, cmd
+		default:
+			return m, nil
+		}
+	}
 	vr := m.listViewportRows
 	if vr < 1 {
 		vr = 5
@@ -493,15 +674,8 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.shown = false
 		return m, state.NavigateTarget{Kind: state.NavigateBackToGraph, StatusMessage: "Split cancelled"}.Cmd()
 	case "enter":
-		if len(m.entries) == 0 || m.selectedIdx < 0 || m.selectedIdx >= len(m.entries) {
-			return m, nil
-		}
-		if noSplitFirstEnterOnlyArms(m.suggestNoSplit, m.selectedIdx, m.noSplitConfirm) {
-			m.noSplitConfirm.armed = true
-			return m, nil
-		}
-		m.noSplitConfirm.reset()
-		return m, m.performSplitNavigateCmd()
+		upd, cmd, _ := m.commitSplitOrArmNoSplit()
+		return upd, cmd
 	case "d":
 		if m.suggestCfg != nil && m.suggestCfg.AIConfiguredForGeneration() {
 			m.describeAfterSplit = !m.describeAfterSplit
@@ -514,7 +688,18 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 		if len(m.pendingHunkPeelRounds) > 0 {
 			m.pendingHunkPeelRounds = nil
 		}
+		m.pendingExpectedChain = nil
+		m.pendingPrecomputedParentDesc = ""
+		m.pendingPrecomputedChildDesc = ""
+		m.resetOutcomePreview()
 		return m, nil
+	case "p":
+		if m.outcomePreviewOpen {
+			m.outcomePreviewOpen = false
+			m.outcomePreviewScroll = 0
+			return m, nil
+		}
+		return m.openOutcomePreviewWithLoad()
 	case "o":
 		cmd := m.openStepPatchNavigate()
 		if cmd == nil {
@@ -544,6 +729,10 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.listScrollTop = max(0, m.listScrollTop-vr)
 		return m, nil
 	case "s", "ctrl+g":
+		if m.outcomePreviewOpen {
+			m.outcomePreviewOpen = false
+			m.outcomePreviewScroll = 0
+		}
 		if m.suggestLoading || len(m.entries) < 2 {
 			return m, nil
 		}
@@ -573,7 +762,7 @@ func (m Model) ZoneIDs() []string {
 	for i := range m.entries {
 		ids = append(ids, mouse.ZoneEvologSplitEntry(i))
 	}
-	ids = append(ids, mouse.ZoneEvologSplitSuggest, mouse.ZoneEvologSplitConfirm, mouse.ZoneEvologSplitCancel, mouse.ZoneEvologSplitViewPatch)
+	ids = append(ids, mouse.ZoneEvologSplitSuggest, mouse.ZoneEvologSplitConfirm, mouse.ZoneEvologSplitCancel, mouse.ZoneEvologSplitViewPatch, mouse.ZoneEvologSplitOutcomePreview)
 	return ids
 }
 
@@ -609,6 +798,16 @@ func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
 		if len(m.entries) == 0 || m.selectedIdx < 0 || m.selectedIdx >= len(m.entries) {
 			return m, nil
 		}
+		// Match keyboard Enter: when the outcome preview overlay is open, use commitSplitOrArmNoSplit
+		// so the overlay closes and stale preview async messages are sequenced like the key path.
+		if m.outcomePreviewOpen {
+			upd, cmd, closeOverlay := m.commitSplitOrArmNoSplit()
+			if closeOverlay {
+				upd.outcomePreviewOpen = false
+				upd.outcomePreviewScroll = 0
+			}
+			return upd, cmd
+		}
 		if noSplitFirstEnterOnlyArms(m.suggestNoSplit, m.selectedIdx, m.noSplitConfirm) {
 			m.noSplitConfirm.armed = true
 			return m, nil
@@ -626,6 +825,10 @@ func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, cmd
+	}
+	if zoneID == mouse.ZoneEvologSplitOutcomePreview {
+		upd, cmd := m.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+		return upd, cmd
 	}
 	return m, nil
 }
@@ -699,6 +902,196 @@ func formatSuggestWaitDuration(d time.Duration) string {
 	return fmt.Sprintf("%dm%02ds", m, s)
 }
 
+func formatOutcomeChainStep(st aitab.EvologSplitExpectedChainStep) string {
+	lbl := strings.TrimSpace(st.Label)
+	d := strings.TrimSpace(st.Description)
+	switch {
+	case lbl != "" && d != "":
+		return lbl + ": " + d
+	case lbl != "":
+		return lbl
+	default:
+		return d
+	}
+}
+
+// buildOutcomePreviewAllLines returns plain-text lines for the outcome overlay (scrollable body).
+func (m Model) buildOutcomePreviewAllLines(wrapW int) []string {
+	if wrapW < 24 {
+		wrapW = 24
+	}
+	textW := max(8, wrapW-6)
+	var out []string
+	out = append(out, "Planned linear stack (newest at top, after full automation)")
+	out = append(out, "FAQ step: new work is parented on the evolog row you pick in this modal (j/k), not on the main bookmark unless that row is on main.")
+	out = append(out, "")
+
+	wc := strings.TrimSpace(m.pendingPrecomputedChildDesc)
+	if wc == "" {
+		wc = "working copy @ (after plan)"
+	}
+	out = append(out, "  @  "+runewidth.Truncate(wc, textW, "…"))
+
+	for i := len(m.pendingExpectedChain) - 1; i >= 0; i-- {
+		out = append(out, "  │")
+		chunk := formatOutcomeChainStep(m.pendingExpectedChain[i])
+		out = append(out, "  o  "+runewidth.Truncate(chunk, textW, "…"))
+	}
+
+	if len(m.pendingFilesFirst) > 0 {
+		out = append(out, "  │")
+		preview := strings.Join(m.pendingFilesFirst, ", ")
+		out = append(out, "  o  file split — "+runewidth.Truncate(preview, max(8, textW-16), "…"))
+	}
+	if len(m.pendingHunkPeelRounds) > 0 {
+		for ri := len(m.pendingHunkPeelRounds) - 1; ri >= 0; ri-- {
+			round := m.pendingHunkPeelRounds[ri]
+			var rp []string
+			for p, k := range round {
+				rp = append(rp, fmt.Sprintf("%s:%d", p, k))
+			}
+			sort.Strings(rp)
+			line := fmt.Sprintf("hunk peel round %d — %s", ri+1, strings.Join(rp, ", "))
+			out = append(out, "  │")
+			out = append(out, "  o  "+runewidth.Truncate(line, textW, "…"))
+		}
+	}
+
+	out = append(out, "  │")
+	parent := strings.TrimSpace(m.pendingPrecomputedParentDesc)
+	if parent == "" {
+		parent = "parent @- (remainder / described parent)"
+	}
+	baseHint := ""
+	if m.selectedIdx >= 0 && m.selectedIdx < len(m.entries) {
+		e := m.entries[m.selectedIdx]
+		sum := runewidth.Truncate(strings.TrimSpace(e.Summary), 32, "…")
+		baseHint = fmt.Sprintf("  ·  base %s %s", e.CommitIDShort, sum)
+	}
+	out = append(out, "  ◆  "+runewidth.Truncate(parent+baseHint, textW, "…"))
+
+	out = append(out, "")
+	out = append(out, "Working copy — jj diff --summary `@-` -> `@`:")
+	if m.outcomePreviewLoading {
+		out = append(out, "  (loading…)")
+		return out
+	}
+	if m.outcomePreviewErr != "" {
+		out = append(out, "  error: "+runewidth.Truncate(m.outcomePreviewErr, wrapW-4, "…"))
+		return out
+	}
+	if len(m.outcomePreviewSummary) == 0 {
+		out = append(out, "  (no lines — empty diff or not loaded)")
+		return out
+	}
+	for _, ln := range m.outcomePreviewSummary {
+		ln = strings.TrimRight(ln, "\r")
+		if strings.TrimSpace(ln) == "" {
+			out = append(out, "")
+			continue
+		}
+		out = append(out, "  "+runewidth.Truncate(ln, max(8, wrapW-4), "…"))
+	}
+	return out
+}
+
+// renderOutcomePreviewOverlay draws a scrollable box on top of the split modal.
+func (m Model) renderOutcomePreviewOverlay(base string, innerContentW int) string {
+	wrapW := innerContentW
+	if wrapW < 32 {
+		wrapW = m.outcomePreviewWrapW()
+	}
+	all := m.buildOutcomePreviewAllLines(wrapW)
+	viewH := evologOutcomeOverlayBodyLines
+	maxScroll := max(0, len(all)-viewH)
+	scroll := m.outcomePreviewScroll
+	if scroll > maxScroll {
+		scroll = maxScroll
+	}
+	if scroll < 0 {
+		scroll = 0
+	}
+	end := min(len(all), scroll+viewH)
+	window := all[scroll:end]
+	if len(window) < viewH {
+		pad := make([]string, viewH-len(window))
+		window = append(window, pad...)
+	}
+
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#8BE9FD"))
+	muted := lipgloss.NewStyle().Foreground(styles.ColorMuted)
+	atSty := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#50FA7B"))
+	oSty := lipgloss.NewStyle().Foreground(styles.ColorSecondary)
+	diaSty := lipgloss.NewStyle().Foreground(styles.ColorMuted)
+	pipe := muted.Render("  │")
+
+	var styled []string
+	for _, ln := range window {
+		s := strings.TrimRight(ln, " ")
+		if s == "" {
+			styled = append(styled, "")
+			continue
+		}
+		switch {
+		case strings.HasPrefix(s, "  @  "):
+			rest := strings.TrimPrefix(s, "  @  ")
+			styled = append(styled, "  "+atSty.Render("@")+"  "+rest)
+		case strings.HasPrefix(s, "  o  "):
+			rest := strings.TrimPrefix(s, "  o  ")
+			styled = append(styled, "  "+oSty.Render("o")+"  "+rest)
+		case strings.HasPrefix(s, "  ◆  "):
+			rest := strings.TrimPrefix(s, "  ◆  ")
+			styled = append(styled, "  "+diaSty.Render("◆")+"  "+rest)
+		case strings.TrimSpace(s) == "│":
+			styled = append(styled, pipe)
+		default:
+			styled = append(styled, s)
+		}
+	}
+
+	scrollHint := ""
+	if maxScroll > 0 {
+		scrollHint = fmt.Sprintf("scroll %d–%d of %d", scroll+1, min(len(all), scroll+viewH), len(all))
+	}
+	runHint := ""
+	if m.canRunSuggestedSplit() {
+		runHint = "Enter — run full suggested split (same as modal) · "
+	}
+	footer1 := muted.Render(runHint + "Esc / q · j/k · wheel · " + scrollHint)
+	footer2 := muted.Render("Peels: --insert-before when @ has one child")
+	body := strings.Join(styled, "\n")
+	title := titleStyle.Render("Plan (before split)") + "\n" + muted.Render("After split: Graph (g) shows what jj did — compare there to this view.")
+	inner := title + "\n" + body + "\n" + footer1 + "\n" + footer2
+
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(styles.ColorMuted).
+		Background(styles.HeaderBarBackground).
+		Padding(0, 1).
+		Width(wrapW + 4).
+		Render(inner)
+
+	baseLines := strings.Split(base, "\n")
+	bh := len(baseLines)
+	bw := 0
+	for _, l := range baseLines {
+		if w := lipgloss.Width(l); w > bw {
+			bw = w
+		}
+	}
+	boxLines := strings.Split(box, "\n")
+	h := len(boxLines)
+	mw := 0
+	for _, l := range boxLines {
+		if w := lipgloss.Width(l); w > mw {
+			mw = w
+		}
+	}
+	top := max((bh-h)/2, 0)
+	left := max((bw-mw)/2, 0)
+	return overlay.OverlayView(base, box, bw, bh, top, left)
+}
+
 // renderEvologSuggestSpinnerOverlay draws a centered box on the modal; elapsed drives “still working” hints.
 func renderEvologSuggestSpinnerOverlay(base, spinGlyph string, elapsed time.Duration, maxLine int, jjDone, jjTotal int, phase string) string {
 	if maxLine < 36 {
@@ -710,7 +1103,7 @@ func renderEvologSuggestSpinnerOverlay(base, spinGlyph string, elapsed time.Dura
 	var rows []string
 	rows = append(rows, row1)
 	if phase == "llm" {
-		rows = append(rows, muted.Render(runewidth.Truncate("Calling AI model…", maxLine, "…")))
+		rows = append(rows, muted.Render(runewidth.Truncate("Calling AI (split plan + outcome preview)…", maxLine, "…")))
 	} else if phase == "jj" && jjTotal > 0 {
 		t := fmt.Sprintf("JJ diff summaries: %d / %d", jjDone, jjTotal)
 		rows = append(rows, muted.Render(runewidth.Truncate(t, maxLine, "…")))
@@ -869,6 +1262,12 @@ func (m Model) View() string {
 	} else {
 		patchBtn = lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("Patch (o)")
 	}
+	var previewBtn string
+	if m.canOpenOutcomePreview() {
+		previewBtn = m.mark(mouse.ZoneEvologSplitOutcomePreview, styles.ButtonStyle.Render("Preview (p)"))
+	} else {
+		previewBtn = lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("Preview (p)")
+	}
 	var confirm string
 	if noSplitFirstEnterOnlyArms(m.suggestNoSplit, m.selectedIdx, m.noSplitConfirm) {
 		confirm = m.mark(mouse.ZoneEvologSplitConfirm, styles.ButtonStyle.Render("Confirm (Enter)"))
@@ -876,29 +1275,16 @@ func (m Model) View() string {
 		confirm = m.mark(mouse.ZoneEvologSplitConfirm, styles.ButtonStyle.Render("Split (Enter)"))
 	}
 	cancel := m.mark(mouse.ZoneEvologSplitCancel, styles.ButtonSecondaryStyle.Render("Cancel (Esc)"))
-	buttonRow := lipgloss.JoinHorizontal(lipgloss.Left, patchBtn, "  ", confirm, "  ", cancel)
+	buttonRow := lipgloss.JoinHorizontal(lipgloss.Left, patchBtn, "  ", previewBtn, "  ", confirm, "  ", cancel)
 	lines = append(lines, buttonRow)
 	lines = append(lines, "")
 	textWrapW := max(16, modalW-6)
-	if m.suggestNoSplit && strings.TrimSpace(m.suggestRationale) != "" {
-		lines = append(lines, renderEvologModalWrapped(
-			"AI: no split recommended — "+m.suggestRationale,
-			textWrapW,
-			evologAIWrapMaxLines,
-			lipgloss.NewStyle().Foreground(lipgloss.Color("#E3B341")),
-			muted,
-		))
-		if noSplitFirstEnterOnlyArms(m.suggestNoSplit, m.selectedIdx, m.noSplitConfirm) {
-			lines = append(lines, muted.Render("Enter again to split here, or j/k for another row."))
-		}
-	} else if m.suggestRationale != "" {
-		lines = append(lines, renderEvologModalWrapped(
-			"AI: "+m.suggestRationale,
-			textWrapW,
-			evologAIWrapMaxLines,
-			lipgloss.NewStyle().Foreground(styles.ColorSecondary),
-			muted,
-		))
+	if m.suggestNoSplit {
+		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#E3B341")).Render("AI: no split")+"  "+
+			muted.Render("p — current WC files · Enter again here to split anyway, or j/k for another row"))
+	} else if !m.suggestNoSplit && (m.hasAISplitPlan() || strings.TrimSpace(m.suggestRationale) != "") {
+		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#BD93F9")).Render("AI plan")+"  "+
+			muted.Render("p toggles preview · c clears plan"))
 	}
 	if m.suggestErrLine != "" {
 		lines = append(lines, renderEvologModalWrapped(
@@ -914,40 +1300,18 @@ func (m Model) View() string {
 		if m.describeAfterSplit {
 			dstate = "on"
 		}
-		lines = append(lines, muted.Render("d — AI describe @- and @ after split: "+dstate))
-	}
-	if len(m.pendingMultiBaseIDs) > 1 {
-		lines = append(lines, muted.Render(fmt.Sprintf("AI: %d FAQ bases (deepest first)", len(m.pendingMultiBaseIDs))))
-		if m.suggestCfg != nil && m.suggestCfg.EvologAIMultiSplitStepwise() {
-			lines = append(lines, muted.Render("Stepwise: one base per Enter · batch: Settings → Advanced"))
-		}
-	}
-	if len(m.pendingFilesFirst) > 0 {
-		preview := strings.Join(m.pendingFilesFirst, ", ")
-		fileLine := "AI file split (after FAQ): " + preview + " (c clears)"
-		lines = append(lines, renderEvologModalWrapped(fileLine, textWrapW, evologAIWrapMaxLines, muted, muted))
-	}
-	if len(m.pendingHunkPeelRounds) > 0 {
-		var parts []string
-		for ri, round := range m.pendingHunkPeelRounds {
-			var rp []string
-			for p, k := range round {
-				rp = append(rp, fmt.Sprintf("%s:%d", p, k))
-			}
-			sort.Strings(rp)
-			parts = append(parts, fmt.Sprintf("r%d:%s", ri+1, strings.Join(rp, ",")))
-		}
-		prev := strings.Join(parts, " · ")
-		hunkLine := fmt.Sprintf("AI hunk peel (%d round(s) after FAQ): %s (c clears)", len(m.pendingHunkPeelRounds), prev)
-		lines = append(lines, renderEvologModalWrapped(hunkLine, textWrapW, evologAIWrapMaxLines, muted, muted))
+		lines = append(lines, muted.Render("d — AI describe after split: "+dstate))
 	}
 	lines = append(lines, "")
 	lines = append(lines, muted.Render("Scroll: j/k · PgUp/Dn · wheel"))
-	lines = append(lines, muted.Render("o patch · s / ^g AI row · d after-split describe · c clear AI path"))
+	lines = append(lines, muted.Render("o patch · p plan (Enter runs split while preview open) · s / ^g AI suggest · d toggle post-split describe · c clear AI plan"))
 	lines = append(lines, muted.Render("Pick a parent below the tip (not the tip row)."))
 
 	box := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(styles.ColorMuted).Padding(1, 2).Width(modalW)
 	out := box.Render(strings.Join(lines, "\n"))
+	if m.outcomePreviewOpen {
+		out = m.renderOutcomePreviewOverlay(out, max(48, modalW-10))
+	}
 	if m.suggestLoading {
 		var elapsed time.Duration
 		if !m.suggestStartedAt.IsZero() {

@@ -103,6 +103,36 @@ func TestParseTwoHunksPrefix(t *testing.T) {
 	}
 }
 
+// Regression: the last @@ hunk of a file must not be dropped when the next diff --git starts.
+func TestParseGitUnifiedHunksMultiTextFilesKeepsFirstFileHunk(t *testing.T) {
+	const git = `diff --git a/one.go b/one.go
+--- a/one.go
++++ b/one.go
+@@ -1,1 +1,2 @@
+ a
++b
+diff --git a/two.go b/two.go
+--- a/two.go
++++ b/two.go
+@@ -1,1 +1,2 @@
+ x
++y
+`
+	hm, bin, err := ParseGitUnifiedHunksPerPath(git)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bin) != 0 {
+		t.Fatalf("bin=%v", bin)
+	}
+	if len(hm["one.go"]) != 1 {
+		t.Fatalf("one.go hunks: %v", hm["one.go"])
+	}
+	if len(hm["two.go"]) != 1 {
+		t.Fatalf("two.go hunks: %v", hm["two.go"])
+	}
+}
+
 func TestParseGitUnifiedHunksBinaryMarker(t *testing.T) {
 	const git = `diff --git a/logo.png b/logo.png
 index 111..222 100644

@@ -13,7 +13,8 @@ import (
 
 // buildColocatedEvologSplitFixture creates a small colocated git+jj repo with a demo/feature bookmark
 // whose change has multiple jj evolog revisions (squash + edit), matching fixtures/setup-evolog-split-vhs-repo.sh.
-// Used by TestEvologSplitMoveBookmarkDeltaColocated; the shell script is the manual equivalent for VHS / debugging.
+// Used by TestEvologSplitMoveBookmarkDeltaColocated and TestEvologMultiSplitShallowFirstOrderMatchesDeepestFirst;
+// the shell script is the manual equivalent for VHS / debugging.
 func buildColocatedEvologSplitFixture(t *testing.T, repoDir string) {
 	t.Helper()
 	if _, err := exec.LookPath("jj"); err != nil {
@@ -157,5 +158,118 @@ func TestEvologSplitMoveBookmarkDeltaColocated(t *testing.T) {
 	}
 	if !strings.Contains(string(out), "demo/feature") {
 		t.Fatalf("expected demo/feature in bookmark list after split, got:\n%s", string(out))
+	}
+}
+
+// evologBasesWithDiffToTip returns evolog commit ids (row order: shallow → deep among those with a
+// non-empty jj diff summary vs tipChangeID) for FAQ multi-split tests.
+func evologBasesWithDiffToTip(t *testing.T, repoDir, tipChangeID string, entries []jj.EvologEntry) []string {
+	t.Helper()
+	var ids []string
+	for i := 1; i < len(entries); i++ {
+		cand := strings.TrimSpace(entries[i].CommitID)
+		if cand == "" {
+			continue
+		}
+		cmd := exec.Command("jj", "diff", "--from", cand, "--to", tipChangeID, "--summary")
+		cmd.Dir = repoDir
+		out, derr := cmd.Output()
+		if derr != nil {
+			t.Fatalf("jj diff --from %s --to %s: %v", cand, tipChangeID, derr)
+		}
+		if strings.TrimSpace(string(out)) != "" {
+			ids = append(ids, cand)
+		}
+	}
+	return ids
+}
+
+// evologAncestorShape is the per-commit parent arity along ::demo/feature (ids differ across fresh
+// fixtures; arity sequence should match when two runs apply the same multi-split logic).
+func evologAncestorShape(t *testing.T, repoDir string) string {
+	t.Helper()
+	cmd := exec.Command("jj", "log", "-r", "::demo/feature", "--no-graph", "-T", `parents.len() ++ "\n"`)
+	cmd.Dir = repoDir
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("jj log ::demo/feature: %v", err)
+	}
+	return string(out)
+}
+
+// TestEvologMultiSplitShallowFirstOrderMatchesDeepestFirst runs two EvologMultiSplit sequences on
+// identical fixtures: correct deepest-first base order vs shallow-first (wrong API order). The service
+// re-sorts bases using jj evolog so both runs must produce the same bookmark ancestry.
+func TestEvologMultiSplitShallowFirstOrderMatchesDeepestFirst(t *testing.T) {
+	ctx := context.Background()
+	if _, err := exec.LookPath("jj"); err != nil {
+		t.Skip("jj not in PATH")
+	}
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not in PATH")
+	}
+
+	dirA := t.TempDir()
+	dirB := t.TempDir()
+	buildColocatedEvologSplitFixture(t, dirA)
+	buildColocatedEvologSplitFixture(t, dirB)
+
+	svcA, err := jj.NewService(dirA)
+	if err != nil {
+		t.Fatalf("NewService A: %v", err)
+	}
+	svcB, err := jj.NewService(dirB)
+	if err != nil {
+		t.Fatalf("NewService B: %v", err)
+	}
+
+	entriesA, err := svcA.ListEvolog(ctx, "demo/feature")
+	if err != nil {
+		t.Fatalf("ListEvolog: %v", err)
+	}
+	entriesB, err := svcB.ListEvolog(ctx, "demo/feature")
+	if err != nil {
+		t.Fatalf("ListEvolog B: %v", err)
+	}
+
+	tip := func(dir string) string {
+		cmd := exec.Command("jj", "log", "-r", "demo/feature", "--no-graph", "-T", "change_id", "--limit", "1")
+		cmd.Dir = dir
+		b, e := cmd.Output()
+		if e != nil {
+			t.Fatalf("tip change_id: %v", e)
+		}
+		s := strings.TrimSpace(string(b))
+		if s == "" {
+			t.Fatal("empty tip change id")
+		}
+		return s
+	}
+	tipA := tip(dirA)
+	tipB := tip(dirB)
+
+	basesA := evologBasesWithDiffToTip(t, dirA, tipA, entriesA)
+	if len(basesA) < 2 {
+		t.Skipf("need at least two evolog bases with non-empty diff to tip (got %d)", len(basesA))
+	}
+	basesB := evologBasesWithDiffToTip(t, dirB, tipB, entriesB)
+	if len(basesB) < 2 {
+		t.Fatalf("fixture B inconsistent: bases=%d", len(basesB))
+	}
+
+	correctOrderA := []string{basesA[len(basesA)-1], basesA[0]}
+	wrongOrderB := []string{basesB[0], basesB[len(basesB)-1]}
+
+	if err := svcA.EvologMultiSplit(ctx, "demo/feature", tipA, "", correctOrderA, nil, nil); err != nil {
+		t.Fatalf("EvologMultiSplit correct order: %v", err)
+	}
+	if err := svcB.EvologMultiSplit(ctx, "demo/feature", tipB, "", wrongOrderB, nil, nil); err != nil {
+		t.Fatalf("EvologMultiSplit shallow-first (should reorder): %v", err)
+	}
+
+	shapeA := evologAncestorShape(t, dirA)
+	shapeB := evologAncestorShape(t, dirB)
+	if shapeA != shapeB {
+		t.Fatalf("ancestor shape mismatch after correct vs reordered bases\n--- A ---\n%s\n--- B ---\n%s", shapeA, shapeB)
 	}
 }

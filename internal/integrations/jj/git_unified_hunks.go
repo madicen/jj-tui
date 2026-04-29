@@ -27,8 +27,16 @@ func ParseGitUnifiedHunksPerPath(gitDiff string) (map[string][]UnifiedHunk, map[
 	var cur []UnifiedHunk
 	var curH *UnifiedHunk
 	flushFile := func() {
-		if curPath != "" && len(cur) > 0 {
-			out[curPath] = append(out[curPath], cur...)
+		if curPath != "" {
+			// Finish the in-progress @@ hunk before switching files or at EOF; otherwise the
+			// previous file's last hunk is dropped when the next diff --git line appears.
+			if curH != nil {
+				cur = append(cur, *curH)
+				curH = nil
+			}
+			if len(cur) > 0 {
+				out[curPath] = append(out[curPath], cur...)
+			}
 		}
 		curPath = ""
 		cur = nil
@@ -76,9 +84,6 @@ func ParseGitUnifiedHunksPerPath(gitDiff string) (map[string][]UnifiedHunk, map[
 				curH.Lines = append(curH.Lines, line)
 			}
 		}
-	}
-	if curPath != "" && curH != nil {
-		cur = append(cur, *curH)
 	}
 	flushFile()
 	return out, binaryPaths, nil
@@ -279,13 +284,16 @@ func ValidateHunkPrefixPlan(gitDiff string, prefixByPath map[string]int) error {
 			return fmt.Errorf("negative hunk prefix for %s", p)
 		}
 		if k > len(hunks) {
-			return fmt.Errorf("hunk prefix %d for %s exceeds %d hunks", k, p, len(hunks))
+			return fmt.Errorf("hunk prefix k=%d for %q exceeds %d @@ hunks in the current diff (k = count of leading hunks to peel, not a line number — re-count @@ for this path on @ vs @-)", k, p, len(hunks))
 		}
 		if k > 0 && len(hunks) == 0 {
 			return fmt.Errorf("unknown path %s in hunk prefix (not in diff)", p)
 		}
+		if len(hunks) == 1 && k > 0 {
+			return fmt.Errorf("%q: only 1 @@ hunk — hunk peel cannot split this path (need at least 2 hunks); use files_first_commit for the whole file or omit this path from hunk_prefix / hunk_peel_rounds", p)
+		}
 		if len(hunks) > 0 && k == len(hunks) {
-			return fmt.Errorf("cannot assign every hunk of %s to the first commit", p)
+			return fmt.Errorf("cannot assign every @@ hunk of %q to the first commit (k must be < hunk count)", p)
 		}
 	}
 	remainder := false

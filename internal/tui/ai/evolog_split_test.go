@@ -159,6 +159,26 @@ func TestParseEvologSplitJSONMultiBaseCommitIDs(t *testing.T) {
 	}
 }
 
+func TestParseEvologSplitJSONMultiBaseSortsDeepestFirst(t *testing.T) {
+	entries := []jj.EvologEntry{
+		{CommitID: "full11111111111111111111111111111111"},
+		{CommitID: "full22222222222222222222222222222222"},
+		{CommitID: "full33333333333333333333333333333333"},
+	}
+	// LLM often lists shallow-to-deep; client must reorder so EvologMultiSplit runs oldest boundary first.
+	raw := `{"recommended_index": 1, "rationale": "ok", "split_base_commit_ids": ["full22222222222222222222222222222222", "full33333333333333333333333333333333"]}`
+	res, err := parseEvologSplitJSON(raw, 2, entries, 99)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.MultiSplitBaseCommitIDs) != 2 {
+		t.Fatalf("multi=%v", res.MultiSplitBaseCommitIDs)
+	}
+	if res.MultiSplitBaseCommitIDs[0] != entries[2].CommitID || res.MultiSplitBaseCommitIDs[1] != entries[1].CommitID {
+		t.Fatalf("expected deepest-first [row2, row1], got %#v", res.MultiSplitBaseCommitIDs)
+	}
+}
+
 func TestParseEvologSplitJSONMultiMaxParseTruncates(t *testing.T) {
 	entries := []jj.EvologEntry{
 		{CommitID: "full11111111111111111111111111111111"},
