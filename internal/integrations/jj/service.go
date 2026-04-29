@@ -1734,7 +1734,22 @@ func (s *Service) cleanupAfterFetch(ctx context.Context) error {
 // mutable revision repo-wide (including unrelated merged branches, stale divergent pairs, and
 // teammates' old lines), which is overwhelming in large colocated repos like access.
 // descendants(@) keeps move-to-parent / move-to-child splits visible.
-const DefaultGraphRevset = `(mutable() & (ancestors(@) | descendants(@))) | bookmarks() | main@origin`
+//
+// (bookmarks() & mutable()) and parents(bookmarks() & mutable()) seed mutable tips (including
+// sibling branches) without pulling parents of immutable bookmark tips such as main.
+//
+// ::(bookmarks() & mutable()) & mutable() includes every mutable ancestor of mutable bookmark
+// tips (e.g. @ below the bookmark when the bookmark stayed on the parent), so the graph is not
+// missing intermediate mutables on that line.
+//
+// Closest immutable bases are added separately per anchor so heads() over unrelated lines does
+// not drop a bookmark stack's base when it is an ancestor of @'s closer immutable:
+//   heads(::(bookmarks() & mutable()) & immutable()) and heads(::(@) & immutable()).
+//
+// heads(...)::(bookmarks() & mutable()) and heads(...)::@ add every commit on the DAG between
+// that immutable and the tip (jj x::y = descendants(x) & ancestors(y)), so the graph does not
+// elide commits on merge-heavy lines where ::(tip) & mutable() alone still left gaps above ~.
+const DefaultGraphRevset = `(mutable() & (ancestors(@) | descendants(@))) | (bookmarks() & mutable()) | parents(bookmarks() & mutable()) | bookmarks() | main@origin | (::(bookmarks() & mutable()) & mutable()) | heads(::(bookmarks() & mutable()) & immutable()) | heads(::(@) & immutable()) | (heads(::(bookmarks() & mutable()) & immutable())::(bookmarks() & mutable())) | (heads(::(@) & immutable())::@)`
 
 // Caps for per-commit jj subprocess work during getCommitGraph. After the main jj log, we run
 // enrichCommitsDeltaVsOrigin and enrichCommitsEvologSplitViable; each mutable commit with a feature
