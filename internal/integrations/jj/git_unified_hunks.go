@@ -254,6 +254,62 @@ func normalizePatchText(s string) string {
 	return strings.TrimSuffix(s, "\n")
 }
 
+// SanitizeHunkPrefixMapAgainstDiff drops or adjusts prefix entries that do not apply to the current
+// git unified diff. This covers paths that disappeared from @ vs @- after earlier FAQ/file peels
+// (stale LLM plan) and k values that are out of range. Returns nil when nothing remains (caller
+// should skip the peel). Parse/semantic errors from the diff text are returned as non-nil error.
+func SanitizeHunkPrefixMapAgainstDiff(gitDiff string, prefixByPath map[string]int) (map[string]int, error) {
+	if len(prefixByPath) == 0 {
+		return nil, nil
+	}
+	if strings.TrimSpace(gitDiff) == "" {
+		return nil, nil
+	}
+	hunksPerPath, binaryPaths, err := ParseGitUnifiedHunksPerPath(gitDiff)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]int)
+	for p, k0 := range prefixByPath {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		k := k0
+		if _, bin := binaryPaths[p]; bin {
+			if k == 0 {
+				out[p] = 0
+			}
+			continue
+		}
+		hunks := hunksPerPath[p]
+		if len(hunks) == 0 {
+			continue
+		}
+		if k < 0 {
+			continue
+		}
+		if k == 0 {
+			continue
+		}
+		if len(hunks) < 2 {
+			// One @@ hunk: cannot assign a strict non-empty proper prefix to the child commit.
+			continue
+		}
+		if k >= len(hunks) {
+			k = len(hunks) - 1
+		}
+		if k <= 0 {
+			continue
+		}
+		out[p] = k
+	}
+	if len(out) == 0 {
+		return nil, nil
+	}
+	return out, nil
+}
+
 // ValidateHunkPrefixPlan checks prefix counts against a git unified diff: each path must exist when
 // k > 0, k must be <= number of hunks, and k == len(hunks) is forbidden (would leave nothing on @).
 // There must be at least one changed path that still has hunks not fully assigned to the first commit.

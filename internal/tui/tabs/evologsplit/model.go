@@ -381,7 +381,11 @@ func (m Model) performSplitNavigateCmd() tea.Cmd {
 	hunkPeels := cloneHunkPeelRounds(m.pendingHunkPeelRounds)
 	var remainder []string
 	runBases := bases
-	if m.suggestCfg != nil && m.suggestCfg.EvologAIMultiSplitStepwise() && len(bases) > 1 {
+	// Stepwise mode normally runs one FAQ base at a time so the user can review evolog between steps.
+	// When the plan preview overlay is open, Enter promises a full run (same as the preview); do not
+	// peel off remainder here — that path left the modal up, dropped file/hunk automation for later
+	// steps, and cleared precomputed descriptions before post-split describe could run.
+	if m.suggestCfg != nil && m.suggestCfg.EvologAIMultiSplitStepwise() && len(bases) > 1 && !m.outcomePreviewOpen {
 		remainder = append([]string(nil), bases[1:]...)
 		runBases = []string{bases[0]}
 		if len(remainder) > 0 {

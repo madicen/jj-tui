@@ -41,10 +41,17 @@ func (s *Service) SplitRevisionByHunkPrefix(ctx context.Context, revision, messa
 	if err != nil {
 		return fmt.Errorf("git diff @- → @: %w", err)
 	}
-	if err := ValidateHunkPrefixPlan(diff, prefixByPath); err != nil {
+	sanitized, err := SanitizeHunkPrefixMapAgainstDiff(diff, prefixByPath)
+	if err != nil {
 		return err
 	}
-	spec := EvologHunkSplitSpec{GitDiff: diff, PrefixByPath: prefixByPath}
+	if len(sanitized) == 0 {
+		return nil
+	}
+	if err := ValidateHunkPrefixPlan(diff, sanitized); err != nil {
+		return err
+	}
+	spec := EvologHunkSplitSpec{GitDiff: diff, PrefixByPath: sanitized}
 	specFile, err := os.CreateTemp("", "jj-tui-hunk-spec-*.json")
 	if err != nil {
 		return err
