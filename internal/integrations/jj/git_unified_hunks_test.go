@@ -179,3 +179,78 @@ diff --git a/x.go b/x.go
 		t.Fatal("expected error for binary path with k!=0")
 	}
 }
+
+func TestSanitizeHunkPrefixMapAgainstDiff_stalePathDropped(t *testing.T) {
+	const git = `diff --git a/a.go b/a.go
+--- a/a.go
++++ b/a.go
+@@ -1,3 +1,4 @@
+ package p
++import "fmt"
+ const x = 1
+@@ -8,2 +9,3 @@
+ func f() {
++	fmt.Println()
+ }
+`
+	got, err := SanitizeHunkPrefixMapAgainstDiff(git, map[string]int{
+		"internal/integrations/jj/service.go": 1,
+		"a.go":                                  1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got["a.go"] != 1 {
+		t.Fatalf("got %#v", got)
+	}
+	if err := ValidateHunkPrefixPlan(git, got); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSanitizeHunkPrefixMapAgainstDiff_staleOnlyReturnsNil(t *testing.T) {
+	const git = `diff --git a/a.go b/a.go
+--- a/a.go
++++ b/a.go
+@@ -1,3 +1,4 @@
+ package p
++import "fmt"
+ const x = 1
+@@ -8,2 +9,3 @@
+ func f() {
++	fmt.Println()
+ }
+`
+	got, err := SanitizeHunkPrefixMapAgainstDiff(git, map[string]int{"internal/integrations/jj/service.go": 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != nil {
+		t.Fatalf("want nil map, got %#v", got)
+	}
+}
+
+func TestSanitizeHunkPrefixMapAgainstDiff_clampsOversizedK(t *testing.T) {
+	const git = `diff --git a/a.go b/a.go
+--- a/a.go
++++ b/a.go
+@@ -1,3 +1,4 @@
+ package p
++import "fmt"
+ const x = 1
+@@ -8,2 +9,3 @@
+ func f() {
++	fmt.Println()
+ }
+`
+	got, err := SanitizeHunkPrefixMapAgainstDiff(git, map[string]int{"a.go": 99})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got["a.go"] != 1 {
+		t.Fatalf("want a.go:1 (len-1), got %#v", got)
+	}
+	if err := ValidateHunkPrefixPlan(git, got); err != nil {
+		t.Fatal(err)
+	}
+}
