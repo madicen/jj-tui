@@ -78,8 +78,11 @@ type NavigateTarget struct {
 	EvologTipChangeID   string
 	EvologTipCommitHint string
 	EvologBaseCommitID  string
-	// EvologDescribeAfterSplit runs AI jj describe on @- and @ after a successful split.
+	// EvologDescribeAfterSplit runs AI jj describe after a successful split (@- and @ when @- is mutable, otherwise @ only).
 	EvologDescribeAfterSplit bool
+	// EvologPrecomputedDescribeParent / Child, when set, skip the post-split describe LLM and apply these strings (from AI suggest chain preview).
+	EvologPrecomputedDescribeParent string
+	EvologPrecomputedDescribeChild  string
 	// EvologFilesetsFirst optional paths for jj split -r @ after FAQ split(s).
 	EvologFilesetsFirst []string
 	// EvologHunkPeelRounds optional sequence of path→prefix hunk peels after FAQ split(s); each round is one jj split on @.

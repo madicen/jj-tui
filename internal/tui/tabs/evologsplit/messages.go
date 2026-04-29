@@ -13,6 +13,32 @@ import (
 	"github.com/madicen/jj-tui/internal/tui/util"
 )
 
+// EvologOutcomePreviewRequestedMsg asks main to load jj diff --summary @- → @ for the AI outcome overlay.
+type EvologOutcomePreviewRequestedMsg struct {
+	Seq int
+}
+
+// EvologOutcomePreviewLoadedMsg carries working-copy diff summary lines for the outcome preview overlay.
+type EvologOutcomePreviewLoadedMsg struct {
+	Seq    int
+	Lines  []string
+	Err    error
+}
+
+// LoadEvologOutcomePreviewCmd runs jj diff --summary @- → @ (async).
+func LoadEvologOutcomePreviewCmd(svc *jj.Service, seq int) tea.Cmd {
+	if svc == nil || seq <= 0 {
+		return nil
+	}
+	return func() tea.Msg {
+		lines, err := svc.DiffSummaryLinesFromTo(context.Background(), "@-", "@")
+		if err != nil {
+			return EvologOutcomePreviewLoadedMsg{Seq: seq, Err: err}
+		}
+		return EvologOutcomePreviewLoadedMsg{Seq: seq, Lines: lines}
+	}
+}
+
 // EvologDiffLoadRequestedMsg is sent so main can run LoadEvologSplitDiffCmd with the current JJ service.
 type EvologDiffLoadRequestedMsg struct{}
 
@@ -20,6 +46,13 @@ type EvologDiffLoadRequestedMsg struct{}
 func EvologDiffLoadRequestedCmd() tea.Cmd {
 	return func() tea.Msg {
 		return EvologDiffLoadRequestedMsg{}
+	}
+}
+
+// EvologOutcomePreviewRequestedCmd schedules EvologOutcomePreviewRequestedMsg with the given sequence.
+func EvologOutcomePreviewRequestedCmd(seq int) tea.Cmd {
+	return func() tea.Msg {
+		return EvologOutcomePreviewRequestedMsg{Seq: seq}
 	}
 }
 

@@ -86,15 +86,20 @@ type Model struct {
 	evologStepwiseRemainderAfterSplit []string
 	evologStepwiseBookmarkName        string
 	// Post-split AI describe preview (y apply / n discard).
-	evologDescribePreviewActive bool
-	evologDescribeParent        string
-	evologDescribeChild         string
-	fileDiffModal               filedifftab.Model
-	bookmarkModal               bookmarktab.Model
-	prFormModal                 prformtab.Model
-	ticketFormModal             ticketformtab.Model
-	desceditModal               descedittab.Model
-	githubLoginModel            githublogintab.Model
+	evologDescribePreviewActive   bool
+	evologDescribePreviewFromPlan bool // true when text came from suggest-phase chain preview (not post-split LLM)
+	evologDescribeSkipParent      bool // @- immutable: apply only describes @
+	evologDescribeParent          string
+	evologDescribeChild           string
+	// evologPrecomputedDescribe* come from AI suggest (chain preview); used when describe-after-split runs without a second LLM.
+	evologPrecomputedDescribeParent string
+	evologPrecomputedDescribeChild  string
+	fileDiffModal                   filedifftab.Model
+	bookmarkModal                   bookmarktab.Model
+	prFormModal                     prformtab.Model
+	ticketFormModal                 ticketformtab.Model
+	desceditModal                   descedittab.Model
+	githubLoginModel                githublogintab.Model
 
 	busySpinner spinner.Model
 }
@@ -353,6 +358,8 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		return m, nil
 	case state.NavigateBackToGraph:
 		m.evologSplitModal.Hide()
+		m.evologStepwiseRemainderAfterSplit = nil
+		m.evologStepwiseBookmarkName = ""
 		m.fileDiffModal.Hide()
 		m.restoreModalUnderlayOrGraph()
 		m.appState.Loading = false
@@ -365,8 +372,12 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		m.evologStepwiseRemainderAfterSplit = nil
 		m.evologStepwiseBookmarkName = ""
 		m.evologDescribePreviewActive = false
+		m.evologDescribePreviewFromPlan = false
+		m.evologDescribeSkipParent = false
 		m.evologDescribeParent = ""
 		m.evologDescribeChild = ""
+		m.evologPrecomputedDescribeParent = ""
+		m.evologPrecomputedDescribeChild = ""
 		bn := graphtab.FeatureBookmarkForSplit(t.Commit.Branches)
 		m.evologSplitModal = m.evologSplitModal.SetDimensions(m.width, m.height).WithSuggestConfig(m.appState.Config)
 		descDef := m.appState.Config != nil && m.appState.Config.DefaultEvologPostSplitDescribe()
@@ -408,7 +419,10 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		m.appState.StatusMessage = "Loading file diff…"
 		return m, filedifftab.LoadFileDiffCmd(m.appState.JJService, seq, t.Commit.ChangeID, path)
 	case state.NavigatePerformEvologSplit:
+		m.evologSplitModal.ResetOutcomePreviewForPerformSplit()
 		m.evologPostSplitDescribe = t.EvologDescribeAfterSplit
+		m.evologPrecomputedDescribeParent = strings.TrimSpace(t.EvologPrecomputedDescribeParent)
+		m.evologPrecomputedDescribeChild = strings.TrimSpace(t.EvologPrecomputedDescribeChild)
 		m.evologStepwiseRemainderAfterSplit = append([]string(nil), t.EvologStepwiseRemainder...)
 		m.evologStepwiseBookmarkName = t.EvologBookmarkName
 		m.appState.StatusMessage = "Splitting change…"
@@ -865,15 +879,20 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "y", "Y":
 				pd, cd := m.evologDescribeParent, m.evologDescribeChild
 				m.evologDescribePreviewActive = false
+				m.evologDescribePreviewFromPlan = false
+				skipP := m.evologDescribeSkipParent
+				m.evologDescribeSkipParent = false
 				m.evologDescribeParent, m.evologDescribeChild = "", ""
 				m.appState.Loading = true
 				m.appState.StatusMessage = "Applying descriptions…"
 				return m, tea.Batch(
-					aitab.ApplyEvologSplitDescriptionsCmd(0, m.appState.JJService, m.appState.Config, pd, cd),
+					aitab.ApplyEvologSplitDescriptionsCmd(0, m.appState.JJService, m.appState.Config, pd, cd, skipP),
 					m.startBusySpinnerCmd(),
 				)
 			case "n", "N", "esc":
 				m.evologDescribePreviewActive = false
+				m.evologDescribePreviewFromPlan = false
+				m.evologDescribeSkipParent = false
 				m.evologDescribeParent, m.evologDescribeChild = "", ""
 				m.appState.StatusMessage = "Descriptions preview dismissed"
 				return m, nil
@@ -1304,6 +1323,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case errorMsg:
 		m.evologDescribePreviewActive = false
+		m.evologDescribePreviewFromPlan = false
+		m.evologDescribeSkipParent = false
 		m.evologDescribeParent = ""
 		m.evologDescribeChild = ""
 		if m.appState.ViewMode == state.ViewEvologSplit || m.appState.ViewMode == state.ViewFileDiff || m.appState.ViewMode == state.ViewEditDescription {
@@ -1589,7 +1610,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		updated, cmd := m.evologSplitModal.Update(msg)
 		m.evologSplitModal = updated
 		if msg.Err == nil {
-			m.appState.StatusMessage = "Pick parent revision (j/k, Enter); o opens colored step diff when a row below the tip is selected"
+			m.appState.StatusMessage = "Pick parent (j/k, Enter); o step diff; s AI suggest; p plan preview (opens after suggest)"
 		} else {
 			m.appState.StatusMessage = "Evolog load failed"
 		}
@@ -1642,6 +1663,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		updated, cmd := m.evologSplitModal.Update(msg)
 		m.evologSplitModal = updated
 		return m, cmd
+	case evologsplittab.EvologOutcomePreviewRequestedMsg:
+		if m.appState.JJService == nil {
+			return m, nil
+		}
+		if m.appState.ViewMode != state.ViewEvologSplit || !m.evologSplitModal.IsShown() {
+			return m, nil
+		}
+		return m, evologsplittab.LoadEvologOutcomePreviewCmd(m.appState.JJService, msg.Seq)
+	case evologsplittab.EvologOutcomePreviewLoadedMsg:
+		if m.appState.ViewMode != state.ViewEvologSplit || !m.evologSplitModal.IsShown() {
+			return m, nil
+		}
+		updated, cmd := m.evologSplitModal.Update(msg)
+		m.evologSplitModal = updated
+		return m, cmd
 	case aitab.EvologSplitSuggestMsg:
 		if !m.evologSplitModal.IsShown() {
 			return m, nil
@@ -1661,11 +1697,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		updated, sub := m.evologSplitModal.Update(msg)
 		m.evologSplitModal = updated
-		if msg.Err == nil && !msg.NoSplit && msg.PickIndex > 0 && strings.TrimSpace(msg.Rationale) != "" {
-			m.appState.StatusMessage = fmt.Sprintf("AI suggested evolog row %d — review diff, then Enter to split", msg.PickIndex)
+		if msg.Err == nil && !msg.NoSplit && msg.PickIndex > 0 {
+			m.appState.StatusMessage = "AI plan: preview opened — Esc closes overlay, then Enter to split or adjust row"
 		}
 		if msg.Err == nil && msg.NoSplit {
-			m.appState.StatusMessage = "AI suggests no split — review rationale in the modal"
+			m.appState.StatusMessage = "AI: no split — use p for WC files or pick another row"
 		}
 		if warnCmd != nil && sub != nil {
 			return m, tea.Batch(sub, warnCmd)
@@ -1694,10 +1730,30 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.evologSplitModal.Hide()
 		m.appState.ViewMode = state.ViewCommitGraph
 		m2, cmd := m.applyRepositoryLoaded(msg.Repository)
-		m2.appState.StatusMessage = "Split complete — describe new commit if needed"
+		m2.appState.StatusMessage = "Split complete — Graph (g) shows what jj did; compare to the plan you saw in Preview (p) before split"
 		if m2.evologPostSplitDescribe && m2.appState.JJService != nil && m2.appState.Config != nil && m2.appState.Config.AIConfiguredForGeneration() {
 			m2.evologPostSplitDescribe = false
-			m2.appState.StatusMessage = "Split complete — generating descriptions with AI…"
+			preChild := strings.TrimSpace(m2.evologPrecomputedDescribeChild)
+			preParent := strings.TrimSpace(m2.evologPrecomputedDescribeParent)
+			m2.evologPrecomputedDescribeParent = ""
+			m2.evologPrecomputedDescribeChild = ""
+			if preChild != "" {
+				descCtx, descCancel := context.WithTimeout(context.Background(), m2.appState.Config.AITimeout())
+				parentOK, perr := aitab.DescribeSplitParentWritable(descCtx, m2.appState.JJService)
+				descCancel()
+				skipParent := perr != nil || !parentOK
+				m2.evologDescribePreviewActive = true
+				m2.evologDescribePreviewFromPlan = true
+				m2.evologDescribeSkipParent = skipParent
+				m2.evologDescribeParent = preParent
+				m2.evologDescribeChild = preChild
+				m2.appState.StatusMessage = "Split complete — Graph (g) vs plan preview; review AI descriptions (y apply, n discard)"
+				if cmd != nil {
+					return m2, cmd
+				}
+				return m2, nil
+			}
+			m2.appState.StatusMessage = "Split complete — Graph (g) vs plan preview; generating descriptions with AI…"
 			m2.appState.Loading = true
 			if cmd != nil {
 				return m2, tea.Batch(cmd, aitab.SuggestEvologSplitDescriptionsCmd(0, m2.appState.JJService, m2.appState.Config), m2.startBusySpinnerCmd())
@@ -1705,6 +1761,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m2, tea.Batch(aitab.SuggestEvologSplitDescriptionsCmd(0, m2.appState.JJService, m2.appState.Config), m2.startBusySpinnerCmd())
 		}
 		m2.evologPostSplitDescribe = false
+		m2.evologPrecomputedDescribeParent = ""
+		m2.evologPrecomputedDescribeChild = ""
 		return m2, cmd
 	case aitab.EvologDescribeSplitPreviewMsg:
 		m.appState.Loading = false
@@ -1712,17 +1770,25 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.Update(errorMsg{Err: fmt.Errorf("post-split describe preview: %w", msg.Err)})
 		}
 		m.evologDescribePreviewActive = true
+		m.evologDescribePreviewFromPlan = false
+		m.evologDescribeSkipParent = msg.SkipParentDescribe
 		m.evologDescribeParent = msg.ParentDescription
 		m.evologDescribeChild = msg.ChildDescription
 		m.appState.StatusMessage = "AI descriptions ready — y apply, n discard, Esc cancel"
 		return m, nil
 	case aitab.EvologDescribeSplitDoneMsg:
 		m.appState.Loading = false
+		m.evologDescribePreviewActive = false
+		m.evologDescribePreviewFromPlan = false
 		if msg.Err != nil {
 			return m.Update(errorMsg{Err: fmt.Errorf("post-split describe: %w", msg.Err)})
 		}
 		m2, cmd := m.applyRepositoryLoaded(msg.Repository)
-		m2.appState.StatusMessage = "Descriptions updated for @- and @"
+		if msg.OnlyChild {
+			m2.appState.StatusMessage = "Description updated for @ (parent @- is immutable)"
+		} else {
+			m2.appState.StatusMessage = "Descriptions updated for @- and @"
+		}
 		return m2, cmd
 	case graphtab.FileMoveCompletedMsg:
 		graphtab.HandleFileMoveCompletedMsg(graphtab.FileMoveInput{
@@ -1904,8 +1970,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.evologPostSplitDescribe = false
 		m.evologDescribePreviewActive = false
+		m.evologDescribePreviewFromPlan = false
+		m.evologDescribeSkipParent = false
 		m.evologDescribeParent = ""
 		m.evologDescribeChild = ""
+		m.evologPrecomputedDescribeParent = ""
+		m.evologPrecomputedDescribeChild = ""
 		return m.Update(errorMsg{Err: msg.Err})
 	}
 

@@ -27,8 +27,16 @@ func ParseGitUnifiedHunksPerPath(gitDiff string) (map[string][]UnifiedHunk, map[
 	var cur []UnifiedHunk
 	var curH *UnifiedHunk
 	flushFile := func() {
-		if curPath != "" && len(cur) > 0 {
-			out[curPath] = append(out[curPath], cur...)
+		if curPath != "" {
+			// Finish the in-progress @@ hunk before switching files or at EOF; otherwise the
+			// previous file's last hunk is dropped when the next diff --git line appears.
+			if curH != nil {
+				cur = append(cur, *curH)
+				curH = nil
+			}
+			if len(cur) > 0 {
+				out[curPath] = append(out[curPath], cur...)
+			}
 		}
 		curPath = ""
 		cur = nil
@@ -76,9 +84,6 @@ func ParseGitUnifiedHunksPerPath(gitDiff string) (map[string][]UnifiedHunk, map[
 				curH.Lines = append(curH.Lines, line)
 			}
 		}
-	}
-	if curPath != "" && curH != nil {
-		cur = append(cur, *curH)
 	}
 	flushFile()
 	return out, binaryPaths, nil
@@ -249,6 +254,62 @@ func normalizePatchText(s string) string {
 	return strings.TrimSuffix(s, "\n")
 }
 
+// SanitizeHunkPrefixMapAgainstDiff drops or adjusts prefix entries that do not apply to the current
+// git unified diff. This covers paths that disappeared from @ vs @- after earlier FAQ/file peels
+// (stale LLM plan) and k values that are out of range. Returns nil when nothing remains (caller
+// should skip the peel). Parse/semantic errors from the diff text are returned as non-nil error.
+func SanitizeHunkPrefixMapAgainstDiff(gitDiff string, prefixByPath map[string]int) (map[string]int, error) {
+	if len(prefixByPath) == 0 {
+		return nil, nil
+	}
+	if strings.TrimSpace(gitDiff) == "" {
+		return nil, nil
+	}
+	hunksPerPath, binaryPaths, err := ParseGitUnifiedHunksPerPath(gitDiff)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]int)
+	for p, k0 := range prefixByPath {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		k := k0
+		if _, bin := binaryPaths[p]; bin {
+			if k == 0 {
+				out[p] = 0
+			}
+			continue
+		}
+		hunks := hunksPerPath[p]
+		if len(hunks) == 0 {
+			continue
+		}
+		if k < 0 {
+			continue
+		}
+		if k == 0 {
+			continue
+		}
+		if len(hunks) < 2 {
+			// One @@ hunk: cannot assign a strict non-empty proper prefix to the child commit.
+			continue
+		}
+		if k >= len(hunks) {
+			k = len(hunks) - 1
+		}
+		if k <= 0 {
+			continue
+		}
+		out[p] = k
+	}
+	if len(out) == 0 {
+		return nil, nil
+	}
+	return out, nil
+}
+
 // ValidateHunkPrefixPlan checks prefix counts against a git unified diff: each path must exist when
 // k > 0, k must be <= number of hunks, and k == len(hunks) is forbidden (would leave nothing on @).
 // There must be at least one changed path that still has hunks not fully assigned to the first commit.
@@ -279,13 +340,16 @@ func ValidateHunkPrefixPlan(gitDiff string, prefixByPath map[string]int) error {
 			return fmt.Errorf("negative hunk prefix for %s", p)
 		}
 		if k > len(hunks) {
-			return fmt.Errorf("hunk prefix %d for %s exceeds %d hunks", k, p, len(hunks))
+			return fmt.Errorf("hunk prefix k=%d for %q exceeds %d @@ hunks in the current diff (k = count of leading hunks to peel, not a line number — re-count @@ for this path on @ vs @-)", k, p, len(hunks))
 		}
 		if k > 0 && len(hunks) == 0 {
 			return fmt.Errorf("unknown path %s in hunk prefix (not in diff)", p)
 		}
+		if len(hunks) == 1 && k > 0 {
+			return fmt.Errorf("%q: only 1 @@ hunk — hunk peel cannot split this path (need at least 2 hunks); use files_first_commit for the whole file or omit this path from hunk_prefix / hunk_peel_rounds", p)
+		}
 		if len(hunks) > 0 && k == len(hunks) {
-			return fmt.Errorf("cannot assign every hunk of %s to the first commit", p)
+			return fmt.Errorf("cannot assign every @@ hunk of %q to the first commit (k must be < hunk count)", p)
 		}
 	}
 	remainder := false

@@ -41,10 +41,17 @@ func (s *Service) SplitRevisionByHunkPrefix(ctx context.Context, revision, messa
 	if err != nil {
 		return fmt.Errorf("git diff @- → @: %w", err)
 	}
-	if err := ValidateHunkPrefixPlan(diff, prefixByPath); err != nil {
+	sanitized, err := SanitizeHunkPrefixMapAgainstDiff(diff, prefixByPath)
+	if err != nil {
 		return err
 	}
-	spec := EvologHunkSplitSpec{GitDiff: diff, PrefixByPath: prefixByPath}
+	if len(sanitized) == 0 {
+		return nil
+	}
+	if err := ValidateHunkPrefixPlan(diff, sanitized); err != nil {
+		return err
+	}
+	spec := EvologHunkSplitSpec{GitDiff: diff, PrefixByPath: sanitized}
 	specFile, err := os.CreateTemp("", "jj-tui-hunk-spec-*.json")
 	if err != nil {
 		return err
@@ -98,16 +105,24 @@ func (s *Service) SplitRevisionByHunkPrefix(ctx context.Context, revision, messa
 		"split", "-r", rev, "-m", msg,
 		"--tool", "jj-tui-hunk-split",
 	}
-	// Default jj split puts the remainder in a new child of the selected (first) commit and rebases
-	// any existing descendants of @ onto that remainder. When @ already has a direct child, repeated
-	// peels then pile into the same descendant instead of forming @ → peel₁ → peel₂ → … → child.
-	// --insert-before keeps the remainder on @ and inserts the peeled commit between @ and that child
-	// (omit if 0 or 2+ direct children).
-	if kids, err := s.directRevisionChildrenCommitIDs(ctx, rev); err == nil && len(kids) == 1 {
-		args = append(args, "--insert-before", kids[0])
-	}
+	args = s.appendSplitInsertBeforeArgs(ctx, args, rev)
 	env := EvologHunkSplitSpecEnv + "=" + specPath
 	return s.runJJWithExtraEnv(ctx, []string{env}, args)
+}
+
+// appendSplitInsertBeforeArgs appends --insert-before when rev has exactly one direct child commit.
+// Without this, repeated jj splits while a bookmark/stack child exists can leave peels as siblings
+// instead of a single chain under @.
+func (s *Service) appendSplitInsertBeforeArgs(ctx context.Context, args []string, rev string) []string {
+	rev = strings.TrimSpace(rev)
+	if rev == "" {
+		rev = "@"
+	}
+	kids, err := s.directRevisionChildrenCommitIDs(ctx, rev)
+	if err != nil || len(kids) != 1 {
+		return args
+	}
+	return append(args, "--insert-before", kids[0])
 }
 
 // directRevisionChildrenCommitIDs lists direct children (commits whose parent is rev) as full ids.

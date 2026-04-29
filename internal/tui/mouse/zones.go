@@ -69,7 +69,8 @@ const (
 	ZoneEvologSplitSuggest   = "zone:evologsplit:suggest"
 	ZoneEvologSplitConfirm   = "zone:evologsplit:confirm"
 	ZoneEvologSplitCancel    = "zone:evologsplit:cancel"
-	ZoneEvologSplitViewPatch = "zone:evologsplit:viewpatch"
+	ZoneEvologSplitViewPatch      = "zone:evologsplit:viewpatch"
+	ZoneEvologSplitOutcomePreview = "zone:evologsplit:outcomepreview"
 
 	// Graph view pane zones (for click-to-focus)
 	ZoneGraphPane = "zone:graph:pane"

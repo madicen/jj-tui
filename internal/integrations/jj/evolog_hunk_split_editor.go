@@ -116,7 +116,10 @@ func writeHunkSplitOutputDirs(leftDir, rightDir, outputDir string, hunksPerPath 
 			return os.WriteFile(outPath, rightBytes, 0o644)
 		}
 		if k < 0 || k > len(hunks) {
-			return fmt.Errorf("%s: hunk prefix %d out of range (0..%d)", rel, k, len(hunks))
+			return fmt.Errorf("%s: hunk prefix k=%d exceeds %d @@ hunks (k is how many leading hunks to peel, not a line number)", rel, k, len(hunks))
+		}
+		if len(hunks) == 1 && k > 0 {
+			return fmt.Errorf("%s: only 1 @@ hunk — cannot split this path by hunk prefix (use file-level jj split for the whole file)", rel)
 		}
 		if k == len(hunks) {
 			return fmt.Errorf("%s: hunk prefix would move every hunk off @ (need strict subset)", rel)
