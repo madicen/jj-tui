@@ -1408,6 +1408,11 @@ func (s *Service) EvologMultiSplit(ctx context.Context, bookmarkName, initialTip
 			return fmt.Errorf("jj split (by hunk): %w", err)
 		}
 	}
+	// Chained splits (esp. with --insert-before) can briefly surface two commits for one change_id on
+	// the path to @; same cleanup as stack-on-origin after rebase (see abandonDivergentDuplicateCommitsOffWCPath).
+	if err := s.abandonDivergentDuplicateCommitsOffWCPath(ctx); err != nil {
+		return fmt.Errorf("cleanup divergent duplicates after evolog multi-split: %w", err)
+	}
 	return nil
 }
 
@@ -1522,6 +1527,9 @@ func (s *Service) MoveBookmarkDeltaOntoEvologBase(ctx context.Context, bookmarkN
 		if err := s.SplitRevisionByHunkPeelRounds(ctx, "@", EvologSplitHunkPeelMessage, hunkPeelRounds); err != nil {
 			return fmt.Errorf("jj split (by hunk): %w", err)
 		}
+	}
+	if err := s.abandonDivergentDuplicateCommitsOffWCPath(ctx); err != nil {
+		return fmt.Errorf("cleanup divergent duplicates after evolog split: %w", err)
 	}
 	return nil
 }
