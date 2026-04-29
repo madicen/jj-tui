@@ -521,7 +521,7 @@ func (r renderCtx) renderAdvanced(data RenderData) []string {
 
 	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render("Graph View"), "")
 	lines = append(lines, focusStyle(14).Render("  Default revset (jj):"))
-	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Which commits to show in the commit graph. Empty = use built-in default."), "")
+	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Which commits to show in the commit graph. Empty = built-in default (fork parents + closest immutable per mutable stack; see README)."), "")
 	if len(data.Inputs) > 14 {
 		lines = append(lines, "  "+r.mark(mouse.ZoneSettingsGraphRevset, data.Inputs[14].View)+" "+r.mark(mouse.ZoneSettingsGraphRevsetClear, clearButtonStyle.Render("[Clear]")))
 	}
