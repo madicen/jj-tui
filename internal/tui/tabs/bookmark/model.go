@@ -445,10 +445,10 @@ func (m Model) renderBookmark() string {
 	if nameW < 8 {
 		nameW = 50
 	}
-	// Align sparkles with the indented input row ("  " + field, width 2+nameW).
+	// Align the ✧ ^g chip with the indented input row ("  " + field, width 2+nameW).
 	nameRowW := 2 + nameW
 	if m.selectedBookmarkIdx == -1 {
-		genChip := mark(m.zoneManager, mouse.ZoneBookmarkGenerate, styles.StyleAIGenerateIcon(styles.AIAssistGlyph))
+		genChip := mark(m.zoneManager, mouse.ZoneBookmarkGenerate, styles.AIGenerateChip())
 		lines = append(lines, styles.SpreadRow(nameRowW, inputStyle.Render("  Name:"), genChip))
 	} else {
 		lines = append(lines, inputStyle.Render("Name:"))

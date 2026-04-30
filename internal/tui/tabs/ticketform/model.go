@@ -118,9 +118,9 @@ func (m Model) renderForm() string {
 	if contentW < 12 {
 		contentW = 60
 	}
-	genChip := mark(mouse.ZoneTicketFormGenerate, styles.StyleAIGenerateIcon(styles.AIAssistGlyph))
+	genChip := mark(mouse.ZoneTicketFormGenerate, styles.AIGenerateChip())
 	headerRow := styles.SpreadRow(contentW, titleStyle.Render("Create Ticket"), genChip)
-	hintLine := subtitleStyle.Render("AI (Ctrl+G): uses diff for selected graph revision, or @ if none selected")
+	diffHint := subtitleStyle.Render("Uses diff for the selected graph revision, or @ if none selected")
 
 	titleInput := mark(mouse.ZoneTicketFormTitle, m.titleInput.View())
 	bodyInput := mark(mouse.ZoneTicketFormBody, m.bodyInput.View())
@@ -129,7 +129,7 @@ func (m Model) renderForm() string {
 
 	blocks := []string{
 		headerRow,
-		hintLine,
+		diffHint,
 		providerLine,
 		"",
 		"Title:",

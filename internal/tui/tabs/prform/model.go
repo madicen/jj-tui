@@ -122,7 +122,7 @@ func (m Model) renderForm() string {
 	if contentW < 12 {
 		contentW = 60
 	}
-	genChip := mark(mouse.ZonePRGenerate, styles.StyleAIGenerateIcon(styles.AIAssistGlyph))
+	genChip := mark(mouse.ZonePRGenerate, styles.AIGenerateChip())
 	headerRow := styles.SpreadRow(contentW, titleStyle.Render("Create Pull Request"), genChip)
 
 	branchLine := subtitleStyle.Render(fmt.Sprintf("Branch: %s → %s", m.baseBranch, m.headBranch))

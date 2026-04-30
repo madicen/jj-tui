@@ -1197,11 +1197,11 @@ func (m Model) View() string {
 	var genChip string
 	switch {
 	case m.suggestLoading:
-		genChip = lipgloss.NewStyle().Foreground(styles.ColorMuted).Render(styles.AIAssistGlyph + " …")
+		genChip = lipgloss.NewStyle().Foreground(styles.ColorMuted).Render(styles.AIGenerateMark + " …")
 	case aiReady:
-		genChip = m.mark(mouse.ZoneEvologSplitSuggest, styles.StyleAIGenerateIcon(styles.AIAssistGlyph))
+		genChip = m.mark(mouse.ZoneEvologSplitSuggest, styles.AIGenerateChip())
 	default:
-		genChip = lipgloss.NewStyle().Foreground(styles.ColorMuted).Render(styles.AIAssistGlyph)
+		genChip = lipgloss.NewStyle().Foreground(styles.ColorMuted).Render(styles.AIGenerateMark)
 	}
 	headerRow := styles.SpreadRow(innerW, titleStyle.Render("Split"), genChip)
 	lines = append(lines, headerRow)
@@ -1308,7 +1308,7 @@ func (m Model) View() string {
 	}
 	lines = append(lines, "")
 	lines = append(lines, muted.Render("Scroll: j/k · PgUp/Dn · wheel"))
-	lines = append(lines, muted.Render("o patch · p plan (Enter runs split while preview open) · s / ^g AI suggest · d toggle post-split describe · c clear AI plan"))
+	lines = append(lines, muted.Render("o patch · p plan (Enter runs split while preview open) · s / ✧^g AI suggest · d toggle post-split describe · c clear AI plan"))
 	lines = append(lines, muted.Render("Pick a parent below the tip (not the tip row)."))
 
 	box := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(styles.ColorMuted).Padding(1, 2).Width(modalW)

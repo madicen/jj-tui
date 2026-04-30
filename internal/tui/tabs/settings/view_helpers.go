@@ -533,7 +533,7 @@ func (r renderCtx) renderAdvanced(data RenderData) []string {
 	if data.AIEnabled {
 		toggleAI = "[✓]"
 	}
-	lines = append(lines, "  "+r.mark(mouse.ZoneSettingsAIEnabled, lipgloss.NewStyle().Foreground(styles.ColorPrimary).Bold(true).Render(toggleAI+" Enable AI (Ctrl+G in description, PR, Create Ticket, and bookmark modals)")))
+	lines = append(lines, "  "+r.mark(mouse.ZoneSettingsAIEnabled, lipgloss.NewStyle().Foreground(styles.ColorPrimary).Bold(true).Render(toggleAI+" Enable AI (✧ ^g chip in description, PR, Create ticket, and bookmark modals)")))
 	curProv := strings.TrimSpace(data.AIProviderID)
 	if curProv == "" {
 		curProv = "openai_compatible"
