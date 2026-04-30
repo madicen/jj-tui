@@ -64,6 +64,8 @@ type Model struct {
 	silentReloadInFlight bool
 	// Monotonic id for optional LLM requests; stale responses are ignored.
 	aiGenReqID int
+	// aiGenOverlayActive shows the centered spinner while Generate*Cmd runs (form modals + description editor).
+	aiGenOverlayActive bool
 
 	// Tab-specific models (own all tab/modal state; main model does not duplicate)
 	graphTabModel    graphtab.GraphModel
@@ -130,6 +132,10 @@ func (m *Model) restoreModalUnderlayOrGraph() {
 		return
 	}
 	m.appState.ViewMode = state.ViewCommitGraph
+}
+
+func (m *Model) clearAIGenOverlay() {
+	m.aiGenOverlayActive = false
 }
 
 // buildSettingsViewOpts builds ViewOpts for the settings tab (used when entering settings or on resize).
@@ -357,6 +363,7 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		m.startCreatePR()
 		return m, nil
 	case state.NavigateBackToGraph:
+		m.clearAIGenOverlay()
 		m.evologSplitModal.Hide()
 		m.evologStepwiseRemainderAfterSplit = nil
 		m.evologStepwiseBookmarkName = ""
@@ -492,7 +499,7 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 	case state.NavigateSaveDescription:
 		// A second save while the first describe is still running causes parallel jj operations on the
 		// same revision → divergent commits (same message, sibling children of one parent).
-		if m.appState.Loading {
+		if m.appState.Loading || m.aiGenOverlayActive {
 			return m, nil
 		}
 		if t.SaveCommitID != "" && m.appState.JJService != nil {
@@ -539,6 +546,7 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		m.appState.ViewMode = state.ViewCommitGraph
 		return m, m.refreshRepository()
 	case state.NavigateBackFromPRForm:
+		m.clearAIGenOverlay()
 		m.prFormModal.Hide()
 		m.restoreModalUnderlayOrGraph()
 		if t.StatusMessage != "" {
@@ -549,6 +557,7 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		m.startCreateTicket()
 		return m, nil
 	case state.NavigateBackFromTicketForm:
+		m.clearAIGenOverlay()
 		m.ticketFormModal.Hide()
 		if m.modalUnderlayValid {
 			m.appState.ViewMode = m.modalUnderlayView
@@ -574,7 +583,11 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		m.aiGenReqID++
 		rid := m.aiGenReqID
 		m.appState.StatusMessage = "Generating description…"
-		return m, aitab.GenerateCommitDescriptionCmd(rid, m.appState.JJService, m.appState.Config, changeID, m.desceditModal.GetCommitShortID(), m.desceditModal.GetDescriptionValue())
+		m.aiGenOverlayActive = true
+		return m, tea.Batch(
+			aitab.GenerateCommitDescriptionCmd(rid, m.appState.JJService, m.appState.Config, changeID, m.desceditModal.GetCommitShortID(), m.desceditModal.GetDescriptionValue()),
+			m.startBusySpinnerCmd(),
+		)
 	case state.NavigateGeneratePRForm:
 		if m.appState.Config == nil || !m.appState.Config.AIConfiguredForGeneration() {
 			m.appState.StatusMessage = fmt.Sprintf("Enable AI in Settings → Advanced and set an API key (or %s)", config.EnvAIAPIKey)
@@ -589,7 +602,11 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		m.aiGenReqID++
 		rid := m.aiGenReqID
 		m.appState.StatusMessage = "Generating PR title and body…"
-		return m, aitab.GeneratePRFormCmd(rid, m.appState.JJService, m.appState.Config, changeID, m.prFormModal.GetBaseBranch(), m.prFormModal.GetHeadBranch(), m.prFormModal.GetTitle())
+		m.aiGenOverlayActive = true
+		return m, tea.Batch(
+			aitab.GeneratePRFormCmd(rid, m.appState.JJService, m.appState.Config, changeID, m.prFormModal.GetBaseBranch(), m.prFormModal.GetHeadBranch(), m.prFormModal.GetTitle()),
+			m.startBusySpinnerCmd(),
+		)
 	case state.NavigateGenerateBookmarkName:
 		if m.appState.Config == nil || !m.appState.Config.AIConfiguredForGeneration() {
 			m.appState.StatusMessage = fmt.Sprintf("Enable AI in Settings → Advanced and set an API key (or %s)", config.EnvAIAPIKey)
@@ -608,7 +625,11 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		m.aiGenReqID++
 		rid := m.aiGenReqID
 		m.appState.StatusMessage = "Generating bookmark name…"
-		return m, aitab.GenerateBookmarkNameCmd(rid, m.appState.JJService, m.appState.Config, rev, hint)
+		m.aiGenOverlayActive = true
+		return m, tea.Batch(
+			aitab.GenerateBookmarkNameCmd(rid, m.appState.JJService, m.appState.Config, rev, hint),
+			m.startBusySpinnerCmd(),
+		)
 	case state.NavigateGenerateTicketForm:
 		if m.appState.Config == nil || !m.appState.Config.AIConfiguredForGeneration() {
 			m.appState.StatusMessage = fmt.Sprintf("Enable AI in Settings → Advanced and set an API key (or %s)", config.EnvAIAPIKey)
@@ -630,7 +651,11 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		m.aiGenReqID++
 		rid := m.aiGenReqID
 		m.appState.StatusMessage = "Generating ticket title and description…"
-		return m, aitab.GenerateTicketFormCmd(rid, m.appState.JJService, m.appState.Config, changeID, changeShort, m.ticketFormModal.GetSummary(), m.ticketFormModal.GetDescription())
+		m.aiGenOverlayActive = true
+		return m, tea.Batch(
+			aitab.GenerateTicketFormCmd(rid, m.appState.JJService, m.appState.Config, changeID, changeShort, m.ticketFormModal.GetSummary(), m.ticketFormModal.GetDescription()),
+			m.startBusySpinnerCmd(),
+		)
 	default:
 		return m, nil
 	}
@@ -808,7 +833,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case spinner.TickMsg:
-		if !m.appState.Loading {
+		if !m.appState.Loading && !m.aiGenOverlayActive {
 			return m, nil
 		}
 		var spinCmd tea.Cmd
@@ -1138,6 +1163,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.ReqID != m.aiGenReqID {
 			return m, nil
 		}
+		m.clearAIGenOverlay()
 		if msg.Err != nil {
 			var label string
 			switch msg.Kind {
@@ -1542,10 +1568,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case prformtab.PRCreatedMsg:
+		m.clearAIGenOverlay()
 		m.prFormModal.Hide()
 		m.clearModalUnderlay()
 		return m, prformtab.HandlePRCreatedMsg(prformtab.PRCreatedInput{PRCreatedMsg: msg, DemoMode: m.appState.DemoMode}, &m.appState)
 	case ticketformtab.TicketCreatedMsg:
+		m.clearAIGenOverlay()
 		m.ticketFormModal.Hide()
 		m.clearModalUnderlay()
 		m.appState.Loading = false
@@ -1562,6 +1590,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case prstab.BranchPushedMsg:
 		return m, branchestab.HandleBranchPushedMsg(msg, &m.appState)
 	case bookmarktab.BookmarkCreatedMsg:
+		m.clearAIGenOverlay()
 		m.bookmarkModal.Hide()
 		m.clearModalUnderlay()
 		m.appState.Loading = false
@@ -1854,6 +1883,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case descedittab.DescriptionSavedMsg:
 		cmd := descedittab.HandleDescriptionSavedMsg(msg, &m.appState)
+		m.clearAIGenOverlay()
 		m.desceditModal.Hide()
 		m.clearModalUnderlay()
 		m.appState.Loading = false

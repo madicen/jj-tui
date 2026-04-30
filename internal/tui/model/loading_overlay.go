@@ -11,6 +11,16 @@ import (
 	"github.com/madicen/jj-tui/internal/tui/styles"
 )
 
+// isAIGenBusyOverlayView is true for modals that use Ctrl+G / sparkles AI generation.
+func isAIGenBusyOverlayView(viewMode state.ViewMode) bool {
+	switch viewMode {
+	case state.ViewEditDescription, state.ViewCreatePR, state.ViewCreateTicket, state.ViewCreateBookmark:
+		return true
+	default:
+		return false
+	}
+}
+
 // Rows to shift the busy overlay upward when showing graph "Update PR" push status
 // (slightly above vertical center so it sits clearer above the graph/actions area).
 const loadingOverlayRaiseUpdatePRRows = 4
@@ -52,6 +62,18 @@ func shouldShowLoadingOverlay(viewMode state.ViewMode, msg string) bool {
 	return true
 }
 
+// showCenteredBusyOverlay is true when the main layout should composite the spinner box
+// (either global Loading with shouldShowLoadingOverlay rules, or in-flight AI generation on a form modal).
+func (m *Model) showCenteredBusyOverlay() bool {
+	if m.width <= 0 || m.height <= 0 {
+		return false
+	}
+	if m.appState.Loading && shouldShowLoadingOverlay(m.appState.ViewMode, m.appState.StatusMessage) {
+		return true
+	}
+	return m.aiGenOverlayActive && isAIGenBusyOverlayView(m.appState.ViewMode)
+}
+
 func newBusySpinner() spinner.Model {
 	return spinner.New(
 		spinner.WithSpinner(spinner.MiniDot),
@@ -79,17 +101,15 @@ func (m *Model) wrapGraphTabCmd(cmd tea.Cmd) tea.Cmd {
 	return cmd
 }
 
-// applyLoadingOverlay composites a centered busy box over the full main layout when Loading.
+// applyLoadingOverlay composites a centered busy box over the full main layout when Loading
+// or when an AI generate request is in flight (aiGenOverlayActive on form modals).
 func (m *Model) applyLoadingOverlay(fullView string) string {
-	if !m.appState.Loading || m.width <= 0 || m.height <= 0 {
+	if !m.showCenteredBusyOverlay() {
 		return fullView
 	}
 	msg := m.appState.StatusMessage
 	if msg == "" {
 		msg = "Loading…"
-	}
-	if !shouldShowLoadingOverlay(m.appState.ViewMode, msg) {
-		return fullView
 	}
 	msg = strings.ReplaceAll(msg, "\n", " ")
 	line := lipgloss.JoinHorizontal(lipgloss.Center, m.busySpinner.View(), " ", msg)
