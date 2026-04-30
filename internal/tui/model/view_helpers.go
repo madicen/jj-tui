@@ -47,8 +47,9 @@ func (m *Model) View() string {
 	v := m.renderMainLayoutView()
 	v = m.applyFormModalsOverlay(v)
 	// Busy overlay sits under graph pickers (evolog / divergent / conflict) so keys still target them.
-	// Form modals (PR, ticket, bookmark, GitHub login, init) are under loading so submit/init shows the
-	// spinner on top; description edit and file diff skip the centered overlay (see shouldShowLoadingOverlay).
+	// Form modals (PR, ticket, bookmark, init) are under loading so submit/init shows the spinner on top.
+	// AI generate (Ctrl+G / sparkles) uses aiGenOverlayActive so the same spinner shows on the description
+	// editor too; file diff still skips global Loading overlay (see shouldShowLoadingOverlay).
 	v = m.applyLoadingOverlay(v)
 
 	if m.appState.ViewMode == state.ViewEvologSplit {

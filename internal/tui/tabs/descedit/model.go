@@ -152,7 +152,7 @@ func (m Model) View() string {
 		}
 		return m.zoneManager.Mark(id, s)
 	}
-	genChip := mark(mouse.ZoneDescGenerate, styles.StyleAIGenerateIcon(styles.AIAssistGlyph))
+	genChip := mark(mouse.ZoneDescGenerate, styles.AIGenerateChip())
 	headerRow := styles.SpreadRow(contentW, titleStyle.Render("Edit Commit Description"), genChip)
 	commitLine := subtitleStyle.Render(fmt.Sprintf("Commit: %s", commitInfo))
 	actionButtons := lipgloss.JoinHorizontal(

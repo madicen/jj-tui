@@ -1601,6 +1601,22 @@ func TestShouldShowLoadingOverlaySkipsDescriptionAndFileDiff(t *testing.T) {
 	}
 }
 
+// AI generation uses aiGenOverlayActive so the centered spinner shows on the description modal even
+// when global Loading is false (saving description still uses Loading without centered overlay).
+func TestAIGenOverlayShowsOnDescriptionEditor(t *testing.T) {
+	m := newTestModel()
+	defer m.Close()
+	m.appState.ViewMode = state.ViewEditDescription
+	m.desceditModal.Show("abc1", "abc1")
+	m.appState.Loading = false
+	m.aiGenOverlayActive = true
+	m.appState.StatusMessage = "Generating description…"
+	view := m.View()
+	if !strings.Contains(view, "Generating description") {
+		t.Fatalf("expected AI status in composite view, got: %q", view[:min(400, len(view))])
+	}
+}
+
 func TestBookmarkConflictDialogNotHiddenByLoadingOverlay(t *testing.T) {
 	m := newTestModel()
 	defer m.Close()

@@ -18,18 +18,27 @@ var (
 // from many monospace fonts and from VHS GIF output (replacement boxes). U+2260 is widely supported.
 const DivergentMark = "≠"
 
-// AIAssistGlyph is the Unicode “sparkles” character (U+2728), the common compact affordance for
-// generative / LLM actions (Material “auto awesome”, many chat UIs). Width varies by terminal font.
-const AIAssistGlyph = "\u2728"
+// AIGenerateMark is U+2727 (WHITE FOUR POINTED STAR, “✧”). Unlike U+2728 sparkles, most terminals
+// draw it as a normal glyph so lipgloss foreground controls the color; U+2728 often renders as a
+// color emoji independent of ANSI.
+const AIGenerateMark = "\u2727"
 
-// StyleAIGenerateIcon renders the compact AI control (sparkles) using the current theme primary.
-func StyleAIGenerateIcon(glyph string) string {
+// AIAssistGlyph is kept for muted inline hints (e.g. evolog loading). Prefer AIGenerateMark on
+// styled chips where color must follow the theme.
+const AIAssistGlyph = AIGenerateMark
+
+// StyleAIGenerateIcon renders a compact AI control on the theme primary pill (regular weight so ^g is not bolded).
+func StyleAIGenerateIcon(label string) string {
 	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#F8F8F2")).
+		Foreground(lipgloss.Color("#FFFFFF")).
 		Background(ColorPrimary).
 		Padding(0, 1).
-		Bold(true).
-		Render(glyph)
+		Render(label)
+}
+
+// AIGenerateChip is the clickable AI affordance: ✧ ^g on the theme primary background.
+func AIGenerateChip() string {
+	return StyleAIGenerateIcon(AIGenerateMark + " ^g")
 }
 
 // SpreadRow lays out left and right so the row uses totalWidth terminal cells when possible
