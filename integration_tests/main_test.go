@@ -295,6 +295,7 @@ func TestJJServiceBasicOperations(t *testing.T) {
 		}
 		if splitCommit == nil {
 			t.Fatal("After MoveFileToChild: no commit with description \"(split)\" found")
+			return
 		}
 
 		// The (split) commit must contain the moved file
@@ -831,6 +832,7 @@ func TestSettingsGraphRevset(t *testing.T) {
 	}
 	if cfg == nil {
 		t.Fatal("Config Load returned nil")
+		return
 	}
 	if got := cfg.GraphRevset; got != "trunk()" {
 		t.Errorf("Config GraphRevset = %q, want trunk()", got)
@@ -1086,6 +1088,7 @@ func TestPRTitleFromTicketDisplayKey(t *testing.T) {
 	repoAfter := m.GetRepository()
 	if repoAfter == nil {
 		t.Fatal("Repo is nil after bookmark created")
+		return
 	}
 	wcIdx := -1
 	for i, c := range repoAfter.Graph.Commits {

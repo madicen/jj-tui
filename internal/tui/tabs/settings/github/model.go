@@ -110,15 +110,16 @@ m.tokenInput.Focus()
 }
 return m, nil
 case " ":
-// Toggle boolean options
-if m.focusedField == 1 {
-m.showMerged = !m.showMerged
-} else if m.focusedField == 2 {
-m.showClosed = !m.showClosed
-} else if m.focusedField == 3 {
-m.onlyMine = !m.onlyMine
-}
-return m, nil
+		// Toggle boolean options
+		switch m.focusedField {
+		case 1:
+			m.showMerged = !m.showMerged
+		case 2:
+			m.showClosed = !m.showClosed
+		case 3:
+			m.onlyMine = !m.onlyMine
+		}
+		return m, nil
 }
 return m, nil
 }

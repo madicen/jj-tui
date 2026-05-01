@@ -16,7 +16,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24.12'
+          go-version: '1.25'
 
       - name: Install jj (for integration tests)
         env:
@@ -60,12 +60,10 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24.12'
+          go-version: '1.25'
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v4
+        uses: golangci/golangci-lint-action@v8
         with:
-          version: v1.64.8
-          # Match .golangci.yml (avoids deprecated github-actions default from the action)
-          args: --out-format=colored-line-number
+          version: v2.12.0
 

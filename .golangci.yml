@@ -1,4 +1,22 @@
-# Keep run.go in sync with go.mod and CI setup-go. golangci-lint binaries are built with a
-# fixed Go version; they refuse to run if the targeted language version is newer than that build.
+version: "2"
 run:
-  go: "1.24.12"
+  go: "1.25.0"
+linters:
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

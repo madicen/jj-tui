@@ -203,6 +203,7 @@ func TestMouseScrollGraphTabWithoutClicking(t *testing.T) {
 	filesZone := m.zoneManager.Get(mouse.ZoneFilesPane)
 	if filesZone == nil {
 		t.Skip("files pane zone not registered (e.g. no content); cannot simulate click")
+		return
 	}
 	// Use a click position inside the files pane zone so event-based matching (InBounds) succeeds
 	clickX := filesZone.StartX + 1
