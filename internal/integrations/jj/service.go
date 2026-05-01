@@ -1089,7 +1089,7 @@ func (s *Service) MoveBookmarkDeltaOntoOrigin(ctx context.Context, bookmarkName,
 		return fmt.Errorf("tree already matches %s; nothing to move", remoteRef)
 	}
 	if err := s.runJJ(ctx, "new", remoteRef, "-m", followUpOnOriginMessage); err != nil {
-		return fmt.Errorf("jj new: %w", err)
+		return wrapJjNewColocatedError(err, "then try Align with origin again")
 	}
 	if err := s.runJJ(ctx, "restore", "--into", "@", "--from", tipCommitID); err != nil {
 		return fmt.Errorf("jj restore: %w", err)
@@ -1274,19 +1274,25 @@ func shouldRetryEvologJjNewAfterColocatedSync(errMsg string) bool {
 	return isJJColocatedHeadContentMismatch(errMsg) || isJJColocatedGitCheckoutFailure(errMsg)
 }
 
-func wrapEvologJjNewError(err error) error {
+// wrapJjNewColocatedError augments jj new failures in colocated repos when Git HEAD and jj disagree.
+// retryPhrase is appended after the import/export guidance (e.g. "then retry the split", "then try Align with origin again").
+func wrapJjNewColocatedError(err error, retryPhrase string) error {
 	if err == nil {
 		return nil
 	}
 	wrapped := fmt.Errorf("jj new: %w", err)
 	es := err.Error()
 	if isJJColocatedHeadContentMismatch(es) {
-		return fmt.Errorf("%w\n\nIn a colocated repo, Git’s HEAD can drift from jj (often after `git checkout` without jj). Try: `jj git import` to follow Git, or `jj git export` to push jj’s view to Git, then retry the split", wrapped)
+		return fmt.Errorf("%w\n\nIn a colocated repo, Git’s HEAD can drift from jj (often after `git checkout` without jj). Try: `jj git import` to follow Git, or `jj git export` to push jj’s view to Git, %s", wrapped, retryPhrase)
 	}
 	if isJJColocatedGitCheckoutFailure(es) {
-		return fmt.Errorf("%w\n\nGit could not check out a revision while creating the new change (colocated repo). Try: `jj workspace update-stale` then `jj git export`, ensure the working tree is not blocked by another process, then retry the split. If you only moved HEAD with Git, run `jj git import` or `jj git export` to reconcile.\n\nNote: `jj log` may show `~` between commits when intermediate revisions are elided by the revset filter; that is not the same as a non-linear graph", wrapped)
+		return fmt.Errorf("%w\n\nGit could not check out a revision while creating the new change (colocated repo). Try: `jj workspace update-stale` then `jj git export`, ensure the working tree is not blocked by another process, %s. If you only moved HEAD with Git, run `jj git import` or `jj git export` to reconcile.\n\nNote: `jj log` may show `~` between commits when intermediate revisions are elided by the revset filter; that is not the same as a non-linear graph", wrapped, retryPhrase)
 	}
 	return wrapped
+}
+
+func wrapEvologJjNewError(err error) error {
+	return wrapJjNewColocatedError(err, "then retry the split")
 }
 
 // evologSplitParentForNewCommit returns the revision to pass to `jj new` for an evolog split.

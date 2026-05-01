@@ -66,4 +66,6 @@ jobs:
         uses: golangci/golangci-lint-action@v4
         with:
           version: v1.64.8
+          # Match .golangci.yml (avoids deprecated github-actions default from the action)
+          args: --out-format=colored-line-number
 

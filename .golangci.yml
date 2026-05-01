@@ -1,0 +1,4 @@
+# Keep run.go in sync with go.mod and CI setup-go. golangci-lint binaries are built with a
+# fixed Go version; they refuse to run if the targeted language version is newer than that build.
+run:
+  go: "1.24.12"
