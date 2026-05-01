@@ -2,10 +2,8 @@ package prs
 
 import (
 	"fmt"
-	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
 	overlay "github.com/madicen/bubble-overlay"
 	"github.com/madicen/jj-tui/internal"
@@ -19,9 +17,9 @@ type Model struct {
 	repository    *internal.Repository
 	selectedPR    int // Index of selected PR in the PRs list
 	listYOffset   int // Scroll offset for list (details stay fixed)
-	width           int
-	height          int
-	githubService   bool // whether GitHub is connected (for rendering)
+	width         int
+	height        int
+	githubService bool // whether GitHub is connected (for rendering)
 	// scrollToSelectedPR: when true, next render will adjust listYOffset to keep selection in view (key/click only; mouse scroll can move selection off screen)
 	scrollToSelectedPR bool
 
@@ -249,23 +247,7 @@ func (m *Model) View() string {
 			}
 		}
 		menuView := m.renderContextMenu(prIsOpen)
-		menuLines := strings.Split(menuView, "\n")
-		menuH := len(menuLines)
-		menuW := 0
-		for _, l := range menuLines {
-			if w := lipgloss.Width(l); w > menuW {
-				menuW = w
-			}
-		}
-		top := m.contextMenu.MouseY
-		left := m.contextMenu.MouseX
-		if top+menuH > m.height {
-			top = max(m.height-menuH, 0)
-		}
-		if left+menuW > m.width {
-			left = max(m.width-menuW, 0)
-		}
-		v = overlay.OverlayView(v, menuView, m.width, m.height, top, left)
+		v = overlay.OverlayViewAtPoint(v, menuView, m.width, m.height, m.contextMenu.MouseY, m.contextMenu.MouseX)
 	}
 
 	return v

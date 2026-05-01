@@ -1075,25 +1075,7 @@ func (m Model) renderOutcomePreviewOverlay(base string, innerContentW int) strin
 		Width(wrapW + 4).
 		Render(inner)
 
-	baseLines := strings.Split(base, "\n")
-	bh := len(baseLines)
-	bw := 0
-	for _, l := range baseLines {
-		if w := lipgloss.Width(l); w > bw {
-			bw = w
-		}
-	}
-	boxLines := strings.Split(box, "\n")
-	h := len(boxLines)
-	mw := 0
-	for _, l := range boxLines {
-		if w := lipgloss.Width(l); w > mw {
-			mw = w
-		}
-	}
-	top := max((bh-h)/2, 0)
-	left := max((bw-mw)/2, 0)
-	return overlay.OverlayView(base, box, bw, bh, top, left)
+	return overlay.OverlayViewInCenterInMain(base, box)
 }
 
 // renderEvologSuggestSpinnerOverlay draws a centered box on the modal; elapsed drives “still working” hints.
@@ -1131,25 +1113,7 @@ func renderEvologSuggestSpinnerOverlay(base, spinGlyph string, elapsed time.Dura
 		Background(styles.HeaderBarBackground).
 		Padding(0, 1).
 		Render(inner)
-	baseLines := strings.Split(base, "\n")
-	bh := len(baseLines)
-	bw := 0
-	for _, l := range baseLines {
-		if w := lipgloss.Width(l); w > bw {
-			bw = w
-		}
-	}
-	boxLines := strings.Split(box, "\n")
-	h := len(boxLines)
-	mw := 0
-	for _, l := range boxLines {
-		if w := lipgloss.Width(l); w > mw {
-			mw = w
-		}
-	}
-	top := max((bh-h)/2, 0)
-	left := max((bw-mw)/2, 0)
-	return overlay.OverlayView(base, box, bw, bh, top, left)
+	return overlay.OverlayViewInCenterInMain(base, box)
 }
 
 // View renders the modal.

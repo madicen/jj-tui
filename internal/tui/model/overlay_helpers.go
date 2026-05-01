@@ -1,10 +1,7 @@
 package model
 
 import (
-	"strings"
-
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	overlay "github.com/madicen/bubble-overlay"
 )
 
@@ -13,17 +10,7 @@ func applyBubbleOverlayCentered(fullView, modalView string, viewW, viewH int) st
 	if modalView == "" || viewW <= 0 || viewH <= 0 {
 		return fullView
 	}
-	boxLines := strings.Split(modalView, "\n")
-	modalH := len(boxLines)
-	modalW := 0
-	for _, l := range boxLines {
-		if w := lipgloss.Width(l); w > modalW {
-			modalW = w
-		}
-	}
-	top := max((viewH-modalH)/2, 0)
-	left := max((viewW-modalW)/2, 0)
-	return overlay.OverlayView(fullView, modalView, viewW, viewH, top, left)
+	return overlay.OverlayViewInCenter(fullView, modalView, viewW, viewH)
 }
 
 // wrapFirstPRLoadCmd shows the busy overlay until the first PR list load finishes.

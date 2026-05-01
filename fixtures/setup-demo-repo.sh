@@ -79,7 +79,7 @@ package main
 var DarkMode = false
 
 func toggleDarkMode() {
-    DarkMode = !DarkMode
+	DarkMode = !DarkMode
 }
 EOF
 
@@ -90,6 +90,7 @@ package main
 import "fmt"
 
 func main() {
+    toggleDarkMode()
     fmt.Println("Hello, World!")
     if DarkMode {
         fmt.Println("Dark mode enabled")

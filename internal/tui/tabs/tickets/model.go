@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
 	overlay "github.com/madicen/bubble-overlay"
 	"github.com/madicen/jj-tui/internal"
@@ -240,44 +239,12 @@ func (m *Model) View() string {
 
 	if m.contextMenu != nil {
 		menuView := m.renderContextMenu()
-		menuLines := strings.Split(menuView, "\n")
-		menuH := len(menuLines)
-		menuW := 0
-		for _, l := range menuLines {
-			if w := lipgloss.Width(l); w > menuW {
-				menuW = w
-			}
-		}
-		top := m.contextMenu.MouseY
-		left := m.contextMenu.MouseX
-		if top+menuH > m.height {
-			top = max(m.height-menuH, 0)
-		}
-		if left+menuW > m.width {
-			left = max(m.width-menuW, 0)
-		}
-		v = overlay.OverlayView(v, menuView, m.width, m.height, top, left)
+		v = overlay.OverlayViewAtPoint(v, menuView, m.width, m.height, m.contextMenu.MouseY, m.contextMenu.MouseX)
 	}
 
 	if m.statusSubmenu != nil {
 		subView := m.renderStatusPopoverPanel(m.statusSubmenu.HoverItem)
-		subLines := strings.Split(subView, "\n")
-		subH := len(subLines)
-		subW := 0
-		for _, l := range subLines {
-			if w := lipgloss.Width(l); w > subW {
-				subW = w
-			}
-		}
-		top := m.statusSubmenu.MouseY
-		left := m.statusSubmenu.MouseX
-		if top+subH > m.height {
-			top = max(m.height-subH, 0)
-		}
-		if left+subW > m.width {
-			left = max(m.width-subW, 0)
-		}
-		v = overlay.OverlayView(v, subView, m.width, m.height, top, left)
+		v = overlay.OverlayViewAtPoint(v, subView, m.width, m.height, m.statusSubmenu.MouseY, m.statusSubmenu.MouseX)
 	}
 
 	return v
@@ -448,18 +415,18 @@ func (m Model) handleZoneClick(z *zone.ZoneInfo, event tea.MouseMsg) (Model, *Re
 				m.selectedTicket = ti
 				m.scrollToSelectedTicket = true
 
-			if item.IsCascade {
-				m.statusSubmenu = &StatusSubmenuState{
-					MouseX:    mouseX,
-					MouseY:    mouseY,
-					HoverItem: -1,
+				if item.IsCascade {
+					m.statusSubmenu = &StatusSubmenuState{
+						MouseX:    mouseX,
+						MouseY:    mouseY,
+						HoverItem: -1,
+					}
+					// Always reload transitions to ensure freshness and to return
+					// a non-nil cmd that prevents the main model from falling
+					// through to handleZoneClick (which would double-process the
+					// event and immediately dismiss the just-created submenu).
+					return m, &Request{LoadTransitionsForSelection: true}, nil
 				}
-				// Always reload transitions to ensure freshness and to return
-				// a non-nil cmd that prevents the main model from falling
-				// through to handleZoneClick (which would double-process the
-				// event and immediately dismiss the just-created submenu).
-				return m, &Request{LoadTransitionsForSelection: true}, nil
-			}
 
 				req := item.Request
 				return m, &req, nil

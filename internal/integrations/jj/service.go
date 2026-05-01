@@ -1281,10 +1281,10 @@ func wrapEvologJjNewError(err error) error {
 	wrapped := fmt.Errorf("jj new: %w", err)
 	es := err.Error()
 	if isJJColocatedHeadContentMismatch(es) {
-		return fmt.Errorf("%w\n\nIn a colocated repo, Git’s HEAD can drift from jj (often after `git checkout` without jj). Try: `jj git import` to follow Git, or `jj git export` to push jj’s view to Git, then retry the split.", wrapped)
+		return fmt.Errorf("%w\n\nIn a colocated repo, Git’s HEAD can drift from jj (often after `git checkout` without jj). Try: `jj git import` to follow Git, or `jj git export` to push jj’s view to Git, then retry the split", wrapped)
 	}
 	if isJJColocatedGitCheckoutFailure(es) {
-		return fmt.Errorf("%w\n\nGit could not check out a revision while creating the new change (colocated repo). Try: `jj workspace update-stale` then `jj git export`, ensure the working tree is not blocked by another process, then retry the split. If you only moved HEAD with Git, run `jj git import` or `jj git export` to reconcile.\n\nNote: `jj log` may show `~` between commits when intermediate revisions are elided by the revset filter; that is not the same as a non-linear graph.", wrapped)
+		return fmt.Errorf("%w\n\nGit could not check out a revision while creating the new change (colocated repo). Try: `jj workspace update-stale` then `jj git export`, ensure the working tree is not blocked by another process, then retry the split. If you only moved HEAD with Git, run `jj git import` or `jj git export` to reconcile.\n\nNote: `jj log` may show `~` between commits when intermediate revisions are elided by the revset filter; that is not the same as a non-linear graph", wrapped)
 	}
 	return wrapped
 }

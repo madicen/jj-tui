@@ -113,10 +113,7 @@ func (m *Model) applyLoadingOverlay(fullView string) string {
 	}
 	msg = strings.ReplaceAll(msg, "\n", " ")
 	line := lipgloss.JoinHorizontal(lipgloss.Center, m.busySpinner.View(), " ", msg)
-	maxOuter := m.width - 4
-	if maxOuter < 1 {
-		maxOuter = 1
-	}
+	maxOuter := max(m.width-4, 1)
 	box := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder()).
 		BorderForeground(styles.ColorMuted).
@@ -124,18 +121,9 @@ func (m *Model) applyLoadingOverlay(fullView string) string {
 		MaxWidth(maxOuter).
 		Background(styles.HeaderBarBackground).
 		Render(line)
-	boxLines := strings.Split(box, "\n")
-	modalH := len(boxLines)
-	modalW := 0
-	for _, l := range boxLines {
-		if w := lipgloss.Width(l); w > modalW {
-			modalW = w
-		}
-	}
-	top := max((m.height-modalH)/2, 0)
+	deltaTop, deltaLeft := 0, 0
 	if isUpdatePRPushLoadingStatus(msg) {
-		top = max(top-loadingOverlayRaiseUpdatePRRows, 0)
+		deltaTop = -loadingOverlayRaiseUpdatePRRows
 	}
-	left := max((m.width-modalW)/2, 0)
-	return overlay.OverlayView(fullView, box, m.width, m.height, top, left)
+	return overlay.OverlayViewInCenterWithOffset(fullView, box, m.width, m.height, deltaTop, deltaLeft)
 }

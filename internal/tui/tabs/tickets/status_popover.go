@@ -79,34 +79,11 @@ func (m *Model) renderStatusPopoverPanel(hoverIdx int) string {
 		Render(inner)
 }
 
-func popoverDimensions(s string) (w, h int) {
-	lines := strings.Split(s, "\n")
-	h = len(lines)
-	for _, line := range lines {
-		if lw := lipgloss.Width(line); lw > w {
-			w = lw
-		}
-	}
-	return w, h
-}
-
 // overlayStatusPopover composites the popover to the right of the Change Status button on the actions row.
 // anchorLeft is the terminal column for the popover's left edge (already includes gap after the button).
 func overlayStatusPopover(baseView string, popover string, termW, termH, actionsRowIndex, anchorLeft int) string {
 	if popover == "" || termW <= 0 || termH <= 0 {
 		return baseView
 	}
-	pw, ph := popoverDimensions(popover)
-	left := anchorLeft
-	if left < 0 {
-		left = 0
-	}
-	if left+pw >= termW {
-		left = max(0, termW-pw-1)
-	}
-	top := actionsRowIndex
-	if top+ph > termH {
-		top = max(0, termH-ph)
-	}
-	return overlay.OverlayView(baseView, popover, termW, termH, top, left)
+	return overlay.OverlayViewAtPoint(baseView, popover, termW, termH, actionsRowIndex, anchorLeft)
 }
