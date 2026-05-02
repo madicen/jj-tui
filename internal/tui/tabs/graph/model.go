@@ -105,10 +105,10 @@ func NewGraphModel(zoneManager *zone.Manager) GraphModel {
 	filesVp := viewport.New(defaultW, defaultH)
 	filesVp.MouseWheelEnabled = true
 	return GraphModel{
-		zoneManager:         zoneManager,
-		graphFocused:        true, // default to graph pane focused so j/k navigate commits and wheel scrolls graph
-		viewport:            vp,
-		filesViewport:       filesVp,
+		zoneManager:          zoneManager,
+		graphFocused:         true, // default to graph pane focused so j/k navigate commits and wheel scrolls graph
+		viewport:             vp,
+		filesViewport:        filesVp,
 		rebasePressAnchor:    -1,
 		rebaseDragSource:     -1,
 		rebaseDragHoverDest:  -1,
@@ -478,46 +478,14 @@ func (m *GraphModel) View() string {
 			isMutable = !m.repository.Graph.Commits[m.selectedCommit].Immutable
 		}
 		menuView := m.renderContextMenu(isMutable)
-		menuLines := strings.Split(menuView, "\n")
-		menuH := len(menuLines)
-		menuW := 0
-		for _, l := range menuLines {
-			if w := lipgloss.Width(l); w > menuW {
-				menuW = w
-			}
-		}
-		top := m.contextMenu.MouseY
-		left := m.contextMenu.MouseX
-		if top+menuH > m.height {
-			top = max(m.height-menuH, 0)
-		}
-		if left+menuW > m.width {
-			left = max(m.width-menuW, 0)
-		}
-		v = overlay.OverlayView(v, menuView, m.width, m.height, top, left)
+		v = overlay.OverlayViewAtPoint(v, menuView, m.width, m.height, m.contextMenu.MouseY, m.contextMenu.MouseX)
 	}
 
 	if m.commitContextMenu != nil {
 		isMutable := m.commitMenuIsMutable()
 		firstParentImm := m.commitMenuFirstParentImmutable()
 		menuView := m.renderCommitContextMenu(isMutable, firstParentImm)
-		menuLines := strings.Split(menuView, "\n")
-		menuH := len(menuLines)
-		menuW := 0
-		for _, l := range menuLines {
-			if w := lipgloss.Width(l); w > menuW {
-				menuW = w
-			}
-		}
-		top := m.commitContextMenu.MouseY
-		left := m.commitContextMenu.MouseX
-		if top+menuH > m.height {
-			top = max(m.height-menuH, 0)
-		}
-		if left+menuW > m.width {
-			left = max(m.width-menuW, 0)
-		}
-		v = overlay.OverlayView(v, menuView, m.width, m.height, top, left)
+		v = overlay.OverlayViewAtPoint(v, menuView, m.width, m.height, m.commitContextMenu.MouseY, m.commitContextMenu.MouseX)
 	}
 
 	return v

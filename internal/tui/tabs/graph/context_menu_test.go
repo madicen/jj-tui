@@ -170,6 +170,7 @@ func TestHandleFileLongPress_PressOnFile_ReturnsTick(t *testing.T) {
 	fileZone := m.zoneManager.Get(mouse.ZoneChangedFile(0))
 	if fileZone == nil {
 		t.Skip("zone not registered after scan - zone registration may need full render pipeline")
+		return
 	}
 
 	pressMsg := tea.MouseMsg{
@@ -254,6 +255,7 @@ func TestContextMenu_MenuItemClick_ReturnsRequest(t *testing.T) {
 	itemZone := m.zoneManager.Get(mouse.ZoneCtxMenuItem(0))
 	if itemZone == nil {
 		t.Skip("menu item zone not registered - may need full render pipeline")
+		return
 	}
 
 	clickMsg := zone.MsgZoneInBounds{
@@ -272,6 +274,7 @@ func TestContextMenu_MenuItemClick_ReturnsRequest(t *testing.T) {
 	}
 	if req == nil {
 		t.Fatal("clicking a menu item should produce a request")
+		return
 	}
 	if !req.ViewFileDiff {
 		t.Errorf("first menu item should be ViewFileDiff, got %+v", req)

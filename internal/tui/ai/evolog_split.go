@@ -177,7 +177,7 @@ func EvologSuggestPrepChainStartCmd(reqID int, jjSvc *jj.Service, cfg *config.Co
 			if err != nil {
 				return EvologSuggestPrepDoneMsg{ReqID: reqID, JJTotal: jjTotal, Err: err}
 			}
-			appendStepsToPrompt(&acc, entries, nextLow, batchEnd, chunk)
+			appendStepsToPrompt(&acc, nextLow, batchEnd, chunk)
 			if batchEnd == jjTotal && len(entries)-1 > evologSplitMaxDiffSteps {
 				fmt.Fprintf(&acc, "\n(Only the first %d step summaries are included; you may still choose any valid index 1..%d using row descriptions.)\n", evologSplitMaxDiffSteps, len(entries)-1)
 			}
@@ -406,7 +406,7 @@ func buildEvologSplitPromptPrefix(entries []jj.EvologEntry) (prefix string, step
 	return b.String(), stepLimit, nil
 }
 
-func appendStepsToPrompt(b *strings.Builder, entries []jj.EvologEntry, lo, hi int, stepLines [][]string) {
+func appendStepsToPrompt(b *strings.Builder, lo, hi int, stepLines [][]string) {
 	for i := lo; i <= hi; i++ {
 		lines := stepLines[i]
 		fmt.Fprintf(b, "\n### Boundary after base row index %d (diff from that row up to the row above)\n", i)

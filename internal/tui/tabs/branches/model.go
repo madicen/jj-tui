@@ -2,16 +2,14 @@ package branches
 
 import (
 	"fmt"
-	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
 	overlay "github.com/madicen/bubble-overlay"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
-	"github.com/madicen/jj-tui/internal/tui/util"
 	"github.com/madicen/jj-tui/internal/tui/state"
+	"github.com/madicen/jj-tui/internal/tui/util"
 )
 
 // Model represents the state of the Branches tab
@@ -19,10 +17,10 @@ type Model struct {
 	zoneManager    *zone.Manager
 	repository     *internal.Repository
 	branchList     []internal.Branch
-	selectedBranch  int
-	listYOffset     int // Scroll offset for list (details stay fixed)
-	width  int
-	height int
+	selectedBranch int
+	listYOffset    int // Scroll offset for list (details stay fixed)
+	width          int
+	height         int
 
 	// Long-press context menu for branch rows.
 	longPressItemIndex int
@@ -209,23 +207,7 @@ func (m *Model) View() string {
 	if m.contextMenu != nil {
 		menuView := m.renderContextMenu()
 		if menuView != "" {
-			menuLines := strings.Split(menuView, "\n")
-			menuH := len(menuLines)
-			menuW := 0
-			for _, l := range menuLines {
-				if w := lipgloss.Width(l); w > menuW {
-					menuW = w
-				}
-			}
-			top := m.contextMenu.MouseY
-			left := m.contextMenu.MouseX
-			if top+menuH > m.height {
-				top = max(m.height-menuH, 0)
-			}
-			if left+menuW > m.width {
-				left = max(m.width-menuW, 0)
-			}
-			v = overlay.OverlayView(v, menuView, m.width, m.height, top, left)
+			v = overlay.OverlayViewAtPoint(v, menuView, m.width, m.height, m.contextMenu.MouseY, m.contextMenu.MouseX)
 		}
 	}
 

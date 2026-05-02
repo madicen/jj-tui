@@ -295,6 +295,7 @@ func TestJJServiceBasicOperations(t *testing.T) {
 		}
 		if splitCommit == nil {
 			t.Fatal("After MoveFileToChild: no commit with description \"(split)\" found")
+			return
 		}
 
 		// The (split) commit must contain the moved file
@@ -421,6 +422,18 @@ func TestPRWorkflow(t *testing.T) {
 		if req.Title != "Test PR" {
 			t.Errorf("Expected title 'Test PR', got '%s'", req.Title)
 		}
+		if req.Body != "This is a test PR" {
+			t.Errorf("Expected body 'This is a test PR', got '%s'", req.Body)
+		}
+		if req.BaseBranch != "main" {
+			t.Errorf("Expected base branch 'main', got '%s'", req.BaseBranch)
+		}
+		if req.HeadBranch != "feature-branch" {
+			t.Errorf("Expected head branch 'feature-branch', got '%s'", req.HeadBranch)
+		}
+		if req.Draft {
+			t.Error("Expected draft false")
+		}
 
 		if len(req.CommitIDs) != 2 {
 			t.Errorf("Expected 2 commit IDs, got %d", len(req.CommitIDs))
@@ -472,7 +485,6 @@ func TestRepositoryState(t *testing.T) {
 				"commit1": {"commit2"},
 			},
 		},
-		PRs: []internal.GitHubPR{},
 	}
 
 	if repo.Path != "/test/path" {
@@ -485,6 +497,10 @@ func TestRepositoryState(t *testing.T) {
 
 	if len(repo.Graph.Commits) != 2 {
 		t.Errorf("Expected 2 commits, got %d", len(repo.Graph.Commits))
+	}
+
+	if len(repo.PRs) != 0 {
+		t.Errorf("Expected no PRs, got %d", len(repo.PRs))
 	}
 
 	if len(repo.Graph.Connections["commit1"]) != 1 {
@@ -816,6 +832,7 @@ func TestSettingsGraphRevset(t *testing.T) {
 	}
 	if cfg == nil {
 		t.Fatal("Config Load returned nil")
+		return
 	}
 	if got := cfg.GraphRevset; got != "trunk()" {
 		t.Errorf("Config GraphRevset = %q, want trunk()", got)
@@ -1071,6 +1088,7 @@ func TestPRTitleFromTicketDisplayKey(t *testing.T) {
 	repoAfter := m.GetRepository()
 	if repoAfter == nil {
 		t.Fatal("Repo is nil after bookmark created")
+		return
 	}
 	wcIdx := -1
 	for i, c := range repoAfter.Graph.Commits {

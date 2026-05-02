@@ -459,12 +459,12 @@ func executeNewCommit(ctx *RequestContext) (tea.Cmd, string) {
 	return NewCommit(ctx.JJService, parentCommitID), ""
 }
 
-// bookmarkNameForOriginSplit returns a non–default-branch bookmark on the commit for origin sync.
 // FeatureBookmarkForSplit returns the local bookmark name used for stack-on-origin and evolog split (ignores main/master).
 func FeatureBookmarkForSplit(branches []string) string {
 	return bookmarkNameForOriginSplit(branches)
 }
 
+// bookmarkNameForOriginSplit returns a non–default-branch bookmark on the commit for origin sync.
 func bookmarkNameForOriginSplit(branches []string) string {
 	for _, b := range branches {
 		if b == "" {
@@ -865,8 +865,7 @@ func HandleUndoCompletedMsg(msg UndoCompletedMsg, app *state.AppState) (tea.Cmd,
 	return data.LoadRepository(app.JJService), nil
 }
 
-// Effect types used by ApplyResult (only for FollowUps that require main; others set app and return cmd).
-// These are still sent when app is nil (e.g. tests). NavigateTarget.Cmd() is used when app is non-nil.
+// SetStatusEffect carries a status line for ApplyResult follow-ups when main handles the effect; other effect types in this group follow the same pattern (NavigateTarget.Cmd when app is non-nil; tests may use a nil app).
 type SetStatusEffect struct{ Status string }
 type StartEditDescriptionEffect struct{ Commit internal.Commit }
 type StartRebaseModeEffect struct{ Status string }
