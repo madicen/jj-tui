@@ -510,10 +510,7 @@ func NewInputs(cfg *config.Config) []textinput.Model {
 	inputs[0].Width = 50
 	inputs[0].EchoMode = textinput.EchoPassword
 	inputs[0].EchoCharacter = '•'
-	githubToken := os.Getenv("GITHUB_TOKEN")
-	if githubToken == "" && cfg != nil && cfg.GitHubToken != "" {
-		githubToken = cfg.GitHubToken
-	}
+	githubToken, _ := config.GitHubTokenForAPI(cfg)
 	inputs[0].SetValue(githubToken)
 
 	inputs[1] = textinput.New()

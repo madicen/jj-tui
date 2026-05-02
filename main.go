@@ -90,7 +90,7 @@ func main() {
 		cfg = &config.Config{}
 	}
 
-	// Apply saved config to environment (env vars take precedence)
+	// Apply saved config to environment (only sets env vars that are not already set)
 	cfg.ApplyToEnvironment()
 
 	// Apply theme colors from config so the TUI uses saved preferences
