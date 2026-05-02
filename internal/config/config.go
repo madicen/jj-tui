@@ -2,9 +2,11 @@
 package config
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -427,6 +429,51 @@ func (c *Config) LoadedFrom() string {
 // IsLocal returns true if the config was loaded from a local .jj-tui.json file
 func (c *Config) IsLocal() bool {
 	return c.loadedFrom == localConfigPath()
+}
+
+// ghAuthTokenTimeout bounds how long `gh auth token` may run.
+const ghAuthTokenTimeout = 5 * time.Second
+
+// tokenFromGitHubCLI returns the token from `gh auth token` when GitHub CLI is installed and logged in.
+func tokenFromGitHubCLI() (string, bool) {
+	if _, err := exec.LookPath("gh"); err != nil {
+		return "", false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), ghAuthTokenTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "gh", "auth", "token")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", false
+	}
+	tok := strings.TrimSpace(string(out))
+	if tok == "" {
+		return "", false
+	}
+	return tok, true
+}
+
+// GitHubTokenForAPI returns the token jj-tui should use for GitHub REST/GraphQL calls and a
+// short label for diagnostics (e.g. "config:~/.config/jj-tui/config.json", "env:GITHUB_TOKEN",
+// "gh:auth token").
+//
+// Precedence: saved config (device flow or pasted token), then GITHUB_TOKEN, then GitHub CLI
+// (`gh auth token`) when the first two are unset. That keeps explicit jj-tui auth and env
+// overrides ahead of an implicit CLI login.
+func GitHubTokenForAPI(cfg *Config) (token, source string) {
+	if cfg != nil && cfg.GitHubToken != "" {
+		if from := cfg.LoadedFrom(); from != "" {
+			return cfg.GitHubToken, fmt.Sprintf("config:%s", from)
+		}
+		return cfg.GitHubToken, "config"
+	}
+	if t := os.Getenv("GITHUB_TOKEN"); t != "" {
+		return t, "env:GITHUB_TOKEN"
+	}
+	if tok, ok := tokenFromGitHubCLI(); ok {
+		return tok, "gh:auth token"
+	}
+	return "", ""
 }
 
 // ApplyToEnvironment sets environment variables from config values

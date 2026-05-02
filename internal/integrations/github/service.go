@@ -418,6 +418,9 @@ func (s *Service) getPullRequestsREST(ctx context.Context, filterOpts PRFilterOp
 	for {
 		prs, resp, err := s.client.PullRequests.List(ctx, s.owner, s.repo, opts)
 		if err != nil {
+			if resp != nil && resp.StatusCode == http.StatusNotFound {
+				return nil, fmt.Errorf("failed to list pull requests for %s/%s: not found or access denied (GitHub returns 404 when the repository does not exist or the token cannot read it; for private org repos approve the OAuth app for the organization and complete SSO authorization if required): %w", s.owner, s.repo, err)
+			}
 			return nil, fmt.Errorf("failed to list pull requests: %w", err)
 		}
 

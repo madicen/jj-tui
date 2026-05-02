@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -270,6 +271,47 @@ func TestAIModelResolved(t *testing.T) {
 		cfg := &Config{}
 		if got := cfg.AIModelResolved(); got != "gpt-4o-mini" {
 			t.Fatalf("got %q", got)
+		}
+	})
+}
+
+func TestGitHubTokenForAPI(t *testing.T) {
+	t.Run("configOverridesEnv", func(t *testing.T) {
+		t.Setenv("GITHUB_TOKEN", "env-token")
+		cfg := &Config{GitHubToken: "cfg-token"}
+		cfg.loadedFrom = "/home/u/.config/jj-tui/config.json"
+		tok, src := GitHubTokenForAPI(cfg)
+		if tok != "cfg-token" {
+			t.Fatalf("token: got %q", tok)
+		}
+		want := "config:/home/u/.config/jj-tui/config.json"
+		if src != want {
+			t.Fatalf("source: got %q want %q", src, want)
+		}
+	})
+	t.Run("envWhenConfigEmpty", func(t *testing.T) {
+		t.Setenv("GITHUB_TOKEN", "env-only")
+		tok, src := GitHubTokenForAPI(&Config{})
+		if tok != "env-only" || src != "env:GITHUB_TOKEN" {
+			t.Fatalf("got %q %q", tok, src)
+		}
+	})
+	t.Run("nilCfgUsesEnv", func(t *testing.T) {
+		t.Setenv("GITHUB_TOKEN", "x")
+		tok, src := GitHubTokenForAPI(nil)
+		if tok != "x" || src != "env:GITHUB_TOKEN" {
+			t.Fatalf("got %q %q", tok, src)
+		}
+	})
+	t.Run("noGhWhenPathEmpty", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("PATH=/nonexistent is not reliable for hiding gh on Windows")
+		}
+		t.Setenv("GITHUB_TOKEN", "")
+		t.Setenv("PATH", "/nonexistent")
+		tok, src := GitHubTokenForAPI(&Config{})
+		if tok != "" || src != "" {
+			t.Fatalf("expected no token without config, env, or gh on PATH; got %q %q", tok, src)
 		}
 	})
 }

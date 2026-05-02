@@ -1,8 +1,6 @@
 package github
 
 import (
-	"os"
-
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen/jj-tui/internal"
@@ -44,10 +42,7 @@ func NewModel() Model {
 // NewModelFromConfig creates a model initialized from config and env.
 func NewModelFromConfig(cfg *config.Config) Model {
 	m := NewModel()
-	token := os.Getenv("GITHUB_TOKEN")
-	if token == "" && cfg != nil && cfg.GitHubToken != "" {
-		token = cfg.GitHubToken
-	}
+	token, _ := config.GitHubTokenForAPI(cfg)
 	m.tokenInput.SetValue(token)
 	if cfg != nil {
 		m.showMerged = cfg.ShowMergedPRs()

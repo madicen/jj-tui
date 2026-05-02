@@ -103,22 +103,8 @@ func LoadAuxServicesCmd(demoMode bool, owner, repoName, githubInfoFromURL string
 		var ghSvc *github.Service
 		githubInfo := githubInfoFromURL
 		if owner != "" && repoName != "" {
-			tokenSource := ""
-			token := os.Getenv("GITHUB_TOKEN")
-			if token != "" {
-				tokenSource = "env:GITHUB_TOKEN"
-			}
-			if token == "" {
-				cfg, _ := config.Load()
-				if cfg != nil && cfg.GitHubToken != "" {
-					token = cfg.GitHubToken
-					if cfg.LoadedFrom() != "" {
-						tokenSource = fmt.Sprintf("config:%s", cfg.LoadedFrom())
-					} else {
-						tokenSource = "config"
-					}
-				}
-			}
+			cfg, _ := config.Load()
+			token, tokenSource := config.GitHubTokenForAPI(cfg)
 			if token != "" {
 				tokenPreview := token[:min(8, len(token))] + "..."
 				githubInfo = fmt.Sprintf("repo=%s/%s token=%s(%s)", owner, repoName, tokenPreview, tokenSource)
@@ -186,12 +172,9 @@ func CreateTicketService(owner, repo string) (tickets.Service, error) {
 		}
 		return nil, fmt.Errorf("TICKET_PROVIDER=jira but Jira env vars not set")
 	case "github_issues":
-		token := os.Getenv("GITHUB_TOKEN")
-		if token == "" && cfg != nil {
-			token = cfg.GitHubToken
-		}
+		token, _ := config.GitHubTokenForAPI(cfg)
 		if token == "" {
-			return nil, fmt.Errorf("TICKET_PROVIDER=github_issues but GITHUB_TOKEN not set")
+			return nil, fmt.Errorf("TICKET_PROVIDER=github_issues but no GitHub token (set one in jj-tui Settings or GITHUB_TOKEN)")
 		}
 		if owner == "" || repo == "" {
 			return nil, fmt.Errorf("TICKET_PROVIDER=github_issues but not in a GitHub repository")

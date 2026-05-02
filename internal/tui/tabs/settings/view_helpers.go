@@ -277,6 +277,8 @@ func (r renderCtx) renderGitHub(data RenderData) []string {
 		lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Opens browser to authenticate via GitHub App"))
 	}
 	lines = append(lines, "")
+	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("  If you use GitHub CLI, run `gh auth login` and leave the token field empty:"))
+	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("  jj-tui will use `gh auth token` when no saved token or GITHUB_TOKEN is set."), "")
 
 	labelStyle := lipgloss.NewStyle().Foreground(styles.ColorMuted)
 	if data.FocusedField == 0 {
@@ -286,7 +288,7 @@ func (r renderCtx) renderGitHub(data RenderData) []string {
 	if len(data.Inputs) > 0 {
 		lines = append(lines, "  "+r.mark(mouse.ZoneSettingsGitHubToken, data.Inputs[0].View)+" "+r.mark(mouse.ZoneSettingsGitHubTokenClear, clearButtonStyle.Render("[Clear]")))
 	}
-	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Get a token from: https://github.com/settings/tokens"), "")
+	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Optional PAT: https://github.com/settings/tokens"), "")
 
 	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("  PR Filters:"), "")
 	lines = append(lines, "    "+r.renderToggle("Only My PRs", data.OnlyMyPRs, mouse.ZoneSettingsGitHubOnlyMine))
