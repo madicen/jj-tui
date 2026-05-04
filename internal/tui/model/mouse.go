@@ -75,13 +75,10 @@ func (m *Model) handleZoneClick(msg zone.MsgZoneInBounds) (tea.Model, tea.Cmd) {
 	}
 
 	// ——— Forward zone to active view's submodel (by viewMode) ———
+	// Graph, PRs, Branches, and Tickets already receive zone.MsgZoneInBounds via
+	// UpdateWithApp in model.Update before this handleZoneClick runs; calling Update
+	// again would double-process the same release (e.g. PR double-click state).
 	switch m.appState.ViewMode {
-	case state.ViewCommitGraph:
-		updated, cmd := m.graphTabModel.Update(msg)
-		if p, ok := updated.(*graphtab.GraphModel); ok {
-			m.graphTabModel = *p
-		}
-		return m, cmd
 	case state.ViewEditDescription:
 		updated, cmd := m.desceditModal.Update(msg)
 		m.desceditModal = updated
@@ -114,18 +111,6 @@ func (m *Model) handleZoneClick(msg zone.MsgZoneInBounds) (tea.Model, tea.Cmd) {
 	case state.ViewCreateTicket:
 		updated, cmd := m.ticketFormModal.Update(msg)
 		m.ticketFormModal = updated
-		return m, cmd
-	case state.ViewPullRequests:
-		updated, cmd := m.prsTabModel.Update(msg)
-		m.prsTabModel = updated
-		return m, cmd
-	case state.ViewTickets:
-		updated, cmd := m.ticketsTabModel.Update(msg)
-		m.ticketsTabModel = updated
-		return m, cmd
-	case state.ViewBranches:
-		updated, cmd := m.branchesTabModel.Update(msg)
-		m.branchesTabModel = updated
 		return m, cmd
 	case state.ViewHelp:
 		updated, cmd := m.helpTabModel.Update(msg)
