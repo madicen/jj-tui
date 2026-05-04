@@ -3,6 +3,7 @@ package tickets
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
@@ -10,6 +11,7 @@ import (
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/tickets"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/mousedouble"
 	"github.com/madicen/jj-tui/internal/tui/state"
 )
 
@@ -38,6 +40,8 @@ type Model struct {
 	longPressMouseY    int
 	contextMenu        *ContextMenuState
 	statusSubmenu      *StatusSubmenuState
+
+	rowDoubleClick mousedouble.DoubleClick
 }
 
 // NewModel creates a new Tickets tab model. zoneManager may be nil (e.g. in tests).
@@ -443,6 +447,10 @@ func (m Model) handleZoneClick(z *zone.ZoneInfo, event tea.MouseMsg) (Model, *Re
 		if m.zoneManager.Get(mouse.ZoneJiraTicket(i)) == z {
 			m.selectedTicket = i
 			m.scrollToSelectedTicket = true
+			key := fmt.Sprintf("tickets:%d", i)
+			if m.rowDoubleClick.ObserveLeftRelease(key, event, time.Now(), mousedouble.DefaultDoubleClickWindow) {
+				return m, &Request{OpenInBrowser: true}, nil
+			}
 			return m, &Request{LoadTransitionsForSelection: true}, nil
 		}
 	}

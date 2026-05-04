@@ -12,6 +12,7 @@ import (
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/mousedouble"
 	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/util"
 	"github.com/mattn/go-runewidth"
@@ -61,6 +62,11 @@ type GraphModel struct {
 	longPressCommitMouseX  int
 	longPressCommitMouseY  int
 	commitContextMenu      *CommitContextMenuState
+
+	// Mouse: press generation for overlapping zone dedupe; double-click on rows.
+	mousePressGen  uint64
+	zoneOverlap    mousedouble.OverlapRelease
+	rowDoubleClick mousedouble.DoubleClick
 }
 
 // SelectionMode indicates what the user is selecting commits for
@@ -168,6 +174,10 @@ func (m *GraphModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		if msg.Button == tea.MouseButtonLeft && msg.Action == tea.MouseActionPress {
+			mousedouble.OnLeftPress(&m.mousePressGen)
+		}
+		return m, nil
 
 	case zone.MsgZoneInBounds:
 		updated, req, directCmd := m.handleZoneClick(msg)
@@ -258,6 +268,9 @@ func (m *GraphModel) UpdateWithApp(msg tea.Msg, app *state.AppState) (GraphModel
 				return *g, cmd
 			}
 			return *m, cmd
+		}
+		if msg.Button == tea.MouseButtonLeft && msg.Action == tea.MouseActionPress {
+			mousedouble.OnLeftPress(&m.mousePressGen)
 		}
 		m.handleRebaseDragMouse(msg)
 		if cmd := m.handleFileLongPress(msg); cmd != nil {
