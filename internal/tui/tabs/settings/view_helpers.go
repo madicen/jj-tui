@@ -53,7 +53,7 @@ type RenderData struct {
 	ConfirmingCleanup      string
 	ExternalEditorPreset   int // Advanced: selected external editor preset index (radio rows)
 	AIEnabled              bool
-	AIProviderID           string // openai_compatible | gemini
+	AIProviderID           string // openai_compatible | gemini | ollama
 	AIAPIKeySet            bool   // key present (env overrides config)
 	EvologDescribeDefault  bool
 	EvologFileSplitEnabled bool
@@ -98,7 +98,7 @@ func BuildRenderData(sm *Model, opts ViewOpts) RenderData {
 		ExternalEditorPreset:   sm.GetAdvancedModel().GetExternalEditorPreset(),
 		AIEnabled:              sm.GetAdvancedModel().GetAIEnabled(),
 		AIProviderID:           sm.GetAdvancedModel().GetAIProvider(),
-		AIAPIKeySet:            config.EffectiveAIAPIKey(opts.Config) != "",
+		AIAPIKeySet:            opts.Config != nil && opts.Config.AISupportsGenerationCredentials(),
 		EvologDescribeDefault:  sm.GetAdvancedModel().GetEvologDescribeAfterSplitDefault(),
 		EvologFileSplitEnabled: sm.GetAdvancedModel().GetEvologFileSplitEnabled(),
 		EvologHunkSplitEnabled: sm.GetAdvancedModel().GetEvologHunkSplitEnabled(),
@@ -584,18 +584,22 @@ func (r renderCtx) renderAdvanced(data RenderData) []string {
 		}
 		return r.mark(mouse.ZoneSettingsAIProvider(idx), radioText)
 	}
-	lines = append(lines, "    "+renderAIProv(0, "openai_compatible", "OpenAI-compatible (Chat Completions / Ollama)"))
+	lines = append(lines, "    "+renderAIProv(0, "openai_compatible", "OpenAI-compatible (Chat Completions)"))
 	lines = append(lines, "    "+renderAIProv(1, "gemini", "Google Gemini (Generative Language API)"))
+	lines = append(lines, "    "+renderAIProv(2, "ollama", "Ollama (local Chat Completions)"))
 	lines = append(lines, "")
 	if data.AIAPIKeySet {
-		lines = append(lines, "  "+lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B")).Render("API key: configured"))
+		lines = append(lines, "  "+lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B")).Render("LLM credentials: ready (API key, Ollama preset, or local Ollama URL)"))
 	} else {
-		lines = append(lines, "  "+lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("API key: not set (field below or "+config.EnvAIAPIKey+")"))
+		lines = append(lines, "  "+lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("LLM credentials: set an API key ("+config.EnvAIAPIKey+" or field below), choose Ollama, or use base URL http://127.0.0.1:11434/v1"))
 	}
-	lines = append(lines, "")
+	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Ollama: API key optional; first request after idle may exceed 60s—increase ai_timeout_seconds if needed."), "")
 	baseURLLabel := "  API base URL (OpenAI/Ollama; empty = OpenAI public):"
 	if curProv == "gemini" {
 		baseURLLabel = "  API base URL (ignored for Gemini):"
+	}
+	if curProv == "ollama" {
+		baseURLLabel = "  API base URL (Ollama; empty = " + config.OllamaDefaultChatBaseURL + "):"
 	}
 	lines = append(lines, focusStyle(16).Render(baseURLLabel))
 	if len(data.Inputs) > 16 {
@@ -605,7 +609,7 @@ func (r renderCtx) renderAdvanced(data RenderData) []string {
 	if len(data.Inputs) > 17 {
 		lines = append(lines, "  "+r.mark(mouse.ZoneSettingsAIModel, data.Inputs[17].View))
 	}
-	lines = append(lines, focusStyle(18).Render("  API key (optional; env overrides):"))
+	lines = append(lines, focusStyle(18).Render("  API key (optional for Ollama / local http://127.0.0.1:11434/v1; env overrides):"))
 	if len(data.Inputs) > 18 {
 		lines = append(lines, "  "+r.mark(mouse.ZoneSettingsAIAPIKey, data.Inputs[18].View))
 	}

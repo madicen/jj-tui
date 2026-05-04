@@ -1,4 +1,4 @@
-package ai
+package aiprompts
 
 import (
 	"encoding/json"
@@ -36,11 +36,12 @@ func CommitDescriptionUser(changeIDShort, currentDescription, diff string) strin
 	return b.String()
 }
 
-const prSystem = `You write pull request titles and bodies for GitHub.
+// PRSystem is the system prompt for pull request title + body generation.
+const PRSystem = `You write pull request titles and bodies for GitHub.
 Respond with a single JSON object only, no markdown fences, using exactly these keys:
 {"title":"...","body":"..."}
 Title: at most 200 characters. Body: markdown allowed, be clear and concise.
-If the suggested title hint starts with an issue tracker key (e.g. Jira ABC-123, or [ABC-123]), keep that exact key and the same spacing or punctuation after it at the beginning of the JSON title; only improve the human-readable part after the key.`
+If—and only if—the "Suggested title hint" in the user message already begins with a real ticket/issue id from that hint (e.g. a short alphanumeric key with hyphens, sometimes in brackets), copy that exact prefix into the JSON title and only improve the rest. If the hint has no such prefix, the JSON title must not add one: do not invent keys, placeholders, or example ids from these instructions.`
 
 // PRUser builds the user message for PR title+body.
 func PRUser(baseBranch, headBranch, hintTitle, diff string) string {
@@ -53,15 +54,16 @@ func PRUser(baseBranch, headBranch, hintTitle, diff string) string {
 	b.WriteString(strings.TrimSpace(hintTitle))
 	b.WriteString("\n\nUnified diff:\n")
 	b.WriteString(truncateRunes(diff, maxPromptDiffRunes))
-	b.WriteString("\n\nWrite JSON with title and body for this pull request. Preserve any leading issue key from the hint in the title exactly as required for branch/CI conventions.")
+	b.WriteString("\n\nWrite JSON with title and body for this pull request. Preserve a leading ticket/issue prefix only when it is already present in the hint above; never invent one.")
 	return b.String()
 }
 
-const ticketSystem = `You draft issue-tracker tickets (title + description) that a code change would address or close.
+// TicketSystem is the system prompt for tracker ticket drafts from a diff.
+const TicketSystem = `You draft issue-tracker tickets (title + description) that a code change would address or close.
 The user supplies a unified diff of a proposed fix. Infer what problem or task the change solves, and write the ticket as if filed before the fix: clear title, markdown body with symptoms, expected vs actual where inferable, and scope. Stay conservative—only state what the diff reasonably supports; say what is unknown rather than guessing.
 Respond with a single JSON object only, no markdown fences, using exactly these keys:
 {"title":"...","body":"..."}
-Title: at most 300 characters. Body: markdown allowed. If the draft title hint starts with an issue tracker key (e.g. Jira ABC-123), keep that exact key and spacing at the start of the JSON title; only improve the rest.`
+Title: at most 300 characters. Body: markdown allowed. If—and only if—the draft title in the user message already starts with a real ticket/issue id from that text, keep that exact prefix in the JSON title; otherwise do not add any key or placeholder.`
 
 // TicketUser builds the user message for AI-filled create-ticket fields.
 func TicketUser(changeIDShort, hintSummary, hintDescription, diff string) string {
@@ -78,8 +80,52 @@ func TicketUser(changeIDShort, hintSummary, hintDescription, diff string) string
 	return b.String()
 }
 
+func stripMarkdownLineBlockquote(line string) string {
+	s := line
+	for {
+		t := strings.TrimLeft(s, " \t")
+		if !strings.HasPrefix(t, ">") {
+			return t
+		}
+		s = strings.TrimLeft(t[1:], " \t")
+	}
+}
+
+func extractMarkdownFenceContent(s string) (string, bool) {
+	start := strings.Index(s, "```")
+	if start < 0 {
+		return "", false
+	}
+	rest := s[start+3:]
+	rest = strings.TrimLeft(rest, "\r\n")
+	if nl := strings.IndexByte(rest, '\n'); nl >= 0 {
+		first := strings.TrimSpace(rest[:nl])
+		if strings.EqualFold(first, "json") {
+			rest = rest[nl+1:]
+		}
+	}
+	end := strings.LastIndex(rest, "```")
+	if end < 0 {
+		return "", false
+	}
+	return strings.TrimSpace(rest[:end]), true
+}
+
+func normalizeStructuredLLMOutput(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if inner, ok := extractMarkdownFenceContent(raw); ok {
+		raw = inner
+	}
+	lines := strings.Split(raw, "\n")
+	for i := range lines {
+		lines[i] = stripMarkdownLineBlockquote(lines[i])
+	}
+	return strings.TrimSpace(strings.Join(lines, "\n"))
+}
+
 // ParsePRTitleBody extracts title and body from model output (JSON preferred).
 func ParsePRTitleBody(raw string) (title, body string) {
+	raw = normalizeStructuredLLMOutput(raw)
 	raw = strings.TrimSpace(raw)
 	if i := strings.Index(raw, "{"); i >= 0 {
 		if j := strings.LastIndex(raw, "}"); j > i {
@@ -101,7 +147,8 @@ func ParsePRTitleBody(raw string) (title, body string) {
 	return title, body
 }
 
-const bookmarkSystem = `You suggest a short git branch / bookmark name: lowercase, use hyphens between words, only letters, digits, hyphens, underscores.
+// BookmarkSystem is the system prompt for bookmark / branch name suggestions.
+const BookmarkSystem = `You suggest a short git branch / bookmark name: lowercase, use hyphens between words, only letters, digits, hyphens, underscores.
 Output a single line: the name only, no quotes, no explanation. Max 60 characters.`
 
 // BookmarkUser builds context for bookmark name suggestion.

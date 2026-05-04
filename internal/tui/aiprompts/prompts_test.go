@@ -1,4 +1,4 @@
-package ai
+package aiprompts
 
 import (
 	"strings"
@@ -23,6 +23,23 @@ func TestParsePRTitleBody_JSON(t *testing.T) {
 func TestParsePRTitleBody_FallbackLines(t *testing.T) {
 	title, body := ParsePRTitleBody("One line title\n\nBody para")
 	if title != "One line title" || body != "Body para" {
+		t.Fatalf("got title=%q body=%q", title, body)
+	}
+}
+
+func TestParsePRTitleBody_MarkdownFence(t *testing.T) {
+	title, body := ParsePRTitleBody("```json\n{\"title\":\"T\",\"body\":\"B\"}\n```")
+	if title != "T" || body != "B" {
+		t.Fatalf("got title=%q body=%q", title, body)
+	}
+}
+
+func TestParsePRTitleBody_BlockquotedFence(t *testing.T) {
+	in := "> ```json\n" +
+		"> {\"title\":\"Enhance AI\",\"body\":\"## Symptoms\\n\\nDetails\"}\n" +
+		"> ```"
+	title, body := ParsePRTitleBody(in)
+	if title != "Enhance AI" || body != "## Symptoms\n\nDetails" {
 		t.Fatalf("got title=%q body=%q", title, body)
 	}
 }

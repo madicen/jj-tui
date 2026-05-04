@@ -273,6 +273,95 @@ func TestAIModelResolved(t *testing.T) {
 			t.Fatalf("got %q", got)
 		}
 	})
+	t.Run("ollamaDefault", func(t *testing.T) {
+		cfg := &Config{AIProvider: "ollama"}
+		if got := cfg.AIModelResolved(); got != OllamaDefaultModel {
+			t.Fatalf("got %q want %q", got, OllamaDefaultModel)
+		}
+	})
+}
+
+func TestIsOllamaOpenAICompatibleBaseURL(t *testing.T) {
+	tests := []struct {
+		name string
+		url  string
+		want bool
+	}{
+		{"loopbackV1", "http://127.0.0.1:11434/v1", true},
+		{"loopbackV1Slash", "http://127.0.0.1:11434/v1/", true},
+		{"localhostV1", "http://localhost:11434/v1", true},
+		{"httpsLoopback", "https://127.0.0.1:11434/v1", true},
+		{"noPath", "http://127.0.0.1:11434", false},
+		{"lanHost", "http://192.168.0.1:11434/v1", false},
+		{"wrongPort", "http://127.0.0.1:9999/v1", false},
+		{"empty", "", false},
+		{"openai", "https://api.openai.com/v1", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := IsOllamaOpenAICompatibleBaseURL(tc.url); got != tc.want {
+				t.Fatalf("IsOllamaOpenAICompatibleBaseURL(%q) = %v want %v", tc.url, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestAISupportsGenerationCredentials(t *testing.T) {
+	t.Run("keyInConfig", func(t *testing.T) {
+		cfg := &Config{AIAPIKey: "sk-test"}
+		if !cfg.AISupportsGenerationCredentials() {
+			t.Fatal("expected true with API key")
+		}
+	})
+	t.Run("ollamaProviderNoKey", func(t *testing.T) {
+		cfg := &Config{AIProvider: "ollama"}
+		if !cfg.AISupportsGenerationCredentials() {
+			t.Fatal("expected true for ollama without key")
+		}
+	})
+	t.Run("openaiDefaultNoKey", func(t *testing.T) {
+		cfg := &Config{}
+		if cfg.AISupportsGenerationCredentials() {
+			t.Fatal("expected false with default OpenAI URL and no key")
+		}
+	})
+	t.Run("localOllamaURLNoKey", func(t *testing.T) {
+		cfg := &Config{AIBaseURL: "http://127.0.0.1:11434/v1"}
+		if !cfg.AISupportsGenerationCredentials() {
+			t.Fatal("expected true with local Ollama base and no key")
+		}
+	})
+}
+
+func TestResolveOpenAICompatibleBearerKey(t *testing.T) {
+	t.Run("usesConfigKey", func(t *testing.T) {
+		cfg := &Config{AIAPIKey: "real"}
+		k, err := cfg.ResolveOpenAICompatibleBearerKey()
+		if err != nil || k != "real" {
+			t.Fatalf("got %q %v", k, err)
+		}
+	})
+	t.Run("ollamaPlaceholder", func(t *testing.T) {
+		cfg := &Config{AIProvider: "ollama"}
+		k, err := cfg.ResolveOpenAICompatibleBearerKey()
+		if err != nil || k != OllamaOpenAICompatiblePlaceholderKey {
+			t.Fatalf("got %q %v", k, err)
+		}
+	})
+	t.Run("localURLPlaceholder", func(t *testing.T) {
+		cfg := &Config{AIBaseURL: "http://localhost:11434/v1"}
+		k, err := cfg.ResolveOpenAICompatibleBearerKey()
+		if err != nil || k != OllamaOpenAICompatiblePlaceholderKey {
+			t.Fatalf("got %q %v", k, err)
+		}
+	})
+	t.Run("openaiPublicMissing", func(t *testing.T) {
+		cfg := &Config{AIBaseURL: ""}
+		_, err := cfg.ResolveOpenAICompatibleBearerKey()
+		if err == nil {
+			t.Fatal("expected error")
+		}
+	})
 }
 
 func TestGitHubTokenForAPI(t *testing.T) {

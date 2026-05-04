@@ -257,7 +257,7 @@ func (m *Model) ZoneIDs() []string {
 		mouse.ZoneSettingsAdvancedConfirmYes, mouse.ZoneSettingsAdvancedConfirmNo,
 		mouse.ZoneSettingsAdvancedDeleteBookmarks, mouse.ZoneSettingsAdvancedAbandonOldCommits,
 		mouse.ZoneSettingsGraphRevset, mouse.ZoneSettingsGraphRevsetClear,
-		mouse.ZoneSettingsAIEnabled, mouse.ZoneSettingsAIProvider(0), mouse.ZoneSettingsAIProvider(1),
+		mouse.ZoneSettingsAIEnabled, mouse.ZoneSettingsAIProvider(0), mouse.ZoneSettingsAIProvider(1), mouse.ZoneSettingsAIProvider(2),
 		mouse.ZoneSettingsAIBaseURL, mouse.ZoneSettingsAIModel, mouse.ZoneSettingsAIAPIKey,
 		mouse.ZoneSettingsAIEvologDescribeDefault, mouse.ZoneSettingsAIEvologFileSplit, mouse.ZoneSettingsAIEvologHunkSplit, mouse.ZoneSettingsAIEvologMultiStepwise,
 		mouse.ZoneSettingsAIEvologMultiMaxDecrease, mouse.ZoneSettingsAIEvologMultiMaxIncrease,
