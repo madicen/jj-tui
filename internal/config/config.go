@@ -22,12 +22,36 @@ const (
 	GitHubAuthDeviceFlow GitHubAuthMethod = "device_flow"
 	// GitHubAuthToken means authentication via manual token entry
 	GitHubAuthToken GitHubAuthMethod = "token"
+	// GitHubAuthGhCLI means authentication via GitHub CLI (`gh auth login`); no token stored in config.
+	GitHubAuthGhCLI GitHubAuthMethod = "gh_cli"
 )
+
+// GitHub token source: where jj-tui reads the API token (explicit choice; no cross-source fallback).
+const (
+	GitHubTokenSourceSaved = "saved"   // github_token in jj-tui config (device flow or pasted)
+	GitHubTokenSourceEnv   = "env"     // GITHUB_TOKEN environment variable only
+	GitHubTokenSourceGhCLI = "gh_cli" // `gh auth token` only
+)
+
+// NormalizeGitHubTokenSource returns a valid github_token_source value, defaulting to saved.
+func NormalizeGitHubTokenSource(s string) string {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case GitHubTokenSourceSaved:
+		return GitHubTokenSourceSaved
+	case GitHubTokenSourceEnv:
+		return GitHubTokenSourceEnv
+	case GitHubTokenSourceGhCLI, "gh-cli":
+		return GitHubTokenSourceGhCLI
+	default:
+		return GitHubTokenSourceSaved
+	}
+}
 
 // Config holds the persistent configuration
 type Config struct {
-	GitHubToken      string           `json:"github_token,omitempty"`
-	GitHubAuthMethod GitHubAuthMethod `json:"github_auth_method,omitempty"` // How the token was obtained
+	GitHubToken       string           `json:"github_token,omitempty"`
+	GitHubTokenSource string           `json:"github_token_source,omitempty"` // saved | env | gh_cli (see constants)
+	GitHubAuthMethod  GitHubAuthMethod `json:"github_auth_method,omitempty"`  // How the saved token was obtained
 
 	// GitHub filter settings
 	GitHubShowMerged      *bool `json:"github_show_merged,omitempty"`      // nil = true (show by default)
@@ -157,6 +181,9 @@ func mergeConfig(dest, source *Config) {
 	}
 	if source.GitHubAuthMethod != "" {
 		dest.GitHubAuthMethod = source.GitHubAuthMethod
+	}
+	if source.GitHubTokenSource != "" {
+		dest.GitHubTokenSource = source.GitHubTokenSource
 	}
 	if source.GitHubShowMerged != nil {
 		dest.GitHubShowMerged = source.GitHubShowMerged
@@ -434,8 +461,8 @@ func (c *Config) IsLocal() bool {
 // ghAuthTokenTimeout bounds how long `gh auth token` may run.
 const ghAuthTokenTimeout = 5 * time.Second
 
-// tokenFromGitHubCLI returns the token from `gh auth token` when GitHub CLI is installed and logged in.
-func tokenFromGitHubCLI() (string, bool) {
+// TryGitHubCLIToken returns the token from `gh auth token` when GitHub CLI is installed and logged in.
+func TryGitHubCLIToken() (string, bool) {
 	if _, err := exec.LookPath("gh"); err != nil {
 		return "", false
 	}
@@ -453,33 +480,58 @@ func tokenFromGitHubCLI() (string, bool) {
 	return tok, true
 }
 
-// GitHubTokenForAPI returns the token jj-tui should use for GitHub REST/GraphQL calls and a
-// short label for diagnostics (e.g. "config:~/.config/jj-tui/config.json", "env:GITHUB_TOKEN",
-// "gh:auth token").
-//
-// Precedence: saved config (device flow or pasted token), then GITHUB_TOKEN, then GitHub CLI
-// (`gh auth token`) when the first two are unset. That keeps explicit jj-tui auth and env
-// overrides ahead of an implicit CLI login.
+// GitHubTokenSourceOrDefault returns the configured token source, or a legacy default when unset.
+func (c *Config) GitHubTokenSourceOrDefault() string {
+	if c == nil {
+		return GitHubTokenSourceSaved
+	}
+	if strings.TrimSpace(c.GitHubTokenSource) == "" {
+		if c.GitHubToken != "" {
+			return GitHubTokenSourceSaved
+		}
+		if os.Getenv("GITHUB_TOKEN") != "" {
+			return GitHubTokenSourceEnv
+		}
+		return GitHubTokenSourceSaved
+	}
+	return NormalizeGitHubTokenSource(c.GitHubTokenSource)
+}
+
+// GitHubTokenForAPI returns the token for cfg's chosen github_token_source only (no fallback
+// across sources). Pass nil for an in-memory empty config (treated as saved with no token).
 func GitHubTokenForAPI(cfg *Config) (token, source string) {
-	if cfg != nil && cfg.GitHubToken != "" {
+	src := GitHubTokenSourceSaved
+	if cfg != nil {
+		src = cfg.GitHubTokenSourceOrDefault()
+	}
+	switch src {
+	case GitHubTokenSourceSaved:
+		if cfg == nil || cfg.GitHubToken == "" {
+			return "", ""
+		}
 		if from := cfg.LoadedFrom(); from != "" {
 			return cfg.GitHubToken, fmt.Sprintf("config:%s", from)
 		}
 		return cfg.GitHubToken, "config"
+	case GitHubTokenSourceEnv:
+		if t := os.Getenv("GITHUB_TOKEN"); t != "" {
+			return t, "env:GITHUB_TOKEN"
+		}
+		return "", ""
+	case GitHubTokenSourceGhCLI:
+		if tok, ok := TryGitHubCLIToken(); ok {
+			return tok, "gh:auth token"
+		}
+		return "", ""
+	default:
+		return "", ""
 	}
-	if t := os.Getenv("GITHUB_TOKEN"); t != "" {
-		return t, "env:GITHUB_TOKEN"
-	}
-	if tok, ok := tokenFromGitHubCLI(); ok {
-		return tok, "gh:auth token"
-	}
-	return "", ""
 }
 
 // ApplyToEnvironment sets environment variables from config values
 // Only sets variables that are not already set (env takes precedence)
 func (c *Config) ApplyToEnvironment() {
-	if c.GitHubToken != "" && os.Getenv("GITHUB_TOKEN") == "" {
+	if c.GitHubTokenSourceOrDefault() == GitHubTokenSourceSaved && c.GitHubToken != "" && os.Getenv("GITHUB_TOKEN") == "" {
 		os.Setenv("GITHUB_TOKEN", c.GitHubToken)
 	}
 	if c.JiraURL != "" && os.Getenv("JIRA_URL") == "" {
@@ -516,8 +568,11 @@ func (c *Config) ApplyToEnvironment() {
 
 // UpdateFromEnvironment updates config with current environment values
 func (c *Config) UpdateFromEnvironment() {
-	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
-		c.GitHubToken = token
+	// Legacy: only copy GITHUB_TOKEN into config when github_token_source was never set.
+	if strings.TrimSpace(c.GitHubTokenSource) == "" {
+		if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+			c.GitHubToken = token
+		}
 	}
 	if url := os.Getenv("JIRA_URL"); url != "" {
 		c.JiraURL = url
@@ -551,9 +606,10 @@ func (c *Config) UpdateFromEnvironment() {
 	}
 }
 
-// HasGitHub returns true if GitHub is configured
+// HasGitHub returns true if the chosen token source yields a non-empty token.
 func (c *Config) HasGitHub() bool {
-	return c.GitHubToken != ""
+	tok, _ := GitHubTokenForAPI(c)
+	return tok != ""
 }
 
 // UsedDeviceFlow returns true if the GitHub token was obtained via Device Flow
@@ -561,10 +617,16 @@ func (c *Config) UsedDeviceFlow() bool {
 	return c.GitHubAuthMethod == GitHubAuthDeviceFlow
 }
 
+// UsedGhCLIAuth returns true if GitHub auth is via the GitHub CLI token source flow.
+func (c *Config) UsedGhCLIAuth() bool {
+	return c.GitHubAuthMethod == GitHubAuthGhCLI || c.GitHubTokenSourceOrDefault() == GitHubTokenSourceGhCLI
+}
+
 // SetGitHubToken sets the GitHub token and auth method
 func (c *Config) SetGitHubToken(token string, method GitHubAuthMethod) {
 	c.GitHubToken = token
 	c.GitHubAuthMethod = method
+	c.GitHubTokenSource = GitHubTokenSourceSaved
 }
 
 // ClearGitHub clears the GitHub token and auth method

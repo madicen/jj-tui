@@ -211,5 +211,12 @@ func (m *Model) handleReauthNeededEffect(e prstab.ApplyReauthNeededEffect) (tea.
 	}
 	_ = os.Unsetenv("GITHUB_TOKEN")
 	m.appState.GitHubService = nil
+	src := config.GitHubTokenSourceSaved
+	if cfg != nil {
+		src = cfg.GitHubTokenSourceOrDefault()
+	}
+	if src == config.GitHubTokenSourceGhCLI {
+		return m, settingstab.StartGitHubCLILoginShowCmd()
+	}
 	return m, settingstab.StartGitHubLoginCmd()
 }

@@ -171,10 +171,14 @@ const (
 
 	// GitHub login zones
 	ZoneGitHubLoginCopyAndOpen = "zone:github_login:copy_and_open"
+	ZoneGitHubLoginRunGhAuth   = "zone:github_login:run_gh_auth"
 	ZoneGitHubLoginCancel      = "zone:github_login:cancel"
 
 	// Settings zones
 	ZoneSettingsGitHubToken            = "zone:settings:github_token"
+	ZoneSettingsGitHubAuthSaved        = "zone:settings:github_auth:saved"
+	ZoneSettingsGitHubAuthEnv          = "zone:settings:github_auth:env"
+	ZoneSettingsGitHubAuthGhCLI        = "zone:settings:github_auth:gh_cli"
 	ZoneSettingsGitHubShowMerged       = "zone:settings:github_show_merged"
 	ZoneSettingsGitHubShowClosed       = "zone:settings:github_show_closed"
 	ZoneSettingsGitHubOnlyMine         = "zone:settings:github_only_mine"

@@ -47,6 +47,7 @@ type RenderData struct {
 	JiraConfigured         bool
 	CodecksConfigured      bool
 	GitHubIssuesConfigured bool
+	GitHubTokenSource      string // saved | env | gh_cli
 	BranchLimit            int
 	SanitizeBookmarks      bool
 	ConfirmingCleanup      string
@@ -106,6 +107,7 @@ func BuildRenderData(sm *Model, opts ViewOpts) RenderData {
 		YOffset:                sm.GetSettingsYOffset(),
 		ContentHeight:          opts.ContentHeight,
 		ThemeModel:             sm.GetThemeModel(),
+		GitHubTokenSource:      sm.GetGitHubTokenSource(),
 	}
 	data.Inputs = sm.GetSettingsInputs()
 	data.HasLocalConfig = config.HasLocalConfig()
@@ -269,26 +271,57 @@ func (r renderCtx) renderGitHub(data RenderData) []string {
 	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render("GitHub Integration"))
 	lines = append(lines, "", lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("Connect to GitHub for PR management."), "")
 
+	src := data.GitHubTokenSource
+	if src == "" {
+		src = config.GitHubTokenSourceSaved
+	}
+	authRadio := func(label, value, zone string) string {
+		selected := src == value
+		var radioText string
+		if selected {
+			radioText = toggleOnStyle.Render("(●) " + label)
+		} else {
+			radioText = lipgloss.NewStyle().Foreground(styles.ColorPrimary).Render("( ) " + label)
+		}
+		return r.mark(zone, radioText)
+	}
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("  API token source:"), "")
+	lines = append(lines, "    "+authRadio("Saved in jj-tui (device flow or paste below)", config.GitHubTokenSourceSaved, mouse.ZoneSettingsGitHubAuthSaved))
+	lines = append(lines, "    "+authRadio("Environment variable (GITHUB_TOKEN)", config.GitHubTokenSourceEnv, mouse.ZoneSettingsGitHubAuthEnv))
+	lines = append(lines, "    "+authRadio("GitHub CLI (`gh auth token`)", config.GitHubTokenSourceGhCLI, mouse.ZoneSettingsGitHubAuthGhCLI))
+	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Only the selected source is used (no fallback). Restart jj-tui after changing GITHUB_TOKEN in your shell."), "")
+	lines = append(lines, "")
+
+	loginBtn := "Login with GitHub"
+	if src == config.GitHubTokenSourceGhCLI {
+		loginBtn = "Login with GitHub CLI"
+	}
 	if data.GithubService {
 		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B")).Render("  ✓ Connected to GitHub"))
 		lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    "+r.mark(mouse.ZoneSettingsGitHubLogin, "[Reconnect]")))
 	} else {
-		lines = append(lines, "  "+r.mark(mouse.ZoneSettingsGitHubLogin, styles.ButtonStyle.Background(lipgloss.Color("#238636")).Render("Login with GitHub")))
-		lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Opens browser to authenticate via GitHub App"))
+		lines = append(lines, "  "+r.mark(mouse.ZoneSettingsGitHubLogin, styles.ButtonStyle.Background(lipgloss.Color("#238636")).Render(loginBtn)))
+		if src == config.GitHubTokenSourceGhCLI {
+			lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Opens `gh auth login` (token from `gh auth token`)"))
+		} else {
+			lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Device flow stores a token under \"Saved in jj-tui\""))
+		}
 	}
 	lines = append(lines, "")
-	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("  If you use GitHub CLI, run `gh auth login` and leave the token field empty:"))
-	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("  jj-tui will use `gh auth token` when no saved token or GITHUB_TOKEN is set."), "")
 
 	labelStyle := lipgloss.NewStyle().Foreground(styles.ColorMuted)
 	if data.FocusedField == 0 {
 		labelStyle = labelStyle.Bold(true).Foreground(styles.ColorPrimary)
 	}
-	lines = append(lines, labelStyle.Render("  Or enter token manually:"))
+	lines = append(lines, labelStyle.Render("  Token (saved in jj-tui only):"))
 	if len(data.Inputs) > 0 {
-		lines = append(lines, "  "+r.mark(mouse.ZoneSettingsGitHubToken, data.Inputs[0].View)+" "+r.mark(mouse.ZoneSettingsGitHubTokenClear, clearButtonStyle.Render("[Clear]")))
+		if src == config.GitHubTokenSourceSaved {
+			lines = append(lines, "  "+r.mark(mouse.ZoneSettingsGitHubToken, data.Inputs[0].View)+" "+r.mark(mouse.ZoneSettingsGitHubTokenClear, clearButtonStyle.Render("[Clear]")))
+		} else {
+			lines = append(lines, "  "+lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("(select \"Saved in jj-tui\" to edit the stored token)"))
+		}
 	}
-	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Optional PAT: https://github.com/settings/tokens"), "")
+	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Optional manual PAT: https://github.com/settings/tokens"), "")
 
 	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("  PR Filters:"), "")
 	lines = append(lines, "    "+r.renderToggle("Only My PRs", data.OnlyMyPRs, mouse.ZoneSettingsGitHubOnlyMine))

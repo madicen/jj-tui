@@ -14,7 +14,7 @@ const (
 	ViewCreateTicket // Create Ticket modal (from Tickets tab)
 	ViewEditDescription
 	ViewCreateBookmark
-	ViewGitHubLogin      // GitHub Device Flow login
+	ViewGitHubLogin      // GitHub login (device flow or GitHub CLI)
 	ViewBookmarkConflict // Bookmark conflict resolution dialog
 	ViewDivergentCommit  // Divergent commit resolution dialog
 	ViewEvologSplit      // Experimental evolog-driven stack split (FAQ-style)

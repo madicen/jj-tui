@@ -1529,6 +1529,55 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Do not auto-open the browser; user can press Enter or click "Copy Code & Open Browser" on the login screen.
 		return m, settingstab.PollGitHubTokenCmd(m.githubLoginModel.GetDeviceCode())
 
+	case settingstab.GitHubCLILoginShowMsg:
+		m.beginModalUnderlay()
+		m.githubLoginModel.SetGhCLILoginMode()
+		m.appState.ViewMode = state.ViewGitHubLogin
+		m.appState.StatusMessage = "GitHub CLI: press Enter or click Run to start gh auth login."
+		return m, nil
+
+	case githublogintab.GhCLIAuthFinishedMsg:
+		if m.appState.ViewMode != state.ViewGitHubLogin {
+			return m, nil
+		}
+		m.githubLoginModel.ClearFlow()
+		m.clearModalUnderlay()
+		m.appState.ViewMode = state.ViewSettings
+		m.settingsTabModel.SetViewOpts(m.buildSettingsViewOpts())
+		if msg.Err != nil {
+			m.appState.StatusMessage = fmt.Sprintf("gh auth login: %v", msg.Err)
+			m.errorModal.SetError(msg.Err, false, "")
+			return m, nil
+		}
+		tok, ok := config.TryGitHubCLIToken()
+		if !ok || strings.TrimSpace(tok) == "" {
+			err := fmt.Errorf("gh finished but no token was available from gh auth token; try gh auth login again or gh auth status")
+			m.appState.StatusMessage = err.Error()
+			m.errorModal.SetError(err, false, "")
+			return m, nil
+		}
+		cfg, err := config.Load()
+		if err != nil || cfg == nil {
+			err := fmt.Errorf("could not load config after gh login: %v", err)
+			m.appState.StatusMessage = err.Error()
+			m.errorModal.SetError(err, false, "")
+			return m, nil
+		}
+		cfg.GitHubToken = ""
+		cfg.GitHubTokenSource = config.GitHubTokenSourceGhCLI
+		cfg.GitHubAuthMethod = config.GitHubAuthGhCLI
+		if err := cfg.Save(); err != nil {
+			m.appState.StatusMessage = fmt.Sprintf("could not save config: %v", err)
+			m.errorModal.SetError(err, false, "")
+			return m, nil
+		}
+		_ = os.Unsetenv("GITHUB_TOKEN")
+		m.settingsTabModel.GetGitHubModel().SetTokenSource(config.GitHubTokenSourceGhCLI)
+		m.settingsTabModel.GetGitHubModel().SetToken("")
+		m.settingsTabModel.SetSettingInputValue(0, "")
+		m.appState.StatusMessage = "GitHub CLI login successful!"
+		return m, data.InitializeServices(m.appState.DemoMode)
+
 	case settingstab.GitHubLoginPollMsg:
 		if m.githubLoginModel.GetPolling() {
 			if msg.Interval > 0 {

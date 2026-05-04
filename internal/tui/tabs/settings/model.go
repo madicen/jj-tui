@@ -269,6 +269,7 @@ func (m *Model) ZoneIDs() []string {
 		mouse.ZoneSettingsExternalEditorCustom,
 		mouse.ZoneSettingsSanitizeBookmarks,
 		mouse.ZoneSettingsGitHubLogin,
+		mouse.ZoneSettingsGitHubAuthSaved, mouse.ZoneSettingsGitHubAuthEnv, mouse.ZoneSettingsGitHubAuthGhCLI,
 		mouse.ZoneSettingsGitHubOnlyMine, mouse.ZoneSettingsGitHubShowMerged, mouse.ZoneSettingsGitHubShowClosed,
 		mouse.ZoneSettingsGitHubPRLimitDecrease, mouse.ZoneSettingsGitHubPRLimitIncrease,
 		mouse.ZoneSettingsGitHubRefreshDecrease, mouse.ZoneSettingsGitHubRefreshIncrease, mouse.ZoneSettingsGitHubRefreshToggle,
@@ -307,7 +308,10 @@ func (m *Model) SetZoneManager(zm *zone.Manager) {
 
 // Sub-model getters (return pointers so zone handlers and BuildSettingsParams can mutate)
 
-func (m *Model) GetGitHubModel() *github.Model     { return &m.githubModel }
+func (m *Model) GetGitHubModel() *github.Model { return &m.githubModel }
+
+// GetGitHubTokenSource returns the selected GitHub API token source (saved | env | gh_cli).
+func (m *Model) GetGitHubTokenSource() string { return m.githubModel.GetTokenSource() }
 func (m *Model) GetJiraModel() *jira.Model         { return &m.jiraModel }
 func (m *Model) GetCodecksModel() *codecks.Model   { return &m.codecksModel }
 func (m *Model) GetTicketsModel() *tickets.Model   { return &m.ticketsModel }
@@ -608,6 +612,7 @@ func (m *Model) GetSettingsYOffset() int {
 // SetSettingInputValue sets the value of the settings input at index (e.g. after GitHub login; index 0 = GitHub token).
 func (m *Model) SetSettingInputValue(index int, value string) {
 	if index == 0 {
+		m.githubModel.SetTokenSource(config.GitHubTokenSourceSaved)
 		m.githubModel.SetToken(value)
 	}
 	// Other indices (jira/codecks/tickets) could be set here if needed

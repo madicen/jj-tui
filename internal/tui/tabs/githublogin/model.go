@@ -12,8 +12,17 @@ import (
 	"github.com/madicen/jj-tui/internal/tui/util"
 )
 
-// Model represents the GitHub Device Flow login screen (shown when connecting GitHub from settings).
+// LoginMode selects device flow vs GitHub CLI login UI.
+type LoginMode int
+
+const (
+	LoginModeDevice LoginMode = iota
+	LoginModeGhCLI
+)
+
+// Model represents the GitHub login screen (device flow or `gh auth login`).
 type Model struct {
+	loginMode       LoginMode
 	deviceCode      string
 	userCode        string
 	verificationURL string
@@ -42,6 +51,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		case "esc":
 			return m, state.NavigateTarget{Kind: state.NavigateGitHubLoginCancel, StatusMessage: "GitHub login cancelled"}.Cmd()
 		case "enter":
+			if m.loginMode == LoginModeGhCLI {
+				return m, GhAuthLoginCmd()
+			}
 			if m.userCode != "" {
 				return m, tea.Batch(
 					util.CopyToClipboard(m.userCode),
@@ -62,8 +74,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, nil
 }
 
-// View renders the GitHub Device Flow login screen.
+// View renders the GitHub login screen (device flow or GitHub CLI).
 func (m Model) View() string {
+	if m.loginMode == LoginModeGhCLI {
+		return m.viewGhCLI()
+	}
 	var lines []string
 
 	lines = append(lines, styles.TitleStyle.Render("GitHub Login"))
@@ -111,8 +126,33 @@ func (m Model) View() string {
 	return strings.Join(lines, "\n")
 }
 
+func (m Model) viewGhCLI() string {
+	var lines []string
+	lines = append(lines, styles.TitleStyle.Render("GitHub CLI login"))
+	lines = append(lines, "")
+	lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#8B949E")).Render("This will temporarily suspend jj-tui and run:"))
+	lines = append(lines, "")
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("   gh auth login"))
+	lines = append(lines, "")
+	lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#8B949E")).Render("Complete the prompts in your terminal; jj-tui will then verify `gh auth token`."))
+	lines = append(lines, "")
+	runBtn := styles.ButtonStyle.Render("Run gh auth login (Enter)")
+	cancelBtn := styles.ButtonStyle.Render("Cancel (Esc)")
+	if m.zoneManager != nil {
+		runBtn = m.zoneManager.Mark(mouse.ZoneGitHubLoginRunGhAuth, runBtn)
+		cancelBtn = m.zoneManager.Mark(mouse.ZoneGitHubLoginCancel, cancelBtn)
+	}
+	lines = append(lines, "   "+lipgloss.JoinHorizontal(lipgloss.Left, runBtn, "  ", cancelBtn))
+	lines = append(lines, "")
+	lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#8B949E")).Render("Press Esc to cancel without running gh."))
+	return strings.Join(lines, "\n")
+}
+
 // ZoneIDs returns the zone IDs this view uses when rendering.
 func (m Model) ZoneIDs() []string {
+	if m.loginMode == LoginModeGhCLI {
+		return []string{mouse.ZoneGitHubLoginRunGhAuth, mouse.ZoneGitHubLoginCancel}
+	}
 	return []string{mouse.ZoneGitHubLoginCopyAndOpen, mouse.ZoneGitHubLoginCancel}
 }
 
@@ -130,6 +170,15 @@ func (m Model) resolveClickedZone(msg zone.MsgZoneInBounds) string {
 }
 
 func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
+	if m.loginMode == LoginModeGhCLI {
+		switch zoneID {
+		case mouse.ZoneGitHubLoginRunGhAuth:
+			return m, GhAuthLoginCmd()
+		case mouse.ZoneGitHubLoginCancel:
+			return m, state.NavigateTarget{Kind: state.NavigateGitHubLoginCancel, StatusMessage: "GitHub login cancelled"}.Cmd()
+		}
+		return m, nil
+	}
 	if zoneID == mouse.ZoneGitHubLoginCopyAndOpen && m.userCode != "" {
 		return m, tea.Batch(
 			util.CopyToClipboard(m.userCode),
@@ -151,6 +200,7 @@ func (m *Model) SetZoneManager(zm *zone.Manager) {
 
 // SetDeviceFlow sets the device flow data and polling interval.
 func (m *Model) SetDeviceFlow(deviceCode, userCode, verificationURL string, pollInterval int) {
+	m.loginMode = LoginModeDevice
 	m.deviceCode = deviceCode
 	m.userCode = userCode
 	m.verificationURL = verificationURL
@@ -158,8 +208,19 @@ func (m *Model) SetDeviceFlow(deviceCode, userCode, verificationURL string, poll
 	m.pollInterval = pollInterval
 }
 
-// ClearFlow clears all device flow state (on cancel, success, or error).
+// SetGhCLILoginMode switches the modal to the GitHub CLI login flow (before running gh).
+func (m *Model) SetGhCLILoginMode() {
+	m.loginMode = LoginModeGhCLI
+	m.deviceCode = ""
+	m.userCode = ""
+	m.verificationURL = ""
+	m.polling = false
+	m.pollInterval = 0
+}
+
+// ClearFlow clears all login state (on cancel, success, or error).
 func (m *Model) ClearFlow() {
+	m.loginMode = LoginModeDevice
 	m.deviceCode = ""
 	m.userCode = ""
 	m.verificationURL = ""
