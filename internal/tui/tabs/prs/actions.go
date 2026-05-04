@@ -46,7 +46,7 @@ func LoadPRsCmd(ghSvc *github.Service, githubInfo string, demoMode bool, existin
 		if err != nil {
 			if github.IsAuthError(err) {
 				cfg, _ := config.Load()
-				if cfg != nil && cfg.UsedDeviceFlow() {
+				if cfg != nil && (cfg.UsedDeviceFlow() || cfg.UsedGhCLIAuth()) {
 					return ReauthNeededMsg{Reason: "Your GitHub authorization has expired. Please reauthorize to continue."}
 				}
 			}

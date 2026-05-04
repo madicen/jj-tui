@@ -24,6 +24,7 @@ import (
 // SettingsParams contains all settings values.
 type SettingsParams struct {
 	GitHubToken                       string
+	GitHubTokenSource                 string // config: saved | env | gh_cli
 	JiraURL                           string
 	JiraUser                          string
 	JiraToken                         string
@@ -198,6 +199,7 @@ func BuildSettingsParams(m *Model, githubOwner, githubRepo string) SettingsParam
 		params.AIEvologMultiSplitMode = "batch"
 	}
 	params.GitHubToken = strings.TrimSpace(gh.GetToken())
+	params.GitHubTokenSource = gh.GetTokenSource()
 	params.JiraURL = strings.TrimSpace(jr.GetURL())
 	params.JiraUser = strings.TrimSpace(jr.GetUser())
 	params.JiraToken = strings.TrimSpace(jr.GetToken())
@@ -250,21 +252,30 @@ func ConfirmCleanupCmd(confirmingType string, jjSvc *jj.Service, repo *internal.
 	return nil
 }
 
+func applyGitHubSettingsToCfg(cfg *config.Config, params SettingsParams) {
+	cfg.GitHubTokenSource = config.NormalizeGitHubTokenSource(params.GitHubTokenSource)
+	switch cfg.GitHubTokenSource {
+	case config.GitHubTokenSourceSaved:
+		if t := strings.TrimSpace(params.GitHubToken); t != "" {
+			cfg.SetGitHubToken(t, config.GitHubAuthToken)
+		} else {
+			cfg.ClearGitHub()
+			cfg.GitHubTokenSource = config.GitHubTokenSourceSaved
+		}
+	case config.GitHubTokenSourceEnv, config.GitHubTokenSourceGhCLI:
+		// Keep cfg.GitHubToken on disk so switching back to "saved" still has the last token.
+	}
+}
+
 // SaveSettingsCmd saves settings to global config.
 func SaveSettingsCmd(params SettingsParams) tea.Cmd {
 	return func() tea.Msg {
-		setEnvParams(params)
 		cfg, _ := config.Load()
 		if cfg == nil {
 			cfg = &config.Config{}
 		}
-		if params.GitHubToken != "" && params.GitHubToken != cfg.GitHubToken {
-			cfg.SetGitHubToken(params.GitHubToken, config.GitHubAuthToken)
-		} else if params.GitHubToken == "" {
-			cfg.ClearGitHub()
-		} else {
-			cfg.GitHubToken = params.GitHubToken
-		}
+		applyGitHubSettingsToCfg(cfg, params)
+		setEnvParams(params)
 		cfg.GitHubShowMerged = &params.ShowMerged
 		cfg.GitHubShowClosed = &params.ShowClosed
 		cfg.GitHubOnlyMine = &params.OnlyMine
@@ -315,14 +326,14 @@ func SaveSettingsCmd(params SettingsParams) tea.Cmd {
 		cfg.AIEvologMultiSplitMax = &mm
 		cfg.AIEvologMultiSplitMode = strings.TrimSpace(params.AIEvologMultiSplitMode)
 		_ = cfg.Save()
-		return buildSettingsSavedMsg(params, false)
+		tok, _ := config.GitHubTokenForAPI(cfg)
+		return buildSettingsSavedMsg(params, false, tok)
 	}
 }
 
 // SaveSettingsLocalCmd saves settings to local config file.
 func SaveSettingsLocalCmd(params SettingsParams) tea.Cmd {
 	return func() tea.Msg {
-		setEnvParams(params)
 		aiOn := params.AIEnabled
 		evDesc := params.AIEvologDescribeAfterSplitDefault
 		evFile := params.AIEvologFileSplitEnabled
@@ -370,7 +381,8 @@ func SaveSettingsLocalCmd(params SettingsParams) tea.Cmd {
 			CodecksExcludedStatuses:           params.CodecksExcludedStatuses,
 			GitHubIssuesExcludedStatuses:      params.GitHubIssuesExcludedStatuses,
 		}
-		cfg.GitHubToken = params.GitHubToken
+		applyGitHubSettingsToCfg(cfg, params)
+		setEnvParams(params)
 		cfg.JiraURL = params.JiraURL
 		cfg.JiraUser = params.JiraUser
 		cfg.JiraToken = params.JiraToken
@@ -379,12 +391,22 @@ func SaveSettingsLocalCmd(params SettingsParams) tea.Cmd {
 		if err := cfg.SaveLocal(); err != nil {
 			return SettingsSavedMsg{Err: err}
 		}
-		return buildSettingsSavedMsg(params, true)
+		tok, _ := config.GitHubTokenForAPI(cfg)
+		return buildSettingsSavedMsg(params, true, tok)
 	}
 }
 
 func setEnvParams(params SettingsParams) {
-	os.Setenv("GITHUB_TOKEN", params.GitHubToken)
+	switch config.NormalizeGitHubTokenSource(params.GitHubTokenSource) {
+	case config.GitHubTokenSourceSaved:
+		if t := strings.TrimSpace(params.GitHubToken); t != "" {
+			os.Setenv("GITHUB_TOKEN", t)
+		} else {
+			os.Unsetenv("GITHUB_TOKEN")
+		}
+	case config.GitHubTokenSourceEnv, config.GitHubTokenSourceGhCLI:
+		os.Unsetenv("GITHUB_TOKEN")
+	}
 	os.Setenv("JIRA_URL", params.JiraURL)
 	os.Setenv("JIRA_USER", params.JiraUser)
 	os.Setenv("JIRA_TOKEN", params.JiraToken)
@@ -417,12 +439,9 @@ func setEnvParams(params SettingsParams) {
 	}
 }
 
-func buildSettingsSavedMsg(params SettingsParams, savedLocal bool) SettingsSavedMsg {
-	var githubConnected bool
+func buildSettingsSavedMsg(params SettingsParams, savedLocal bool, gitHubAPIToken string) SettingsSavedMsg {
+	githubConnected := gitHubAPIToken != ""
 	var ticketSvc tickets.Service
-	if params.GitHubToken != "" {
-		githubConnected = true
-	}
 	switch params.TicketProvider {
 	case "codecks":
 		if codecks.IsConfigured() {
@@ -437,8 +456,8 @@ func buildSettingsSavedMsg(params SettingsParams, savedLocal bool) SettingsSaved
 			}
 		}
 	case "github_issues":
-		if params.GitHubToken != "" && params.GitHubOwner != "" && params.GitHubRepo != "" {
-			if svc, err := github.NewIssuesServiceWithToken(params.GitHubOwner, params.GitHubRepo, params.GitHubToken); err == nil && svc != nil {
+		if gitHubAPIToken != "" && params.GitHubOwner != "" && params.GitHubRepo != "" {
+			if svc, err := github.NewIssuesServiceWithToken(params.GitHubOwner, params.GitHubRepo, gitHubAPIToken); err == nil && svc != nil {
 				ticketSvc = svc
 			}
 		}
@@ -510,7 +529,10 @@ func NewInputs(cfg *config.Config) []textinput.Model {
 	inputs[0].Width = 50
 	inputs[0].EchoMode = textinput.EchoPassword
 	inputs[0].EchoCharacter = '•'
-	githubToken, _ := config.GitHubTokenForAPI(cfg)
+	githubToken := ""
+	if cfg != nil && cfg.GitHubTokenSourceOrDefault() == config.GitHubTokenSourceSaved {
+		githubToken = cfg.GitHubToken
+	}
 	inputs[0].SetValue(githubToken)
 
 	inputs[1] = textinput.New()
@@ -618,6 +640,11 @@ func NewInputs(cfg *config.Config) []textinput.Model {
 	}
 
 	return inputs
+}
+
+// StartGitHubCLILoginShowCmd opens the GitHub CLI login modal (user runs `gh auth login` from there).
+func StartGitHubCLILoginShowCmd() tea.Cmd {
+	return func() tea.Msg { return GitHubCLILoginShowMsg{} }
 }
 
 // StartGitHubLoginCmd returns a command that starts GitHub Device Flow and sends GitHubDeviceFlowStartedMsg or GitHubLoginErrorMsg.

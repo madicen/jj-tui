@@ -690,8 +690,8 @@ func TestPRViewContent(t *testing.T) {
 		if !containsString(view, "GitHub") {
 			t.Error("PR view should mention GitHub")
 		}
-		if !containsString(view, "GITHUB_TOKEN") {
-			t.Error("PR view should mention GITHUB_TOKEN")
+		if !containsString(view, "Settings") || !containsString(view, "token source") {
+			t.Error("PR view should mention Settings and token source")
 		}
 	})
 

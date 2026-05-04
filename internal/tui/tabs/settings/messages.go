@@ -67,6 +67,9 @@ func RequestSetStatusCmd(status string) tea.Cmd {
 	return func() tea.Msg { return RequestSetStatusMsg{Status: status} }
 }
 
+// GitHubCLILoginShowMsg tells main to open the GitHub CLI login modal (run `gh auth login`).
+type GitHubCLILoginShowMsg struct{}
+
 // GitHubDeviceFlowStartedMsg is sent when device flow authentication starts.
 type GitHubDeviceFlowStartedMsg struct {
 	DeviceCode      string

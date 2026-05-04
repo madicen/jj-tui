@@ -9,13 +9,14 @@ import (
 
 // Model represents the GitHub settings sub-tab
 type Model struct {
-tokenInput           textinput.Model
-showMerged           bool
-showClosed           bool
-onlyMine             bool
-prLimit              int
-prRefreshInterval int
-focusedField      int
+	tokenSource         string // config.GitHubTokenSource* — where to read the API token
+	tokenInput          textinput.Model
+	showMerged          bool
+	showClosed          bool
+	onlyMine            bool
+	prLimit               int
+	prRefreshInterval     int
+	focusedField          int
 }
 
 // NewModel creates a new GitHub settings model
@@ -29,6 +30,7 @@ func NewModel() Model {
 	tokenInput.Focus()
 
 	return Model{
+		tokenSource:       config.GitHubTokenSourceSaved,
 		tokenInput:        tokenInput,
 		showMerged:        true,
 		showClosed:        true,
@@ -42,14 +44,18 @@ func NewModel() Model {
 // NewModelFromConfig creates a model initialized from config and env.
 func NewModelFromConfig(cfg *config.Config) Model {
 	m := NewModel()
-	token, _ := config.GitHubTokenForAPI(cfg)
-	m.tokenInput.SetValue(token)
 	if cfg != nil {
+		m.tokenSource = cfg.GitHubTokenSourceOrDefault()
 		m.showMerged = cfg.ShowMergedPRs()
 		m.showClosed = cfg.ShowClosedPRs()
 		m.onlyMine = cfg.OnlyMyPRs()
 		m.prLimit = cfg.PRLimit()
 		m.prRefreshInterval = cfg.PRRefreshInterval()
+		if m.tokenSource == config.GitHubTokenSourceSaved {
+			m.tokenInput.SetValue(cfg.GitHubToken)
+		} else {
+			m.tokenInput.SetValue("")
+		}
 	}
 	return m
 }
@@ -71,7 +77,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	}
 
 	var cmd tea.Cmd
-	if m.focusedField == 0 {
+	if m.focusedField == 0 && m.tokenSource == config.GitHubTokenSourceSaved {
 		m.tokenInput, cmd = m.tokenInput.Update(msg)
 	}
 	return m, cmd
@@ -85,25 +91,29 @@ return "" // Rendered by parent
 // handleKeyMsg handles keyboard input
 func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 switch msg.String() {
-case "j", "down":
-if m.focusedField < 4 {
-if m.focusedField > 0 {
-m.tokenInput.Blur()
-}
-m.focusedField++
-if m.focusedField == 0 {
-m.tokenInput.Focus()
-}
-}
-return m, nil
-case "k", "up":
-if m.focusedField > 0 {
-m.focusedField--
-if m.focusedField == 0 {
-m.tokenInput.Focus()
-}
-}
-return m, nil
+	case "j", "down":
+		if m.focusedField < 4 {
+			if m.focusedField == 0 {
+				m.tokenInput.Blur()
+			}
+			m.focusedField++
+			if m.focusedField == 0 && m.tokenSource == config.GitHubTokenSourceSaved {
+				m.tokenInput.Focus()
+			} else if m.focusedField != 0 {
+				m.tokenInput.Blur()
+			}
+		}
+		return m, nil
+	case "k", "up":
+		if m.focusedField > 0 {
+			m.focusedField--
+			if m.focusedField == 0 && m.tokenSource == config.GitHubTokenSourceSaved {
+				m.tokenInput.Focus()
+			} else {
+				m.tokenInput.Blur()
+			}
+		}
+		return m, nil
 case " ":
 		// Toggle boolean options
 		switch m.focusedField {
@@ -123,12 +133,28 @@ return m, nil
 
 // GetToken returns the GitHub token
 func (m *Model) GetToken() string {
-return m.tokenInput.Value()
+	return m.tokenInput.Value()
 }
 
 // SetToken sets the GitHub token
 func (m *Model) SetToken(token string) {
-m.tokenInput.SetValue(token)
+	m.tokenInput.SetValue(token)
+}
+
+// GetTokenSource returns github_token_source (saved | env | gh_cli).
+func (m *Model) GetTokenSource() string {
+	if m.tokenSource == "" {
+		return config.GitHubTokenSourceSaved
+	}
+	return m.tokenSource
+}
+
+// SetTokenSource sets where jj-tui reads the API token from.
+func (m *Model) SetTokenSource(src string) {
+	m.tokenSource = config.NormalizeGitHubTokenSource(src)
+	if m.tokenSource != config.GitHubTokenSourceSaved {
+		m.tokenInput.Blur()
+	}
 }
 
 // GetShowMerged returns whether to show merged PRs
@@ -197,7 +223,7 @@ func (m *Model) SetFocusedField(i int) {
 		i = 0
 	}
 	m.focusedField = i
-	if m.focusedField == 0 {
+	if m.focusedField == 0 && m.tokenSource == config.GitHubTokenSourceSaved {
 		m.tokenInput.Focus()
 	} else {
 		m.tokenInput.Blur()

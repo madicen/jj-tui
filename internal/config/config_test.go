@@ -276,9 +276,9 @@ func TestAIModelResolved(t *testing.T) {
 }
 
 func TestGitHubTokenForAPI(t *testing.T) {
-	t.Run("configOverridesEnv", func(t *testing.T) {
+	t.Run("savedIgnoresEnv", func(t *testing.T) {
 		t.Setenv("GITHUB_TOKEN", "env-token")
-		cfg := &Config{GitHubToken: "cfg-token"}
+		cfg := &Config{GitHubToken: "cfg-token", GitHubTokenSource: GitHubTokenSourceSaved}
 		cfg.loadedFrom = "/home/u/.config/jj-tui/config.json"
 		tok, src := GitHubTokenForAPI(cfg)
 		if tok != "cfg-token" {
@@ -289,18 +289,30 @@ func TestGitHubTokenForAPI(t *testing.T) {
 			t.Fatalf("source: got %q want %q", src, want)
 		}
 	})
-	t.Run("envWhenConfigEmpty", func(t *testing.T) {
+	t.Run("envIgnoresSaved", func(t *testing.T) {
 		t.Setenv("GITHUB_TOKEN", "env-only")
-		tok, src := GitHubTokenForAPI(&Config{})
+		cfg := &Config{GitHubToken: "on-disk", GitHubTokenSource: GitHubTokenSourceEnv}
+		tok, src := GitHubTokenForAPI(cfg)
 		if tok != "env-only" || src != "env:GITHUB_TOKEN" {
 			t.Fatalf("got %q %q", tok, src)
 		}
 	})
-	t.Run("nilCfgUsesEnv", func(t *testing.T) {
+	t.Run("legacyInfersEnvWhenUnset", func(t *testing.T) {
+		t.Setenv("GITHUB_TOKEN", "legacy-env")
+		cfg := &Config{}
+		if cfg.GitHubTokenSourceOrDefault() != GitHubTokenSourceEnv {
+			t.Fatalf("default source: %q", cfg.GitHubTokenSourceOrDefault())
+		}
+		tok, src := GitHubTokenForAPI(cfg)
+		if tok != "legacy-env" || src != "env:GITHUB_TOKEN" {
+			t.Fatalf("got %q %q", tok, src)
+		}
+	})
+	t.Run("nilCfgSavedEmpty", func(t *testing.T) {
 		t.Setenv("GITHUB_TOKEN", "x")
 		tok, src := GitHubTokenForAPI(nil)
-		if tok != "x" || src != "env:GITHUB_TOKEN" {
-			t.Fatalf("got %q %q", tok, src)
+		if tok != "" || src != "" {
+			t.Fatalf("nil cfg uses saved with no token; got %q %q", tok, src)
 		}
 	})
 	t.Run("noGhWhenPathEmpty", func(t *testing.T) {
@@ -309,9 +321,10 @@ func TestGitHubTokenForAPI(t *testing.T) {
 		}
 		t.Setenv("GITHUB_TOKEN", "")
 		t.Setenv("PATH", "/nonexistent")
-		tok, src := GitHubTokenForAPI(&Config{})
+		cfg := &Config{GitHubTokenSource: GitHubTokenSourceGhCLI}
+		tok, src := GitHubTokenForAPI(cfg)
 		if tok != "" || src != "" {
-			t.Fatalf("expected no token without config, env, or gh on PATH; got %q %q", tok, src)
+			t.Fatalf("expected no gh token; got %q %q", tok, src)
 		}
 	})
 }

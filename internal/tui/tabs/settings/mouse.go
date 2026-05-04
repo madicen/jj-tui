@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 )
 
@@ -32,10 +33,30 @@ func resolveTabFromZone(zoneID string) (tab int, ok bool) {
 // handleGitHubZone handles zone clicks for the GitHub panel (tab 0).
 func handleGitHubZone(m *Model, zoneID string) (Model, tea.Cmd) {
 	if zoneID == mouse.ZoneSettingsGitHubLogin {
+		if m.GetGitHubModel().GetTokenSource() == config.GitHubTokenSourceGhCLI {
+			return *m, StartGitHubCLILoginShowCmd()
+		}
 		return *m, StartGitHubLoginCmd()
 	}
 	gh := m.GetGitHubModel()
 	switch zoneID {
+	case mouse.ZoneSettingsGitHubAuthSaved:
+		gh.SetTokenSource(config.GitHubTokenSourceSaved)
+		if cfg, _ := config.Load(); cfg != nil && cfg.GitHubToken != "" {
+			gh.SetToken(cfg.GitHubToken)
+		}
+		m.SetFocusedField(0)
+		return *m, nil
+	case mouse.ZoneSettingsGitHubAuthEnv:
+		gh.SetTokenSource(config.GitHubTokenSourceEnv)
+		gh.SetToken("")
+		m.SetFocusedField(1)
+		return *m, nil
+	case mouse.ZoneSettingsGitHubAuthGhCLI:
+		gh.SetTokenSource(config.GitHubTokenSourceGhCLI)
+		gh.SetToken("")
+		m.SetFocusedField(1)
+		return *m, nil
 	case mouse.ZoneSettingsGitHubOnlyMine:
 		gh.SetOnlyMine(!gh.GetOnlyMine())
 		return *m, nil
