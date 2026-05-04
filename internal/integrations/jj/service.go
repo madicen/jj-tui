@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/tui/util"
@@ -35,41 +36,33 @@ type Service struct {
 	maxHistory     int // Maximum number of commands to keep
 }
 
-// SanitizeBookmarkName converts a string into a valid bookmark name
-// Replaces spaces with hyphens, removes invalid characters, etc.
+// SanitizeBookmarkName converts a string into a valid bookmark name: Unicode letters
+// and numbers, ASCII hyphen and underscore only. Whitespace becomes underscore; any
+// other rune is dropped. Consecutive underscores or consecutive hyphens collapse to one.
 func SanitizeBookmarkName(name string) string {
-	// Replace common problematic characters
-	name = strings.ReplaceAll(name, " ", "_")
-	name = strings.ReplaceAll(name, "\t", "_")
-	name = strings.ReplaceAll(name, "/", "-")
-	name = strings.ReplaceAll(name, "\\", "-")
-	name = strings.ReplaceAll(name, ":", "-")
-	name = strings.ReplaceAll(name, "~", "-")
-	name = strings.ReplaceAll(name, "^", "-")
-	name = strings.ReplaceAll(name, "?", "-")
-	name = strings.ReplaceAll(name, "*", "-")
-	name = strings.ReplaceAll(name, "[", "-")
-	name = strings.ReplaceAll(name, "]", "-")
-	name = strings.ReplaceAll(name, "@", "-")
-	name = strings.ReplaceAll(name, "'", "")
-	name = strings.ReplaceAll(name, ".", "-")
-
-	// Collapse multiple hyphens into one
-	for strings.Contains(name, "--") {
-		name = strings.ReplaceAll(name, "--", "-")
+	var b strings.Builder
+	b.Grow(len(name))
+	var lastSep rune // last written separator: '_' or '-'; 0 if last written was not a sep
+	for _, r := range name {
+		switch {
+		case unicode.IsLetter(r) || unicode.IsNumber(r):
+			b.WriteRune(r)
+			lastSep = 0
+		case unicode.IsSpace(r):
+			if lastSep != '_' {
+				b.WriteRune('_')
+				lastSep = '_'
+			}
+		case r == '-' || r == '_':
+			if lastSep != r {
+				b.WriteRune(r)
+				lastSep = r
+			}
+		default:
+			// drop commas, punctuation, symbols, etc.
+		}
 	}
-
-	for strings.Contains(name, "__") {
-		name = strings.ReplaceAll(name, "__", "_")
-	}
-
-	// Trim leading/trailing hyphens
-	name = strings.Trim(name, "-")
-
-	// Ensure it doesn't start with a dot
-	name = strings.TrimPrefix(name, ".")
-
-	return name
+	return strings.Trim(b.String(), "-_")
 }
 
 // NewService creates a new jj service
