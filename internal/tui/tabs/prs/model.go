@@ -2,12 +2,14 @@ package prs
 
 import (
 	"fmt"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 	overlay "github.com/madicen/bubble-overlay"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/mousedouble"
 	"github.com/madicen/jj-tui/internal/tui/state"
 )
 
@@ -29,6 +31,8 @@ type Model struct {
 	longPressMouseX    int
 	longPressMouseY    int
 	contextMenu        *ContextMenuState
+
+	rowDoubleClick mousedouble.DoubleClick
 }
 
 // NewModel creates a new PRs tab model. zoneManager may be nil (e.g. in tests).
@@ -354,6 +358,10 @@ func (m Model) handleZoneClick(z *zone.ZoneInfo, event tea.MouseMsg) (Model, *Re
 	for i := 0; m.repository != nil && i < len(m.repository.PRs); i++ {
 		if m.zoneManager.Get(mouse.ZonePR(i)) == z {
 			m.selectedPR = i
+			key := fmt.Sprintf("prs:%d", i)
+			if m.rowDoubleClick.ObserveLeftRelease(key, event, time.Now(), mousedouble.DefaultDoubleClickWindow) {
+				return m, &Request{OpenInBrowser: true}, nil
+			}
 			return m, nil, nil
 		}
 	}

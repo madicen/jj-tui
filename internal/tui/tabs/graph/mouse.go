@@ -1,9 +1,13 @@
 package graph
 
 import (
+	"fmt"
+	"time"
+
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/mousedouble"
 )
 
 // handleZoneClick handles zone click messages; returns (updated model, optional request, direct cmd).
@@ -89,18 +93,14 @@ func (m GraphModel) handleZoneClick(msg zone.MsgZoneInBounds) (GraphModel, *Requ
 		}
 	}
 
+	if m.zoneOverlap.ShouldSkipOverlappingRelease(event, m.mousePressGen) {
+		return m, nil, nil
+	}
+
 	if m.repository != nil {
 		for commitIndex := range m.repository.Graph.Commits {
 			if m.zoneManager.Get(mouse.ZoneCommit(commitIndex)) == z {
-				m.graphFocused = true
-				if m.selectionMode == SelectionRebaseDestination {
-					return m, &Request{PerformRebase: true, RebaseDestIndex: commitIndex}, nil
-				}
-				m.selectedCommit = commitIndex
-				m.changedFilesCommitID = ""
-				m.changedFiles = nil
-				commitID := m.repository.Graph.Commits[commitIndex].ChangeID
-				return m, &Request{LoadChangedFiles: &commitID}, nil
+				return applyCommitRowMouseSelection(m, commitIndex, event)
 			}
 		}
 		for commitIndex := range m.repository.Graph.Commits {
@@ -133,9 +133,7 @@ func (m GraphModel) handleZoneClick(msg zone.MsgZoneInBounds) (GraphModel, *Requ
 	}
 	for i := range m.changedFiles {
 		if m.zoneManager.Get(mouse.ZoneChangedFile(i)) == z {
-			m.selectedFile = i
-			m.graphFocused = false
-			return m, nil, nil
+			return applyChangedFileRowMouseSelection(m, i, event)
 		}
 	}
 
@@ -143,15 +141,7 @@ func (m GraphModel) handleZoneClick(msg zone.MsgZoneInBounds) (GraphModel, *Requ
 		if m.repository != nil {
 			for commitIndex := range m.repository.Graph.Commits {
 				if inBounds(mouse.ZoneCommit(commitIndex)) {
-					m.graphFocused = true
-					if m.selectionMode == SelectionRebaseDestination {
-						return m, &Request{PerformRebase: true, RebaseDestIndex: commitIndex}, nil
-					}
-					m.selectedCommit = commitIndex
-					m.changedFilesCommitID = ""
-					m.changedFiles = nil
-					commitID := m.repository.Graph.Commits[commitIndex].ChangeID
-					return m, &Request{LoadChangedFiles: &commitID}, nil
+					return applyCommitRowMouseSelection(m, commitIndex, event)
 				}
 			}
 			for commitIndex := range m.repository.Graph.Commits {
@@ -181,9 +171,7 @@ func (m GraphModel) handleZoneClick(msg zone.MsgZoneInBounds) (GraphModel, *Requ
 	if inBounds(mouse.ZoneFilesPane) {
 		for i := range m.changedFiles {
 			if inBounds(mouse.ZoneChangedFile(i)) {
-				m.selectedFile = i
-				m.graphFocused = false
-				return m, nil, nil
+				return applyChangedFileRowMouseSelection(m, i, event)
 			}
 		}
 		if m.graphFocused {
@@ -248,5 +236,41 @@ func (m GraphModel) handleZoneClick(msg zone.MsgZoneInBounds) (GraphModel, *Requ
 		return m, &Request{OpenInExternalEditor: true}, nil
 	}
 
+	return m, nil, nil
+}
+
+func applyCommitRowMouseSelection(m GraphModel, commitIndex int, event tea.MouseMsg) (GraphModel, *Request, tea.Cmd) {
+	m.graphFocused = true
+	if m.selectionMode == SelectionRebaseDestination {
+		return m, &Request{PerformRebase: true, RebaseDestIndex: commitIndex}, nil
+	}
+	if m.repository == nil || commitIndex < 0 || commitIndex >= len(m.repository.Graph.Commits) {
+		return m, nil, nil
+	}
+	key := fmt.Sprintf("graph:commit:%d", commitIndex)
+	if m.rowDoubleClick.ObserveLeftRelease(key, event, time.Now(), mousedouble.DefaultDoubleClickWindow) {
+		c := m.repository.Graph.Commits[commitIndex]
+		if !c.Immutable && !c.IsWorking {
+			m.selectedCommit = commitIndex
+			return m, &Request{Checkout: true}, nil
+		}
+	}
+	m.selectedCommit = commitIndex
+	m.changedFilesCommitID = ""
+	m.changedFiles = nil
+	commitID := m.repository.Graph.Commits[commitIndex].ChangeID
+	return m, &Request{LoadChangedFiles: &commitID}, nil
+}
+
+func applyChangedFileRowMouseSelection(m GraphModel, fileIndex int, event tea.MouseMsg) (GraphModel, *Request, tea.Cmd) {
+	m.selectedFile = fileIndex
+	m.graphFocused = false
+	if fileIndex < 0 || fileIndex >= len(m.changedFiles) {
+		return m, nil, nil
+	}
+	key := fmt.Sprintf("graph:file:%d", fileIndex)
+	if m.rowDoubleClick.ObserveLeftRelease(key, event, time.Now(), mousedouble.DefaultDoubleClickWindow) {
+		return m, &Request{OpenInExternalEditor: true}, nil
+	}
 	return m, nil, nil
 }
