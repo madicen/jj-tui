@@ -73,7 +73,7 @@ func NewModel() Model {
 	aiURL.Width = 60
 
 	aiModel := textinput.New()
-	aiModel.Placeholder = "e.g. gpt-4o-mini or llama3.2"
+	aiModel.Placeholder = "e.g. gpt-4o-mini, llama3.2, or qwen2.5:1.5b (Ollama)"
 	aiModel.CharLimit = 120
 	aiModel.Width = 60
 
@@ -114,6 +114,14 @@ func NewModelFromConfig(cfg *config.Config) Model {
 		m.aiProvider = cfg.AIProviderOrDefault()
 		m.aiBaseURLInput.SetValue(cfg.AIBaseURL)
 		m.aiModelInput.SetValue(cfg.AIModel)
+		if cfg.AIProviderOrDefault() == "ollama" {
+			if strings.TrimSpace(cfg.AIBaseURL) == "" {
+				m.aiBaseURLInput.SetValue(config.OllamaDefaultChatBaseURL)
+			}
+			if strings.TrimSpace(cfg.AIModel) == "" {
+				m.aiModelInput.SetValue(config.OllamaDefaultModel)
+			}
+		}
 		m.aiAPIKeyInput.SetValue(cfg.AIAPIKey)
 		m.evologDescribeDefault = cfg.DefaultEvologPostSplitDescribe()
 		m.evologFileSplitEnabled = cfg.EvologAIFilePhaseEnabled()
@@ -242,9 +250,26 @@ func (m *Model) GetAIProvider() string {
 	return strings.TrimSpace(m.aiProvider)
 }
 
-// SetAIProvider sets provider id.
+// SetAIProvider sets provider id and applies Ollama URL/model presets when switching to ollama with empty fields.
 func (m *Model) SetAIProvider(s string) {
+	prev := strings.TrimSpace(m.aiProvider)
 	m.aiProvider = strings.TrimSpace(s)
+	switch strings.ToLower(m.aiProvider) {
+	case "gemini":
+		m.aiProvider = "gemini"
+	case "ollama":
+		m.aiProvider = "ollama"
+	default:
+		m.aiProvider = "openai_compatible"
+	}
+	if m.aiProvider == "ollama" && prev != "ollama" {
+		if strings.TrimSpace(m.aiBaseURLInput.Value()) == "" {
+			m.aiBaseURLInput.SetValue(config.OllamaDefaultChatBaseURL)
+		}
+		if strings.TrimSpace(m.aiModelInput.Value()) == "" {
+			m.aiModelInput.SetValue(config.OllamaDefaultModel)
+		}
+	}
 }
 
 // GetAIBaseURL returns the configured API base URL field.

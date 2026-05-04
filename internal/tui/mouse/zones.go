@@ -166,7 +166,7 @@ const (
 	ZoneSettingsAIEvologMultiStepwise      = "zone:settings:ai:evolog_multi_stepwise"
 	ZoneSettingsAIEvologMultiMaxDecrease   = "zone:settings:ai:evolog_multi_max_dec"
 	ZoneSettingsAIEvologMultiMaxIncrease   = "zone:settings:ai:evolog_multi_max_inc"
-	// AI provider rows: zone:settings:ai:provider:N (0=openai_compatible, 1=gemini)
+	// AI provider rows: zone:settings:ai:provider:N (0=openai_compatible, 1=gemini, 2=ollama)
 	ZoneSettingsAIProviderPrefix = "zone:settings:ai:provider:"
 
 	// GitHub login zones
@@ -247,7 +247,7 @@ func ZoneSettingsExternalEditorPreset(index int) string {
 	return fmt.Sprintf("%s%d", ZoneSettingsExternalEditorPresetPrefix, index)
 }
 
-// ZoneSettingsAIProvider returns the zone ID for the AI provider preset row at index (0..1).
+// ZoneSettingsAIProvider returns the zone ID for the AI provider preset row at index (0..2).
 func ZoneSettingsAIProvider(index int) string {
 	return fmt.Sprintf("%s%d", ZoneSettingsAIProviderPrefix, index)
 }

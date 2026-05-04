@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -110,7 +111,7 @@ type Config struct {
 	AIBaseURL        string `json:"ai_base_url,omitempty"`        // empty = https://api.openai.com/v1
 	AIModel          string `json:"ai_model,omitempty"`           // empty = gpt-4o-mini
 	AITimeoutSeconds *int   `json:"ai_timeout_seconds,omitempty"` // nil/0 = 60
-	AIProvider       string `json:"ai_provider,omitempty"`        // empty = openai_compatible; allowed: openai_compatible, gemini
+	AIProvider       string `json:"ai_provider,omitempty"`        // empty = openai_compatible; allowed: openai_compatible, gemini, ollama
 	AIAPIKey         string `json:"ai_api_key,omitempty"`         // optional; env overrides when set
 
 	// AI evolog split (optional; nil = defaults below)
@@ -126,6 +127,15 @@ type Config struct {
 
 // EnvAIAPIKey is the environment variable for the LLM API key; when set, it overrides ai_api_key in config.
 const EnvAIAPIKey = "JJ_TUI_AI_API_KEY"
+
+// OllamaDefaultChatBaseURL is the default OpenAI-compatible API root for a local Ollama server (no trailing slash).
+const OllamaDefaultChatBaseURL = "http://127.0.0.1:11434/v1"
+
+// OllamaDefaultModel is the default model id when ai_provider is ollama and ai_model is empty.
+const OllamaDefaultModel = "qwen2.5:1.5b"
+
+// OllamaOpenAICompatiblePlaceholderKey is used as the Bearer token for Ollama; the server ignores it for typical local setups.
+const OllamaOpenAICompatiblePlaceholderKey = "ollama"
 
 // LocalConfigFileName is the name of the per-repo config file
 const LocalConfigFileName = ".jj-tui.json"
@@ -774,6 +784,9 @@ func (c *Config) AIBaseURLResolved() string {
 	}
 	s := strings.TrimSpace(c.AIBaseURL)
 	if s == "" {
+		if c.AIProviderOrDefault() == "ollama" {
+			return OllamaDefaultChatBaseURL
+		}
 		return "https://api.openai.com/v1"
 	}
 	return strings.TrimSuffix(s, "/")
@@ -802,6 +815,8 @@ func (c *Config) AIModelResolved() string {
 	switch c.AIProviderOrDefault() {
 	case "gemini":
 		return "gemini-2.5-flash"
+	case "ollama":
+		return OllamaDefaultModel
 	default:
 		return "gpt-4o-mini"
 	}
@@ -827,9 +842,75 @@ func EffectiveAIAPIKey(cfg *Config) string {
 	return strings.TrimSpace(cfg.AIAPIKey)
 }
 
-// AIConfiguredForGeneration is true when AI is enabled and an API key is present.
+// IsOllamaOpenAICompatibleBaseURL reports whether baseURL points at a typical local Ollama OpenAI-compatible endpoint
+// (http(s)://127.0.0.1:11434/v1 or http(s)://localhost:11434/v1). Used to allow an empty API key for local-only setups.
+func IsOllamaOpenAICompatibleBaseURL(baseURL string) bool {
+	baseURL = strings.TrimSpace(baseURL)
+	if baseURL == "" {
+		return false
+	}
+	u, err := url.Parse(strings.TrimSuffix(baseURL, "/"))
+	if err != nil || u.Host == "" {
+		return false
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	if host != "127.0.0.1" && host != "localhost" {
+		return false
+	}
+	if u.Port() != "11434" {
+		return false
+	}
+	path := u.Path
+	if path == "" {
+		path = "/"
+	}
+	path = strings.TrimSuffix(path, "/")
+	return path == "/v1"
+}
+
+// AISupportsGenerationCredentials is true when an API key is set, or when using Ollama provider / local Ollama base URL without a key.
+func (c *Config) AISupportsGenerationCredentials() bool {
+	if c == nil {
+		return false
+	}
+	if strings.TrimSpace(EffectiveAIAPIKey(c)) != "" {
+		return true
+	}
+	if c.AIProviderOrDefault() == "ollama" {
+		return true
+	}
+	u := strings.TrimSpace(c.AIBaseURL)
+	if u == "" {
+		return false
+	}
+	return IsOllamaOpenAICompatibleBaseURL(strings.TrimSuffix(u, "/"))
+}
+
+// ResolveOpenAICompatibleBearerKey returns the Bearer token for OpenAI-compatible chat requests.
+func (c *Config) ResolveOpenAICompatibleBearerKey() (string, error) {
+	if k := strings.TrimSpace(EffectiveAIAPIKey(c)); k != "" {
+		return k, nil
+	}
+	if c == nil {
+		return "", fmt.Errorf("missing API key")
+	}
+	switch c.AIProviderOrDefault() {
+	case "ollama":
+		return OllamaOpenAICompatiblePlaceholderKey, nil
+	default:
+		if IsOllamaOpenAICompatibleBaseURL(strings.TrimSuffix(strings.TrimSpace(c.AIBaseURL), "/")) {
+			return OllamaOpenAICompatiblePlaceholderKey, nil
+		}
+	}
+	return "", fmt.Errorf("missing API key")
+}
+
+// AIConfiguredForGeneration is true when AI is enabled and credentials are available (API key, Ollama preset, or local Ollama base URL).
 func (c *Config) AIConfiguredForGeneration() bool {
-	return c != nil && c.AIGenerationEnabled() && EffectiveAIAPIKey(c) != ""
+	return c != nil && c.AIGenerationEnabled() && c.AISupportsGenerationCredentials()
 }
 
 // AIProviderOrDefault returns the configured provider.
@@ -842,7 +923,7 @@ func (c *Config) AIProviderOrDefault() string {
 		return "openai_compatible"
 	}
 	switch s {
-	case "openai_compatible", "gemini":
+	case "openai_compatible", "gemini", "ollama":
 		return s
 	default:
 		return "openai_compatible"

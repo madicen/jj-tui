@@ -432,13 +432,17 @@ Omit keys you do not need. See `internal/config/config.go` for the full schema a
 
 ### Optional AI assist
 
-When **`ai_enabled`** is true and an API key is configured (**`ai_api_key`** in config and/or **`JJ_TUI_AI_API_KEY`** in the environment; the env var wins), jj-tui can call a provider to draft text:
+When **`ai_enabled`** is true and LLM credentials are available, jj-tui can call a provider to draft text:
 
 - The purple **✧ ^g** chip beside the title in the commit description editor, **Create PR**, **Create ticket**, or **bookmark** modal (new name only), or **Ctrl+G** in those modals, runs generation; you always review before saving or submitting.
-- **`ai_provider`**: `openai_compatible` (default) or **`gemini`** (Google Generative Language API).
-- **`ai_base_url`**: For `openai_compatible`, API root without a trailing slash (default: `https://api.openai.com/v1`). Use e.g. `http://127.0.0.1:11434/v1` for Ollama. Ignored for Gemini (Google endpoint).
-- **`ai_model`**: Model id. Defaults: `gpt-4o-mini` (OpenAI-compatible) or `gemini-2.5-flash` (Gemini) when empty.
-- **`ai_timeout_seconds`**: HTTP timeout (optional; default 60).
+- **`ai_provider`**:
+  - **`openai_compatible`** (default): Chat Completions at **`ai_base_url`** (default `https://api.openai.com/v1`). Requires an API key unless **`ai_base_url`** is a typical local Ollama URL (`http://127.0.0.1:11434/v1` or `http://localhost:11434/v1`), in which case a placeholder Bearer token is sent automatically.
+  - **`gemini`**: Google Generative Language API (requires a real API key).
+  - **`ollama`**: Local Ollama OpenAI-compatible API. Defaults: **`ai_base_url`** empty → `http://127.0.0.1:11434/v1`, **`ai_model`** empty → `qwen2.5:1.5b`. **API key is optional** (jj-tui sends a harmless placeholder if unset). Pull the model first (`ollama pull qwen2.5:1.5b` or change **`ai_model`** to a tag you have).
+- **`ai_api_key`** / **`JJ_TUI_AI_API_KEY`**: For cloud OpenAI-compatible hosts and Gemini, set a real key (env wins). For **`ollama`** or the local Ollama **`ai_base_url`** above, you may leave the key empty.
+- **`ai_base_url`**: API root without a trailing slash. Ignored for Gemini (Google endpoint).
+- **`ai_model`**: Model id. Defaults: `gpt-4o-mini` (OpenAI-compatible), `gemini-2.5-flash` (Gemini), or `qwen2.5:1.5b` (**`ollama`**) when empty.
+- **`ai_timeout_seconds`**: HTTP timeout (optional; default 60). Local models may need more on **first request after idle** (model load); try **120** or higher if requests time out.
 
 Configure from **Settings → Advanced** or JSON. Diffs are included in prompts; treat this as sending code to the provider unless you use a local endpoint.
 

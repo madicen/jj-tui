@@ -325,6 +325,8 @@ func handleAdvancedZone(m *Model, zoneID string) (Model, tea.Cmd) {
 				switch idx {
 				case 1:
 					adv.SetAIProvider("gemini")
+				case 2:
+					adv.SetAIProvider("ollama")
 				default:
 					adv.SetAIProvider("openai_compatible")
 				}

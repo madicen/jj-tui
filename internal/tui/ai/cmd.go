@@ -9,6 +9,7 @@ import (
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/integrations/llm"
+	"github.com/madicen/jj-tui/internal/tui/aiprompts"
 )
 
 const diffBytesCommit = 120_000
@@ -36,7 +37,7 @@ func GenerateCommitDescriptionCmd(reqID int, jjSvc *jj.Service, cfg *config.Conf
 			msg.Err = err
 			return msg
 		}
-		out, err := provider.Complete(ctx, CommitDescriptionSystem, CommitDescriptionUser(changeShort, currentDesc, diff))
+		out, err := provider.Complete(ctx, aiprompts.CommitDescriptionSystem, aiprompts.CommitDescriptionUser(changeShort, currentDesc, diff))
 		if err != nil {
 			msg.Err = err
 			return msg
@@ -70,13 +71,13 @@ func GeneratePRFormCmd(reqID int, jjSvc *jj.Service, cfg *config.Config, changeI
 			msg.Err = err
 			return msg
 		}
-		out, err := provider.Complete(ctx, prSystem, PRUser(baseBranch, headBranch, hintTitle, diff))
+		out, err := provider.Complete(ctx, aiprompts.PRSystem, aiprompts.PRUser(baseBranch, headBranch, hintTitle, diff))
 		if err != nil {
 			msg.Err = err
 			return msg
 		}
-		msg.Title, msg.Body = ParsePRTitleBody(out)
-		msg.Title = MergeGeneratedPRTitle(hintTitle, msg.Title)
+		msg.Title, msg.Body = aiprompts.ParsePRTitleBody(out)
+		msg.Title = aiprompts.MergeGeneratedPRTitle(hintTitle, msg.Title)
 		return msg
 	}
 }
@@ -109,13 +110,13 @@ func GenerateTicketFormCmd(reqID int, jjSvc *jj.Service, cfg *config.Config, cha
 		if short == "" {
 			short = rev
 		}
-		out, err := provider.Complete(ctx, ticketSystem, TicketUser(short, hintSummary, hintDescription, diff))
+		out, err := provider.Complete(ctx, aiprompts.TicketSystem, aiprompts.TicketUser(short, hintSummary, hintDescription, diff))
 		if err != nil {
 			msg.Err = err
 			return msg
 		}
-		msg.Title, msg.Body = ParsePRTitleBody(out)
-		msg.Title = MergeGeneratedPRTitle(hintSummary, msg.Title)
+		msg.Title, msg.Body = aiprompts.ParsePRTitleBody(out)
+		msg.Title = aiprompts.MergeGeneratedPRTitle(hintSummary, msg.Title)
 		return msg
 	}
 }
@@ -144,7 +145,7 @@ func GenerateBookmarkNameCmd(reqID int, jjSvc *jj.Service, cfg *config.Config, r
 			msg.Err = err
 			return msg
 		}
-		out, err := provider.Complete(ctx, bookmarkSystem, BookmarkUser(ticketHint, diff))
+		out, err := provider.Complete(ctx, aiprompts.BookmarkSystem, aiprompts.BookmarkUser(ticketHint, diff))
 		if err != nil {
 			msg.Err = err
 			return msg

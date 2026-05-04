@@ -1,4 +1,4 @@
-package ai
+package aiprompts
 
 import (
 	"regexp"
@@ -7,7 +7,6 @@ import (
 	"unicode/utf8"
 )
 
-// leadingIssueKeyPrefix matches a leading Jira-style key plus delimiter (e.g. "PROJ-123 - ", "[FOO-1]: ").
 var leadingIssueKeyPrefix = regexp.MustCompile(
 	`(?i)^[ \t]*(?:` +
 		`\[[A-Z][A-Z0-9]{1,15}-\d+\](?:\s*[-:–|]\s*|\s+)|` +
@@ -15,15 +14,12 @@ var leadingIssueKeyPrefix = regexp.MustCompile(
 		`)`,
 )
 
-// issueKeyOnlyLine is a title that is only a ticket key (optional brackets), no description yet.
 var issueKeyOnlyLine = regexp.MustCompile(
 	`(?i)^[ \t]*(?:\[[A-Z][A-Z0-9]{1,15}-\d+\]|[A-Z][A-Z0-9]{1,15}-\d+)\s*$`,
 )
 
 var bareIssueKeyFromText = regexp.MustCompile(`(?i)\[([A-Z][A-Z0-9]{1,15}-\d+)\]|([A-Z][A-Z0-9]{1,15}-\d+)`)
 
-// extractLeadingIssuePrefix returns the substring of hint (from first non-space) through the
-// delimiter after the issue key, for reuse in front of an LLM-generated title. Empty if none.
 func extractLeadingIssuePrefix(hint string) string {
 	h := strings.TrimSpace(hint)
 	if h == "" {
