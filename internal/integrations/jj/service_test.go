@@ -5,6 +5,30 @@ import (
 	"testing"
 )
 
+func TestSanitizeBookmarkName(t *testing.T) {
+	tests := []struct {
+		in, want string
+	}{
+		{"Implement auth", "Implement_auth"},
+		{"Foo, bar", "Foo_bar"},
+		{"a---b", "a-b"},
+		{"a___b", "a_b"},
+		{"  trim  ", "trim"},
+		{"-__-x-_", "x"},
+		{"café-123", "café-123"},
+		{"", ""},
+		{"!!!", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			got := SanitizeBookmarkName(tt.in)
+			if got != tt.want {
+				t.Errorf("SanitizeBookmarkName(%q) = %q; want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestDefaultGraphRevset(t *testing.T) {
 	rs := DefaultGraphRevset
 	if !strings.Contains(rs, "parents(bookmarks() & mutable())") {
