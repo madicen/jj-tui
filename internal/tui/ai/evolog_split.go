@@ -97,9 +97,9 @@ func appendEvologSplitAutomationHint(b *strings.Builder, cfg *config.Config) {
 	if cfg != nil && cfg.EvologAIMultiSplitStepwise() {
 		mode = "stepwise — one split_base_commit_id per user confirm; hunk_peel_rounds run after the last FAQ confirm."
 	}
-	maxBases := "evolog depth and Settings → Advanced (AI evolog multi-split max)"
+	maxBases := "evolog depth and Settings → AI (AI evolog multi-split max)"
 	if cfg != nil {
-		maxBases = fmt.Sprintf("min(evolog depth−1, %d) from Settings → Advanced", cfg.EvologAIMultiSplitMaxCap())
+		maxBases = fmt.Sprintf("min(evolog depth−1, %d) from Settings → AI", cfg.EvologAIMultiSplitMaxCap())
 	}
 	b.WriteString("\n## Client automation (for planning only; do not echo this heading in your JSON)\n")
 	fmt.Fprintf(b, "- FAQ bases: %s\n", mode)
@@ -224,7 +224,7 @@ func EvologSuggestLLMCmd(reqID int, jjSvc *jj.Service, cfg *config.Config, entri
 func runEvologSuggestLLM(reqID int, jjSvc *jj.Service, cfg *config.Config, entries []jj.EvologEntry, userPrompt string) EvologSplitSuggestMsg {
 	msg := EvologSplitSuggestMsg{ReqID: reqID}
 	if jjSvc == nil || cfg == nil || !cfg.AIConfiguredForGeneration() {
-		msg.Err = fmt.Errorf("AI is disabled or no API key (Settings → Advanced, or %s)", config.EnvAIAPIKey)
+		msg.Err = fmt.Errorf("AI is disabled or no API key (Settings → AI, or %s)", config.EnvAIAPIKey)
 		return msg
 	}
 	if len(entries) < 2 {

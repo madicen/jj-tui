@@ -9,7 +9,7 @@ import (
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 )
 
-// resolveTabFromZone returns the settings tab index (0–6) if zoneID is a tab zone.
+// resolveTabFromZone returns the settings tab index (0–7) if zoneID is a tab zone.
 func resolveTabFromZone(zoneID string) (tab int, ok bool) {
 	switch zoneID {
 	case mouse.ZoneSettingsTabGitHub:
@@ -24,8 +24,10 @@ func resolveTabFromZone(zoneID string) (tab int, ok bool) {
 		return 4, true
 	case mouse.ZoneSettingsTabTheme:
 		return 5, true
-	case mouse.ZoneSettingsTabAdvanced:
+	case mouse.ZoneSettingsTabAI:
 		return 6, true
+	case mouse.ZoneSettingsTabAdvanced:
+		return 7, true
 	}
 	return 0, false
 }
@@ -260,7 +262,7 @@ func handleThemeZone(m *Model, zoneID string, event tea.MouseMsg) (Model, tea.Cm
 	return *m, cmd
 }
 
-// handleAdvancedZone handles zone clicks for the Advanced panel (tab 6).
+// handleAdvancedZone handles zone clicks for the Advanced panel (tab 7).
 func handleAdvancedZone(m *Model, zoneID string) (Model, tea.Cmd) {
 	adv := m.GetAdvancedModel()
 	if adv.GetConfirmingCleanup() != "" {
@@ -291,48 +293,7 @@ func handleAdvancedZone(m *Model, zoneID string) (Model, tea.Cmd) {
 		return *m, m.SetFocusedField(14)
 	case mouse.ZoneSettingsExternalEditorCustom:
 		return *m, m.SetFocusedField(15)
-	case mouse.ZoneSettingsAIEnabled:
-		adv.ToggleAIEnabled()
-		return *m, nil
-	case mouse.ZoneSettingsAIBaseURL:
-		return *m, m.SetFocusedField(16)
-	case mouse.ZoneSettingsAIModel:
-		return *m, m.SetFocusedField(17)
-	case mouse.ZoneSettingsAIAPIKey:
-		return *m, m.SetFocusedField(18)
-	case mouse.ZoneSettingsAIEvologDescribeDefault:
-		adv.ToggleEvologDescribeAfterSplitDefault()
-		return *m, nil
-	case mouse.ZoneSettingsAIEvologFileSplit:
-		adv.ToggleEvologFileSplitEnabled()
-		return *m, nil
-	case mouse.ZoneSettingsAIEvologHunkSplit:
-		adv.ToggleEvologHunkSplitEnabled()
-		return *m, nil
-	case mouse.ZoneSettingsAIEvologMultiStepwise:
-		adv.ToggleEvologMultiStepwise()
-		return *m, nil
-	case mouse.ZoneSettingsAIEvologMultiMaxDecrease:
-		adv.DecEvologMultiMax()
-		return *m, nil
-	case mouse.ZoneSettingsAIEvologMultiMaxIncrease:
-		adv.IncEvologMultiMax()
-		return *m, nil
 	default:
-		if strings.HasPrefix(zoneID, mouse.ZoneSettingsAIProviderPrefix) {
-			s := strings.TrimPrefix(zoneID, mouse.ZoneSettingsAIProviderPrefix)
-			if idx, err := strconv.Atoi(s); err == nil {
-				switch idx {
-				case 1:
-					adv.SetAIProvider("gemini")
-				case 2:
-					adv.SetAIProvider("ollama")
-				default:
-					adv.SetAIProvider("openai_compatible")
-				}
-			}
-			return *m, nil
-		}
 		if strings.HasPrefix(zoneID, mouse.ZoneSettingsExternalEditorPresetPrefix) {
 			s := strings.TrimPrefix(zoneID, mouse.ZoneSettingsExternalEditorPresetPrefix)
 			if idx, err := strconv.Atoi(s); err == nil {
@@ -350,6 +311,9 @@ func (m *Model) routeZoneToPanel(zoneID string, zoneEvent tea.MouseMsg) (Model, 
 	if tab, ok := resolveTabFromZone(zoneID); ok {
 		m.SetSettingsTab(tab)
 		if tab == 6 {
+			return *m, m.aiModel.SetFocusedField(0)
+		}
+		if tab == 7 {
 			return *m, m.advancedModel.SetFocusedField(0)
 		}
 		return *m, nil
@@ -376,7 +340,59 @@ func (m *Model) routeZoneToPanel(zoneID string, zoneEvent tea.MouseMsg) (Model, 
 	case 5:
 		return handleThemeZone(m, zoneID, zoneEvent)
 	case 6:
+		return handleAIZone(m, zoneID)
+	case 7:
 		return handleAdvancedZone(m, zoneID)
+	}
+	return *m, nil
+}
+
+// handleAIZone handles zone clicks for the AI panel (tab 6).
+func handleAIZone(m *Model, zoneID string) (Model, tea.Cmd) {
+	aim := m.GetAIModel()
+	switch zoneID {
+	case mouse.ZoneSettingsAIEnabled:
+		aim.ToggleAIEnabled()
+		return *m, nil
+	case mouse.ZoneSettingsAIBaseURL:
+		return *m, m.SetFocusedField(16)
+	case mouse.ZoneSettingsAIModel:
+		return *m, m.SetFocusedField(17)
+	case mouse.ZoneSettingsAIAPIKey:
+		return *m, m.SetFocusedField(18)
+	case mouse.ZoneSettingsAIEvologDescribeDefault:
+		aim.ToggleEvologDescribeAfterSplitDefault()
+		return *m, nil
+	case mouse.ZoneSettingsAIEvologFileSplit:
+		aim.ToggleEvologFileSplitEnabled()
+		return *m, nil
+	case mouse.ZoneSettingsAIEvologHunkSplit:
+		aim.ToggleEvologHunkSplitEnabled()
+		return *m, nil
+	case mouse.ZoneSettingsAIEvologMultiStepwise:
+		aim.ToggleEvologMultiStepwise()
+		return *m, nil
+	case mouse.ZoneSettingsAIEvologMultiMaxDecrease:
+		aim.DecEvologMultiMax()
+		return *m, nil
+	case mouse.ZoneSettingsAIEvologMultiMaxIncrease:
+		aim.IncEvologMultiMax()
+		return *m, nil
+	default:
+		if strings.HasPrefix(zoneID, mouse.ZoneSettingsAIProviderPrefix) {
+			s := strings.TrimPrefix(zoneID, mouse.ZoneSettingsAIProviderPrefix)
+			if idx, err := strconv.Atoi(s); err == nil {
+				switch idx {
+				case 1:
+					aim.SetAIProvider("gemini")
+				case 2:
+					aim.SetAIProvider("ollama")
+				default:
+					aim.SetAIProvider("openai_compatible")
+				}
+			}
+			return *m, nil
+		}
 	}
 	return *m, nil
 }

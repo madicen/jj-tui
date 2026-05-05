@@ -175,7 +175,7 @@ func (m *Model) GetSettingsFocusedField() int {
 	return m.settingsTabModel.GetFocusedField()
 }
 
-// GetSettingsTab returns the active settings sub-tab index (0–5: GitHub, Jira, Codecks, Tickets, Branches, Advanced).
+// GetSettingsTab returns the active settings sub-tab index (0=GitHub … 5=Theme, 6=AI, 7=Advanced).
 func (m *Model) GetSettingsTab() int {
 	return m.settingsTabModel.GetSettingsTab()
 }

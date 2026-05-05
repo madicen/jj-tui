@@ -98,7 +98,7 @@ func (m Model) lines() []string {
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("^s"), styles.HelpDescStyle.Render("Save description")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("Esc"), styles.HelpDescStyle.Render("Cancel")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("ctrl+shift+u"), styles.HelpDescStyle.Render("Clear description text")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("✧^g"), styles.HelpDescStyle.Render("Same as the purple ✧ ^g chip beside the title (optional AI; Settings → Advanced + API key)")))
+	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("✧^g"), styles.HelpDescStyle.Render("Same as the purple ✧ ^g chip beside the title (optional AI; Settings → AI + API key)")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("a"), styles.HelpDescStyle.Render("Abandon commit")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("n"), styles.HelpDescStyle.Render("Create new commit from selected")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("m"), styles.HelpDescStyle.Render("Create/move bookmark on commit")))

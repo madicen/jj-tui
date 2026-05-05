@@ -573,7 +573,7 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		return m, m.submitTicket()
 	case state.NavigateGenerateCommitDescription:
 		if m.appState.Config == nil || !m.appState.Config.AIConfiguredForGeneration() {
-			m.appState.StatusMessage = fmt.Sprintf("Enable AI in Settings → Advanced and set an API key (or %s)", config.EnvAIAPIKey)
+			m.appState.StatusMessage = fmt.Sprintf("Enable AI in Settings → AI and set an API key (or %s)", config.EnvAIAPIKey)
 			return m, nil
 		}
 		changeID := m.desceditModal.GetEditingCommitID()
@@ -590,7 +590,7 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		)
 	case state.NavigateGeneratePRForm:
 		if m.appState.Config == nil || !m.appState.Config.AIConfiguredForGeneration() {
-			m.appState.StatusMessage = fmt.Sprintf("Enable AI in Settings → Advanced and set an API key (or %s)", config.EnvAIAPIKey)
+			m.appState.StatusMessage = fmt.Sprintf("Enable AI in Settings → AI and set an API key (or %s)", config.EnvAIAPIKey)
 			return m, nil
 		}
 		repo := m.appState.Repository
@@ -609,7 +609,7 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		)
 	case state.NavigateGenerateBookmarkName:
 		if m.appState.Config == nil || !m.appState.Config.AIConfiguredForGeneration() {
-			m.appState.StatusMessage = fmt.Sprintf("Enable AI in Settings → Advanced and set an API key (or %s)", config.EnvAIAPIKey)
+			m.appState.StatusMessage = fmt.Sprintf("Enable AI in Settings → AI and set an API key (or %s)", config.EnvAIAPIKey)
 			return m, nil
 		}
 		repo := m.appState.Repository
@@ -632,7 +632,7 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		)
 	case state.NavigateGenerateTicketForm:
 		if m.appState.Config == nil || !m.appState.Config.AIConfiguredForGeneration() {
-			m.appState.StatusMessage = fmt.Sprintf("Enable AI in Settings → Advanced and set an API key (or %s)", config.EnvAIAPIKey)
+			m.appState.StatusMessage = fmt.Sprintf("Enable AI in Settings → AI and set an API key (or %s)", config.EnvAIAPIKey)
 			return m, nil
 		}
 		repo := m.appState.Repository
@@ -1714,7 +1714,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.appState.Config == nil || !m.appState.Config.AIConfiguredForGeneration() {
 			return m, func() tea.Msg {
-				return aitab.EvologSplitSuggestMsg{ReqID: msg.ReqID, Err: fmt.Errorf("AI is disabled or no API key (Settings → Advanced, or %s)", config.EnvAIAPIKey)}
+				return aitab.EvologSplitSuggestMsg{ReqID: msg.ReqID, Err: fmt.Errorf("AI is disabled or no API key (Settings → AI, or %s)", config.EnvAIAPIKey)}
 			}
 		}
 		return m, aitab.EvologSuggestPrepChainStartCmd(msg.ReqID, m.appState.JJService, m.appState.Config, m.evologSplitModal.EvologEntries())

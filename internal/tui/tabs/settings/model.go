@@ -8,6 +8,7 @@ import (
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/tabs/settings/advanced"
+	"github.com/madicen/jj-tui/internal/tui/tabs/settings/ai"
 	"github.com/madicen/jj-tui/internal/tui/tabs/settings/branches"
 	"github.com/madicen/jj-tui/internal/tui/tabs/settings/codecks"
 	"github.com/madicen/jj-tui/internal/tui/tabs/settings/github"
@@ -20,7 +21,7 @@ import (
 type Model struct {
 	settingsTab  int
 	zoneManager  *zone.Manager
-	panelYOffset [7]int
+	panelYOffset [8]int
 	width        int
 	height       int
 	viewOpts     *ViewOpts
@@ -31,6 +32,7 @@ type Model struct {
 	ticketsModel  tickets.Model
 	branchesModel branches.Model
 	themeModel    theme.Model
+	aiModel       ai.Model
 	advancedModel advanced.Model
 }
 
@@ -44,6 +46,7 @@ func NewModel() Model {
 		ticketsModel:  tickets.NewModel(),
 		branchesModel: branches.NewModel(),
 		themeModel:    theme.NewModel(),
+		aiModel:       ai.NewModel(),
 		advancedModel: advanced.NewModel(),
 	}
 }
@@ -58,6 +61,7 @@ func NewModelWithConfig(cfg *config.Config) Model {
 		ticketsModel:  tickets.NewModelFromConfig(cfg),
 		branchesModel: branches.NewModelFromConfig(cfg),
 		themeModel:    theme.NewModelFromConfig(cfg),
+		aiModel:       ai.NewModelFromConfig(cfg),
 		advancedModel: advanced.NewModelFromConfig(cfg),
 	}
 }
@@ -186,22 +190,28 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "ctrl+j":
 		tab := m.settingsTab - 1
 		if tab < 0 {
-			tab = 6
+			tab = 7
 		}
-		m.settingsTab = tab % 7
+		m.settingsTab = tab % 8
 		if m.settingsTab == 6 {
+			return m, m.aiModel.SetFocusedField(0)
+		}
+		if m.settingsTab == 7 {
 			return m, m.advancedModel.SetFocusedField(0)
 		}
 		return m, nil
 	case "ctrl+k":
-		m.settingsTab = (m.settingsTab + 1) % 7
+		m.settingsTab = (m.settingsTab + 1) % 8
 		if m.settingsTab == 6 {
+			return m, m.aiModel.SetFocusedField(0)
+		}
+		if m.settingsTab == 7 {
 			return m, m.advancedModel.SetFocusedField(0)
 		}
 		return m, nil
 	case "ctrl+s", "enter":
-		if m.settingsTab == 6 {
-			// Advanced tab: forward enter to revset input
+		if m.settingsTab == 6 || m.settingsTab == 7 {
+			// AI / Advanced: forward keys to text inputs
 			return m.forwardKeyToActiveSubmodelReturn(msg)
 		}
 		if msg.String() == "enter" {
@@ -229,12 +239,12 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "ctrl+l":
 		return m, Request{SaveSettingsLocal: true}.Cmd()
 	case "tab", "down":
-		if m.settingsTab != 6 {
+		if m.settingsTab != 6 && m.settingsTab != 7 {
 			m.forwardKeyToActiveSubmodel(msg)
 			return m, nil
 		}
 	case "shift+tab", "up":
-		if m.settingsTab != 6 {
+		if m.settingsTab != 6 && m.settingsTab != 7 {
 			m.forwardKeyToActiveSubmodel(msg)
 			return m, nil
 		}
@@ -248,7 +258,7 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 func (m *Model) ZoneIDs() []string {
 	ids := []string{
 		mouse.ZoneSettingsTabGitHub, mouse.ZoneSettingsTabJira, mouse.ZoneSettingsTabCodecks,
-		mouse.ZoneSettingsTabTickets, mouse.ZoneSettingsTabBranches, mouse.ZoneSettingsTabTheme, mouse.ZoneSettingsTabAdvanced,
+		mouse.ZoneSettingsTabTickets, mouse.ZoneSettingsTabBranches, mouse.ZoneSettingsTabTheme, mouse.ZoneSettingsTabAI, mouse.ZoneSettingsTabAdvanced,
 		mouse.ZoneSettingsThemePrimary, mouse.ZoneSettingsThemeSecondary, mouse.ZoneSettingsThemeMuted,
 		mouse.ZoneSettingsThemePrimaryDefault, mouse.ZoneSettingsThemeSecondaryDefault, mouse.ZoneSettingsThemeMutedDefault,
 		mouse.ZoneSettingsTicketProviderNone, mouse.ZoneSettingsTicketProviderJira,
@@ -311,12 +321,13 @@ func (m *Model) SetZoneManager(zm *zone.Manager) {
 func (m *Model) GetGitHubModel() *github.Model { return &m.githubModel }
 
 // GetGitHubTokenSource returns the selected GitHub API token source (saved | env | gh_cli).
-func (m *Model) GetGitHubTokenSource() string { return m.githubModel.GetTokenSource() }
+func (m *Model) GetGitHubTokenSource() string      { return m.githubModel.GetTokenSource() }
 func (m *Model) GetJiraModel() *jira.Model         { return &m.jiraModel }
 func (m *Model) GetCodecksModel() *codecks.Model   { return &m.codecksModel }
 func (m *Model) GetTicketsModel() *tickets.Model   { return &m.ticketsModel }
 func (m *Model) GetBranchesModel() *branches.Model { return &m.branchesModel }
 func (m *Model) GetThemeModel() *theme.Model       { return &m.themeModel }
+func (m *Model) GetAIModel() *ai.Model             { return &m.aiModel }
 func (m *Model) GetAdvancedModel() *advanced.Model { return &m.advancedModel }
 
 // forwardKeyToActiveSubmodel updates focus/state for tab/up/down within the active panel (mutates m in place).
@@ -371,10 +382,22 @@ func (m *Model) forwardKeyToActiveSubmodel(msg tea.KeyMsg) {
 	case 5:
 		// Theme tab: no fields to focus
 	case 6:
+		aim := m.GetAIModel()
+		switch msg.String() {
+		case "tab", "down", "j":
+			if aim.GetFocusedField() < 2 {
+				aim.SetFocusedField(aim.GetFocusedField() + 1)
+			}
+		case "shift+tab", "up", "k":
+			if aim.GetFocusedField() > 0 {
+				aim.SetFocusedField(aim.GetFocusedField() - 1)
+			}
+		}
+	case 7:
 		adv := m.GetAdvancedModel()
 		switch msg.String() {
 		case "tab", "down", "j":
-			if adv.GetFocusedField() < 4 {
+			if adv.GetFocusedField() < 1 {
 				adv.SetFocusedField(adv.GetFocusedField() + 1)
 			}
 		case "shift+tab", "up", "k":
@@ -408,6 +431,10 @@ func (m Model) forwardKeyToActiveSubmodelReturn(msg tea.KeyMsg) (Model, tea.Cmd)
 		// Theme tab has no text inputs
 		return m, nil
 	case 6:
+		updated, cmd := m.aiModel.Update(msg)
+		m.aiModel = updated
+		return m, cmd
+	case 7:
 		updated, cmd := m.advancedModel.Update(msg)
 		m.advancedModel = updated
 		return m, cmd
@@ -416,7 +443,7 @@ func (m Model) forwardKeyToActiveSubmodelReturn(msg tea.KeyMsg) (Model, tea.Cmd)
 }
 
 // forwardToActiveSubmodel forwards any message to the active sub-model (e.g. textinput.Blink for cursor).
-// Panels with inputs (GitHub, Jira, Codecks, Tickets, Advanced) need to receive these so the cursor blinks.
+// Panels with inputs (GitHub, Jira, Codecks, Tickets, AI, Advanced) need to receive these so the cursor blinks.
 func (m Model) forwardToActiveSubmodel(msg tea.Msg) (Model, tea.Cmd) {
 	switch m.settingsTab {
 	case 0:
@@ -439,6 +466,10 @@ func (m Model) forwardToActiveSubmodel(msg tea.Msg) (Model, tea.Cmd) {
 		// Theme tab: no inputs
 		return m, nil
 	case 6:
+		updated, cmd := m.aiModel.Update(msg)
+		m.aiModel = updated
+		return m, cmd
+	case 7:
 		updated, cmd := m.advancedModel.Update(msg)
 		m.advancedModel = updated
 		return m, cmd
@@ -453,15 +484,15 @@ func (m *Model) GetSettingsTab() int {
 	return m.settingsTab
 }
 
-// SetSettingsTab sets the settings sub-tab (0=GitHub, 1=Jira, 2=Codecks, 3=Tickets, 4=Branches, 5=Theme, 6=Advanced)
+// SetSettingsTab sets the settings sub-tab (0=GitHub, 1=Jira, 2=Codecks, 3=Tickets, 4=Branches, 5=Theme, 6=AI, 7=Advanced)
 func (m *Model) SetSettingsTab(tab int) {
 	if tab < 0 {
 		tab = 0
 	}
-	m.settingsTab = tab % 7
+	m.settingsTab = tab % 8
 }
 
-// GetFocusedField returns the currently focused input field (global index; Advanced text inputs use 14–18).
+// GetFocusedField returns the currently focused input field (global index; Advanced 14–15, AI 16–18).
 func (m *Model) GetFocusedField() int {
 	switch m.settingsTab {
 	case 0:
@@ -480,13 +511,15 @@ func (m *Model) GetFocusedField() int {
 	case 5:
 		return 0 // Theme tab has no inputs
 	case 6:
-		return 14 + m.advancedModel.GetFocusedField() // 14..18
+		return 16 + m.aiModel.GetFocusedField() // 16..18
+	case 7:
+		return 14 + m.advancedModel.GetFocusedField() // 14..15
 	}
 	return 0
 }
 
 // SetFocusedField sets the focused input field (global index); used by zone handlers to focus an input.
-// Returns a tea.Cmd when focusing an Advanced text input (indices 14–18) so the cursor is shown.
+// Returns a tea.Cmd when focusing Advanced or AI text inputs so the cursor is shown.
 func (m *Model) SetFocusedField(idx int) tea.Cmd {
 	if idx < 1 {
 		m.githubModel.SetFocusedField(0)
@@ -504,7 +537,10 @@ func (m *Model) SetFocusedField(idx int) tea.Cmd {
 		m.ticketsModel.SetFocusedField(0)
 		return nil
 	}
-	return m.advancedModel.SetFocusedField(idx - 14)
+	if idx < 16 {
+		return m.advancedModel.SetFocusedField(idx - 14)
+	}
+	return m.aiModel.SetFocusedField(idx - 16)
 }
 
 // ThemeSwatchIndex returns the theme swatch index (0–2) for the given zone ID, or -1.
@@ -548,13 +584,15 @@ func (m *Model) EnterTab() tea.Cmd {
 	case 5:
 		// Theme tab: nothing to focus
 	case 6:
+		return m.aiModel.SetFocusedField(0)
+	case 7:
 		return m.advancedModel.SetFocusedField(0)
 	}
 	return nil
 }
 
 // GetSettingsInputs returns a slice of textinput views for BuildRenderData (built from sub-models).
-// The layout is fixed so that the Advanced revset input is always at index 14 (needed for renderAdvanced).
+// Fixed layout: index 14–15 Advanced (revset, custom editor), 16–18 AI (URL, model, key).
 func (m *Model) GetSettingsInputs() []struct{ View string } {
 	var out []struct{ View string }
 	for _, v := range m.githubModel.GetInputViews() {
@@ -569,14 +607,15 @@ func (m *Model) GetSettingsInputs() []struct{ View string } {
 	for _, v := range m.ticketsModel.GetInputViews() {
 		out = append(out, struct{ View string }{v})
 	}
-	// Pad so Advanced revset is always at index 14 (Tickets returns 0 when provider != github_issues).
 	for len(out) < 14 {
 		out = append(out, struct{ View string }{""})
 	}
 	for _, v := range m.advancedModel.GetInputViews() {
 		out = append(out, struct{ View string }{v})
 	}
-	// Ensure exactly 19 elements: 14=revset, 15=custom editor, 16=AI base URL, 17=AI model, 18=AI key.
+	for _, v := range m.aiModel.GetInputViews() {
+		out = append(out, struct{ View string }{v})
+	}
 	for len(out) < 19 {
 		out = append(out, struct{ View string }{""})
 	}
@@ -593,6 +632,7 @@ func (m *Model) SetInputWidths(width int) {
 	m.codecksModel.SetInputWidth(width)
 	m.ticketsModel.SetInputWidth(width)
 	m.advancedModel.SetInputWidth(width)
+	m.aiModel.SetInputWidth(width)
 }
 
 // SetDimensions sets the content area dimensions (used for scroll viewport).
@@ -603,7 +643,7 @@ func (m *Model) SetDimensions(width, height int) {
 
 // GetSettingsYOffset returns the current scroll offset for the active settings panel.
 func (m *Model) GetSettingsYOffset() int {
-	if m.settingsTab < 0 || m.settingsTab >= 7 {
+	if m.settingsTab < 0 || m.settingsTab >= 8 {
 		return 0
 	}
 	return m.panelYOffset[m.settingsTab]

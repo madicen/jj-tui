@@ -777,10 +777,10 @@ func TestSettingsGraphRevset(t *testing.T) {
 		t.Fatalf("Expected ViewSettings after ',' , got %v", m.GetViewMode())
 	}
 
-	// Go to Advanced tab: ctrl+j goes previous tab, so from 0 -> last (6) in one key; run returned cmd so Focus() runs
+	// Go to Advanced tab: ctrl+j goes previous tab, so from 0 -> last (7) in one key; run returned cmd so Focus() runs
 	m = updateModelWithCmd(m, tea.KeyMsg{Type: tea.KeyCtrlJ})
-	if m.GetSettingsTab() != 6 {
-		t.Fatalf("Expected settings tab 6 (Advanced) after ctrl+j, got %d", m.GetSettingsTab())
+	if m.GetSettingsTab() != 7 {
+		t.Fatalf("Expected settings tab 7 (Advanced) after ctrl+j, got %d", m.GetSettingsTab())
 	}
 
 	// Rendered view must include the revset input line: ">" prompt (like Jira/Codecks) and the label
