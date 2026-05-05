@@ -158,11 +158,11 @@ func (m *Model) renderPRs() string {
 		var reviewIndicator string
 		switch pr.ReviewStatus {
 		case internal.ReviewStatusApproved:
-			reviewIndicator = lipgloss.NewStyle().Foreground(lipgloss.Color("#2ea44f")).Render("👍")
+			reviewIndicator = lipgloss.NewStyle().Foreground(lipgloss.Color("#2ea44f")).Render(styles.ReviewApprovedMark)
 		case internal.ReviewStatusChangesRequested:
-			reviewIndicator = lipgloss.NewStyle().Foreground(lipgloss.Color("#cb2431")).Render("📝")
+			reviewIndicator = lipgloss.NewStyle().Foreground(lipgloss.Color("#cb2431")).Render(styles.ReviewChangesRequestedMark)
 		case internal.ReviewStatusPending:
-			reviewIndicator = lipgloss.NewStyle().Foreground(lipgloss.Color("#dbab09")).Render("⏳")
+			reviewIndicator = lipgloss.NewStyle().Foreground(lipgloss.Color("#dbab09")).Render(styles.ReviewPendingMark)
 		default:
 			reviewIndicator = lipgloss.NewStyle().Foreground(lipgloss.Color("#6a737d")).Render("·")
 		}

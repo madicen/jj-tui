@@ -23,6 +23,14 @@ const DivergentMark = "≠"
 // color emoji independent of ANSI.
 const AIGenerateMark = "\u2727"
 
+// PR review column marks: single-cell characters that respect lipgloss foreground. Emoji
+// (👍 📝 ⏳) often render as full-color pictographs and ignore theme colors.
+const (
+	ReviewApprovedMark         = "+"
+	ReviewChangesRequestedMark = "!"
+	ReviewPendingMark          = "*"
+)
+
 // AIAssistGlyph is kept for muted inline hints (e.g. evolog loading). Prefer AIGenerateMark on
 // styled chips where color must follow the theme.
 const AIAssistGlyph = AIGenerateMark
