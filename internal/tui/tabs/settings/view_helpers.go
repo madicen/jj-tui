@@ -14,7 +14,8 @@ import (
 	"github.com/madicen/jj-tui/internal/version"
 )
 
-// ActiveTab is the active settings sub-tab (0=GitHub, 1=Jira, 2=Codecks, 3=Tickets, 4=Branches, 5=Theme, 6=Advanced)
+// ActiveTab is the selected settings sub-tab. Indices and labels:
+// 0 GitHub, 1 Jira, 2 Codecks, 3 Tickets, 4 Branches, 5 Theme, 6 AI, 7 Advanced.
 type ActiveTab int
 
 const (
@@ -24,6 +25,7 @@ const (
 	TabTickets
 	TabBranches
 	TabTheme
+	TabAI
 	TabAdvanced
 )
 
@@ -83,7 +85,7 @@ func BuildRenderData(sm *Model, opts ViewOpts) RenderData {
 		FocusedField:           sm.GetFocusedField(),
 		GithubService:          opts.GitHubAvailable,
 		JiraService:            opts.TicketServiceName != "",
-		ActiveTab:              ActiveTab(sm.GetSettingsTab()),
+		ActiveTab:              ActiveTab(sm.GetActiveSettingsTabIndex()),
 		ShowMergedPRs:          sm.GetSettingsShowMerged(),
 		ShowClosedPRs:          sm.GetSettingsShowClosed(),
 		OnlyMyPRs:              sm.GetSettingsOnlyMine(),
@@ -96,14 +98,14 @@ func BuildRenderData(sm *Model, opts ViewOpts) RenderData {
 		SanitizeBookmarks:      sm.GetSettingsSanitizeBookmarks(),
 		ConfirmingCleanup:      sm.GetConfirmingCleanup(),
 		ExternalEditorPreset:   sm.GetAdvancedModel().GetExternalEditorPreset(),
-		AIEnabled:              sm.GetAdvancedModel().GetAIEnabled(),
-		AIProviderID:           sm.GetAdvancedModel().GetAIProvider(),
+		AIEnabled:              sm.GetAIModel().GetAIEnabled(),
+		AIProviderID:           sm.GetAIModel().GetAIProvider(),
 		AIAPIKeySet:            opts.Config != nil && opts.Config.AISupportsGenerationCredentials(),
-		EvologDescribeDefault:  sm.GetAdvancedModel().GetEvologDescribeAfterSplitDefault(),
-		EvologFileSplitEnabled: sm.GetAdvancedModel().GetEvologFileSplitEnabled(),
-		EvologHunkSplitEnabled: sm.GetAdvancedModel().GetEvologHunkSplitEnabled(),
-		EvologMultiStepwise:    sm.GetAdvancedModel().GetEvologMultiStepwise(),
-		EvologMultiMax:         sm.GetAdvancedModel().GetEvologMultiMax(),
+		EvologDescribeDefault:  sm.GetAIModel().GetEvologDescribeAfterSplitDefault(),
+		EvologFileSplitEnabled: sm.GetAIModel().GetEvologFileSplitEnabled(),
+		EvologHunkSplitEnabled: sm.GetAIModel().GetEvologHunkSplitEnabled(),
+		EvologMultiStepwise:    sm.GetAIModel().GetEvologMultiStepwise(),
+		EvologMultiMax:         sm.GetAIModel().GetEvologMultiMax(),
 		YOffset:                sm.GetSettingsYOffset(),
 		ContentHeight:          opts.ContentHeight,
 		ThemeModel:             sm.GetThemeModel(),
@@ -175,6 +177,8 @@ func Render(zm *zone.Manager, data RenderData) string {
 	case TabTheme:
 		themeStartRow := len(lines)
 		lines = append(lines, r.renderTheme(data, themeStartRow)...)
+	case TabAI:
+		lines = append(lines, r.renderAI(data)...)
 	case TabAdvanced:
 		lines = append(lines, r.renderAdvanced(data)...)
 	}
@@ -232,6 +236,7 @@ func (r renderCtx) renderTabs(active ActiveTab) string {
 	ticketsStyle := settingsTabStyle
 	branchesStyle := settingsTabStyle
 	themeStyle := settingsTabStyle
+	aiStyle := settingsTabStyle
 	advancedStyle := settingsTabStyle
 	switch active {
 	case TabGitHub:
@@ -246,6 +251,8 @@ func (r renderCtx) renderTabs(active ActiveTab) string {
 		branchesStyle = settingsTabActive
 	case TabTheme:
 		themeStyle = settingsTabActive
+	case TabAI:
+		aiStyle = settingsTabActive
 	case TabAdvanced:
 		advancedStyle = settingsTabActive
 	}
@@ -255,8 +262,9 @@ func (r renderCtx) renderTabs(active ActiveTab) string {
 	ticketsTab := r.mark(mouse.ZoneSettingsTabTickets, ticketsStyle.Render("Tickets"))
 	branchesTab := r.mark(mouse.ZoneSettingsTabBranches, branchesStyle.Render("Branches"))
 	themeTab := r.mark(mouse.ZoneSettingsTabTheme, themeStyle.Render("Theme"))
+	aiTab := r.mark(mouse.ZoneSettingsTabAI, aiStyle.Render("AI"))
 	advancedTab := r.mark(mouse.ZoneSettingsTabAdvanced, advancedStyle.Render("Advanced"))
-	return lipgloss.JoinHorizontal(lipgloss.Left, githubTab, " │ ", jiraTab, " │ ", codecksTab, " │ ", ticketsTab, " │ ", branchesTab, " │ ", themeTab, " │ ", advancedTab)
+	return lipgloss.JoinHorizontal(lipgloss.Left, githubTab, " │ ", jiraTab, " │ ", codecksTab, " │ ", ticketsTab, " │ ", branchesTab, " │ ", themeTab, " │ ", aiTab, " │ ", advancedTab)
 }
 
 func (r renderCtx) renderToggle(label string, enabled bool, zoneID string) string {
@@ -521,7 +529,7 @@ func (r renderCtx) renderTheme(data RenderData, startRow int) []string {
 	return lines
 }
 
-func (r renderCtx) renderAdvanced(data RenderData) []string {
+func (r renderCtx) renderAI(data RenderData) []string {
 	var lines []string
 	focusStyle := func(i int) lipgloss.Style {
 		s := lipgloss.NewStyle()
@@ -530,39 +538,7 @@ func (r renderCtx) renderAdvanced(data RenderData) []string {
 		}
 		return s
 	}
-	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render("Open in external editor"), "")
-	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Graph files pane: O opens the selected file. Install the editor CLI on your PATH (e.g. Cursor “Install cursor command”)."), "")
-	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("  Editor:"), "")
-	renderEditorRadio := func(idx int, label string) string {
-		selected := data.ExternalEditorPreset == idx
-		var radioText string
-		if selected {
-			radioText = toggleOnStyle.Render("(●) " + label)
-		} else {
-			radioText = lipgloss.NewStyle().Foreground(styles.ColorPrimary).Render("( ) " + label)
-		}
-		return r.mark(mouse.ZoneSettingsExternalEditorPreset(idx), radioText)
-	}
-	for i, label := range advanced.ExternalEditorPresetLabels {
-		lines = append(lines, "    "+renderEditorRadio(i, label))
-	}
-	lines = append(lines, "")
-	lines = append(lines, focusStyle(15).Render("  Custom command (when preset is Custom, run via sh -c):"))
-	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Use {path} for the absolute file path, e.g. cursor -g {path}"), "")
-	if len(data.Inputs) > 15 {
-		lines = append(lines, "  "+r.mark(mouse.ZoneSettingsExternalEditorCustom, data.Inputs[15].View))
-	}
-	lines = append(lines, "", "")
-
-	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render("Graph View"), "")
-	lines = append(lines, focusStyle(14).Render("  Default revset (jj):"))
-	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Which commits to show in the commit graph. Empty = built-in default (fork parents + closest immutable per mutable stack; see README)."), "")
-	if len(data.Inputs) > 14 {
-		lines = append(lines, "  "+r.mark(mouse.ZoneSettingsGraphRevset, data.Inputs[14].View)+" "+r.mark(mouse.ZoneSettingsGraphRevsetClear, clearButtonStyle.Render("[Clear]")))
-	}
-	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    e.g. trunk() | (ancestors(@) - ancestors(trunk())) for main + your branch only"), "", "")
-
-	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render("Optional AI assist"), "")
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render("AI assist"), "")
 	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    API keys can be stored in config (0600) or provided via env ("+config.EnvAIAPIKey+" overrides). Sending a diff exposes code to the API."), "")
 	toggleAI := "[ ]"
 	if data.AIEnabled {
@@ -641,7 +617,49 @@ func (r renderCtx) renderAdvanced(data RenderData) []string {
 		"  ", lipgloss.NewStyle().Foreground(styles.ColorMuted).Render(fmt.Sprintf("AI multi-split max bases: %d", data.EvologMultiMax)),
 		"  "+r.mark(mouse.ZoneSettingsAIEvologMultiMaxIncrease, lipgloss.NewStyle().Foreground(styles.ColorPrimary).Render("+")),
 	))
+	return lines
+}
+
+func (r renderCtx) renderAdvanced(data RenderData) []string {
+	var lines []string
+	focusStyle := func(i int) lipgloss.Style {
+		s := lipgloss.NewStyle()
+		if data.FocusedField == i {
+			return s.Bold(true).Foreground(styles.ColorPrimary)
+		}
+		return s
+	}
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render("Open in external editor"), "")
+	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Graph files pane: O opens the selected file. Install the editor CLI on your PATH (e.g. Cursor “Install cursor command”)."), "")
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("  Editor:"), "")
+	renderEditorRadio := func(idx int, label string) string {
+		selected := data.ExternalEditorPreset == idx
+		var radioText string
+		if selected {
+			radioText = toggleOnStyle.Render("(●) " + label)
+		} else {
+			radioText = lipgloss.NewStyle().Foreground(styles.ColorPrimary).Render("( ) " + label)
+		}
+		return r.mark(mouse.ZoneSettingsExternalEditorPreset(idx), radioText)
+	}
+	for i, label := range advanced.ExternalEditorPresetLabels {
+		lines = append(lines, "    "+renderEditorRadio(i, label))
+	}
+	lines = append(lines, "")
+	lines = append(lines, focusStyle(15).Render("  Custom command (when preset is Custom, run via sh -c):"))
+	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Use {path} for the absolute file path, e.g. cursor -g {path}"), "")
+	if len(data.Inputs) > 15 {
+		lines = append(lines, "  "+r.mark(mouse.ZoneSettingsExternalEditorCustom, data.Inputs[15].View))
+	}
 	lines = append(lines, "", "")
+
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render("Graph View"), "")
+	lines = append(lines, focusStyle(14).Render("  Default revset (jj):"))
+	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Which commits to show in the commit graph. Empty = built-in default (fork parents + closest immutable per mutable stack; see README)."), "")
+	if len(data.Inputs) > 14 {
+		lines = append(lines, "  "+r.mark(mouse.ZoneSettingsGraphRevset, data.Inputs[14].View)+" "+r.mark(mouse.ZoneSettingsGraphRevsetClear, clearButtonStyle.Render("[Clear]")))
+	}
+	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    e.g. trunk() | (ancestors(@) - ancestors(trunk())) for main + your branch only"), "", "")
 
 	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render("Bookmark Settings"), "")
 	toggleStr := "[ ]"

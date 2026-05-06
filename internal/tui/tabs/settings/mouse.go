@@ -9,7 +9,8 @@ import (
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 )
 
-// resolveTabFromZone returns the settings tab index (0–6) if zoneID is a tab zone.
+// resolveTabFromZone maps a tab zone id to the settings sub-tab index if zoneID is a tab header:
+// 0 GitHub, 1 Jira, 2 Codecks, 3 Tickets, 4 Branches, 5 Theme, 6 AI, 7 Advanced.
 func resolveTabFromZone(zoneID string) (tab int, ok bool) {
 	switch zoneID {
 	case mouse.ZoneSettingsTabGitHub:
@@ -24,13 +25,15 @@ func resolveTabFromZone(zoneID string) (tab int, ok bool) {
 		return 4, true
 	case mouse.ZoneSettingsTabTheme:
 		return 5, true
-	case mouse.ZoneSettingsTabAdvanced:
+	case mouse.ZoneSettingsTabAI:
 		return 6, true
+	case mouse.ZoneSettingsTabAdvanced:
+		return 7, true
 	}
 	return 0, false
 }
 
-// handleGitHubZone handles zone clicks for the GitHub panel (tab 0).
+// handleGitHubZone handles zone clicks for the GitHub settings panel (index 0).
 func handleGitHubZone(m *Model, zoneID string) (Model, tea.Cmd) {
 	if zoneID == mouse.ZoneSettingsGitHubLogin {
 		if m.GetGitHubModel().GetTokenSource() == config.GitHubTokenSourceGhCLI {
@@ -110,7 +113,7 @@ func handleGitHubZone(m *Model, zoneID string) (Model, tea.Cmd) {
 	return *m, nil
 }
 
-// handleJiraZone handles zone clicks for the Jira panel (tab 1).
+// handleJiraZone handles zone clicks for the Jira settings panel (index 1).
 func handleJiraZone(m *Model, zoneID string) (Model, tea.Cmd) {
 	jr := m.GetJiraModel()
 	clearZones := []string{
@@ -154,7 +157,7 @@ func handleJiraZone(m *Model, zoneID string) (Model, tea.Cmd) {
 	return *m, nil
 }
 
-// handleCodecksZone handles zone clicks for the Codecks panel (tab 2).
+// handleCodecksZone handles zone clicks for the Codecks settings panel (index 2).
 func handleCodecksZone(m *Model, zoneID string) (Model, tea.Cmd) {
 	cc := m.GetCodecksModel()
 	clearZones := []string{
@@ -191,7 +194,7 @@ func handleCodecksZone(m *Model, zoneID string) (Model, tea.Cmd) {
 	return *m, nil
 }
 
-// handleTicketsZone handles zone clicks for the Tickets panel (tab 3).
+// handleTicketsZone handles zone clicks for the Tickets settings panel (index 3).
 func handleTicketsZone(m *Model, zoneID string) (Model, tea.Cmd) {
 	tk := m.GetTicketsModel()
 	switch zoneID {
@@ -221,7 +224,7 @@ func handleTicketsZone(m *Model, zoneID string) (Model, tea.Cmd) {
 	return *m, nil
 }
 
-// handleBranchesZone handles zone clicks for the Branches panel (tab 4).
+// handleBranchesZone handles zone clicks for the Branches settings panel (index 4).
 func handleBranchesZone(m *Model, zoneID string) (Model, tea.Cmd) {
 	br := m.GetBranchesModel()
 	switch zoneID {
@@ -245,7 +248,7 @@ func handleBranchesZone(m *Model, zoneID string) (Model, tea.Cmd) {
 	return *m, nil
 }
 
-// handleThemeZone handles zone clicks for the Theme panel (tab 5): [Default] buttons or forward to the clicked swatch.
+// handleThemeZone handles zone clicks for the Theme settings panel (index 5): [Default] buttons or forward to the clicked swatch.
 func handleThemeZone(m *Model, zoneID string, event tea.MouseMsg) (Model, tea.Cmd) {
 	if idx := ThemeDefaultZoneIndex(zoneID); idx >= 0 {
 		m.themeModel.SetSwatchToDefault(idx)
@@ -260,7 +263,7 @@ func handleThemeZone(m *Model, zoneID string, event tea.MouseMsg) (Model, tea.Cm
 	return *m, cmd
 }
 
-// handleAdvancedZone handles zone clicks for the Advanced panel (tab 6).
+// handleAdvancedZone handles zone clicks for the Advanced settings panel (index 7).
 func handleAdvancedZone(m *Model, zoneID string) (Model, tea.Cmd) {
 	adv := m.GetAdvancedModel()
 	if adv.GetConfirmingCleanup() != "" {
@@ -291,48 +294,7 @@ func handleAdvancedZone(m *Model, zoneID string) (Model, tea.Cmd) {
 		return *m, m.SetFocusedField(14)
 	case mouse.ZoneSettingsExternalEditorCustom:
 		return *m, m.SetFocusedField(15)
-	case mouse.ZoneSettingsAIEnabled:
-		adv.ToggleAIEnabled()
-		return *m, nil
-	case mouse.ZoneSettingsAIBaseURL:
-		return *m, m.SetFocusedField(16)
-	case mouse.ZoneSettingsAIModel:
-		return *m, m.SetFocusedField(17)
-	case mouse.ZoneSettingsAIAPIKey:
-		return *m, m.SetFocusedField(18)
-	case mouse.ZoneSettingsAIEvologDescribeDefault:
-		adv.ToggleEvologDescribeAfterSplitDefault()
-		return *m, nil
-	case mouse.ZoneSettingsAIEvologFileSplit:
-		adv.ToggleEvologFileSplitEnabled()
-		return *m, nil
-	case mouse.ZoneSettingsAIEvologHunkSplit:
-		adv.ToggleEvologHunkSplitEnabled()
-		return *m, nil
-	case mouse.ZoneSettingsAIEvologMultiStepwise:
-		adv.ToggleEvologMultiStepwise()
-		return *m, nil
-	case mouse.ZoneSettingsAIEvologMultiMaxDecrease:
-		adv.DecEvologMultiMax()
-		return *m, nil
-	case mouse.ZoneSettingsAIEvologMultiMaxIncrease:
-		adv.IncEvologMultiMax()
-		return *m, nil
 	default:
-		if strings.HasPrefix(zoneID, mouse.ZoneSettingsAIProviderPrefix) {
-			s := strings.TrimPrefix(zoneID, mouse.ZoneSettingsAIProviderPrefix)
-			if idx, err := strconv.Atoi(s); err == nil {
-				switch idx {
-				case 1:
-					adv.SetAIProvider("gemini")
-				case 2:
-					adv.SetAIProvider("ollama")
-				default:
-					adv.SetAIProvider("openai_compatible")
-				}
-			}
-			return *m, nil
-		}
 		if strings.HasPrefix(zoneID, mouse.ZoneSettingsExternalEditorPresetPrefix) {
 			s := strings.TrimPrefix(zoneID, mouse.ZoneSettingsExternalEditorPresetPrefix)
 			if idx, err := strconv.Atoi(s); err == nil {
@@ -348,8 +310,11 @@ func handleAdvancedZone(m *Model, zoneID string) (Model, tea.Cmd) {
 // zoneEvent is the mouse event that triggered the zone hit (needed for theme swatch clicks).
 func (m *Model) routeZoneToPanel(zoneID string, zoneEvent tea.MouseMsg) (Model, tea.Cmd) {
 	if tab, ok := resolveTabFromZone(zoneID); ok {
-		m.SetSettingsTab(tab)
-		if tab == 6 {
+		m.SetActiveSettingsTabIndex(tab)
+		if tab == 6 { // AI
+			return *m, m.aiModel.SetFocusedField(0)
+		}
+		if tab == 7 { // Advanced
 			return *m, m.advancedModel.SetFocusedField(0)
 		}
 		return *m, nil
@@ -363,20 +328,72 @@ func (m *Model) routeZoneToPanel(zoneID string, zoneEvent tea.MouseMsg) (Model, 
 		return *m, PerformCancelCmd()
 	}
 	switch m.settingsTab {
-	case 0:
+	case 0: // GitHub
 		return handleGitHubZone(m, zoneID)
-	case 1:
+	case 1: // Jira
 		return handleJiraZone(m, zoneID)
-	case 2:
+	case 2: // Codecks
 		return handleCodecksZone(m, zoneID)
-	case 3:
+	case 3: // Tickets
 		return handleTicketsZone(m, zoneID)
-	case 4:
+	case 4: // Branches
 		return handleBranchesZone(m, zoneID)
-	case 5:
+	case 5: // Theme
 		return handleThemeZone(m, zoneID, zoneEvent)
-	case 6:
+	case 6: // AI
+		return handleAIZone(m, zoneID)
+	case 7: // Advanced
 		return handleAdvancedZone(m, zoneID)
+	}
+	return *m, nil
+}
+
+// handleAIZone handles zone clicks for the AI settings panel (index 6).
+func handleAIZone(m *Model, zoneID string) (Model, tea.Cmd) {
+	aim := m.GetAIModel()
+	switch zoneID {
+	case mouse.ZoneSettingsAIEnabled:
+		aim.ToggleAIEnabled()
+		return *m, nil
+	case mouse.ZoneSettingsAIBaseURL:
+		return *m, m.SetFocusedField(16)
+	case mouse.ZoneSettingsAIModel:
+		return *m, m.SetFocusedField(17)
+	case mouse.ZoneSettingsAIAPIKey:
+		return *m, m.SetFocusedField(18)
+	case mouse.ZoneSettingsAIEvologDescribeDefault:
+		aim.ToggleEvologDescribeAfterSplitDefault()
+		return *m, nil
+	case mouse.ZoneSettingsAIEvologFileSplit:
+		aim.ToggleEvologFileSplitEnabled()
+		return *m, nil
+	case mouse.ZoneSettingsAIEvologHunkSplit:
+		aim.ToggleEvologHunkSplitEnabled()
+		return *m, nil
+	case mouse.ZoneSettingsAIEvologMultiStepwise:
+		aim.ToggleEvologMultiStepwise()
+		return *m, nil
+	case mouse.ZoneSettingsAIEvologMultiMaxDecrease:
+		aim.DecEvologMultiMax()
+		return *m, nil
+	case mouse.ZoneSettingsAIEvologMultiMaxIncrease:
+		aim.IncEvologMultiMax()
+		return *m, nil
+	default:
+		if strings.HasPrefix(zoneID, mouse.ZoneSettingsAIProviderPrefix) {
+			s := strings.TrimPrefix(zoneID, mouse.ZoneSettingsAIProviderPrefix)
+			if idx, err := strconv.Atoi(s); err == nil {
+				switch idx {
+				case 1:
+					aim.SetAIProvider("gemini")
+				case 2:
+					aim.SetAIProvider("ollama")
+				default:
+					aim.SetAIProvider("openai_compatible")
+				}
+			}
+			return *m, nil
+		}
 	}
 	return *m, nil
 }

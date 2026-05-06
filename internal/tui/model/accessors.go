@@ -175,14 +175,15 @@ func (m *Model) GetSettingsFocusedField() int {
 	return m.settingsTabModel.GetFocusedField()
 }
 
-// GetSettingsTab returns the active settings sub-tab index (0–5: GitHub, Jira, Codecks, Tickets, Branches, Advanced).
-func (m *Model) GetSettingsTab() int {
-	return m.settingsTabModel.GetSettingsTab()
+// GetActiveSettingsTabIndex returns the active settings sub-tab index:
+// 0 GitHub, 1 Jira, 2 Codecks, 3 Tickets, 4 Branches, 5 Theme, 6 AI, 7 Advanced.
+func (m *Model) GetActiveSettingsTabIndex() int {
+	return m.settingsTabModel.GetActiveSettingsTabIndex()
 }
 
-// SetSettingsTab sets the active settings sub-tab (for testing).
-func (m *Model) SetSettingsTab(tab int) {
-	m.settingsTabModel.SetSettingsTab(tab)
+// SetActiveSettingsTabIndex sets the active settings sub-tab (for testing).
+func (m *Model) SetActiveSettingsTabIndex(tab int) {
+	m.settingsTabModel.SetActiveSettingsTabIndex(tab)
 }
 
 // GetSettingsGraphRevset returns the graph revset string from the Advanced settings panel.

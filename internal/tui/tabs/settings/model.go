@@ -8,6 +8,7 @@ import (
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/tabs/settings/advanced"
+	"github.com/madicen/jj-tui/internal/tui/tabs/settings/ai"
 	"github.com/madicen/jj-tui/internal/tui/tabs/settings/branches"
 	"github.com/madicen/jj-tui/internal/tui/tabs/settings/codecks"
 	"github.com/madicen/jj-tui/internal/tui/tabs/settings/github"
@@ -18,9 +19,11 @@ import (
 
 // Model represents the state of the Settings tab (routing-only; state lives in sub-models).
 type Model struct {
+	// settingsTab selects the visible sub-panel. Indices (UI label):
+	// 0 GitHub, 1 Jira, 2 Codecks, 3 Tickets, 4 Branches, 5 Theme, 6 AI, 7 Advanced.
 	settingsTab  int
 	zoneManager  *zone.Manager
-	panelYOffset [7]int
+	panelYOffset [8]int // scroll offset per sub-tab; index matches settingsTab order above
 	width        int
 	height       int
 	viewOpts     *ViewOpts
@@ -31,6 +34,7 @@ type Model struct {
 	ticketsModel  tickets.Model
 	branchesModel branches.Model
 	themeModel    theme.Model
+	aiModel       ai.Model
 	advancedModel advanced.Model
 }
 
@@ -44,6 +48,7 @@ func NewModel() Model {
 		ticketsModel:  tickets.NewModel(),
 		branchesModel: branches.NewModel(),
 		themeModel:    theme.NewModel(),
+		aiModel:       ai.NewModel(),
 		advancedModel: advanced.NewModel(),
 	}
 }
@@ -58,6 +63,7 @@ func NewModelWithConfig(cfg *config.Config) Model {
 		ticketsModel:  tickets.NewModelFromConfig(cfg),
 		branchesModel: branches.NewModelFromConfig(cfg),
 		themeModel:    theme.NewModelFromConfig(cfg),
+		aiModel:       ai.NewModelFromConfig(cfg),
 		advancedModel: advanced.NewModelFromConfig(cfg),
 	}
 }
@@ -76,13 +82,13 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	// When Theme tab is active and a color picker is open, forward all input to the theme model.
-	if m.settingsTab == 5 && m.themeModel.AnyOpen() {
+	if m.settingsTab == 5 && m.themeModel.AnyOpen() { // Theme
 		updated, cmd := m.themeModel.Update(msg)
 		m.themeModel = updated
 		return m, cmd
 	}
 	// When Theme tab is active and we get picker result messages, forward to theme model so the swatch closes
-	if m.settingsTab == 5 {
+	if m.settingsTab == 5 { // Theme
 		switch msg.(type) {
 		case bubblepicker.ColorChosenMsg, bubblepicker.ColorCanceledMsg:
 			updated, cmd := m.themeModel.Update(msg)
@@ -92,7 +98,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	}
 	// When Theme tab is active, forward left mouse press to theme swatch if click is in a swatch zone
 	// (bubblezone sends MsgZoneInBounds on release, but the swatch opens on press—so we must handle press here)
-	if m.settingsTab == 5 && m.zoneManager != nil {
+	if m.settingsTab == 5 && m.zoneManager != nil { // Theme
 		if mouseMsg, ok := msg.(tea.MouseMsg); ok && mouseMsg.Action == tea.MouseActionPress && mouseMsg.Button == tea.MouseButtonLeft {
 			for _, zoneID := range []string{mouse.ZoneSettingsThemePrimary, mouse.ZoneSettingsThemeSecondary, mouse.ZoneSettingsThemeMuted} {
 				z := m.zoneManager.Get(zoneID)
@@ -146,7 +152,7 @@ func (m Model) View() string {
 		return ""
 	}
 	out := RenderWithState(m.zoneManager, &m, *m.viewOpts)
-	if m.settingsTab == 5 && m.themeModel.AnyOpen() {
+	if m.settingsTab == 5 && m.themeModel.AnyOpen() { // Theme
 		out = m.themeModel.ViewWithOverlay(out, m.width, m.height)
 	}
 	return out
@@ -157,13 +163,13 @@ func (m *Model) SetViewOpts(opts ViewOpts) {
 	m.viewOpts = &opts
 }
 
-// EscHandledInsideSettings is true when Esc should be handled by the settings tab (theme color
-// picker, advanced cleanup confirm) instead of closing settings and returning to the graph.
+// EscHandledInsideSettings is true when Esc should be handled inside Settings (Theme tab / index 5
+// color picker, Advanced / index 7 cleanup confirm) instead of closing settings and returning to the graph.
 func (m Model) EscHandledInsideSettings() bool {
 	if m.advancedModel.GetConfirmingCleanup() != "" {
 		return true
 	}
-	return m.settingsTab == 5 && m.themeModel.AnyOpen()
+	return m.settingsTab == 5 && m.themeModel.AnyOpen() // Theme
 }
 
 // handleKeyMsg handles all keyboard input for the Settings tab (cleanup confirm, nav, focus, save, inputs).
@@ -186,38 +192,44 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "ctrl+j":
 		tab := m.settingsTab - 1
 		if tab < 0 {
-			tab = 6
+			tab = 7
 		}
-		m.settingsTab = tab % 7
-		if m.settingsTab == 6 {
+		m.settingsTab = tab % 8
+		if m.settingsTab == 6 { // AI
+			return m, m.aiModel.SetFocusedField(0)
+		}
+		if m.settingsTab == 7 { // Advanced
 			return m, m.advancedModel.SetFocusedField(0)
 		}
 		return m, nil
 	case "ctrl+k":
-		m.settingsTab = (m.settingsTab + 1) % 7
-		if m.settingsTab == 6 {
+		m.settingsTab = (m.settingsTab + 1) % 8
+		if m.settingsTab == 6 { // AI
+			return m, m.aiModel.SetFocusedField(0)
+		}
+		if m.settingsTab == 7 { // Advanced
 			return m, m.advancedModel.SetFocusedField(0)
 		}
 		return m, nil
 	case "ctrl+s", "enter":
-		if m.settingsTab == 6 {
-			// Advanced tab: forward enter to revset input
+		if m.settingsTab == 6 || m.settingsTab == 7 { // AI or Advanced
+			// Forward keys to text inputs
 			return m.forwardKeyToActiveSubmodelReturn(msg)
 		}
 		if msg.String() == "enter" {
 			// Advance focus within panel if not on last field; otherwise save
 			lastField := false
 			switch m.settingsTab {
-			case 0:
+			case 0: // GitHub
 				lastField = m.githubModel.GetFocusedField() >= 0
-			case 1:
+			case 1: // Jira
 				lastField = m.jiraModel.GetFocusedField() >= 7
-			case 2:
+			case 2: // Codecks
 				lastField = m.codecksModel.GetFocusedField() >= 3
-			case 3:
+			case 3: // Tickets
 				lastField = m.ticketsModel.GetTicketProvider() != "github_issues" || m.ticketsModel.GetFocusedField() >= 0
-			case 5:
-				lastField = true // Theme tab: Enter saves
+			case 5: // Theme
+				lastField = true // Enter saves
 			}
 			if !lastField {
 				var cmd tea.Cmd
@@ -229,12 +241,12 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "ctrl+l":
 		return m, Request{SaveSettingsLocal: true}.Cmd()
 	case "tab", "down":
-		if m.settingsTab != 6 {
+		if m.settingsTab != 6 && m.settingsTab != 7 { // not AI or Advanced
 			m.forwardKeyToActiveSubmodel(msg)
 			return m, nil
 		}
 	case "shift+tab", "up":
-		if m.settingsTab != 6 {
+		if m.settingsTab != 6 && m.settingsTab != 7 { // not AI or Advanced
 			m.forwardKeyToActiveSubmodel(msg)
 			return m, nil
 		}
@@ -248,7 +260,7 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 func (m *Model) ZoneIDs() []string {
 	ids := []string{
 		mouse.ZoneSettingsTabGitHub, mouse.ZoneSettingsTabJira, mouse.ZoneSettingsTabCodecks,
-		mouse.ZoneSettingsTabTickets, mouse.ZoneSettingsTabBranches, mouse.ZoneSettingsTabTheme, mouse.ZoneSettingsTabAdvanced,
+		mouse.ZoneSettingsTabTickets, mouse.ZoneSettingsTabBranches, mouse.ZoneSettingsTabTheme, mouse.ZoneSettingsTabAI, mouse.ZoneSettingsTabAdvanced,
 		mouse.ZoneSettingsThemePrimary, mouse.ZoneSettingsThemeSecondary, mouse.ZoneSettingsThemeMuted,
 		mouse.ZoneSettingsThemePrimaryDefault, mouse.ZoneSettingsThemeSecondaryDefault, mouse.ZoneSettingsThemeMutedDefault,
 		mouse.ZoneSettingsTicketProviderNone, mouse.ZoneSettingsTicketProviderJira,
@@ -311,18 +323,19 @@ func (m *Model) SetZoneManager(zm *zone.Manager) {
 func (m *Model) GetGitHubModel() *github.Model { return &m.githubModel }
 
 // GetGitHubTokenSource returns the selected GitHub API token source (saved | env | gh_cli).
-func (m *Model) GetGitHubTokenSource() string { return m.githubModel.GetTokenSource() }
+func (m *Model) GetGitHubTokenSource() string      { return m.githubModel.GetTokenSource() }
 func (m *Model) GetJiraModel() *jira.Model         { return &m.jiraModel }
 func (m *Model) GetCodecksModel() *codecks.Model   { return &m.codecksModel }
 func (m *Model) GetTicketsModel() *tickets.Model   { return &m.ticketsModel }
 func (m *Model) GetBranchesModel() *branches.Model { return &m.branchesModel }
 func (m *Model) GetThemeModel() *theme.Model       { return &m.themeModel }
+func (m *Model) GetAIModel() *ai.Model             { return &m.aiModel }
 func (m *Model) GetAdvancedModel() *advanced.Model { return &m.advancedModel }
 
 // forwardKeyToActiveSubmodel updates focus/state for tab/up/down within the active panel (mutates m in place).
 func (m *Model) forwardKeyToActiveSubmodel(msg tea.KeyMsg) {
 	switch m.settingsTab {
-	case 0:
+	case 0: // GitHub
 		gh := m.GetGitHubModel()
 		switch msg.String() {
 		case "tab", "down", "j":
@@ -334,7 +347,7 @@ func (m *Model) forwardKeyToActiveSubmodel(msg tea.KeyMsg) {
 				gh.SetFocusedField(gh.GetFocusedField() - 1)
 			}
 		}
-	case 1:
+	case 1: // Jira
 		jr := m.GetJiraModel()
 		switch msg.String() {
 		case "tab", "down", "j":
@@ -346,7 +359,7 @@ func (m *Model) forwardKeyToActiveSubmodel(msg tea.KeyMsg) {
 				jr.SetFocusedField(jr.GetFocusedField() - 1)
 			}
 		}
-	case 2:
+	case 2: // Codecks
 		cc := m.GetCodecksModel()
 		switch msg.String() {
 		case "tab", "down", "j":
@@ -358,7 +371,7 @@ func (m *Model) forwardKeyToActiveSubmodel(msg tea.KeyMsg) {
 				cc.SetFocusedField(cc.GetFocusedField() - 1)
 			}
 		}
-	case 3:
+	case 3: // Tickets
 		tk := m.GetTicketsModel()
 		if tk.GetTicketProvider() == "github_issues" {
 			switch msg.String() {
@@ -368,13 +381,25 @@ func (m *Model) forwardKeyToActiveSubmodel(msg tea.KeyMsg) {
 				tk.SetFocusedField(0)
 			}
 		}
-	case 5:
-		// Theme tab: no fields to focus
-	case 6:
+	case 5: // Theme
+		// No fields to focus
+	case 6: // AI
+		aim := m.GetAIModel()
+		switch msg.String() {
+		case "tab", "down", "j":
+			if aim.GetFocusedField() < 2 {
+				aim.SetFocusedField(aim.GetFocusedField() + 1)
+			}
+		case "shift+tab", "up", "k":
+			if aim.GetFocusedField() > 0 {
+				aim.SetFocusedField(aim.GetFocusedField() - 1)
+			}
+		}
+	case 7: // Advanced
 		adv := m.GetAdvancedModel()
 		switch msg.String() {
 		case "tab", "down", "j":
-			if adv.GetFocusedField() < 4 {
+			if adv.GetFocusedField() < 1 {
 				adv.SetFocusedField(adv.GetFocusedField() + 1)
 			}
 		case "shift+tab", "up", "k":
@@ -388,26 +413,30 @@ func (m *Model) forwardKeyToActiveSubmodel(msg tea.KeyMsg) {
 // forwardKeyToActiveSubmodelReturn forwards the key to the active sub-model and returns updated model and cmd.
 func (m Model) forwardKeyToActiveSubmodelReturn(msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch m.settingsTab {
-	case 0:
+	case 0: // GitHub
 		updated, cmd := m.githubModel.Update(msg)
 		m.githubModel = updated
 		return m, cmd
-	case 1:
+	case 1: // Jira
 		updated, cmd := m.jiraModel.Update(msg)
 		m.jiraModel = updated
 		return m, cmd
-	case 2:
+	case 2: // Codecks
 		updated, cmd := m.codecksModel.Update(msg)
 		m.codecksModel = updated
 		return m, cmd
-	case 3:
+	case 3: // Tickets
 		updated, cmd := m.ticketsModel.Update(msg)
 		m.ticketsModel = updated
 		return m, cmd
-	case 5:
-		// Theme tab has no text inputs
+	case 5: // Theme
+		// No text inputs
 		return m, nil
-	case 6:
+	case 6: // AI
+		updated, cmd := m.aiModel.Update(msg)
+		m.aiModel = updated
+		return m, cmd
+	case 7: // Advanced
 		updated, cmd := m.advancedModel.Update(msg)
 		m.advancedModel = updated
 		return m, cmd
@@ -416,29 +445,33 @@ func (m Model) forwardKeyToActiveSubmodelReturn(msg tea.KeyMsg) (Model, tea.Cmd)
 }
 
 // forwardToActiveSubmodel forwards any message to the active sub-model (e.g. textinput.Blink for cursor).
-// Panels with inputs (GitHub, Jira, Codecks, Tickets, Advanced) need to receive these so the cursor blinks.
+// Panels with inputs (GitHub, Jira, Codecks, Tickets, AI, Advanced) need to receive these so the cursor blinks.
 func (m Model) forwardToActiveSubmodel(msg tea.Msg) (Model, tea.Cmd) {
 	switch m.settingsTab {
-	case 0:
+	case 0: // GitHub
 		updated, cmd := m.githubModel.Update(msg)
 		m.githubModel = updated
 		return m, cmd
-	case 1:
+	case 1: // Jira
 		updated, cmd := m.jiraModel.Update(msg)
 		m.jiraModel = updated
 		return m, cmd
-	case 2:
+	case 2: // Codecks
 		updated, cmd := m.codecksModel.Update(msg)
 		m.codecksModel = updated
 		return m, cmd
-	case 3:
+	case 3: // Tickets
 		updated, cmd := m.ticketsModel.Update(msg)
 		m.ticketsModel = updated
 		return m, cmd
-	case 5:
-		// Theme tab: no inputs
+	case 5: // Theme
+		// No inputs
 		return m, nil
-	case 6:
+	case 6: // AI
+		updated, cmd := m.aiModel.Update(msg)
+		m.aiModel = updated
+		return m, cmd
+	case 7: // Advanced
 		updated, cmd := m.advancedModel.Update(msg)
 		m.advancedModel = updated
 		return m, cmd
@@ -448,45 +481,47 @@ func (m Model) forwardToActiveSubmodel(msg tea.Msg) (Model, tea.Cmd) {
 
 // Accessors
 
-// GetSettingsTab returns the currently selected settings tab
-func (m *Model) GetSettingsTab() int {
+// GetActiveSettingsTabIndex returns the selected sub-tab index (see Model.settingsTab).
+func (m *Model) GetActiveSettingsTabIndex() int {
 	return m.settingsTab
 }
 
-// SetSettingsTab sets the settings sub-tab (0=GitHub, 1=Jira, 2=Codecks, 3=Tickets, 4=Branches, 5=Theme, 6=Advanced)
-func (m *Model) SetSettingsTab(tab int) {
+// SetActiveSettingsTabIndex sets the visible sub-tab (indices: GitHub, Jira, Codecks, Tickets, Branches, Theme, AI, Advanced).
+func (m *Model) SetActiveSettingsTabIndex(tab int) {
 	if tab < 0 {
 		tab = 0
 	}
-	m.settingsTab = tab % 7
+	m.settingsTab = tab % 8
 }
 
-// GetFocusedField returns the currently focused input field (global index; Advanced text inputs use 14–18).
+// GetFocusedField returns the focused field’s global input index. Advanced tab uses 14–15 (revset, custom editor); AI tab uses 16–18 (API URL, model, key).
 func (m *Model) GetFocusedField() int {
 	switch m.settingsTab {
-	case 0:
+	case 0: // GitHub
 		return m.githubModel.GetFocusedField()
-	case 1:
+	case 1: // Jira
 		return 1 + m.jiraModel.GetFocusedField()
-	case 2:
+	case 2: // Codecks
 		return 9 + m.codecksModel.GetFocusedField()
-	case 3:
+	case 3: // Tickets
 		if m.ticketsModel.GetTicketProvider() == "github_issues" {
 			return 13
 		}
 		return 0
-	case 4:
-		return 0 // Branches settings: no text inputs
-	case 5:
-		return 0 // Theme tab has no inputs
-	case 6:
-		return 14 + m.advancedModel.GetFocusedField() // 14..18
+	case 4: // Branches
+		return 0 // no text inputs
+	case 5: // Theme
+		return 0 // no inputs
+	case 6: // AI
+		return 16 + m.aiModel.GetFocusedField() // 16..18
+	case 7: // Advanced
+		return 14 + m.advancedModel.GetFocusedField() // 14..15
 	}
 	return 0
 }
 
 // SetFocusedField sets the focused input field (global index); used by zone handlers to focus an input.
-// Returns a tea.Cmd when focusing an Advanced text input (indices 14–18) so the cursor is shown.
+// Returns a tea.Cmd when focusing Advanced or AI text inputs so the cursor is shown.
 func (m *Model) SetFocusedField(idx int) tea.Cmd {
 	if idx < 1 {
 		m.githubModel.SetFocusedField(0)
@@ -504,7 +539,10 @@ func (m *Model) SetFocusedField(idx int) tea.Cmd {
 		m.ticketsModel.SetFocusedField(0)
 		return nil
 	}
-	return m.advancedModel.SetFocusedField(idx - 14)
+	if idx < 16 {
+		return m.advancedModel.SetFocusedField(idx - 14)
+	}
+	return m.aiModel.SetFocusedField(idx - 16)
 }
 
 // ThemeSwatchIndex returns the theme swatch index (0–2) for the given zone ID, or -1.
@@ -534,27 +572,29 @@ func ThemeDefaultZoneIndex(zoneID string) int {
 }
 
 // EnterTab prepares the tab when main navigates to Settings (focus first field of active panel).
-// Returns a tea.Cmd when focusing the Advanced revset input so the cursor is shown.
+// Returns a tea.Cmd when focusing AI or Advanced text inputs so the cursor is shown.
 func (m *Model) EnterTab() tea.Cmd {
 	switch m.settingsTab {
-	case 0:
+	case 0: // GitHub
 		m.githubModel.SetFocusedField(0)
-	case 1:
+	case 1: // Jira
 		m.jiraModel.SetFocusedField(0)
-	case 2:
+	case 2: // Codecks
 		m.codecksModel.SetFocusedField(0)
-	case 3:
+	case 3: // Tickets
 		m.ticketsModel.SetFocusedField(0)
-	case 5:
-		// Theme tab: nothing to focus
-	case 6:
+	case 5: // Theme
+		// Nothing to focus
+	case 6: // AI
+		return m.aiModel.SetFocusedField(0)
+	case 7: // Advanced
 		return m.advancedModel.SetFocusedField(0)
 	}
 	return nil
 }
 
-// GetSettingsInputs returns a slice of textinput views for BuildRenderData (built from sub-models).
-// The layout is fixed so that the Advanced revset input is always at index 14 (needed for renderAdvanced).
+// GetSettingsInputs returns textinput views for BuildRenderData (built from sub-models).
+// Global indices 14–15 are the Advanced tab (revset, custom editor); 16–18 are the AI tab (URL, model, key).
 func (m *Model) GetSettingsInputs() []struct{ View string } {
 	var out []struct{ View string }
 	for _, v := range m.githubModel.GetInputViews() {
@@ -569,14 +609,15 @@ func (m *Model) GetSettingsInputs() []struct{ View string } {
 	for _, v := range m.ticketsModel.GetInputViews() {
 		out = append(out, struct{ View string }{v})
 	}
-	// Pad so Advanced revset is always at index 14 (Tickets returns 0 when provider != github_issues).
 	for len(out) < 14 {
 		out = append(out, struct{ View string }{""})
 	}
 	for _, v := range m.advancedModel.GetInputViews() {
 		out = append(out, struct{ View string }{v})
 	}
-	// Ensure exactly 19 elements: 14=revset, 15=custom editor, 16=AI base URL, 17=AI model, 18=AI key.
+	for _, v := range m.aiModel.GetInputViews() {
+		out = append(out, struct{ View string }{v})
+	}
 	for len(out) < 19 {
 		out = append(out, struct{ View string }{""})
 	}
@@ -593,6 +634,7 @@ func (m *Model) SetInputWidths(width int) {
 	m.codecksModel.SetInputWidth(width)
 	m.ticketsModel.SetInputWidth(width)
 	m.advancedModel.SetInputWidth(width)
+	m.aiModel.SetInputWidth(width)
 }
 
 // SetDimensions sets the content area dimensions (used for scroll viewport).
@@ -601,9 +643,9 @@ func (m *Model) SetDimensions(width, height int) {
 	m.height = height
 }
 
-// GetSettingsYOffset returns the current scroll offset for the active settings panel.
+// GetSettingsYOffset returns the scroll offset for the active sub-tab (indices match Model.settingsTab).
 func (m *Model) GetSettingsYOffset() int {
-	if m.settingsTab < 0 || m.settingsTab >= 7 {
+	if m.settingsTab < 0 || m.settingsTab >= 8 {
 		return 0
 	}
 	return m.panelYOffset[m.settingsTab]

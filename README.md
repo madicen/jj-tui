@@ -4,10 +4,12 @@
 
 A modern Terminal User Interface (TUI) for managing [Jujutsu (jj)](https://github.com/jj-vcs/jj) repositories. Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lip Gloss](https://github.com/charmbracelet/lipgloss) for an intuitive and beautiful command-line experience.
 
-The demo above walks through the **commit graph**, **tickets**, **pull requests**, and **branches** (`make demo-gif` / `vhs/all.tape`). Static captures below cover views that are not in that recording.
+The demo above walks through the **commit graph**, **tickets**, **pull requests**, and **branches** (`make demo-gif` / `vhs/all.tape`). It does not open **Settings**; the static **Settings** capture below shows the full tab bar (including **AI** and **Advanced**). Other clips cover additional flows.
 
 ### Settings
 ![Settings](screenshots/settings.png)
+
+Sub-tabs run left to right: **GitHub**, **Jira**, **Codecks**, **Tickets**, **Branches**, **Theme**, **AI**, **Advanced**. Use **`Ctrl+j`** / **`Ctrl+k`** or click the tab bar to switch (see [Settings view](#settings-view)).
 
 ### Help
 ![Help](screenshots/help.png)
@@ -45,19 +47,19 @@ When a bookmark was pushed and then amended or moved locally, **jj** may show th
 - **Split-pane layout**: Graph and changed files in separate scrollable panes; **Tab** or **click** to focus; mouse wheel scrolls the focused pane
 - **Changed files**: Per-commit file list with line stats; **move** a file to a new parent/child commit (`[` / `]`) or **revert** it (`v`) from the files pane
 - **File diff overlay**: **`o`** (files pane) opens a full **jj** diff for the selected path in a scrollable modal
-- **External editor**: **`O`** (files pane) opens the selected file in Cursor, VS Code, Zed, Neovim (`nvr`), etc.—configured under **Settings → Advanced**
+- **External editor**: **`O`** (files pane) opens the selected file in Cursor, VS Code, Zed, Neovim (`nvr`), etc.—configured under **Settings → Advanced** (editor presets and custom command)
 - **Rebase**: **`r`** enters destination-pick mode, or **drag** a commit row onto another (mouse) for the same `jj rebase -s … -d …` flow
 - **Keyboard & mouse**: Zone-based clicks across tabs, settings, PRs, tickets, and branch lists
 - **GitHub**: Create/update PRs, device-flow login, PR list with CI and review hints
 - **Tickets**: Jira, Codecks, or GitHub Issues—provider choice in Settings; create a bookmark from a ticket on your current commit; status transitions where supported
 - **Branches**: List locals/remotes, track/untrack, push/fetch, resolve diverged bookmarks
-- **Settings**: GitHub, Jira, Codecks, **Tickets** (provider + workflow), **Branches** (limit), **Theme** (primary/secondary/muted), **Advanced** (editor, graph revset, bookmark sanitize, destructive cleanup)
+- **Settings**: GitHub, Jira, Codecks, **Tickets** (provider + workflow), **Branches** (limit), **Theme** (colors), **AI** (LLM provider, keys, evolog split defaults), **Advanced** (external editor, graph revset, bookmark sanitize, destructive cleanup)
 - **Help tab**: Shortcuts reference plus **command history** of **jj** commands the TUI ran (copy-friendly)
 - **Evolog split (`z`)**: Experimental FAQ-style split when evolution history allows (see [Split](#split))
 - **Divergent commits & diverged bookmarks**: Dedicated flows from the graph or Branches tab (see sections below)
 - **Undo / redo**: **`Ctrl+z`** / **`Ctrl+y`** for **jj** undo and redo
 - **Non-repo & init**: Prompt to **`jj git init`** when the path is not a jj repo
-- **Demo mode**: **`jj-tui --demo`** uses mock tickets/PRs for screenshots or trying the UI
+- **Demo mode**: **`jj-tui --demo`** uses mock tickets/PRs for screenshots or trying the UI; **Settings** is available with the same sub-tabs (including **AI**), using mock or empty integration fields
 - **Config**: Global and per-repo **`.jj-tui.json`** merge; optional **`JJ_TUI_CONFIG`**
 
 ## Prerequisites
@@ -180,7 +182,7 @@ The graph view has two panes: the commit graph (left) and changed files (right).
 
 **Files pane (focus with Tab or click the files side):**
 - `o`: Open full **jj** diff for the selected file (modal)
-- `O`: Open the selected file in the **external editor** (configure under **Settings → Advanced**)
+- `O`: Open the selected file in the **external editor** (configure under **Settings → Advanced** → Open in external editor)
 - `[` / `]`: Move file to new parent / child commit
 - `v`: Revert the file in this commit
 
@@ -214,7 +216,8 @@ Sub-tabs (use **`Ctrl+j`** / **`Ctrl+k`**, click the tab bar, or **`Tab`** throu
 4. **Tickets** — active provider (None / Jira / Codecks / GitHub Issues), auto “In Progress” on branch-from-ticket, GitHub Issues status excludes  
 5. **Branches** — how many branches to load for the Branches tab (`0` = all)  
 6. **Theme** — primary, secondary, muted accent colors (click swatches or **Save** to persist)  
-7. **Advanced** — see below  
+7. **AI** — LLM provider, credentials, and optional **evolog split** defaults (see [AI settings tab](#ai-settings-tab))  
+8. **Advanced** — external editor, default graph revset, bookmark sanitize, destructive maintenance (see [Advanced settings](#advanced-settings))  
 
 **Keys:**
 
@@ -224,6 +227,17 @@ Sub-tabs (use **`Ctrl+j`** / **`Ctrl+k`**, click the tab bar, or **`Tab`** throu
 - **`Ctrl+l`**: Save **local** (`.jj-tui.json` in the repo)  
 - **`Esc`**: Cancel and return to the graph (or dismiss in-tab overlays first)  
 - **Click** fields, tabs, toggles, and theme swatches
+
+### AI settings tab
+
+Configure optional **AI assist** from **Settings → AI** (or merge the same keys in JSON—see [Optional AI assist](#optional-ai-assist)).
+
+- **Enable AI**: Turns on the purple **✧ ^g** chip and **`Ctrl+G`** generation in the commit description editor, **Create PR**, **Create ticket**, and **new bookmark** modals. You always review generated text before saving.  
+- **Provider**: **OpenAI-compatible** (Chat Completions), **Google Gemini**, or **Ollama** (local). Picking **Ollama** applies sensible defaults for base URL and model when those fields are empty.  
+- **API base URL**, **Model**, **API key**: Same semantics as the `ai_base_url`, `ai_model`, and `ai_api_key` config fields; **`JJ_TUI_AI_API_KEY`** overrides the saved key when set. Gemini ignores custom base URL (Google endpoint).  
+- **AI evolog split** (graph **`z`** when evolog split is available): Defaults for post-split describe, honoring AI file/hunk suggestions, stepwise multi-split, and the cap on multi-split “FAQ bases”—stored as `aievolog_*` options in config (see `internal/config` for names).
+
+Use **Save** (**`Ctrl+s`** global, **`Ctrl+l`** local) after changing AI settings. Sending a diff to a cloud API exposes code to that provider; local **Ollama** avoids that.
 
 ### Advanced settings
 
@@ -432,6 +446,8 @@ Omit keys you do not need. See `internal/config/config.go` for the full schema a
 
 ### Optional AI assist
 
+Use **[Settings → AI](#ai-settings-tab)** to toggle generation and set provider/credentials in the TUI; the fields below correspond to the same JSON keys.
+
 When **`ai_enabled`** is true and LLM credentials are available, jj-tui can call a provider to draft text:
 
 - The purple **✧ ^g** chip beside the title in the commit description editor, **Create PR**, **Create ticket**, or **bookmark** modal (new name only), or **Ctrl+G** in those modals, runs generation; you always review before saving or submitting.
@@ -444,7 +460,7 @@ When **`ai_enabled`** is true and LLM credentials are available, jj-tui can call
 - **`ai_model`**: Model id. Defaults: `gpt-4o-mini` (OpenAI-compatible), `gemini-2.5-flash` (Gemini), or `qwen2.5:1.5b` (**`ollama`**) when empty.
 - **`ai_timeout_seconds`**: HTTP timeout (optional; default 60). Local models may need more on **first request after idle** (model load); try **120** or higher if requests time out.
 
-Configure from **Settings → Advanced** or JSON. Diffs are included in prompts; treat this as sending code to the provider unless you use a local endpoint.
+Configure from **Settings → AI** (recommended) or JSON below. Diffs are included in prompts; treat this as sending code to the provider unless you use a local endpoint.
 
 **Cursor / in-IDE models:** Cursor’s chat models are not exposed as a stable HTTP API for third-party apps to call from the TUI. Practical options are **your own API keys** (OpenAI, Google AI Studio for Gemini, Anthropic via an OpenAI-compatible gateway, local Ollama, etc.).
 
@@ -525,7 +541,7 @@ jj-tui/
 │           ├── branches/      # Branches/bookmarks list
 │           ├── bookmark/      # Create bookmark modal
 │           ├── descedit/      # Edit commit description modal
-│           ├── settings/      # Settings tabs (GitHub, Jira, Codecks, tickets, branches, theme, advanced)
+│           ├── settings/      # Settings tabs (GitHub, Jira, Codecks, tickets, branches, theme, ai, advanced)
 │           ├── help/          # Help (shortcuts + jj command history)
 │           ├── filediff/      # Full-file diff modal (jj diff)
 │           ├── evologsplit/   # Evolog split wizard

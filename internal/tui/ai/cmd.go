@@ -22,7 +22,7 @@ func GenerateCommitDescriptionCmd(reqID int, jjSvc *jj.Service, cfg *config.Conf
 	return func() tea.Msg {
 		msg := TextGeneratedMsg{ReqID: reqID, Kind: KindCommitDescription, CommitID: commitID}
 		if jjSvc == nil || cfg == nil || !cfg.AIConfiguredForGeneration() {
-			msg.Err = fmt.Errorf("AI is disabled or no API key (Settings → Advanced, or %s)", config.EnvAIAPIKey)
+			msg.Err = fmt.Errorf("AI is disabled or no API key (Settings → AI, or %s)", config.EnvAIAPIKey)
 			return msg
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), cfg.AITimeout())
@@ -52,7 +52,7 @@ func GeneratePRFormCmd(reqID int, jjSvc *jj.Service, cfg *config.Config, changeI
 	return func() tea.Msg {
 		msg := TextGeneratedMsg{ReqID: reqID, Kind: KindPR, CommitID: changeID}
 		if jjSvc == nil || cfg == nil || !cfg.AIConfiguredForGeneration() {
-			msg.Err = fmt.Errorf("AI is disabled or no API key (Settings → Advanced, or %s)", config.EnvAIAPIKey)
+			msg.Err = fmt.Errorf("AI is disabled or no API key (Settings → AI, or %s)", config.EnvAIAPIKey)
 			return msg
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), cfg.AITimeout())
@@ -87,7 +87,7 @@ func GenerateTicketFormCmd(reqID int, jjSvc *jj.Service, cfg *config.Config, cha
 	return func() tea.Msg {
 		msg := TextGeneratedMsg{ReqID: reqID, Kind: KindTicket, CommitID: changeID}
 		if jjSvc == nil || cfg == nil || !cfg.AIConfiguredForGeneration() {
-			msg.Err = fmt.Errorf("AI is disabled or no API key (Settings → Advanced, or %s)", config.EnvAIAPIKey)
+			msg.Err = fmt.Errorf("AI is disabled or no API key (Settings → AI, or %s)", config.EnvAIAPIKey)
 			return msg
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), cfg.AITimeout())
@@ -126,7 +126,7 @@ func GenerateBookmarkNameCmd(reqID int, jjSvc *jj.Service, cfg *config.Config, r
 	return func() tea.Msg {
 		msg := TextGeneratedMsg{ReqID: reqID, Kind: KindBookmark}
 		if jjSvc == nil || cfg == nil || !cfg.AIConfiguredForGeneration() {
-			msg.Err = fmt.Errorf("AI is disabled or no API key (Settings → Advanced, or %s)", config.EnvAIAPIKey)
+			msg.Err = fmt.Errorf("AI is disabled or no API key (Settings → AI, or %s)", config.EnvAIAPIKey)
 			return msg
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), cfg.AITimeout())

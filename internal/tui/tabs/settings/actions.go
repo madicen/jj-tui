@@ -167,6 +167,7 @@ func BuildSettingsParams(m *Model, githubOwner, githubRepo string) SettingsParam
 	tk := m.GetTicketsModel()
 	br := m.GetBranchesModel()
 	adv := m.GetAdvancedModel()
+	aim := m.GetAIModel()
 	params := SettingsParams{
 		TicketProvider:    tk.GetTicketProvider(),
 		ShowMerged:        gh.GetShowMerged(),
@@ -184,16 +185,16 @@ func BuildSettingsParams(m *Model, githubOwner, githubRepo string) SettingsParam
 	preset, custom := adv.SavedExternalEditor()
 	params.ExternalFileEditor = preset
 	params.ExternalFileEditorCustom = custom
-	params.AIEnabled = adv.GetAIEnabled()
-	params.AIBaseURL = adv.GetAIBaseURL()
-	params.AIModel = adv.GetAIModel()
-	params.AIProvider = adv.GetAIProvider()
-	params.AIAPIKey = adv.GetAIAPIKey()
-	params.AIEvologDescribeAfterSplitDefault = adv.GetEvologDescribeAfterSplitDefault()
-	params.AIEvologFileSplitEnabled = adv.GetEvologFileSplitEnabled()
-	params.AIEvologHunkSplitEnabled = adv.GetEvologHunkSplitEnabled()
-	params.AIEvologMultiSplitMax = adv.GetEvologMultiMax()
-	if adv.GetEvologMultiStepwise() {
+	params.AIEnabled = aim.GetAIEnabled()
+	params.AIBaseURL = aim.GetAIBaseURL()
+	params.AIModel = aim.GetAIModel()
+	params.AIProvider = aim.GetAIProvider()
+	params.AIAPIKey = aim.GetAIAPIKey()
+	params.AIEvologDescribeAfterSplitDefault = aim.GetEvologDescribeAfterSplitDefault()
+	params.AIEvologFileSplitEnabled = aim.GetEvologFileSplitEnabled()
+	params.AIEvologHunkSplitEnabled = aim.GetEvologHunkSplitEnabled()
+	params.AIEvologMultiSplitMax = aim.GetEvologMultiMax()
+	if aim.GetEvologMultiStepwise() {
 		params.AIEvologMultiSplitMode = "stepwise"
 	} else {
 		params.AIEvologMultiSplitMode = "batch"

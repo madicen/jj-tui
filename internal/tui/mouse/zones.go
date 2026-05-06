@@ -66,9 +66,9 @@ const (
 	ZoneWarningDismiss    = "zone:warning:dismiss"
 
 	// Evolog split modal (prefix zone:evologsplit:entry: for dynamic row zones)
-	ZoneEvologSplitSuggest   = "zone:evologsplit:suggest"
-	ZoneEvologSplitConfirm   = "zone:evologsplit:confirm"
-	ZoneEvologSplitCancel    = "zone:evologsplit:cancel"
+	ZoneEvologSplitSuggest        = "zone:evologsplit:suggest"
+	ZoneEvologSplitConfirm        = "zone:evologsplit:confirm"
+	ZoneEvologSplitCancel         = "zone:evologsplit:cancel"
 	ZoneEvologSplitViewPatch      = "zone:evologsplit:viewpatch"
 	ZoneEvologSplitOutcomePreview = "zone:evologsplit:outcomepreview"
 
@@ -110,13 +110,14 @@ const (
 	ZoneBranchFetch           = "zone:branch:fetch"
 	ZoneBranchResolveConflict = "zone:branch:resolve_conflict"
 
-	// Settings sub-tab zones
+	// Settings sub-tab zones (order in UI: GitHub, Jira, Codecks, Tickets, Branches, Theme, AI, Advanced)
 	ZoneSettingsTabGitHub   = "zone:settings:tab:github"
 	ZoneSettingsTabJira     = "zone:settings:tab:jira"
 	ZoneSettingsTabCodecks  = "zone:settings:tab:codecks"
 	ZoneSettingsTabTickets  = "zone:settings:tab:tickets"
 	ZoneSettingsTabBranches = "zone:settings:tab:branches"
 	ZoneSettingsTabTheme    = "zone:settings:tab:theme"
+	ZoneSettingsTabAI       = "zone:settings:tab:ai"
 	ZoneSettingsTabAdvanced = "zone:settings:tab:advanced"
 
 	// Theme color swatches

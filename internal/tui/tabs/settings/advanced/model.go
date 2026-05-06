@@ -9,25 +9,14 @@ import (
 	"github.com/madicen/jj-tui/internal/config"
 )
 
-// Model represents the Advanced settings sub-tab (sanitize bookmarks, graph revset, cleanup confirmation).
+// Model represents the Advanced settings sub-tab (sanitize bookmarks, graph revset, external editor, cleanup).
 type Model struct {
 	sanitizeBookmarks    bool
-	aiEnabled            bool
-	aiProvider           string
 	confirmingCleanup    string
 	graphRevsetInput     textinput.Model
 	customEditorInput    textinput.Model
-	aiBaseURLInput       textinput.Model
-	aiModelInput         textinput.Model
-	aiAPIKeyInput        textinput.Model
-	focusedField         int // 0 = graph revset, 1 = custom editor, 2 = AI base URL, 3 = AI model, 4 = AI key
+	focusedField         int // 0 = graph revset, 1 = custom editor
 	externalEditorPreset int // 0..8 — see externalEditorPresetLabels
-	// AI evolog split defaults (persisted in config)
-	evologDescribeDefault  bool
-	evologFileSplitEnabled bool
-	evologHunkSplitEnabled bool
-	evologMultiStepwise    bool
-	evologMultiMax         int // 1..config.EvologAIMultiSplitHardMax, cap for AI multi-split plan length
 }
 
 // ExternalEditorPresetLabels are UI labels for each editor preset (same order as config values below).
@@ -67,38 +56,12 @@ func NewModel() Model {
 	customIn.CharLimit = 400
 	customIn.Width = 60
 
-	aiURL := textinput.New()
-	aiURL.Placeholder = "https://api.openai.com/v1 or http://127.0.0.1:11434/v1"
-	aiURL.CharLimit = 200
-	aiURL.Width = 60
-
-	aiModel := textinput.New()
-	aiModel.Placeholder = "e.g. gpt-4o-mini, llama3.2, or qwen2.5:1.5b (Ollama)"
-	aiModel.CharLimit = 120
-	aiModel.Width = 60
-
-	aiKey := textinput.New()
-	aiKey.Placeholder = "API key (stored in config.json unless env overrides)"
-	aiKey.CharLimit = 400
-	aiKey.Width = 60
-	aiKey.EchoMode = textinput.EchoPassword
-	aiKey.EchoCharacter = '•'
-
 	return Model{
-		sanitizeBookmarks:      true,
-		aiEnabled:              false,
-		aiProvider:             "openai_compatible",
-		evologFileSplitEnabled: true,
-		evologHunkSplitEnabled: true,
-		evologMultiMax:         config.EvologAIMultiSplitHardMax,
-		confirmingCleanup:      "",
-		graphRevsetInput:       revsetInput,
-		customEditorInput:      customIn,
-		aiBaseURLInput:         aiURL,
-		aiModelInput:           aiModel,
-		aiAPIKeyInput:          aiKey,
-		focusedField:           0,
-		externalEditorPreset:   0,
+		sanitizeBookmarks: true,
+		confirmingCleanup: "",
+		graphRevsetInput:  revsetInput,
+		customEditorInput: customIn,
+		focusedField:      0,
 	}
 }
 
@@ -110,24 +73,6 @@ func NewModelFromConfig(cfg *config.Config) Model {
 		m.graphRevsetInput.SetValue(cfg.GraphRevset)
 		m.customEditorInput.SetValue(cfg.ExternalFileEditorCustom)
 		m.externalEditorPreset = presetIndexFromConfig(cfg.ExternalFileEditor)
-		m.aiEnabled = cfg.AIGenerationEnabled()
-		m.aiProvider = cfg.AIProviderOrDefault()
-		m.aiBaseURLInput.SetValue(cfg.AIBaseURL)
-		m.aiModelInput.SetValue(cfg.AIModel)
-		if cfg.AIProviderOrDefault() == "ollama" {
-			if strings.TrimSpace(cfg.AIBaseURL) == "" {
-				m.aiBaseURLInput.SetValue(config.OllamaDefaultChatBaseURL)
-			}
-			if strings.TrimSpace(cfg.AIModel) == "" {
-				m.aiModelInput.SetValue(config.OllamaDefaultModel)
-			}
-		}
-		m.aiAPIKeyInput.SetValue(cfg.AIAPIKey)
-		m.evologDescribeDefault = cfg.DefaultEvologPostSplitDescribe()
-		m.evologFileSplitEnabled = cfg.EvologAIFilePhaseEnabled()
-		m.evologHunkSplitEnabled = cfg.EvologAIHunkPhaseEnabled()
-		m.evologMultiStepwise = cfg.EvologAIMultiSplitStepwise()
-		m.evologMultiMax = cfg.EvologAIMultiSplitMaxCap()
 	}
 	return m
 }
@@ -158,18 +103,6 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.customEditorInput, cmd = m.customEditorInput.Update(msg)
 		return m, cmd
-	case 2:
-		var cmd tea.Cmd
-		m.aiBaseURLInput, cmd = m.aiBaseURLInput.Update(msg)
-		return m, cmd
-	case 3:
-		var cmd tea.Cmd
-		m.aiModelInput, cmd = m.aiModelInput.Update(msg)
-		return m, cmd
-	case 4:
-		var cmd tea.Cmd
-		m.aiAPIKeyInput, cmd = m.aiAPIKeyInput.Update(msg)
-		return m, cmd
 	default:
 		return m, nil
 	}
@@ -180,8 +113,6 @@ func (m Model) View() string {
 	return "" // Rendered by parent
 }
 
-// Accessors
-
 // GetSanitizeBookmarks returns whether to sanitize bookmark names
 func (m *Model) GetSanitizeBookmarks() bool {
 	return m.sanitizeBookmarks
@@ -190,101 +121,6 @@ func (m *Model) GetSanitizeBookmarks() bool {
 // SetSanitizeBookmarks sets whether to sanitize bookmark names
 func (m *Model) SetSanitizeBookmarks(sanitize bool) {
 	m.sanitizeBookmarks = sanitize
-}
-
-// GetAIEnabled returns whether AI assist is enabled in settings.
-func (m *Model) GetAIEnabled() bool {
-	return m.aiEnabled
-}
-
-// SetAIEnabled sets AI assist toggle.
-func (m *Model) SetAIEnabled(v bool) {
-	m.aiEnabled = v
-}
-
-// ToggleAIEnabled flips the AI assist toggle.
-func (m *Model) ToggleAIEnabled() {
-	m.aiEnabled = !m.aiEnabled
-}
-
-func (m *Model) GetEvologDescribeAfterSplitDefault() bool { return m.evologDescribeDefault }
-
-func (m *Model) ToggleEvologDescribeAfterSplitDefault() {
-	m.evologDescribeDefault = !m.evologDescribeDefault
-}
-
-func (m *Model) GetEvologFileSplitEnabled() bool { return m.evologFileSplitEnabled }
-
-func (m *Model) ToggleEvologFileSplitEnabled() {
-	m.evologFileSplitEnabled = !m.evologFileSplitEnabled
-}
-
-func (m *Model) GetEvologHunkSplitEnabled() bool { return m.evologHunkSplitEnabled }
-
-func (m *Model) ToggleEvologHunkSplitEnabled() {
-	m.evologHunkSplitEnabled = !m.evologHunkSplitEnabled
-}
-
-func (m *Model) GetEvologMultiStepwise() bool { return m.evologMultiStepwise }
-
-func (m *Model) ToggleEvologMultiStepwise() {
-	m.evologMultiStepwise = !m.evologMultiStepwise
-}
-
-func (m *Model) GetEvologMultiMax() int { return m.evologMultiMax }
-
-func (m *Model) IncEvologMultiMax() {
-	if m.evologMultiMax < config.EvologAIMultiSplitHardMax {
-		m.evologMultiMax++
-	}
-}
-
-func (m *Model) DecEvologMultiMax() {
-	if m.evologMultiMax > 1 {
-		m.evologMultiMax--
-	}
-}
-
-// GetAIProvider returns the selected provider id.
-func (m *Model) GetAIProvider() string {
-	return strings.TrimSpace(m.aiProvider)
-}
-
-// SetAIProvider sets provider id and applies Ollama URL/model presets when switching to ollama with empty fields.
-func (m *Model) SetAIProvider(s string) {
-	prev := strings.TrimSpace(m.aiProvider)
-	m.aiProvider = strings.TrimSpace(s)
-	switch strings.ToLower(m.aiProvider) {
-	case "gemini":
-		m.aiProvider = "gemini"
-	case "ollama":
-		m.aiProvider = "ollama"
-	default:
-		m.aiProvider = "openai_compatible"
-	}
-	if m.aiProvider == "ollama" && prev != "ollama" {
-		if strings.TrimSpace(m.aiBaseURLInput.Value()) == "" {
-			m.aiBaseURLInput.SetValue(config.OllamaDefaultChatBaseURL)
-		}
-		if strings.TrimSpace(m.aiModelInput.Value()) == "" {
-			m.aiModelInput.SetValue(config.OllamaDefaultModel)
-		}
-	}
-}
-
-// GetAIBaseURL returns the configured API base URL field.
-func (m *Model) GetAIBaseURL() string {
-	return strings.TrimSpace(m.aiBaseURLInput.Value())
-}
-
-// GetAIModel returns the configured model field.
-func (m *Model) GetAIModel() string {
-	return strings.TrimSpace(m.aiModelInput.Value())
-}
-
-// GetAIAPIKey returns the key field (may be empty).
-func (m *Model) GetAIAPIKey() string {
-	return strings.TrimSpace(m.aiAPIKeyInput.Value())
 }
 
 // GetGraphRevset returns the graph revset string
@@ -307,18 +143,15 @@ func (m *Model) SetConfirmingCleanup(s string) {
 	m.confirmingCleanup = s
 }
 
-// GetInputViews returns the view strings for advanced text inputs (revset, custom editor, AI URL, AI model).
+// GetInputViews returns graph revset and custom editor views (global input indices 14–15 on the Advanced tab).
 func (m *Model) GetInputViews() []string {
 	return []string{
 		m.graphRevsetInput.View(),
 		m.customEditorInput.View(),
-		m.aiBaseURLInput.View(),
-		m.aiModelInput.View(),
-		m.aiAPIKeyInput.View(),
 	}
 }
 
-// GetFocusedField returns the focused input index (0 = graph revset, 1 = custom editor, 2 = AI URL, 3 = AI model)
+// GetFocusedField returns the focused input index (0 = graph revset, 1 = custom editor).
 func (m *Model) GetFocusedField() int {
 	return m.focusedField
 }
@@ -329,26 +162,17 @@ func (m *Model) SetFocusedField(i int) tea.Cmd {
 	if i < 0 {
 		i = 0
 	}
-	if i > 4 {
-		i = 4
+	if i > 1 {
+		i = 1
 	}
 	m.focusedField = i
 	m.graphRevsetInput.Blur()
 	m.customEditorInput.Blur()
-	m.aiBaseURLInput.Blur()
-	m.aiModelInput.Blur()
-	m.aiAPIKeyInput.Blur()
 	switch m.focusedField {
 	case 0:
 		return m.graphRevsetInput.Focus()
-	case 1:
-		return m.customEditorInput.Focus()
-	case 2:
-		return m.aiBaseURLInput.Focus()
-	case 3:
-		return m.aiModelInput.Focus()
 	default:
-		return m.aiAPIKeyInput.Focus()
+		return m.customEditorInput.Focus()
 	}
 }
 
@@ -359,9 +183,6 @@ func (m *Model) SetInputWidth(w int) {
 	}
 	m.graphRevsetInput.Width = w
 	m.customEditorInput.Width = w
-	m.aiBaseURLInput.Width = w
-	m.aiModelInput.Width = w
-	m.aiAPIKeyInput.Width = w
 }
 
 // GetExternalEditorPreset returns the selected editor preset index (0..len(ExternalEditorPresetLabels)-1).
