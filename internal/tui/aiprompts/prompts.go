@@ -40,6 +40,7 @@ func CommitDescriptionUser(changeIDShort, currentDescription, diff string) strin
 const PRSystem = `You write pull request titles and bodies for GitHub.
 Respond with a single JSON object only, no markdown fences, using exactly these keys:
 {"title":"...","body":"..."}
+The response must be valid JSON: newlines inside body must be \n escapes inside the quoted string, not literal line breaks.
 Title: at most 200 characters. Body: markdown allowed, be clear and concise.
 If—and only if—the "Suggested title hint" in the user message already begins with a real ticket/issue id from that hint (e.g. a short alphanumeric key with hyphens, sometimes in brackets), copy that exact prefix into the JSON title and only improve the rest. If the hint has no such prefix, the JSON title must not add one: do not invent keys, placeholders, or example ids from these instructions.`
 
@@ -63,6 +64,7 @@ const TicketSystem = `You draft issue-tracker tickets (title + description) that
 The user supplies a unified diff of a proposed fix. Infer what problem or task the change solves, and write the ticket as if filed before the fix: clear title, markdown body with symptoms, expected vs actual where inferable, and scope. Stay conservative—only state what the diff reasonably supports; say what is unknown rather than guessing.
 Respond with a single JSON object only, no markdown fences, using exactly these keys:
 {"title":"...","body":"..."}
+The response must be valid JSON: any newlines inside body must be written as \n inside the quoted string, not as literal line breaks. Prefer one line for the whole object if unsure.
 Title: at most 300 characters. Body: markdown allowed. If—and only if—the draft title in the user message already starts with a real ticket/issue id from that text, keep that exact prefix in the JSON title; otherwise do not add any key or placeholder.`
 
 // TicketUser builds the user message for AI-filled create-ticket fields.
@@ -123,10 +125,35 @@ func normalizeStructuredLLMOutput(raw string) string {
 	return strings.TrimSpace(strings.Join(lines, "\n"))
 }
 
+// decodeTitleBodyJSON parses the first JSON object from raw, which may span multiple lines
+// (pretty-printed models). json.Decoder stops after one value, so braces inside strings do
+// not corrupt the slice the way strings.LastIndex(raw, "}") can when the object is multiline.
+func decodeTitleBodyJSON(raw string) (title, body string, ok bool) {
+	raw = strings.TrimSpace(raw)
+	i := strings.Index(raw, "{")
+	if i < 0 {
+		return "", "", false
+	}
+	dec := json.NewDecoder(strings.NewReader(raw[i:]))
+	dec.UseNumber()
+	var v struct {
+		Title string `json:"title"`
+		Body  string `json:"body"`
+	}
+	if err := dec.Decode(&v); err != nil {
+		return "", "", false
+	}
+	return strings.TrimSpace(v.Title), strings.TrimSpace(v.Body), true
+}
+
 // ParsePRTitleBody extracts title and body from model output (JSON preferred).
 func ParsePRTitleBody(raw string) (title, body string) {
 	raw = normalizeStructuredLLMOutput(raw)
 	raw = strings.TrimSpace(raw)
+	if t, b, ok := decodeTitleBodyJSON(raw); ok {
+		return t, b
+	}
+	// Fallback: single slice from first { to last } (handles some trailing prose after JSON).
 	if i := strings.Index(raw, "{"); i >= 0 {
 		if j := strings.LastIndex(raw, "}"); j > i {
 			var v struct {

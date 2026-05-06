@@ -44,6 +44,32 @@ func TestParsePRTitleBody_BlockquotedFence(t *testing.T) {
 	}
 }
 
+func TestParsePRTitleBody_PrettyPrintedMultilineJSON(t *testing.T) {
+	// Models often emit pretty-printed objects; line-based fallback used to treat "{" alone as title.
+	in := "{\n  \"title\": \"Refactor settings tab\",\n  \"body\": \"## Symptoms\\n\\nExpected vs actual.\"\n}"
+	title, body := ParsePRTitleBody(in)
+	if title != "Refactor settings tab" || body != "## Symptoms\n\nExpected vs actual." {
+		t.Fatalf("got title=%q body=%q", title, body)
+	}
+}
+
+func TestParsePRTitleBody_PreambleThenPrettyJSON(t *testing.T) {
+	in := "Here is the ticket draft:\n\n{\n  \"title\": \"Fix parse\",\n  \"body\": \"Details\"\n}\n"
+	title, body := ParsePRTitleBody(in)
+	if title != "Fix parse" || body != "Details" {
+		t.Fatalf("got title=%q body=%q", title, body)
+	}
+}
+
+func TestParsePRTitleBody_BodyWithBracesInsideString(t *testing.T) {
+	// Closing brace appears inside the JSON string; slice [first { : last }] would mis-parse.
+	in := `{"title":"T","body":"See } and { in markdown or pseudo-code"}`
+	title, body := ParsePRTitleBody(in)
+	if title != "T" || body != "See } and { in markdown or pseudo-code" {
+		t.Fatalf("got title=%q body=%q", title, body)
+	}
+}
+
 func TestMergeGeneratedPRTitle_prependsDroppedJiraKey(t *testing.T) {
 	hint := "PROJ-456 - Original Jira summary"
 	gen := "Add retry logic for checkout"
