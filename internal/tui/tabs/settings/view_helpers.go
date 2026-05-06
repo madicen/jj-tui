@@ -14,7 +14,8 @@ import (
 	"github.com/madicen/jj-tui/internal/version"
 )
 
-// ActiveTab is the active settings sub-tab (0=GitHub, 1=Jira, 2=Codecks, 3=Tickets, 4=Branches, 5=Theme, 6=AI, 7=Advanced)
+// ActiveTab is the selected settings sub-tab. Indices and labels:
+// 0 GitHub, 1 Jira, 2 Codecks, 3 Tickets, 4 Branches, 5 Theme, 6 AI, 7 Advanced.
 type ActiveTab int
 
 const (
@@ -84,7 +85,7 @@ func BuildRenderData(sm *Model, opts ViewOpts) RenderData {
 		FocusedField:           sm.GetFocusedField(),
 		GithubService:          opts.GitHubAvailable,
 		JiraService:            opts.TicketServiceName != "",
-		ActiveTab:              ActiveTab(sm.GetSettingsTab()),
+		ActiveTab:              ActiveTab(sm.GetActiveSettingsTabIndex()),
 		ShowMergedPRs:          sm.GetSettingsShowMerged(),
 		ShowClosedPRs:          sm.GetSettingsShowClosed(),
 		OnlyMyPRs:              sm.GetSettingsOnlyMine(),

@@ -110,7 +110,7 @@ const (
 	ZoneBranchFetch           = "zone:branch:fetch"
 	ZoneBranchResolveConflict = "zone:branch:resolve_conflict"
 
-	// Settings sub-tab zones
+	// Settings sub-tab zones (order in UI: GitHub, Jira, Codecks, Tickets, Branches, Theme, AI, Advanced)
 	ZoneSettingsTabGitHub   = "zone:settings:tab:github"
 	ZoneSettingsTabJira     = "zone:settings:tab:jira"
 	ZoneSettingsTabCodecks  = "zone:settings:tab:codecks"

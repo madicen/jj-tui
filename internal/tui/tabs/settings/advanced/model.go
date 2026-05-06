@@ -143,7 +143,7 @@ func (m *Model) SetConfirmingCleanup(s string) {
 	m.confirmingCleanup = s
 }
 
-// GetInputViews returns the view strings for graph revset and custom editor (indices 14–15).
+// GetInputViews returns graph revset and custom editor views (global input indices 14–15 on the Advanced tab).
 func (m *Model) GetInputViews() []string {
 	return []string{
 		m.graphRevsetInput.View(),

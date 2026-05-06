@@ -191,7 +191,7 @@ func (m *Model) GetAIAPIKey() string {
 	return strings.TrimSpace(m.aiAPIKeyInput.Value())
 }
 
-// GetInputViews returns views for base URL, model, and API key (global indices 16–18).
+// GetInputViews returns API URL, model, and API key views (global input indices 16–18 on the AI tab).
 func (m *Model) GetInputViews() []string {
 	return []string{
 		m.aiBaseURLInput.View(),

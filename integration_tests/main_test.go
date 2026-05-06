@@ -777,10 +777,10 @@ func TestSettingsGraphRevset(t *testing.T) {
 		t.Fatalf("Expected ViewSettings after ',' , got %v", m.GetViewMode())
 	}
 
-	// Go to Advanced tab: ctrl+j goes previous tab, so from 0 -> last (7) in one key; run returned cmd so Focus() runs
+	// Go to Advanced (index 7): ctrl+j is previous tab, so from GitHub (0) -> Advanced (7) in one key; run returned cmd so Focus() runs
 	m = updateModelWithCmd(m, tea.KeyMsg{Type: tea.KeyCtrlJ})
-	if m.GetSettingsTab() != 7 {
-		t.Fatalf("Expected settings tab 7 (Advanced) after ctrl+j, got %d", m.GetSettingsTab())
+	if m.GetActiveSettingsTabIndex() != 7 {
+		t.Fatalf("Expected settings tab 7 (Advanced) after ctrl+j, got %d", m.GetActiveSettingsTabIndex())
 	}
 
 	// Rendered view must include the revset input line: ">" prompt (like Jira/Codecks) and the label
@@ -978,8 +978,8 @@ func TestSettingsJiraProjectFields(t *testing.T) {
 
 	// Switch to Jira tab (ctrl+k from GitHub tab 0 -> tab 1 = Jira)
 	m = updateModelWithCmd(m, tea.KeyMsg{Type: tea.KeyCtrlK})
-	if m.GetSettingsTab() != 1 {
-		t.Fatalf("Expected settings tab 1 (Jira) after ctrl+k, got %d", m.GetSettingsTab())
+	if m.GetActiveSettingsTabIndex() != 1 {
+		t.Fatalf("Expected settings tab 1 (Jira) after ctrl+k, got %d", m.GetActiveSettingsTabIndex())
 	}
 
 	// Move focus to "Project for new issues" (Jira field index 3): press Tab 3 times
