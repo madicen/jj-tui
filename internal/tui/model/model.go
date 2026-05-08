@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -157,11 +158,13 @@ func (m *Model) buildSettingsViewOpts() settingstab.ViewOpts {
 	if m.appState.TicketService != nil {
 		ticketName = m.appState.TicketService.GetProviderName()
 	}
+	_, ghLookErr := exec.LookPath("gh")
 	return settingstab.ViewOpts{
 		GitHubAvailable:   m.isGitHubAvailable(),
 		TicketServiceName: ticketName,
 		Config:            m.appState.Config,
 		ContentHeight:     m.estimatedContentHeight(),
+		GhAvailable:       ghLookErr == nil,
 	}
 }
 
@@ -325,7 +328,31 @@ func (m *Model) handleNavigateToTicketsTab() (tea.Model, tea.Cmd) {
 func (m *Model) handleNavigateToSettingsTab() (tea.Model, tea.Cmd) {
 	m.appState.ViewMode = state.ViewSettings
 	m.settingsTabModel.SetViewOpts(m.buildSettingsViewOpts())
+	m.refreshSettingsOriginURL()
 	return m, m.settingsTabModel.EnterTab()
+}
+
+// refreshSettingsOriginURL queries the jj service for the current `origin` URL and caches it on
+// the GitHub settings sub-model so renderRepositoryRemote can display "Current origin: …" /
+// "(none configured)". Called on Settings open and after every successful Apply / Create /
+// Remove operation so the cached value reflects reality without a refresh shortcut.
+func (m *Model) refreshSettingsOriginURL() {
+	gh := m.settingsTabModel.GetGitHubModel()
+	if m.appState.JJService == nil {
+		gh.SetCurrentOrigin("")
+		return
+	}
+	url, err := m.appState.JJService.GetGitRemoteURL(context.Background())
+	if err != nil || strings.TrimSpace(url) == "" {
+		gh.SetCurrentOrigin("")
+		return
+	}
+	gh.SetCurrentOrigin(strings.TrimSpace(url))
+	// Pre-fill the input with the existing URL so users see what's there and can edit/replace it
+	// rather than retyping from scratch. Empty input is left empty.
+	if gh.GetOriginURL() == "" {
+		gh.SetOriginURL(strings.TrimSpace(url))
+	}
 }
 
 func (m *Model) handleNavigateToHelpTab() (tea.Model, tea.Cmd) {
@@ -576,6 +603,40 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 			GhRepoPrivate: t.InitGhRepoPrivate,
 		}
 		return m, tea.Batch(data.RunJJInit(opts), m.startBusySpinnerCmd())
+	case state.NavigateRemoteApply:
+		url := strings.TrimSpace(t.RemoteURL)
+		if url == "" {
+			// Empty URL on a tab where origin is already configured is a "I cleared the field
+			// to remove origin" intent; route to remove instead so the user doesn't have to
+			// remember the Ctrl+x shortcut.
+			gh := m.settingsTabModel.GetGitHubModel()
+			if gh.GetCurrentOrigin() != "" {
+				return m, data.RemoveOriginCmd(m.appState.JJService)
+			}
+			m.appState.StatusMessage = "Enter a remote URL first"
+			return m, nil
+		}
+		m.appState.Loading = true
+		m.appState.StatusMessage = "Configuring origin remote…"
+		return m, tea.Batch(data.ApplyOriginCmd(m.appState.JJService, url), m.startBusySpinnerCmd())
+	case state.NavigateRemoteCreateGh:
+		m.appState.Loading = true
+		m.appState.StatusMessage = "Creating GitHub repository…"
+		// Repo name is implicitly the current working directory; the data layer derives it from
+		// filepath.Base when name is empty so we don't need to plumb it through here.
+		return m, tea.Batch(data.CreateGhRepoCmd(m.appState.JJService, "", t.RemoteRepoPrivate), m.startBusySpinnerCmd())
+	case state.NavigateRemoteRemove:
+		m.appState.Loading = true
+		m.appState.StatusMessage = "Removing origin remote…"
+		return m, tea.Batch(data.RemoveOriginCmd(m.appState.JJService), m.startBusySpinnerCmd())
+	case state.NavigatePushBookmarks:
+		m.appState.Loading = true
+		if t.PushAll {
+			m.appState.StatusMessage = "Pushing all bookmarks to origin…"
+		} else {
+			m.appState.StatusMessage = "Pushing current bookmark to origin…"
+		}
+		return m, tea.Batch(data.PushBookmarksCmd(m.appState.JJService, t.PushAll), m.startBusySpinnerCmd())
 	case state.NavigateRetryError:
 		// If we have a saved AI replay target, clear the modal and re-dispatch the same
 		// NavigateGenerate* request via handleNavigate. The form modal underneath stays open
@@ -1457,6 +1518,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.initRepoModel.SetPath("")
 		m.errorModal.SetError(nil, false, "")
 		return m, initrepotab.HandleJJInitSuccess(msg, &m.appState)
+	case data.RemoteOpResultMsg:
+		return m.handleRemoteOpResultMsg(msg)
+	case data.PushResultMsg:
+		return m.handlePushResultMsg(msg)
 	case data.RepoReadyMsg:
 		return m.handleRepoReadyMsg(msg)
 	case data.AuxServicesReadyMsg:

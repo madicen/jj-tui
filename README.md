@@ -243,7 +243,7 @@ The graph view has two panes: the commit graph (left) and changed files (right).
 
 Sub-tabs (use **`Ctrl+j`** / **`Ctrl+k`**, click the tab bar, or **`Tab`** through fields):
 
-1. **GitHub** — token / device login, PR list filters, refresh interval  
+1. **GitHub** — token / device login, PR list filters, refresh interval, **repository remote** (origin URL / `gh repo create`; see [GitHub settings tab](#github-settings-tab))  
 2. **Jira** — URL, user, token, projects, JQL, filters  
 3. **Codecks** — subdomain, token, project filter  
 4. **Tickets** — active provider (None / Jira / Codecks / GitHub Issues), auto “In Progress” on branch-from-ticket, GitHub Issues status excludes  
@@ -260,6 +260,25 @@ Sub-tabs (use **`Ctrl+j`** / **`Ctrl+k`**, click the tab bar, or **`Tab`** throu
 - **`Ctrl+l`**: Save **local** (`.jj-tui.json` in the repo)  
 - **`Esc`**: Cancel and return to the graph (or dismiss in-tab overlays first)  
 - **Click** fields, tabs, toggles, and theme swatches
+
+### GitHub settings tab
+
+The **GitHub** sub-tab also hosts a **Repository remote** section that lets you manage the git `origin` remote for the current repo without leaving the TUI. Use this when you initialized a repo earlier without an origin (or want to re-point an existing one) and would otherwise hit `Failed to push branch: No git remote named 'origin'` on first push.
+
+- **Current origin**: shows the live URL from `jj git remote list` (or **`(none configured)`** if the remote isn't set yet); refreshed whenever you open the Settings view or finish a remote operation.
+- **Remote URL** input: pre-filled with the existing origin URL when present so you can edit it; **`Tab`** / **`down`** focuses the field, then paste the new URL.
+  - **`Enter`** while focused (or click **Apply**): runs `jj git remote add origin <url>` (when no origin yet) or `jj git remote set-url origin <url>` (when changing it), then a best-effort `jj git fetch` so any remote bookmarks (`main@origin`, etc.) appear in the graph immediately. Empty URL + Apply when an origin already exists routes to **Remove** instead.
+  - **`Ctrl+x`** or click **Remove origin**: deletes the existing `origin` (no-op if none configured).
+- **Push current bookmark (`p`)** / **Push all bookmarks (`P`)**: run `jj git push --allow-new` (current bookmark on `@`) or `jj git push --all-bookmarks --allow-new` against the configured origin. Both buttons are disabled with a hint to set up origin first when none is configured. Use these after **Apply** to push existing work to a freshly-pointed remote, or anytime you want a one-click push that doesn't require switching to the Branches tab.
+- **Create new GitHub repo (`g`)**: when the [GitHub CLI (`gh`)](https://cli.github.com/) is installed and authenticated, runs `gh repo create <dir> --private/--public --source=. --remote=origin`, then **automatically pushes all local bookmarks** to the new origin in the same action — so the most common workflow ("create the repo and push my work") is a single click. The repo name defaults to the current directory name. Requires no existing origin (Apply / Remove first if you want to replace).
+  - **`Ctrl+v`** or click **Visibility**: toggles between **Private** (default) and **Public** before pressing `g`.
+  - **No bookmarks yet?** The auto-push step is skipped silently and the status reads `Created GitHub repo (no bookmarks to push yet)`. Make a commit / bookmark and use **Push all bookmarks** when you're ready.
+  - **Push fails after a successful create?** The new origin is preserved (the GitHub repo really exists), the failure surfaces in the error modal, and you can retry just the push via the **Push all bookmarks** button without re-creating anything.
+  - When `gh` isn't on `PATH`, the section shows a hint to install / run `gh auth login` instead of the button.
+
+These actions take effect immediately and aren't part of **Save** — there's nothing to persist because the remote is a property of the repo, not jj-tui config.
+
+If a push attempt fails with `No git remote named 'origin'`, the status / error message includes a one-line pointer to **Settings → GitHub → Repository remote** so you can jump straight to the fix.
 
 ### AI settings tab
 

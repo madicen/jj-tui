@@ -2,6 +2,7 @@ package branches
 
 import (
 	"fmt"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
@@ -105,13 +106,21 @@ func (m Model) update(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
 		}.Cmd()
 	case BranchActionMsg:
 		if msg.Err != nil {
+			statusMsg := fmt.Sprintf("Failed to %s branch: %v", msg.Action, msg.Err)
+			// Hint for the most common first-push failure: no `origin` configured. The hint is
+			// added at the formatting layer (rather than in the jj service) so we don't perturb
+			// error wrapping for any non-UI consumers of PushBranch. The status footer collapses
+			// the leading newline; the message is single-line in practice.
+			if hint := util.MissingOriginHint(msg.Err); hint != "" {
+				statusMsg += " — " + strings.TrimSpace(hint)
+			}
 			if app != nil {
-				app.StatusMessage = fmt.Sprintf("Failed to %s branch: %v", msg.Action, msg.Err)
+				app.StatusMessage = statusMsg
 				return m, nil
 			}
 			return m, ApplyBranchActionEffect{
 				Err:           msg.Err,
-				StatusMessage: fmt.Sprintf("Failed to %s branch: %v", msg.Action, msg.Err),
+				StatusMessage: statusMsg,
 			}.Cmd()
 		}
 		var statusMsg string

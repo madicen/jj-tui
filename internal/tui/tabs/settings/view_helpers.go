@@ -50,6 +50,11 @@ type RenderData struct {
 	CodecksConfigured      bool
 	GitHubIssuesConfigured bool
 	GitHubTokenSource      string // saved | env | gh_cli
+	// Repository remote section (Settings → GitHub)
+	CurrentOrigin     string // live `origin` URL ("" if not configured); cached on Settings open
+	OriginInputView   string // rendered view of the origin URL textinput
+	GhAvailable       bool   // gh CLI present in PATH (controls the "Create new GitHub repo" button)
+	GhRepoPrivate     bool   // visibility flag for "Create new GitHub repo" (true => --private)
 	BranchLimit            int
 	SanitizeBookmarks      bool
 	ConfirmingCleanup      string
@@ -77,6 +82,9 @@ type ViewOpts struct {
 	TicketServiceName string
 	Config            *config.Config
 	ContentHeight     int
+	// GhAvailable mirrors `gh` CLI presence in PATH (cached by main on Settings open). Used by
+	// renderGitHub to decide whether to show the "Create new GitHub repo" button or a hint.
+	GhAvailable bool
 }
 
 // BuildRenderData builds RenderData from the settings model and opts. Used by RenderWithState.
@@ -110,6 +118,10 @@ func BuildRenderData(sm *Model, opts ViewOpts) RenderData {
 		ContentHeight:          opts.ContentHeight,
 		ThemeModel:             sm.GetThemeModel(),
 		GitHubTokenSource:      sm.GetGitHubTokenSource(),
+		CurrentOrigin:          sm.GetGitHubModel().GetCurrentOrigin(),
+		OriginInputView:        sm.GetGitHubModel().GetOriginInputView(),
+		GhAvailable:            opts.GhAvailable,
+		GhRepoPrivate:          sm.GetGitHubModel().GetGhPrivate(),
 	}
 	data.Inputs = sm.GetSettingsInputs()
 	data.HasLocalConfig = config.HasLocalConfig()
@@ -356,7 +368,91 @@ func (r renderCtx) renderGitHub(data RenderData) []string {
 		refreshText+" "+
 		r.mark(mouse.ZoneSettingsGitHubRefreshIncrease, lipgloss.NewStyle().Foreground(styles.ColorPrimary).Render("[+]"))+" "+
 		r.mark(mouse.ZoneSettingsGitHubRefreshToggle, lipgloss.NewStyle().Foreground(styles.ColorPrimary).Render("[Toggle]")))
-	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Auto-refresh PRs when viewing PR tab (0 = disabled)"))
+	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Auto-refresh PRs when viewing PR tab (0 = disabled)"), "")
+
+	lines = append(lines, r.renderRepositoryRemote(data)...)
+	return lines
+}
+
+// renderRepositoryRemote renders the "Repository remote" subsection of the GitHub settings tab.
+// Action-oriented (not part of Save): Apply / Create / Remove fire commands directly via
+// navigation messages handled by main, mirroring the welcome-screen flow.
+func (r renderCtx) renderRepositoryRemote(data RenderData) []string {
+	var lines []string
+	muted := lipgloss.NewStyle().Foreground(styles.ColorMuted)
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render("Repository remote"))
+	lines = append(lines, "")
+	lines = append(lines, muted.Render("  The git remote `origin` jj-tui pushes branches to. Required for `Update PR`,"))
+	lines = append(lines, muted.Render("  branch push, and bookmark tracking against a remote `main`."), "")
+
+	currentLine := "  Current origin:  " + muted.Render("(none configured)")
+	if data.CurrentOrigin != "" {
+		currentLine = "  Current origin:  " + lipgloss.NewStyle().Bold(true).Render(data.CurrentOrigin)
+	}
+	lines = append(lines, currentLine, "")
+
+	urlLabelStyle := muted
+	if data.FocusedField == 5 {
+		urlLabelStyle = lipgloss.NewStyle().Foreground(styles.ColorPrimary).Bold(true)
+	}
+	lines = append(lines, "  "+urlLabelStyle.Render("Remote URL:"))
+	lines = append(lines, "  "+r.mark(mouse.ZoneSettingsRemoteOriginInput, data.OriginInputView))
+	lines = append(lines, muted.Render("    Tab/down to focus, paste a URL, then press Enter or click Apply."), "")
+
+	applyLabel := "Apply (^enter)"
+	if data.CurrentOrigin == "" {
+		applyLabel = "Add origin (^enter)"
+	} else {
+		applyLabel = "Update origin (^enter)"
+	}
+	applyButton := styles.ButtonStyle.Background(lipgloss.Color("#238636")).Render(applyLabel)
+	removeButton := styles.ButtonStyle.Background(lipgloss.Color("#8b1a1a")).Render("Remove origin (^x)")
+	if data.CurrentOrigin == "" {
+		// Render a disabled-looking style when there's nothing to remove. Still mark the zone so
+		// the click is captured and we can show a clean status message ("no origin to remove").
+		removeButton = lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("[Remove origin (n/a)]")
+	}
+	lines = append(lines,
+		"  "+r.mark(mouse.ZoneSettingsRemoteApply, applyButton)+"  "+r.mark(mouse.ZoneSettingsRemoteRemove, removeButton),
+	)
+	lines = append(lines, "")
+
+	// Push buttons: enabled only when origin is configured. When no origin is set the buttons
+	// are rendered in muted style with a parenthetical hint pointing the user at Apply / Create
+	// first; mouse zones are still attached so clicks produce a clear status message rather
+	// than silently no-op.
+	pushCurrentLabel := "Push current bookmark (p)"
+	pushAllLabel := "Push all bookmarks (P)"
+	var pushCurrentBtn, pushAllBtn string
+	if data.CurrentOrigin == "" {
+		pushCurrentBtn = lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("[" + pushCurrentLabel + " — set origin first]")
+		pushAllBtn = lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("[" + pushAllLabel + " — set origin first]")
+	} else {
+		pushCurrentBtn = styles.ButtonStyle.Background(lipgloss.Color("#1f6feb")).Render(pushCurrentLabel)
+		pushAllBtn = styles.ButtonStyle.Background(lipgloss.Color("#1f6feb")).Render(pushAllLabel)
+	}
+	lines = append(lines,
+		"  "+r.mark(mouse.ZoneSettingsRemotePushCurrent, pushCurrentBtn)+"  "+r.mark(mouse.ZoneSettingsRemotePushAll, pushAllBtn),
+	)
+	lines = append(lines, muted.Render("    Runs `jj git push --allow-new` (current) or `jj git push --all-bookmarks --allow-new` (all)."), "")
+
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("  Or create a brand-new GitHub repo"))
+	lines = append(lines, "")
+	if data.GhAvailable {
+		visLabel := "Public"
+		if data.GhRepoPrivate {
+			visLabel = "Private"
+		}
+		ghButton := styles.ButtonStyle.Background(lipgloss.Color("#1f6feb")).Render("Create new GitHub repo (g)")
+		visButton := styles.ButtonStyle.Render(fmt.Sprintf("Visibility: %s  (^v)", visLabel))
+		lines = append(lines,
+			"  "+r.mark(mouse.ZoneSettingsRemoteCreateGh, ghButton)+"  "+r.mark(mouse.ZoneSettingsRemoteVisibilityToggle, visButton),
+		)
+		lines = append(lines, muted.Render(fmt.Sprintf("    Runs `gh repo create <dir> --%s --source=. --remote=origin` and then pushes all", strings.ToLower(visLabel))))
+		lines = append(lines, muted.Render("    local bookmarks to the new origin. Requires gh CLI authentication."))
+	} else {
+		lines = append(lines, muted.Render("  `gh` CLI not found in PATH. Install GitHub CLI and run `gh auth login` to enable this option."))
+	}
 	return lines
 }
 
