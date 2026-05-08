@@ -66,6 +66,12 @@ type Model struct {
 	aiGenReqID int
 	// aiGenOverlayActive shows the centered spinner while Generate*Cmd runs (form modals + description editor).
 	aiGenOverlayActive bool
+	// pendingAIRetryKind is the most recently dispatched AI generation kind (NavigateGenerateCommitDescription,
+	// NavigateGeneratePRForm, NavigateGenerateBookmarkName, NavigateGenerateTicketForm). When the cmd reports an
+	// error, the error modal shows Retry (^r) and clicking it replays this kind via handleNavigate so the user
+	// keeps the open form modal and any text they had typed. Cleared on success or dismiss.
+	pendingAIRetryKind   state.NavigateKind
+	pendingAIRetryActive bool
 
 	// Tab-specific models (own all tab/modal state; main model does not duplicate)
 	graphTabModel    graphtab.GraphModel
@@ -136,6 +142,13 @@ func (m *Model) restoreModalUnderlayOrGraph() {
 
 func (m *Model) clearAIGenOverlay() {
 	m.aiGenOverlayActive = false
+}
+
+// clearPendingAIRetry forgets any saved AI replay target. Called on successful generation, on
+// error dismissal, and whenever we transition back to the main views without a form modal open.
+func (m *Model) clearPendingAIRetry() {
+	m.pendingAIRetryActive = false
+	m.pendingAIRetryKind = 0
 }
 
 // buildSettingsViewOpts builds ViewOpts for the settings tab (used when entering settings or on resize).
@@ -364,6 +377,7 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		return m, nil
 	case state.NavigateBackToGraph:
 		m.clearAIGenOverlay()
+		m.clearPendingAIRetry()
 		m.evologSplitModal.Hide()
 		m.evologStepwiseRemainderAfterSplit = nil
 		m.evologStepwiseBookmarkName = ""
@@ -473,7 +487,14 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		return m, nil
 	case state.NavigateDismissError:
 		m.errorModal.ClearError()
-		m.appState.ViewMode = state.ViewCommitGraph
+		m.clearPendingAIRetry()
+		// If a form modal (Edit Description, PR/Ticket/Bookmark, GitHub login) is open, keep it
+		// open after dismissing the error. Previously we forced ViewMode back to the graph,
+		// which silently discarded whatever the user had typed. Errors triggered from these
+		// views are typically AI/network failures the user wants to recover from inline.
+		if !m.isFormModalView() {
+			m.appState.ViewMode = state.ViewCommitGraph
+		}
 		if t.StatusMessage != "" {
 			m.appState.StatusMessage = t.StatusMessage
 		}
@@ -541,12 +562,28 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		m.appState.Loading = true
 		m.appState.StatusMessage = "Initializing repository…"
 		return m, tea.Batch(data.RunJJInit(), m.startBusySpinnerCmd())
-	case state.NavigateDismissErrorAndRefresh:
+	case state.NavigateRetryError:
+		// If we have a saved AI replay target, clear the modal and re-dispatch the same
+		// NavigateGenerate* request via handleNavigate. The form modal underneath stays open
+		// so the user keeps any text they typed, and the spinner overlay flips back on.
+		if m.pendingAIRetryActive {
+			m.errorModal.ClearError()
+			retryKind := m.pendingAIRetryKind
+			// pendingAIRetryActive will be set again by the NavigateGenerate* handler.
+			m.pendingAIRetryActive = false
+			return m.handleNavigate(state.NavigateTarget{Kind: retryKind})
+		}
+		// No replayable action: fall back to the legacy behavior of dismissing and refreshing
+		// the repository. Today the Retry button is hidden in this case (errortab.HasRetry is
+		// false), so this branch is only reached if the user binds ctrl+r elsewhere.
 		m.errorModal.ClearError()
-		m.appState.ViewMode = state.ViewCommitGraph
+		if !m.isFormModalView() {
+			m.appState.ViewMode = state.ViewCommitGraph
+		}
 		return m, m.refreshRepository()
 	case state.NavigateBackFromPRForm:
 		m.clearAIGenOverlay()
+		m.clearPendingAIRetry()
 		m.prFormModal.Hide()
 		m.restoreModalUnderlayOrGraph()
 		if t.StatusMessage != "" {
@@ -558,6 +595,7 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		return m, nil
 	case state.NavigateBackFromTicketForm:
 		m.clearAIGenOverlay()
+		m.clearPendingAIRetry()
 		m.ticketFormModal.Hide()
 		if m.modalUnderlayValid {
 			m.appState.ViewMode = m.modalUnderlayView
@@ -584,6 +622,8 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		rid := m.aiGenReqID
 		m.appState.StatusMessage = "Generating description…"
 		m.aiGenOverlayActive = true
+		m.pendingAIRetryKind = state.NavigateGenerateCommitDescription
+		m.pendingAIRetryActive = true
 		return m, tea.Batch(
 			aitab.GenerateCommitDescriptionCmd(rid, m.appState.JJService, m.appState.Config, changeID, m.desceditModal.GetCommitShortID(), m.desceditModal.GetDescriptionValue()),
 			m.startBusySpinnerCmd(),
@@ -603,6 +643,8 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		rid := m.aiGenReqID
 		m.appState.StatusMessage = "Generating PR title and body…"
 		m.aiGenOverlayActive = true
+		m.pendingAIRetryKind = state.NavigateGeneratePRForm
+		m.pendingAIRetryActive = true
 		return m, tea.Batch(
 			aitab.GeneratePRFormCmd(rid, m.appState.JJService, m.appState.Config, changeID, m.prFormModal.GetBaseBranch(), m.prFormModal.GetHeadBranch(), m.prFormModal.GetTitle()),
 			m.startBusySpinnerCmd(),
@@ -626,6 +668,8 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		rid := m.aiGenReqID
 		m.appState.StatusMessage = "Generating bookmark name…"
 		m.aiGenOverlayActive = true
+		m.pendingAIRetryKind = state.NavigateGenerateBookmarkName
+		m.pendingAIRetryActive = true
 		return m, tea.Batch(
 			aitab.GenerateBookmarkNameCmd(rid, m.appState.JJService, m.appState.Config, rev, hint),
 			m.startBusySpinnerCmd(),
@@ -652,6 +696,8 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		rid := m.aiGenReqID
 		m.appState.StatusMessage = "Generating ticket title and description…"
 		m.aiGenOverlayActive = true
+		m.pendingAIRetryKind = state.NavigateGenerateTicketForm
+		m.pendingAIRetryActive = true
 		return m, tea.Batch(
 			aitab.GenerateTicketFormCmd(rid, m.appState.JJService, m.appState.Config, changeID, changeShort, m.ticketFormModal.GetSummary(), m.ticketFormModal.GetDescription()),
 			m.startBusySpinnerCmd(),
@@ -1178,8 +1224,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			default:
 				label = "AI"
 			}
-			return m.Update(errorMsg{Err: fmt.Errorf("%s: %w", label, msg.Err)})
+			nm, cmd := m.Update(errorMsg{Err: fmt.Errorf("%s: %w", label, msg.Err)})
+			// errorMsg path resets hasRetry to false; turn it back on so the user sees the
+			// Retry button. The pending replay target is whatever NavigateGenerate* last set
+			// (still valid here because we only got here from one of those code paths).
+			m.errorModal.SetHasRetry(m.pendingAIRetryActive)
+			return nm, cmd
 		}
+		// Success: forget the saved retry target so a later non-AI failure doesn't accidentally
+		// offer Retry that replays a stale generation.
+		m.clearPendingAIRetry()
 		switch msg.Kind {
 		case aitab.KindCommitDescription:
 			if m.appState.ViewMode != state.ViewEditDescription || m.desceditModal.GetEditingCommitID() != msg.CommitID {

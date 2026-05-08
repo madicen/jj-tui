@@ -28,7 +28,10 @@ const (
 	NavigateResolveDivergent
 	NavigateWarningCancel
 	NavigateRunInit
-	NavigateDismissErrorAndRefresh
+	// NavigateRetryError is fired by the Retry button on the error modal. Main replays the most
+	// recent retry-eligible action (currently: in-flight AI generation kind saved on Model). If
+	// nothing is replayable, main falls back to a repository refresh.
+	NavigateRetryError
 	NavigateBackFromPRForm // back to graph and hide PR form modal
 	NavigateCreateTicket   // open Create Ticket modal (from Tickets tab)
 	NavigateBackFromTicketForm
