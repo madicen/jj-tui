@@ -58,7 +58,7 @@ When a bookmark was pushed and then amended or moved locally, **jj** may show th
 - **Evolog split (`z`)**: Experimental FAQ-style split when evolution history allows (see [Split](#split))
 - **Divergent commits & diverged bookmarks**: Dedicated flows from the graph or Branches tab (see sections below)
 - **Undo / redo**: **`Ctrl+z`** / **`Ctrl+y`** for **jj** undo and redo
-- **Non-repo & init**: Welcome screen with **`jj git init --colocate`**, optional **remote URL** to wire up `origin`, and a one-shot **`gh repo create`** path (when the GitHub CLI is installed)
+- **Non-repo & init**: [Welcome screen](#welcome-screen-non-jj-directories) with **`jj git init --colocate`**, optional **remote URL** to wire up `origin`, and a one-shot **`gh repo create`** path (when the GitHub CLI is installed)
 - **Demo mode**: **`jj-tui --demo`** uses mock tickets/PRs for screenshots or trying the UI; **Settings** is available with the same sub-tabs (including **AI**), using mock or empty integration fields
 - **Config**: Global and per-repo **`.jj-tui.json`** merge; optional **`JJ_TUI_CONFIG`**
 
@@ -153,6 +153,39 @@ jj-tui --demo
 - `,`: Open settings
 - `h`, `?`: Show help
 - `Esc`: Return to graph / Cancel current action
+
+### Welcome screen (non-jj directories)
+
+When you launch `jj-tui` in a directory that isn't a Jujutsu repository, a **Welcome to jj-tui** screen appears with three onboarding paths so you can land in a useful state without leaving the TUI.
+
+#### Initialize the repo
+
+Press **`i`** (or click **Initialize Repository**) to run **`jj git init --colocate`** in the current directory. The `--colocate` flag is the default because every downstream flow (`git remote add`, `gh repo create --source=.`, pushing branches, the `Update PR` action) assumes a colocated `.git/` directory exists; running plain `jj git init` consistently produced the *“No git remote named 'origin'”* error on first push.
+
+#### Optional: connect an existing remote
+
+If you already have a GitHub / GitLab / Bitbucket / self-hosted repository, paste its URL into the **Remote URL** input on the welcome screen:
+
+- **`Tab`** or **`u`**: Focus the **Remote URL** input (you can also click the input to focus it)
+- Paste the URL — `git@github.com:owner/repo.git`, `https://github.com/owner/repo.git`, or any other valid Git remote URL
+- **`Enter`** (while focused) or **`i`** (after blurring): Initialize **and** add the URL as `origin` — jj-tui runs `jj git init --colocate`, then `git remote add origin <url>`, then `jj git fetch` so the graph picks up the upstream `main` (and any other remote bookmarks) immediately
+- **`Esc`** while focused: Blur the input (the typed URL is preserved); press `Esc` again to dismiss the welcome screen entirely
+
+#### Optional: create a brand-new GitHub repo
+
+When the [GitHub CLI (`gh`)](https://cli.github.com/) is installed in your `PATH` and authenticated, the welcome screen also offers a one-shot **Create new GitHub repo** path:
+
+- **`g`** or click **Create new GitHub repo (\<dir\>)**: Initializes the jj repo and runs `gh repo create <dir> --private --source=. --remote=origin` to create the GitHub repository, wire up `origin`, and (silently) `jj git fetch`. The repo name defaults to the current directory name, so initializing inside `~/projects/my-app` creates `my-app` under your GitHub account
+- **`Ctrl+v`** or click the **Visibility** button: Toggle between **Private** (default) and **Public** before pressing `g`
+- We deliberately omit `--push` because a freshly initialized repo usually has no commits to push yet; push later via the normal **`u`** (Update PR) or branch push flows once you have a commit
+
+If the welcome screen shows **`gh` CLI not found in PATH** in place of the button, install the GitHub CLI and run `gh auth login`. You can also authenticate from inside jj-tui later via **Settings → GitHub → Log in with `gh`**.
+
+#### Soft-failure behavior
+
+If `jj git init --colocate` succeeds but a follow-up step fails (e.g. `gh` isn't authenticated, the URL is malformed, the GitHub repo already exists), the welcome screen closes anyway — the directory **is** a valid jj repository at that point — and an error modal surfaces the follow-up failure with **Dismiss** / **Copy** / **Quit** buttons. You can fix the remote manually afterward (e.g. `git remote add origin <url>` in your shell, then **`Ctrl+r`** to refresh).
+
+After any successful path the welcome screen also runs a best-effort `jj bookmark track main@origin`, so if the remote already has a `main` branch the graph picks it up without further action.
 
 ### Commit graph
 
@@ -707,10 +740,10 @@ The application supports these key user workflows:
 - Visual indicators in Graph and Branches views
 
 ### 8. Repository Setup & Cleanup
-- Auto-detect non-jj repositories and offer to initialize
-- Initialize with `jj git init --colocate` (so colocated `git`/`gh` flows just work), then optionally:
-  - Paste a remote URL → adds it as `origin` and runs `jj git fetch`
-  - Press **`g`** → runs `gh repo create <dir> --private/--public --source=. --remote=origin` (toggle visibility with **`Ctrl+v`**); requires the GitHub CLI authenticated
+- Auto-detect non-jj repositories and show the [Welcome screen](#welcome-screen-non-jj-directories) with three onboarding paths:
+  - Plain init (`jj git init --colocate`)
+  - Init + paste a remote URL (adds `origin`, runs `jj git fetch`)
+  - Init + create a brand-new GitHub repo via `gh repo create` (Private by default; toggle with **`Ctrl+v`**)
 - Best-effort `jj bookmark track main@origin` after init so the graph picks up the upstream `main` if it exists
 - Abandon old commits after merging PRs
 - Delete all bookmarks for fresh start
