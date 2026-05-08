@@ -58,8 +58,11 @@ const (
 	// Push action zone
 	ZoneActionUpdatePR = "zone:action:push"
 
-	// Init button zone (shown when not in a jj repo)
-	ZoneActionJJInit = "zone:action:jj_init"
+	// Init screen zones (shown when not in a jj repo)
+	ZoneActionJJInit                = "zone:action:jj_init"
+	ZoneActionInitURLInput          = "zone:action:init_url_input"
+	ZoneActionInitGhRepoCreate      = "zone:action:init_gh_repo_create"
+	ZoneActionInitVisibilityToggle  = "zone:action:init_visibility_toggle"
 
 	// Warning modal zones
 	ZoneWarningGoToCommit = "zone:warning:goto_commit"

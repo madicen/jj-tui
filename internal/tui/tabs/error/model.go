@@ -13,6 +13,7 @@ import (
 type Model struct {
 	err         error
 	copied      bool
+	hasRetry    bool // true => render Retry button and accept ctrl+r / ZoneActionRetry
 	zoneManager *zone.Manager
 	width       int
 	height      int
@@ -57,7 +58,7 @@ func (m Model) View() string {
 	if w < 50 {
 		w = 80
 	}
-	return renderModal(m.zoneManager, w, m.height, errStr, m.copied)
+	return renderModal(m.zoneManager, w, m.height, errStr, m.copied, m.hasRetry)
 }
 
 func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
@@ -66,7 +67,10 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 		util.FlushMouse()
 		return m, tea.Quit
 	case "ctrl+r":
-		return m, state.NavigateTarget{Kind: state.NavigateDismissErrorAndRefresh}.Cmd()
+		if !m.hasRetry {
+			return m, nil
+		}
+		return m, state.NavigateTarget{Kind: state.NavigateRetryError}.Cmd()
 	case "esc", "enter", " ":
 		return m, state.NavigateTarget{Kind: state.NavigateDismissError, StatusMessage: "Error dismissed"}.Cmd()
 	case "c":
@@ -75,12 +79,17 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	return m, nil
 }
 
-// ZoneIDs returns the zone IDs used when rendering this modal's buttons.
+// ZoneIDs returns the zone IDs used when rendering this modal's buttons. The Retry zone is
+// only included when hasRetry is set so clicks in that area don't get swallowed when the button
+// isn't actually drawn (see SetHasRetry).
 func (m Model) ZoneIDs() []string {
-	return []string{
-		mouse.ZoneActionCopyError, mouse.ZoneActionDismissError,
-		mouse.ZoneActionRetry, mouse.ZoneActionQuit,
+	ids := []string{
+		mouse.ZoneActionCopyError, mouse.ZoneActionDismissError, mouse.ZoneActionQuit,
 	}
+	if m.hasRetry {
+		ids = append(ids, mouse.ZoneActionRetry)
+	}
+	return ids
 }
 
 func (m Model) resolveClickedZone(msg zone.MsgZoneInBounds) string {
@@ -103,7 +112,10 @@ func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
 	case mouse.ZoneActionDismissError:
 		return m, state.NavigateTarget{Kind: state.NavigateDismissError, StatusMessage: "Error dismissed"}.Cmd()
 	case mouse.ZoneActionRetry:
-		return m, state.NavigateTarget{Kind: state.NavigateDismissErrorAndRefresh}.Cmd()
+		if !m.hasRetry {
+			return m, nil
+		}
+		return m, state.NavigateTarget{Kind: state.NavigateRetryError}.Cmd()
 	case mouse.ZoneActionQuit:
 		util.FlushMouse()
 		return m, tea.Quit
@@ -131,16 +143,32 @@ func (m *Model) GetError() error {
 	return m.err
 }
 
-// SetError sets the error (path is ignored; init-repo screen uses initrepo tab).
+// SetError sets the error (path is ignored; init-repo screen uses initrepo tab). hasRetry resets
+// to false; callers that want a Retry button (e.g. AI generation failures with a saved replay
+// target on the main Model) must follow up with SetHasRetry(true).
 func (m *Model) SetError(err error, _ bool, _ string) {
 	m.err = err
 	m.copied = false
+	m.hasRetry = false
 }
 
 // ClearError clears the error.
 func (m *Model) ClearError() {
 	m.err = nil
 	m.copied = false
+	m.hasRetry = false
+}
+
+// SetHasRetry toggles whether the Retry (^r) button is rendered and the corresponding
+// keybinding/zone are honored. Main sets this when an AI generation fails with a saved replay
+// target so the user can rerun the same request without losing the open form modal.
+func (m *Model) SetHasRetry(has bool) {
+	m.hasRetry = has
+}
+
+// HasRetry reports whether Retry is currently offered for the active error.
+func (m *Model) HasRetry() bool {
+	return m.hasRetry
 }
 
 // IsCopied returns whether the error was just copied.

@@ -8,10 +8,16 @@ import (
 )
 
 // InitErrorMsg is sent when initialization fails (e.g. not a jj repo). Main converts to model error.
+//
+// When JJInitialized is true the caller already ran `jj git init` successfully and the failure is
+// in a follow-up step (e.g. `gh repo create` or `git remote add`). Main treats this as a soft
+// error: the init screen is dismissed, services are reloaded, and the error modal surfaces the
+// follow-up failure so the user can address it without losing the (already-applied) jj init.
 type InitErrorMsg struct {
-	Err         error
-	NotJJRepo   bool
-	CurrentPath string
+	Err            error
+	NotJJRepo      bool
+	CurrentPath    string
+	JJInitialized  bool
 }
 
 // ServicesInitializedMsg is sent when jj, GitHub, and ticket services are initialized.

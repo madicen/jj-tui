@@ -8,7 +8,7 @@ import (
 func TestRenderModalCapsHeight(t *testing.T) {
 	t.Parallel()
 	long := strings.Repeat("word ", 200)
-	modal := renderModal(nil, 100, 24, long, false)
+	modal := renderModal(nil, 100, 24, long, false, true)
 	lines := strings.Split(modal, "\n")
 	if len(lines) > 24 {
 		t.Fatalf("modal has %d lines, want at most 24 (terminal height budget)", len(lines))
@@ -21,11 +21,24 @@ func TestRenderModalCapsHeight(t *testing.T) {
 func TestRenderModalNoTruncateWhenShort(t *testing.T) {
 	t.Parallel()
 	msg := "short error"
-	modal := renderModal(nil, 100, 24, msg, false)
+	modal := renderModal(nil, 100, 24, msg, false, true)
 	if strings.Contains(modal, "truncated") {
 		t.Fatalf("did not expect truncation hint for short message")
 	}
 	if !strings.Contains(modal, msg) {
 		t.Fatalf("expected original message in modal")
+	}
+}
+
+func TestRenderModalHidesRetryWhenNotApplicable(t *testing.T) {
+	t.Parallel()
+	msg := "non-retryable failure"
+	withRetry := renderModal(nil, 100, 24, msg, false, true)
+	withoutRetry := renderModal(nil, 100, 24, msg, false, false)
+	if !strings.Contains(withRetry, "Retry") {
+		t.Fatalf("expected Retry button when hasRetry=true")
+	}
+	if strings.Contains(withoutRetry, "Retry") {
+		t.Fatalf("did not expect Retry button when hasRetry=false")
 	}
 }

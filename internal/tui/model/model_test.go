@@ -1279,8 +1279,10 @@ func TestJJInitFeature(t *testing.T) {
 		if !containsString(view, "jj git init") {
 			t.Error("Expected jj git init command text in view")
 		}
-		if !containsString(view, "main@origin") {
-			t.Error("Expected main@origin tracking text in view")
+		// The redesigned screen exposes an optional remote URL section (Pass 2 of init UX);
+		// asserting on its heading guards that the new layout actually renders.
+		if !containsString(view, "Optional: connect a remote") {
+			t.Error("Expected optional-remote section heading in view")
 		}
 	})
 

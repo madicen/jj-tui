@@ -33,8 +33,10 @@ func CopyErrorCmd(errMsg string) tea.Cmd {
 const fixedChromeLines = 15
 
 // renderModal renders the error dialog (title, message, dismiss/copy/retry/quit buttons).
-// Content is intended to be centered by the caller.
-func renderModal(zm *zone.Manager, width, height int, errStr string, copied bool) string {
+// Content is intended to be centered by the caller. The Retry button is only drawn when
+// hasRetry is true; many errors (jj op failures, parse errors, etc.) have nothing replayable
+// and showing a button that just refreshed the repo proved confusing.
+func renderModal(zm *zone.Manager, width, height int, errStr string, copied, hasRetry bool) string {
 	modalWidth := min(max(width-8, 50), 80)
 
 	titleStyle := lipgloss.NewStyle().
@@ -104,10 +106,15 @@ func renderModal(zm *zone.Manager, width, height int, errStr string, copied bool
 		copyBtn = mark(mouse.ZoneActionCopyError, buttonStyle.Render("Copy (c)"))
 	}
 
-	retryBtn := mark(mouse.ZoneActionRetry, buttonStyle.Render("Retry (^r)"))
 	quitBtn := mark(mouse.ZoneActionQuit, buttonStyle.Background(lipgloss.Color("#c9302c")).Render("Quit (^q)"))
 
-	content.WriteString(dismissBtn + "  " + copyBtn + "  " + retryBtn + "  " + quitBtn)
+	row := dismissBtn + "  " + copyBtn
+	if hasRetry {
+		retryBtn := mark(mouse.ZoneActionRetry, buttonStyle.Render("Retry (^r)"))
+		row += "  " + retryBtn
+	}
+	row += "  " + quitBtn
+	content.WriteString(row)
 
 	modalBox := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
