@@ -58,7 +58,7 @@ When a bookmark was pushed and then amended or moved locally, **jj** may show th
 - **Evolog split (`z`)**: Experimental FAQ-style split when evolution history allows (see [Split](#split))
 - **Divergent commits & diverged bookmarks**: Dedicated flows from the graph or Branches tab (see sections below)
 - **Undo / redo**: **`Ctrl+z`** / **`Ctrl+y`** for **jj** undo and redo
-- **Non-repo & init**: Prompt to **`jj git init`** when the path is not a jj repo
+- **Non-repo & init**: Welcome screen with **`jj git init --colocate`**, optional **remote URL** to wire up `origin`, and a one-shot **`gh repo create`** path (when the GitHub CLI is installed)
 - **Demo mode**: **`jj-tui --demo`** uses mock tickets/PRs for screenshots or trying the UI; **Settings** is available with the same sub-tabs (including **AI**), using mock or empty integration fields
 - **Config**: Global and per-repo **`.jj-tui.json`** merge; optional **`JJ_TUI_CONFIG`**
 
@@ -708,7 +708,10 @@ The application supports these key user workflows:
 
 ### 8. Repository Setup & Cleanup
 - Auto-detect non-jj repositories and offer to initialize
-- Initialize with `jj git init` and automatically track `main@origin`
+- Initialize with `jj git init --colocate` (so colocated `git`/`gh` flows just work), then optionally:
+  - Paste a remote URL → adds it as `origin` and runs `jj git fetch`
+  - Press **`g`** → runs `gh repo create <dir> --private/--public --source=. --remote=origin` (toggle visibility with **`Ctrl+v`**); requires the GitHub CLI authenticated
+- Best-effort `jj bookmark track main@origin` after init so the graph picks up the upstream `main` if it exists
 - Abandon old commits after merging PRs
 - Delete all bookmarks for fresh start
 - Track/fetch remote branches

@@ -94,6 +94,13 @@ type NavigateTarget struct {
 	EvologMultiBaseCommitIDs []string
 	// EvologStepwiseRemainder, when non-empty, is bases still to run after this split (stepwise mode); main reloads evolog without closing the modal.
 	EvologStepwiseRemainder []string
+	// Init-repo screen options: forwarded to data.RunJJInit when the user accepts the welcome
+	// screen. Defaults (zero values) reproduce today's behavior of plain `jj git init`.
+	InitColocate     bool   // run `jj git init --colocate` instead of plain `jj git init`
+	InitRemoteURL    string // when non-empty, add as `origin` after init and run `jj git fetch`
+	InitGhCreateRepo bool   // run `gh repo create` after init (requires gh CLI in PATH)
+	InitGhRepoName   string // name passed to `gh repo create`; empty -> filepath.Base(cwd)
+	InitGhRepoPrivate bool  // visibility for `gh repo create`: true => --private, else --public
 	// File diff modal (graph): path relative to repo; Commit holds change id / short id.
 	FileDiffPath string
 	// When non-empty, NavigateOpenFileDiff shows this git unified diff immediately (no jj call). Used by evolog split.

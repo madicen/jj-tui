@@ -560,8 +560,22 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		return m, nil
 	case state.NavigateRunInit:
 		m.appState.Loading = true
-		m.appState.StatusMessage = "Initializing repository…"
-		return m, tea.Batch(data.RunJJInit(), m.startBusySpinnerCmd())
+		switch {
+		case t.InitGhCreateRepo:
+			m.appState.StatusMessage = "Initializing repository and creating GitHub repo…"
+		case strings.TrimSpace(t.InitRemoteURL) != "":
+			m.appState.StatusMessage = "Initializing repository and adding remote…"
+		default:
+			m.appState.StatusMessage = "Initializing repository…"
+		}
+		opts := data.InitOptions{
+			Colocate:      t.InitColocate,
+			RemoteURL:     t.InitRemoteURL,
+			GhCreateRepo:  t.InitGhCreateRepo,
+			GhRepoName:    t.InitGhRepoName,
+			GhRepoPrivate: t.InitGhRepoPrivate,
+		}
+		return m, tea.Batch(data.RunJJInit(opts), m.startBusySpinnerCmd())
 	case state.NavigateRetryError:
 		// If we have a saved AI replay target, clear the modal and re-dispatch the same
 		// NavigateGenerate* request via handleNavigate. The form modal underneath stays open
@@ -1420,6 +1434,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, cmd
 	case data.InitErrorMsg:
+		// Soft-failure path: jj init succeeded but a follow-up step (gh repo create / git remote
+		// add) failed. The directory is now a valid jj repo, so dismiss the init screen and load
+		// services as if init had fully succeeded. The follow-up error is still surfaced via the
+		// error modal so the user knows to set up the remote manually.
+		if msg.JJInitialized {
+			m.initRepoModel.SetPath("")
+			m.errorModal.SetError(msg.Err, false, "")
+			m.appState.StatusMessage = "Repository initialized; remote setup failed"
+			return m, data.InitializeServices(m.appState.DemoMode)
+		}
 		cmd, info := initrepotab.HandleInitError(msg, &m.appState)
 		if info != nil {
 			if info.NotJJRepo {
