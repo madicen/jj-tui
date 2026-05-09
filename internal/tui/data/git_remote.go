@@ -49,7 +49,9 @@ type RemoteOpResultMsg struct {
 // from RemoteOpResultMsg so the two flows have independent status text and so the auto-push
 // after Create can be styled distinctly from a deliberate user-initiated push.
 type PushResultMsg struct {
-	All         bool // true => `jj git push --all-bookmarks`, false => current bookmark only
+	// All records user intent: true => "Push all bookmarks" (we enumerated and pushed each via
+	// --bookmark <name>), false => "Push current bookmark" (default jj behavior, no flag).
+	All         bool
 	PushedCount int
 	PushedNames []string
 	Output      string
@@ -89,10 +91,13 @@ func ApplyOriginCmd(svc *jj.Service, url string) tea.Cmd {
 }
 
 // CreateGhRepoCmd creates a new GitHub repository via `gh repo create`, wires up `origin`, and
-// then attempts an inline `jj git push --all-bookmarks --allow-new` so the user's existing work
-// reaches the new remote in a single user action. We use jj's push (not `gh repo create --push`)
-// because gh's --push runs raw `git push -u origin <branch>` which skips jj's import/export step
-// and can leave colocated repos slightly out of sync; --all-bookmarks also handles stacked work.
+// then attempts an inline push of every local bookmark (`jj git push --allow-new --bookmark
+// <name>` repeated per name) so the user's existing work reaches the new remote in a single
+// user action. We use jj's push (not `gh repo create --push`) because gh's --push runs raw
+// `git push -u origin <branch>` which skips jj's import/export step and can leave colocated
+// repos slightly out of sync; pushing every bookmark explicitly also handles stacked work and
+// stays compatible across jj versions that renamed `--all-bookmarks` (the older flag is
+// rejected on some currently-supported builds, so we avoid it).
 //
 // The push step is intentionally soft-failing: if create succeeds but push doesn't (e.g. auth,
 // network, or "no bookmarks yet"), the GitHub repo is preserved and the result message carries
@@ -135,7 +140,7 @@ func CreateGhRepoCmd(svc *jj.Service, name string, private bool) tea.Cmd {
 		// has nothing yet.
 		names := listLocalBookmarks(ctx, svc)
 		if len(names) > 0 {
-			pushOut, pushErr := pushBookmarks(ctx, svc, true)
+			pushOut, pushErr := pushBookmarks(ctx, svc, names)
 			msg.PushOutput = pushOut
 			msg.PushErr = pushErr
 			if pushErr == nil {
@@ -147,10 +152,13 @@ func CreateGhRepoCmd(svc *jj.Service, name string, private bool) tea.Cmd {
 	}
 }
 
-// PushBookmarksCmd runs `jj git push [--all-bookmarks] --allow-new` against the configured
-// origin remote. Used by the standalone Push current / Push all buttons in the Repository
-// remote panel. Independent of CreateGhRepoCmd's auto-push so users can retry / push later
-// without re-creating the GitHub repo.
+// PushBookmarksCmd runs `jj git push --allow-new` against the configured origin. The "all"
+// branch enumerates local bookmarks and pushes each via `--bookmark <name>` so we don't depend
+// on `--all-bookmarks`, which is unrecognized on some currently-supported jj versions; the
+// "current" branch passes no bookmark flag and lets jj's default selection apply (the bookmark
+// on @). Used by the standalone Push current / Push all buttons in the Repository remote
+// panel. Independent of CreateGhRepoCmd's auto-push so users can retry / push later without
+// re-creating the GitHub repo.
 func PushBookmarksCmd(svc *jj.Service, all bool) tea.Cmd {
 	return func() tea.Msg {
 		msg := PushResultMsg{All: all}
@@ -168,7 +176,7 @@ func PushBookmarksCmd(svc *jj.Service, all bool) tea.Cmd {
 				// genuinely empty repo. Caller decides whether to surface a status line.
 				return msg
 			}
-			out, err := pushBookmarks(ctx, svc, true)
+			out, err := pushBookmarks(ctx, svc, names)
 			msg.Output = out
 			if err != nil {
 				msg.Err = err
@@ -178,7 +186,7 @@ func PushBookmarksCmd(svc *jj.Service, all bool) tea.Cmd {
 			msg.PushedCount = len(names)
 			return msg
 		}
-		out, err := pushBookmarks(ctx, svc, false)
+		out, err := pushBookmarks(ctx, svc, nil)
 		msg.Output = out
 		if err != nil {
 			msg.Err = err
@@ -194,16 +202,25 @@ func PushBookmarksCmd(svc *jj.Service, all bool) tea.Cmd {
 	}
 }
 
-// pushBookmarks runs the underlying `jj git push` command and returns its combined output. The
-// helper is shared between CreateGhRepoCmd's auto-push step and PushBookmarksCmd so the exact
-// command flags stay consistent across both entry points.
-func pushBookmarks(ctx context.Context, svc *jj.Service, all bool) (string, error) {
+// pushBookmarks runs `jj git push --allow-new` against origin and returns its combined output.
+// When names is empty, no `--bookmark` flag is passed and jj's default selection applies (the
+// bookmark on @). When names is non-empty, each entry is forwarded as `--bookmark <name>`, which
+// is the version-portable way to push multiple bookmarks at once: jj historically renamed the
+// "all bookmarks" shorthand (e.g. `--all-bookmarks`), and some currently-shipping jj builds
+// reject it outright, while every bookmark-era jj accepts the singular `--bookmark` flag. The
+// helper is shared between CreateGhRepoCmd's auto-push step and PushBookmarksCmd so both entry
+// points produce identical jj invocations.
+func pushBookmarks(ctx context.Context, svc *jj.Service, names []string) (string, error) {
 	if svc == nil {
 		return "", fmt.Errorf("jj service unavailable")
 	}
 	args := []string{"git", "push", "--allow-new"}
-	if all {
-		args = append(args, "--all-bookmarks")
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		args = append(args, "--bookmark", name)
 	}
 	cmd := exec.CommandContext(ctx, "jj", args...)
 	if svc.RepoPath != "" {
@@ -241,7 +258,7 @@ func listLocalBookmarks(ctx context.Context, svc *jj.Service) []string {
 		}
 		// `jj bookmark list --template name` includes both local and remote-tracking entries
 		// (the latter formatted as "name@remote"); we only want bookmarks the user owns
-		// locally, since those are what jj git push --all-bookmarks targets.
+		// locally, since those are what the per-bookmark push targets.
 		if strings.Contains(line, "@") {
 			continue
 		}

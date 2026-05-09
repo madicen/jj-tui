@@ -52,11 +52,13 @@ const (
 	NavigateRemoteApply
 	NavigateRemoteCreateGh
 	NavigateRemoteRemove
-	// NavigatePushBookmarks runs `jj git push --allow-new` (current bookmark) or
-	// `jj git push --all-bookmarks --allow-new` (PushAll=true) against the configured origin.
-	// Wired to the Push current / Push all buttons in the Repository remote panel. Separate
-	// from the auto-push-after-create flow so users can retry pushes after configuration
-	// changes without re-creating the GitHub repo.
+	// NavigatePushBookmarks runs `jj git push --allow-new` against the configured origin —
+	// without `--bookmark` for PushAll=false (jj selects the bookmark on @), or with one
+	// `--bookmark <name>` per local bookmark for PushAll=true. We avoid `--all-bookmarks`
+	// because some currently-supported jj versions reject it. Wired to the Push current /
+	// Push all buttons in the Repository remote panel. Separate from the auto-push-after-create
+	// flow so users can retry pushes after configuration changes without re-creating the
+	// GitHub repo.
 	NavigatePushBookmarks
 )
 
@@ -112,8 +114,9 @@ type NavigateTarget struct {
 	RemoteURL         string
 	RemoteRepoName    string
 	RemoteRepoPrivate bool
-	// PushAll is the payload for NavigatePushBookmarks: true => `jj git push --all-bookmarks`,
-	// false => push only the current bookmark (the bookmark on @).
+	// PushAll is the payload for NavigatePushBookmarks: true => enumerate local bookmarks and
+	// pass each as `--bookmark <name>` (portable across jj versions), false => push only the
+	// current bookmark (jj's default selection on @).
 	PushAll bool
 
 	// Init-repo screen options: forwarded to data.RunJJInit when the user accepts the welcome

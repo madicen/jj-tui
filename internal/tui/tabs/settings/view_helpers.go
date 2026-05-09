@@ -434,7 +434,7 @@ func (r renderCtx) renderRepositoryRemote(data RenderData) []string {
 	lines = append(lines,
 		"  "+r.mark(mouse.ZoneSettingsRemotePushCurrent, pushCurrentBtn)+"  "+r.mark(mouse.ZoneSettingsRemotePushAll, pushAllBtn),
 	)
-	lines = append(lines, muted.Render("    Runs `jj git push --allow-new` (current) or `jj git push --all-bookmarks --allow-new` (all)."), "")
+	lines = append(lines, muted.Render("    Runs `jj git push --allow-new` (current) or once per local bookmark via `--bookmark <name>` (all)."), "")
 
 	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("  Or create a brand-new GitHub repo"))
 	lines = append(lines, "")
