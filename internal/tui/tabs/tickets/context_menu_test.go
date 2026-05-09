@@ -84,7 +84,11 @@ func TestChangeStatus_CascadeFromContextMenu(t *testing.T) {
 
 	itemZone := m.zoneManager.Get(mouse.ZoneTicketCtxMenuItem(2))
 	if itemZone == nil {
+		// Explicit return after t.Skip: t.SkipNow uses runtime.Goexit, which staticcheck
+		// (SA5011) doesn't model as terminating, so it would otherwise flag the
+		// itemZone.StartX deref below as a possible nil deref.
 		t.Skip("menu item zone not registered after scan - zone registration may need full render pipeline")
+		return
 	}
 
 	event := tea.MouseMsg{
@@ -102,7 +106,9 @@ func TestChangeStatus_CascadeFromContextMenu(t *testing.T) {
 		t.Fatal("statusSubmenu should be created after clicking Change Status")
 	}
 	if req == nil {
+		// See SA5011 note above; same reason for the explicit return.
 		t.Fatal("should return a request for LoadTransitionsForSelection")
+		return
 	}
 	if !req.LoadTransitionsForSelection {
 		t.Errorf("request should have LoadTransitionsForSelection=true, got %+v", req)
@@ -122,7 +128,10 @@ func TestChangeStatus_SubmenuSurvivesDoubleZoneHit(t *testing.T) {
 
 	itemZone := m.zoneManager.Get(mouse.ZoneTicketCtxMenuItem(2))
 	if itemZone == nil {
+		// Explicit return after t.Skip — see SA5011 note in
+		// TestChangeStatus_CascadeFromContextMenu.
 		t.Skip("menu item zone not registered after scan")
+		return
 	}
 
 	event := tea.MouseMsg{
@@ -161,6 +170,7 @@ func TestFullClickFlow_ChangeStatus(t *testing.T) {
 	ticketZone := m.zoneManager.Get(mouse.ZoneJiraTicket(1))
 	if ticketZone == nil {
 		t.Skip("ticket zone not registered after scan")
+		return
 	}
 
 	// 1. Press on ticket row (starts long-press timer)
@@ -191,6 +201,7 @@ func TestFullClickFlow_ChangeStatus(t *testing.T) {
 	changeStatusZone := m.zoneManager.Get(mouse.ZoneTicketCtxMenuItem(2))
 	if changeStatusZone == nil {
 		t.Skip("Change Status zone not registered after scan")
+		return
 	}
 
 	// 4. Press on "Change Status >" — should not dismiss menu
@@ -282,6 +293,7 @@ func TestStatusSubmenu_CloseButtonDismisses(t *testing.T) {
 	closeZone := m.zoneManager.Get(mouse.ZoneStatusPopoverClose)
 	if closeZone == nil {
 		t.Skip("close button zone not registered after scan")
+		return
 	}
 
 	event := tea.MouseMsg{
@@ -314,6 +326,7 @@ func TestStatusSubmenu_TransitionClick(t *testing.T) {
 	transZone := m.zoneManager.Get(mouse.ZoneJiraTransition + "0")
 	if transZone == nil {
 		t.Skip("transition zone not registered after scan")
+		return
 	}
 
 	event := tea.MouseMsg{
@@ -329,6 +342,7 @@ func TestStatusSubmenu_TransitionClick(t *testing.T) {
 	}
 	if req == nil {
 		t.Fatal("transition click should produce a request")
+		return
 	}
 	if req.TransitionID != "11" {
 		t.Errorf("expected TransitionID '11', got '%s'", req.TransitionID)
@@ -346,6 +360,7 @@ func TestContextMenu_ClickOutsideDismisses(t *testing.T) {
 	ticketZone := m.zoneManager.Get(mouse.ZoneJiraTicket(2))
 	if ticketZone == nil {
 		t.Skip("ticket zone not registered")
+		return
 	}
 
 	event := tea.MouseMsg{
@@ -373,6 +388,7 @@ func TestFullClickFlow_WithAppState(t *testing.T) {
 	itemZone := m.zoneManager.Get(mouse.ZoneTicketCtxMenuItem(2))
 	if itemZone == nil {
 		t.Skip("Change Status zone not registered")
+		return
 	}
 
 	app := &state.AppState{
