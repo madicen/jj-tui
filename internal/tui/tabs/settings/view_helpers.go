@@ -399,10 +399,10 @@ func (r renderCtx) renderRepositoryRemote(data RenderData) []string {
 	lines = append(lines, "  "+r.mark(mouse.ZoneSettingsRemoteOriginInput, data.OriginInputView))
 	lines = append(lines, muted.Render("    Tab/down to focus, paste a URL, then press Enter or click Apply."), "")
 
-	applyLabel := "Apply (^enter)"
-	if data.CurrentOrigin == "" {
-		applyLabel = "Add origin (^enter)"
-	} else {
+	// Default to the no-origin label and override only when an origin already exists; the
+	// previous "Apply (^enter)" generic fallback was unused and tripped ineffassign.
+	applyLabel := "Add origin (^enter)"
+	if data.CurrentOrigin != "" {
 		applyLabel = "Update origin (^enter)"
 	}
 	applyButton := styles.ButtonStyle.Background(lipgloss.Color("#238636")).Render(applyLabel)

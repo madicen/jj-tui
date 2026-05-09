@@ -53,7 +53,8 @@ When a bookmark was pushed and then amended or moved locally, **jj** may show th
 - **GitHub**: Create/update PRs, device-flow login, PR list with CI and review hints
 - **Tickets**: Jira, Codecks, or GitHub Issues—provider choice in Settings; create a bookmark from a ticket on your current commit; status transitions where supported
 - **Branches**: List locals/remotes, track/untrack, push/fetch, resolve diverged bookmarks
-- **Settings**: GitHub, Jira, Codecks, **Tickets** (provider + workflow), **Branches** (limit), **Theme** (colors), **AI** (LLM provider, keys, evolog split defaults), **Advanced** (external editor, graph revset, bookmark sanitize, destructive cleanup)
+- **Repository remote management**: Configure / change / remove the git `origin` from inside the TUI, push current or all bookmarks in one click, or run **`gh repo create` + auto-push** when bootstrapping a new GitHub repo (see [GitHub settings tab](#github-settings-tab))
+- **Settings**: GitHub (token, PR filters, **`origin` remote management**), Jira, Codecks, **Tickets** (provider + workflow), **Branches** (limit), **Theme** (colors), **AI** (LLM provider, keys, evolog split defaults), **Advanced** (external editor, graph revset, bookmark sanitize, destructive cleanup)
 - **Help tab**: Shortcuts reference plus **command history** of **jj** commands the TUI ran (copy-friendly)
 - **Evolog split (`z`)**: Experimental FAQ-style split when evolution history allows (see [Split](#split))
 - **Divergent commits & diverged bookmarks**: Dedicated flows from the graph or Branches tab (see sections below)
@@ -263,7 +264,20 @@ Sub-tabs (use **`Ctrl+j`** / **`Ctrl+k`**, click the tab bar, or **`Tab`** throu
 
 ### GitHub settings tab
 
-The **GitHub** sub-tab also hosts a **Repository remote** section that lets you manage the git `origin` remote for the current repo without leaving the TUI. Use this when you initialized a repo earlier without an origin (or want to re-point an existing one) and would otherwise hit `Failed to push branch: No git remote named 'origin'` on first push.
+The **GitHub** sub-tab hosts both the API/auth configuration (token / device login / PR filters / refresh interval — covered above) **and** a dedicated **Repository remote** section that lets you manage the git `origin` remote for the current repo without leaving the TUI. Use this when you initialized a repo earlier without an origin (or want to re-point an existing one) and would otherwise hit `Failed to push branch: No git remote named 'origin'` on first push.
+
+#### Common workflows at a glance
+
+| You want to… | Inputs | Press / Click |
+|---|---|---|
+| **Add an existing remote** (e.g. `git@github.com:owner/repo.git`) | Paste URL into **Remote URL** | **`Enter`** while focused, or **Apply** |
+| **Update an existing origin** (typo / wrong account / SSH→HTTPS) | Edit **Remote URL** (pre-filled) | **`Enter`** while focused, or **Apply** |
+| **Remove origin** | — | **`Ctrl+x`**, or **Remove origin** |
+| **Push current bookmark** to origin | — | **`p`**, or **Push current bookmark** |
+| **Push all local bookmarks** to origin (after Apply / set-url) | — | **`P`**, or **Push all bookmarks** |
+| **Create a new GitHub repo + push everything in one shot** | optionally toggle visibility | **`Ctrl+v`** to flip Private/Public, then **`g`** or **Create new GitHub repo** |
+
+#### Field reference
 
 - **Current origin**: shows the live URL from `jj git remote list` (or **`(none configured)`** if the remote isn't set yet); refreshed whenever you open the Settings view or finish a remote operation.
 - **Remote URL** input: pre-filled with the existing origin URL when present so you can edit it; **`Tab`** / **`down`** focuses the field, then paste the new URL.
