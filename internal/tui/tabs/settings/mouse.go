@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/state"
 )
 
 // resolveTabFromZone maps a tab zone id to the settings sub-tab index if zoneID is a tab header:
@@ -109,6 +110,29 @@ func handleGitHubZone(m *Model, zoneID string) (Model, tea.Cmd) {
 	case mouse.ZoneSettingsGitHubToken:
 		m.SetFocusedField(0)
 		return *m, nil
+	case mouse.ZoneSettingsRemoteOriginInput:
+		// Bypass the parent's SetFocusedField clamp (which forces github -> 0); focus directly.
+		gh.FocusOriginInput()
+		return *m, nil
+	case mouse.ZoneSettingsRemoteApply:
+		return *m, state.NavigateTarget{
+			Kind:      state.NavigateRemoteApply,
+			RemoteURL: strings.TrimSpace(gh.GetOriginURL()),
+		}.Cmd()
+	case mouse.ZoneSettingsRemoteCreateGh:
+		return *m, state.NavigateTarget{
+			Kind:              state.NavigateRemoteCreateGh,
+			RemoteRepoPrivate: gh.GetGhPrivate(),
+		}.Cmd()
+	case mouse.ZoneSettingsRemoteRemove:
+		return *m, state.NavigateTarget{Kind: state.NavigateRemoteRemove}.Cmd()
+	case mouse.ZoneSettingsRemoteVisibilityToggle:
+		gh.ToggleGhPrivate()
+		return *m, nil
+	case mouse.ZoneSettingsRemotePushCurrent:
+		return *m, state.NavigateTarget{Kind: state.NavigatePushBookmarks, PushAll: false}.Cmd()
+	case mouse.ZoneSettingsRemotePushAll:
+		return *m, state.NavigateTarget{Kind: state.NavigatePushBookmarks, PushAll: true}.Cmd()
 	}
 	return *m, nil
 }

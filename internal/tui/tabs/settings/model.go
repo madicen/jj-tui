@@ -1,12 +1,15 @@
 package settings
 
 import (
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/bubble-color-picker"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/tabs/settings/advanced"
 	"github.com/madicen/jj-tui/internal/tui/tabs/settings/ai"
 	"github.com/madicen/jj-tui/internal/tui/tabs/settings/branches"
@@ -186,6 +189,40 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Repository remote shortcuts (Settings → GitHub only). Handled here so they fire from any
+	// focusedField on the GitHub panel (including the token input row), and so they don't
+	// collide with j/k/space toggle handling further below.
+	if m.settingsTab == 0 {
+		switch msg.String() {
+		case "ctrl+v":
+			m.githubModel.ToggleGhPrivate()
+			return m, nil
+		case "ctrl+x":
+			return m, state.NavigateTarget{Kind: state.NavigateRemoteRemove}.Cmd()
+		case "ctrl+@", "ctrl+ ": // ctrl+enter on most terminals; fall-through below also handles enter when focused on origin URL.
+			return m, state.NavigateTarget{
+				Kind:      state.NavigateRemoteApply,
+				RemoteURL: strings.TrimSpace(m.githubModel.GetOriginURL()),
+			}.Cmd()
+		}
+		// `g` only fires "Create on GitHub" when the user is NOT typing into a textinput.
+		if msg.String() == "g" && m.githubModel.GetFocusedField() != 0 && m.githubModel.GetFocusedField() != 5 {
+			return m, state.NavigateTarget{
+				Kind:              state.NavigateRemoteCreateGh,
+				RemoteRepoPrivate: m.githubModel.GetGhPrivate(),
+			}.Cmd()
+		}
+		// `p` / `P` fire push (current / all) when not typing in an input. Lowercase = current
+		// bookmark only (matches `jj git push`'s default scope), uppercase = all bookmarks
+		// (matches the auto-push scope after a successful Create).
+		if (msg.String() == "p" || msg.String() == "P") && m.githubModel.GetFocusedField() != 0 && m.githubModel.GetFocusedField() != 5 {
+			return m, state.NavigateTarget{
+				Kind:    state.NavigatePushBookmarks,
+				PushAll: msg.String() == "P",
+			}.Cmd()
+		}
+	}
+
 	switch msg.String() {
 	case "esc":
 		return m, PerformCancelCmd()
@@ -217,6 +254,15 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m.forwardKeyToActiveSubmodelReturn(msg)
 		}
 		if msg.String() == "enter" {
+			// Apply remote URL when the user presses Enter while typing into the origin URL
+			// field. This mirrors the welcome-screen behaviour and is more discoverable than
+			// the (terminal-dependent) Ctrl+Enter chord we expose for non-input rows.
+			if m.settingsTab == 0 && m.githubModel.GetFocusedField() == 5 {
+				return m, state.NavigateTarget{
+					Kind:      state.NavigateRemoteApply,
+					RemoteURL: strings.TrimSpace(m.githubModel.GetOriginURL()),
+				}.Cmd()
+			}
 			// Advance focus within panel if not on last field; otherwise save
 			lastField := false
 			switch m.settingsTab {
@@ -281,6 +327,10 @@ func (m *Model) ZoneIDs() []string {
 		mouse.ZoneSettingsExternalEditorCustom,
 		mouse.ZoneSettingsSanitizeBookmarks,
 		mouse.ZoneSettingsGitHubLogin,
+		mouse.ZoneSettingsRemoteOriginInput, mouse.ZoneSettingsRemoteApply,
+		mouse.ZoneSettingsRemoteCreateGh, mouse.ZoneSettingsRemoteRemove,
+		mouse.ZoneSettingsRemoteVisibilityToggle,
+		mouse.ZoneSettingsRemotePushCurrent, mouse.ZoneSettingsRemotePushAll,
 		mouse.ZoneSettingsGitHubAuthSaved, mouse.ZoneSettingsGitHubAuthEnv, mouse.ZoneSettingsGitHubAuthGhCLI,
 		mouse.ZoneSettingsGitHubOnlyMine, mouse.ZoneSettingsGitHubShowMerged, mouse.ZoneSettingsGitHubShowClosed,
 		mouse.ZoneSettingsGitHubPRLimitDecrease, mouse.ZoneSettingsGitHubPRLimitIncrease,
@@ -339,7 +389,7 @@ func (m *Model) forwardKeyToActiveSubmodel(msg tea.KeyMsg) {
 		gh := m.GetGitHubModel()
 		switch msg.String() {
 		case "tab", "down", "j":
-			if gh.GetFocusedField() < 4 {
+			if gh.GetFocusedField() < github.MaxFocusedField {
 				gh.SetFocusedField(gh.GetFocusedField() + 1)
 			}
 		case "shift+tab", "up", "k":

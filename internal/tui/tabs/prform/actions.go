@@ -143,7 +143,7 @@ func CreatePRCmd(jjSvc *jj.Service, ghSvc *github.Service, params PRCreateParams
 		}
 		pushOutput, err := jjSvc.PushToGit(ctx, params.HeadBranch)
 		if err != nil {
-			return util.ErrorMsg{Err: fmt.Errorf("failed to push branch: %w\nOutput: %s", err, pushOutput)}
+			return util.ErrorMsg{Err: fmt.Errorf("failed to push branch: %w\nOutput: %s%s", err, pushOutput, util.MissingOriginHint(err))}
 		}
 		time.Sleep(3 * time.Second)
 		var pr *internal.GitHubPR

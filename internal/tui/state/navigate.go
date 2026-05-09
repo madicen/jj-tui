@@ -46,6 +46,18 @@ const (
 	NavigateGeneratePRForm
 	NavigateGenerateBookmarkName
 	NavigateGenerateTicketForm
+	// Repository remote management from Settings → GitHub. Apply adds-or-updates origin to the
+	// supplied URL, CreateGh runs `gh repo create` (and wires up origin), Remove deletes origin.
+	// Main owns the dispatch because it has the jj service and refreshes the repo on success.
+	NavigateRemoteApply
+	NavigateRemoteCreateGh
+	NavigateRemoteRemove
+	// NavigatePushBookmarks runs `jj git push --allow-new` (current bookmark) or
+	// `jj git push --all-bookmarks --allow-new` (PushAll=true) against the configured origin.
+	// Wired to the Push current / Push all buttons in the Repository remote panel. Separate
+	// from the auto-push-after-create flow so users can retry pushes after configuration
+	// changes without re-creating the GitHub repo.
+	NavigatePushBookmarks
 )
 
 // NavigateTarget describes a navigation request. Only main can perform these
@@ -94,6 +106,16 @@ type NavigateTarget struct {
 	EvologMultiBaseCommitIDs []string
 	// EvologStepwiseRemainder, when non-empty, is bases still to run after this split (stepwise mode); main reloads evolog without closing the modal.
 	EvologStepwiseRemainder []string
+	// Repository remote payload (set on NavigateRemoteApply / NavigateRemoteCreateGh):
+	// RemoteURL is the new origin URL for Apply; RemoteRepoName / RemoteRepoPrivate parameterise
+	// `gh repo create` for CreateGh. Remove takes no payload.
+	RemoteURL         string
+	RemoteRepoName    string
+	RemoteRepoPrivate bool
+	// PushAll is the payload for NavigatePushBookmarks: true => `jj git push --all-bookmarks`,
+	// false => push only the current bookmark (the bookmark on @).
+	PushAll bool
+
 	// Init-repo screen options: forwarded to data.RunJJInit when the user accepts the welcome
 	// screen. Defaults (zero values) reproduce today's behavior of plain `jj git init`.
 	InitColocate     bool   // run `jj git init --colocate` instead of plain `jj git init`

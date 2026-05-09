@@ -3,6 +3,7 @@ package model
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -109,6 +110,96 @@ func (m *Model) handleAuxServicesReadyMsg(msg data.AuxServicesReadyMsg) (tea.Mod
 	}
 	m.prsTabModel.SetGithubService(m.isGitHubAvailable())
 	return m, tea.Batch(cmds...)
+}
+
+// handleRemoteOpResultMsg processes the outcome of an Apply / CreateGh / Remove origin command
+// dispatched from Settings → GitHub → Repository remote. On success: refresh the cached origin
+// shown in the panel, set a status message, and reload the repo so PR / branch flows pick up
+// the new remote bookmarks. On failure: surface the error in the modal so the user can read it
+// (Retry isn't useful here because the command is idempotent and the user can simply re-press
+// Apply with corrections).
+//
+// Special-case for Op == RemoteOpCreateGh: the command attempts an inline `jj git push` after
+// creating the GitHub repo. PushErr being non-nil while Err is nil is the soft-failure case
+// (repo created, push failed) — we surface the push error in the modal but keep the new origin
+// in place so the user can retry via the Push all bookmarks button without re-creating.
+func (m *Model) handleRemoteOpResultMsg(msg data.RemoteOpResultMsg) (tea.Model, tea.Cmd) {
+	m.appState.Loading = false
+	if msg.Err != nil {
+		m.errorModal.SetError(msg.Err, false, "")
+		// Refresh anyway so the panel shows whatever state we ended up in (e.g. the user
+		// changed origin but the fetch failed; current origin should still update).
+		m.refreshSettingsOriginURL()
+		return m, nil
+	}
+	switch msg.Op {
+	case data.RemoteOpApply:
+		if msg.PreviousURL == "" {
+			m.appState.StatusMessage = fmt.Sprintf("Added origin %s", msg.NewURL)
+		} else if msg.PreviousURL != msg.NewURL {
+			m.appState.StatusMessage = fmt.Sprintf("Updated origin → %s", msg.NewURL)
+		} else {
+			m.appState.StatusMessage = "Origin already set to that URL; refreshed"
+		}
+	case data.RemoteOpCreateGh:
+		base := "Created GitHub repo"
+		if msg.NewURL != "" {
+			base = fmt.Sprintf("Created GitHub repo (%s)", msg.NewURL)
+		}
+		switch {
+		case msg.PushErr != nil:
+			// Soft-failure: create succeeded, push didn't. Status reads the success-side, the
+			// modal carries the failure detail so the user knows to retry the push.
+			m.appState.StatusMessage = base + "; push failed (see error)"
+			m.errorModal.SetError(fmt.Errorf("post-create push failed: %w\nUse Push all bookmarks to retry once you've resolved the underlying issue", msg.PushErr), false, "")
+		case msg.PushedCount > 0:
+			m.appState.StatusMessage = fmt.Sprintf("%s and pushed %d bookmark(s): %s", base, msg.PushedCount, strings.Join(msg.PushedNames, ", "))
+		default:
+			m.appState.StatusMessage = base + " (no bookmarks to push yet)"
+		}
+	case data.RemoteOpRemove:
+		m.appState.StatusMessage = fmt.Sprintf("Removed origin (was %s)", msg.PreviousURL)
+		// Clear the input so the user doesn't re-Apply the same URL by accident on the next
+		// keystroke. They can retype if they want to re-add it.
+		m.settingsTabModel.GetGitHubModel().SetOriginURL("")
+	}
+	m.refreshSettingsOriginURL()
+	// Reload the repo (and branches) so any newly fetched remote bookmarks appear immediately.
+	cmds := []tea.Cmd{
+		data.LoadRepository(m.appState.JJService),
+	}
+	return m, tea.Batch(cmds...)
+}
+
+// handlePushResultMsg processes the outcome of a standalone Push current / Push all action from
+// the Repository remote panel. Mirrors handleRemoteOpResultMsg's success/failure handling but
+// stays distinct because the panel needs different status text and because no origin URL state
+// changes — only the remote bookmarks and the repo PRs view.
+func (m *Model) handlePushResultMsg(msg data.PushResultMsg) (tea.Model, tea.Cmd) {
+	m.appState.Loading = false
+	if msg.Err != nil {
+		m.errorModal.SetError(msg.Err, false, "")
+		return m, nil
+	}
+	switch {
+	case msg.PushedCount == 0:
+		m.appState.StatusMessage = "Nothing to push (no local bookmarks yet)"
+		return m, nil
+	case msg.All:
+		if len(msg.PushedNames) > 0 {
+			m.appState.StatusMessage = fmt.Sprintf("Pushed %d bookmark(s) to origin: %s", msg.PushedCount, strings.Join(msg.PushedNames, ", "))
+		} else {
+			m.appState.StatusMessage = fmt.Sprintf("Pushed %d bookmark(s) to origin", msg.PushedCount)
+		}
+	default:
+		if len(msg.PushedNames) > 0 {
+			m.appState.StatusMessage = fmt.Sprintf("Pushed bookmark %s to origin", msg.PushedNames[0])
+		} else {
+			m.appState.StatusMessage = "Pushed current bookmark to origin"
+		}
+	}
+	// Reload the repo so the graph picks up new remote-tracking bookmarks (e.g. main@origin).
+	return m, data.LoadRepository(m.appState.JJService)
 }
 
 // handleDataRepositoryLoadedMsg delegates to shared applyRepositoryLoaded.
