@@ -44,11 +44,17 @@ type RepoReadyMsg struct {
 }
 
 // AuxServicesReadyMsg is sent after GitHub and ticket services are ready (after RepoReadyMsg).
+//
+// DefaultBranch carries the GitHub repository's default branch name (e.g. "main", "master",
+// "trunk") when it could be resolved during this load. Empty means "couldn't resolve" — main
+// caches that as-is and falls back to "main" later when opening the Create PR form, matching
+// the legacy hardcoded behavior.
 type AuxServicesReadyMsg struct {
 	GitHubService *github.Service
 	TicketService tickets.Service
 	TicketError   error
 	GitHubInfo    string
+	DefaultBranch string
 }
 
 // RepositoryLoadedMsg is sent when repository data is loaded (refresh).

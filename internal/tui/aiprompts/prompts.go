@@ -146,22 +146,98 @@ func decodeTitleBodyJSON(raw string) (title, body string, ok bool) {
 	return strings.TrimSpace(v.Title), strings.TrimSpace(v.Body), true
 }
 
+// relaxLiteralWhitespaceInJSONStrings escapes literal control whitespace that appears
+// inside JSON string values, producing a payload json.Decoder will accept.
+//
+// Several local models (including ollama's smaller coder variants) ignore the
+// "newlines inside body must be \n escapes" instruction and emit something like:
+//
+//	{
+//	  "title": "Implement hybrid backend",
+//	  "body": "Symptoms:
+//	- bullet one
+//	- bullet two"
+//	}
+//
+// which is invalid JSON. Walking the buffer with a tiny string-tracking state machine
+// is enough to rewrite the embedded \n/\r/\t/\b/\f into their escape forms while
+// leaving anything outside string values alone. We don't try to handle unescaped
+// quotes inside strings because there is no reliable way to recover those without
+// re-running the LLM.
+func relaxLiteralWhitespaceInJSONStrings(raw string) string {
+	var b strings.Builder
+	b.Grow(len(raw) + len(raw)/8)
+	inString := false
+	escaped := false
+	for i := 0; i < len(raw); i++ {
+		c := raw[i]
+		if escaped {
+			b.WriteByte(c)
+			escaped = false
+			continue
+		}
+		if inString && c == '\\' {
+			b.WriteByte(c)
+			escaped = true
+			continue
+		}
+		if c == '"' {
+			inString = !inString
+			b.WriteByte(c)
+			continue
+		}
+		if !inString {
+			b.WriteByte(c)
+			continue
+		}
+		switch c {
+		case '\n':
+			b.WriteString(`\n`)
+		case '\r':
+			b.WriteString(`\r`)
+		case '\t':
+			b.WriteString(`\t`)
+		case '\b':
+			b.WriteString(`\b`)
+		case '\f':
+			b.WriteString(`\f`)
+		default:
+			b.WriteByte(c)
+		}
+	}
+	return b.String()
+}
+
+// decodeTitleBodyJSONLenient is decodeTitleBodyJSON plus a single retry on a
+// whitespace-relaxed copy. We keep the strict attempt first so well-formed JSON
+// is never reinterpreted (e.g. a body that legitimately contains the two-character
+// sequence backslash+n stays intact).
+func decodeTitleBodyJSONLenient(raw string) (title, body string, ok bool) {
+	if t, b, ok := decodeTitleBodyJSON(raw); ok {
+		return t, b, true
+	}
+	if relaxed := relaxLiteralWhitespaceInJSONStrings(raw); relaxed != raw {
+		if t, b, ok := decodeTitleBodyJSON(relaxed); ok {
+			return t, b, true
+		}
+	}
+	return "", "", false
+}
+
 // ParsePRTitleBody extracts title and body from model output (JSON preferred).
 func ParsePRTitleBody(raw string) (title, body string) {
 	raw = normalizeStructuredLLMOutput(raw)
 	raw = strings.TrimSpace(raw)
-	if t, b, ok := decodeTitleBodyJSON(raw); ok {
+	if t, b, ok := decodeTitleBodyJSONLenient(raw); ok {
 		return t, b
 	}
-	// Fallback: single slice from first { to last } (handles some trailing prose after JSON).
+	// Last-ditch slice from first { to last }: handles cases where the model wraps
+	// the JSON with trailing prose that begins with a stray opening brace inside it.
+	// json.Decoder above already tolerates plain trailing prose on its own.
 	if i := strings.Index(raw, "{"); i >= 0 {
 		if j := strings.LastIndex(raw, "}"); j > i {
-			var v struct {
-				Title string `json:"title"`
-				Body  string `json:"body"`
-			}
-			if err := json.Unmarshal([]byte(raw[i:j+1]), &v); err == nil {
-				return strings.TrimSpace(v.Title), strings.TrimSpace(v.Body)
+			if t, b, ok := decodeTitleBodyJSONLenient(raw[i : j+1]); ok {
+				return t, b
 			}
 		}
 	}

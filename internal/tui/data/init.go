@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen/jj-tui/internal"
@@ -17,6 +18,12 @@ import (
 	"github.com/madicen/jj-tui/internal/mock"
 	"github.com/madicen/jj-tui/internal/tickets"
 )
+
+// defaultBranchLookupTimeout caps the GET /repos/{owner}/{repo} call we make to learn the
+// default branch during aux-service init. We never want a slow API to delay the user-visible
+// "GitHub services ready" handoff — if the lookup misses the deadline we fall back to "main"
+// downstream, identical to the legacy hardcoded behavior.
+const defaultBranchLookupTimeout = 5 * time.Second
 
 // InitializeServices sets up the jj service and loads repository data first (RepoReadyMsg),
 // so the UI can show the graph immediately. The model then runs LoadAuxServicesCmd to load
@@ -114,12 +121,26 @@ func LoadAuxServicesCmd(demoMode bool, owner, repoName, githubInfoFromURL string
 			}
 		}
 
+		// Pre-resolve the GitHub repo's default branch (best effort; failure leaves DefaultBranch
+		// empty and the Create PR form falls back to "main"). Doing this here means the form
+		// open path stays free of network I/O — the user can pop the modal up instantly and
+		// see the right base branch by the time they're typing a title.
+		defaultBranch := ""
+		if ghSvc != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), defaultBranchLookupTimeout)
+			if branch, derr := ghSvc.GetDefaultBranch(ctx); derr == nil {
+				defaultBranch = branch
+			}
+			cancel()
+		}
+
 		ticketSvc, ticketErr := CreateTicketService(owner, repoName)
 		return AuxServicesReadyMsg{
 			GitHubService: ghSvc,
 			TicketService: ticketSvc,
 			TicketError:   ticketErr,
 			GitHubInfo:    githubInfo,
+			DefaultBranch: defaultBranch,
 		}
 	}
 }

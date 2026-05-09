@@ -82,6 +82,10 @@ type Service struct {
 	repo          string
 	token         string
 	username      string // cached authenticated username
+	// Cached repo metadata (filled on first lookup so PR-form open / preflight checks don't
+	// re-hit the API). Empty defaultBranch means "not fetched yet" — callers should fall back
+	// to a sensible default (usually "main") if a fetch fails.
+	defaultBranch string
 }
 
 // CreatePullRequest creates a new pull request
@@ -101,12 +105,23 @@ func (s *Service) CreatePullRequest(ctx context.Context, req *internal.CreatePRR
 
 	pr, resp, err := s.client.PullRequests.Create(ctx, s.owner, s.repo, newPR)
 	if err != nil {
-		// If we get a "not all refs" error, try with owner:branch format
-		if resp != nil && resp.StatusCode == 422 && strings.Contains(err.Error(), "refs") {
-			newPR.Head = github.String(s.owner + ":" + req.HeadBranch)
-			pr, _, err = s.client.PullRequests.Create(ctx, s.owner, s.repo, newPR)
-			if err != nil {
-				return nil, fmt.Errorf("failed to create pull request (tried both formats): %w", err)
+		// Decode 422 validation errors into a single user-friendly string so callers can
+		// distinguish base- vs head-related failures. Without this, the only signal is the
+		// raw `[{Resource:PullRequest Field:base Code:invalid Message:}]` blob, which loses
+		// the field/code distinction inside fmt.Errorf and trips the head-ref retry path on
+		// errors that retrying can't fix.
+		if resp != nil && resp.StatusCode == 422 {
+			detail := summarize422(err)
+			// Only retry the head-ref/owner-prefix dance for head-related issues — retrying
+			// a missing-or-invalid base branch will just 422 again every time.
+			if isHeadRefRetryable(err, detail) {
+				newPR.Head = github.String(s.owner + ":" + req.HeadBranch)
+				pr, _, err = s.client.PullRequests.Create(ctx, s.owner, s.repo, newPR)
+				if err != nil {
+					return nil, fmt.Errorf("failed to create pull request (tried both head formats): %s", summarize422(err))
+				}
+			} else {
+				return nil, fmt.Errorf("failed to create pull request: %s", detail)
 			}
 		} else {
 			return nil, fmt.Errorf("failed to create pull request: %w", err)
@@ -122,6 +137,83 @@ func (s *Service) CreatePullRequest(ctx context.Context, req *internal.CreatePRR
 		HeadBranch: pr.GetHead().GetRef(),
 		CommitIDs:  req.CommitIDs,
 	}, nil
+}
+
+// summarize422 turns a go-github *ErrorResponse into a single human-readable line that
+// preserves field/code information from the API's structured error array. Falls back to the
+// underlying error string when err isn't a go-github ErrorResponse (so this is safe to call
+// on any 4xx error). Used by CreatePullRequest to give callers something they can actually
+// regex/match on (e.g. detecting a base-related failure to skip a doomed retry loop).
+func summarize422(err error) string {
+	var errResp *github.ErrorResponse
+	if !errors.As(err, &errResp) || len(errResp.Errors) == 0 {
+		return err.Error()
+	}
+	parts := make([]string, 0, len(errResp.Errors))
+	for _, e := range errResp.Errors {
+		seg := fmt.Sprintf("%s.%s=%s", e.Resource, e.Field, e.Code)
+		if msg := strings.TrimSpace(e.Message); msg != "" {
+			seg += " (" + msg + ")"
+		}
+		parts = append(parts, seg)
+	}
+	base := errResp.Message
+	if base == "" {
+		base = "validation failed"
+	}
+	return fmt.Sprintf("%s: %s", base, strings.Join(parts, "; "))
+}
+
+// isHeadRefRetryable returns true for the "tried head as plain branch, GitHub wants
+// owner:branch" pattern that warrants one retry. We deliberately exclude any base-field
+// failure: an invalid or missing base ref isn't fixed by changing the head format, so
+// retrying just wastes the user's time and produces a confusing "(tried both head formats)"
+// message for an unrelated cause.
+func isHeadRefRetryable(err error, detail string) bool {
+	var errResp *github.ErrorResponse
+	if errors.As(err, &errResp) {
+		for _, e := range errResp.Errors {
+			if strings.EqualFold(e.Field, "base") {
+				return false
+			}
+		}
+	}
+	lower := strings.ToLower(detail + " " + err.Error())
+	if strings.Contains(lower, "field=base") || strings.Contains(lower, ".base=") {
+		return false
+	}
+	// Match the legacy heuristic so we don't regress the working same-repo PR path.
+	return strings.Contains(lower, "refs") || strings.Contains(lower, "head")
+}
+
+// GetDefaultBranch returns the repository's default branch name (e.g. "main", "master",
+// "trunk"). The result is cached on the Service so subsequent calls (e.g. preflight checks
+// when opening the PR-create form repeatedly) don't re-hit the API. Returns an error only
+// when the API call itself fails; callers that want a graceful fallback should treat any
+// error as "no opinion" and use their own default (typically "main").
+func (s *Service) GetDefaultBranch(ctx context.Context) (string, error) {
+	if s == nil {
+		return "", fmt.Errorf("github service unavailable")
+	}
+	if s.defaultBranch != "" {
+		return s.defaultBranch, nil
+	}
+	repo, resp, err := s.client.Repositories.Get(ctx, s.owner, s.repo)
+	if err != nil {
+		if resp != nil && (resp.StatusCode == 401 || resp.StatusCode == 403) {
+			return "", NewAuthError(fmt.Errorf("failed to read default branch: %w", err), resp.StatusCode)
+		}
+		return "", fmt.Errorf("failed to read default branch for %s/%s: %w", s.owner, s.repo, err)
+	}
+	branch := strings.TrimSpace(repo.GetDefaultBranch())
+	if branch == "" {
+		// GitHub always populates default_branch for non-empty repos; an empty string here
+		// means the repo has no commits at all yet (fresh `gh repo create`). Don't cache the
+		// empty so the next call retries once the user has pushed something.
+		return "", nil
+	}
+	s.defaultBranch = branch
+	return branch, nil
 }
 
 // UpdatePullRequest updates an existing pull request

@@ -89,6 +89,7 @@ func (m *Model) handleAuxServicesReadyMsg(msg data.AuxServicesReadyMsg) (tea.Mod
 	m.appState.GitHubService = msg.GitHubService
 	m.appState.TicketService = msg.TicketService
 	m.appState.GithubInfo = msg.GitHubInfo
+	m.appState.DefaultBranch = msg.DefaultBranch
 	// Append GitHub/ticket info to existing "Loaded N commits" status
 	if m.appState.DemoMode {
 		m.appState.StatusMessage += " (demo mode)"
