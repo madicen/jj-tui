@@ -65,6 +65,37 @@ func SanitizeBookmarkName(name string) string {
 	return strings.Trim(b.String(), "-_")
 }
 
+// MaxBookmarkNameLen is the hard cap for bookmark / branch names we generate or assign.
+// The AI prompt already advertises a length limit; this constant is what we actually
+// enforce on every "source" of new names (AI output, Jira ticket titles, final submit).
+// 50 is the GitHub-flow-style middle ground: roomy enough for descriptive names but
+// short enough that names stay legible in PR titles, status lines, and the modal's
+// existing-bookmark list on narrow terminals.
+const MaxBookmarkNameLen = 50
+
+// TruncateBookmarkName is TruncateBookmarkNameTo with MaxBookmarkNameLen.
+func TruncateBookmarkName(name string) string {
+	return TruncateBookmarkNameTo(name, MaxBookmarkNameLen)
+}
+
+// TruncateBookmarkNameTo shortens name to at most max runes and trims any trailing
+// '-' / '_' / '/' so the result never ends on a dangling separator. Operates on rune
+// count rather than byte length so multi-byte Unicode (which Sanitize preserves,
+// e.g. "café-…") isn't split mid-codepoint.
+//
+// Callers that want char-class normalization should pass through SanitizeBookmarkName
+// first; this function only enforces length.
+func TruncateBookmarkNameTo(name string, max int) string {
+	if max <= 0 {
+		return ""
+	}
+	runes := []rune(name)
+	if len(runes) <= max {
+		return name
+	}
+	return strings.TrimRight(string(runes[:max]), "-_/")
+}
+
 // NewService creates a new jj service
 func NewService(repoPath string) (*Service, error) {
 	// Verify jj is installed
