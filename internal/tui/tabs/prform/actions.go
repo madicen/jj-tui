@@ -133,6 +133,14 @@ type PRCreateParams struct {
 }
 
 // CreatePRCmd pushes a branch and creates a PR.
+//
+// Before the GitHub create call we preflight that the base branch actually exists on the
+// remote: a fresh `gh repo create --source=. --remote=origin` produces a repo whose default
+// branch may not have any commits pushed yet, and the previous code path would issue the
+// create, get a 422 with `Field:base Code:invalid`, and retry up to 5 times (15s of dead
+// time) before surfacing a confusing error. The preflight short-circuits that with a clear
+// actionable hint instead, and the retry loop now only kicks in for transient head-related
+// failures (the case it was actually written for).
 func CreatePRCmd(jjSvc *jj.Service, ghSvc *github.Service, params PRCreateParams) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
@@ -144,6 +152,19 @@ func CreatePRCmd(jjSvc *jj.Service, ghSvc *github.Service, params PRCreateParams
 		pushOutput, err := jjSvc.PushToGit(ctx, params.HeadBranch)
 		if err != nil {
 			return util.ErrorMsg{Err: fmt.Errorf("failed to push branch: %w\nOutput: %s%s", err, pushOutput, util.MissingOriginHint(err))}
+		}
+		// Preflight base-branch existence. We swallow the bool-side error (network blips, auth
+		// hiccups) because the create call below will surface the same problem with richer
+		// detail; the preflight only short-circuits the unambiguous "base doesn't exist" case.
+		if exists, perr := ghSvc.BranchExists(ctx, params.BaseBranch); perr == nil && !exists {
+			return util.ErrorMsg{Err: fmt.Errorf(
+				"base branch %q does not exist on the remote (%s/%s).\n\n"+
+					"This usually means the GitHub repo is fresh and that branch hasn't been pushed yet. Fixes:\n"+
+					"  - Push your local %s bookmark to origin (Settings → GitHub → Push all bookmarks),\n"+
+					"  - or change the repo's default branch on GitHub to one that does exist,\n"+
+					"  - or pick a different base when creating the PR",
+				params.BaseBranch, ghSvc.GetOwner(), ghSvc.GetRepo(), params.BaseBranch,
+			)}
 		}
 		time.Sleep(3 * time.Second)
 		var pr *internal.GitHubPR
@@ -158,14 +179,34 @@ func CreatePRCmd(jjSvc *jj.Service, ghSvc *github.Service, params PRCreateParams
 			if lastErr == nil {
 				break
 			}
-			if strings.Contains(lastErr.Error(), "not all refs") || strings.Contains(lastErr.Error(), "422") {
+			// Only retry transient head-ref propagation issues. A base-related 422 is
+			// permanent until the user changes the base or pushes the branch — retrying
+			// just delays the actionable error 15 seconds with no chance of success.
+			msg := lastErr.Error()
+			lower := strings.ToLower(msg)
+			baseRelated := strings.Contains(lower, "field=base") ||
+				strings.Contains(lower, ".base=") ||
+				strings.Contains(lower, "base branch") ||
+				strings.Contains(lower, "base ref")
+			if baseRelated {
+				break
+			}
+			if strings.Contains(lower, "not all refs") || strings.Contains(lower, "422") {
 				time.Sleep(3 * time.Second)
 				continue
 			}
 			break
 		}
 		if lastErr != nil {
-			return util.ErrorMsg{Err: fmt.Errorf("failed to create PR: %w\nPush output: %s", lastErr, pushOutput)}
+			detail := lastErr.Error()
+			lower := strings.ToLower(detail)
+			if strings.Contains(lower, "field=base") || strings.Contains(lower, ".base=") {
+				detail += fmt.Sprintf(
+					"\n\nHint: GitHub rejected the PR's base branch %q. The branch may not exist on %s/%s yet — push it via Settings → GitHub → Push all bookmarks, or open the PR against a different base.",
+					params.BaseBranch, ghSvc.GetOwner(), ghSvc.GetRepo(),
+				)
+			}
+			return util.ErrorMsg{Err: fmt.Errorf("failed to create PR: %s\nPush output: %s", detail, pushOutput)}
 		}
 		return PRCreatedMsg{PR: pr}
 	}
@@ -179,13 +220,20 @@ type OpenCreatePRResult struct {
 
 // OpenCreatePR prepares and shows the PR creation dialog for the selected commit's bookmark.
 // height is the content area height (available lines). The body textarea uses the rest after fixed form lines.
+// defaultBranch is the resolved GitHub default branch (e.g. "main", "master", "trunk"); when
+// empty the form falls back to "main" to preserve the legacy behavior on repos where the
+// lookup hasn't completed or the GitHub service is unavailable.
 // Caller sets view mode and status message from the result.
-func OpenCreatePR(modal *Model, repo *internal.Repository, commitIdx int, jiraTitles map[string]string, width, height int) OpenCreatePRResult {
+func OpenCreatePR(modal *Model, repo *internal.Repository, commitIdx int, jiraTitles map[string]string, defaultBranch string, width, height int) OpenCreatePRResult {
 	data := PrepareCreatePR(repo, commitIdx, jiraTitles)
 	if !data.Ok {
 		return OpenCreatePRResult{StatusMessage: "No bookmark found. Create one first with 'b'.", Ok: false}
 	}
-	modal.Show(commitIdx, "main", data.HeadBranch)
+	baseBranch := strings.TrimSpace(defaultBranch)
+	if baseBranch == "" {
+		baseBranch = "main"
+	}
+	modal.Show(commitIdx, baseBranch, data.HeadBranch)
 	modal.SetNeedsMoveBookmark(data.NeedsMoveBookmark)
 	modal.SetTitle(data.DefaultTitle)
 	modal.GetTitleInput().Focus()

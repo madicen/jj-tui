@@ -70,6 +70,56 @@ func TestParsePRTitleBody_BodyWithBracesInsideString(t *testing.T) {
 	}
 }
 
+// Reproduces the failure mode where a local model emits pretty-printed JSON but
+// uses literal line breaks inside the body string instead of \n escapes. The old
+// parser fell back to line splitting and yielded title="{" with the entire JSON
+// in the body.
+func TestParsePRTitleBody_LiteralNewlinesInBody(t *testing.T) {
+	in := "{\n" +
+		"  \"title\": \"Implement hybrid backend for product crawler\",\n" +
+		"  \"body\": \"The proposed changes introduce a new `hybrid` backend.\n" +
+		"\n" +
+		"**Symptoms:**\n" +
+		"- Existing AI-only pipeline is too expensive.\n" +
+		"- Operators need to balance cost and accuracy.\"\n" +
+		"}"
+	title, body := ParsePRTitleBody(in)
+	if title != "Implement hybrid backend for product crawler" {
+		t.Fatalf("title = %q", title)
+	}
+	wantBody := "The proposed changes introduce a new `hybrid` backend.\n\n**Symptoms:**\n- Existing AI-only pipeline is too expensive.\n- Operators need to balance cost and accuracy."
+	if body != wantBody {
+		t.Fatalf("body mismatch\n got: %q\nwant: %q", body, wantBody)
+	}
+}
+
+// Mixed: title is on its own line, body contains both real \n escapes (already
+// correct) and unrelated literal whitespace around the value. The relaxed pass
+// must not double-escape the proper \n sequences.
+func TestParsePRTitleBody_LiteralAndEscapedNewlinesMixed(t *testing.T) {
+	in := "{\n" +
+		"  \"title\": \"Title\",\n" +
+		"  \"body\": \"line one\\nline two\nline three\"\n" +
+		"}"
+	title, body := ParsePRTitleBody(in)
+	if title != "Title" {
+		t.Fatalf("title = %q", title)
+	}
+	if body != "line one\nline two\nline three" {
+		t.Fatalf("body = %q", body)
+	}
+}
+
+// Tabs inside the body value also have to be relaxed; otherwise json.Decoder
+// rejects them with "invalid character '\\t' in string literal".
+func TestParsePRTitleBody_LiteralTabInBody(t *testing.T) {
+	in := "{\"title\":\"T\",\"body\":\"col1\tcol2\"}"
+	_, body := ParsePRTitleBody(in)
+	if body != "col1\tcol2" {
+		t.Fatalf("body = %q", body)
+	}
+}
+
 func TestMergeGeneratedPRTitle_prependsDroppedJiraKey(t *testing.T) {
 	hint := "PROJ-456 - Original Jira summary"
 	gen := "Add retry logic for checkout"

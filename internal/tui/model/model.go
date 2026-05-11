@@ -830,7 +830,7 @@ func (m *Model) startCreatePR() {
 	}
 	idx := m.GetSelectedCommit()
 	contentHeight := m.estimatedContentHeight()
-	res := prformtab.OpenCreatePR(&m.prFormModal, m.appState.Repository, idx, m.bookmarkModal.GetJiraBookmarkTitles(), ModalInnerWidth(m.width), contentHeight)
+	res := prformtab.OpenCreatePR(&m.prFormModal, m.appState.Repository, idx, m.bookmarkModal.GetJiraBookmarkTitles(), m.appState.DefaultBranch, ModalInnerWidth(m.width), contentHeight)
 	if !res.Ok {
 		m.appState.StatusMessage = res.StatusMessage
 		return

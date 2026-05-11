@@ -26,6 +26,14 @@ type AppState struct {
 	DemoMode      bool
 	GithubInfo    string
 
+	// DefaultBranch is the resolved default branch of the GitHub repository (e.g. "main",
+	// "master", "trunk"). Populated by LoadAuxServicesCmd after the GitHub service is
+	// constructed. May be empty when no GitHub service is available, the repo isn't on
+	// GitHub, or the lookup hasn't completed yet — callers should fall back to "main" in
+	// that case to preserve the legacy hardcoded behavior. Used by the Create PR form to
+	// pick a base branch that actually exists on the remote.
+	DefaultBranch string
+
 	// PRsLoadedOnce is set after the first GitHub PR list load completes (success or error).
 	PRsLoadedOnce bool
 	// TicketsLoadedOnce is set after the first ticket list load completes (success or error).
