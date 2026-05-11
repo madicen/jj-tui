@@ -101,13 +101,37 @@ func (m *Model) wrapGraphTabCmd(cmd tea.Cmd) tea.Cmd {
 	return cmd
 }
 
+// snapshotSpinnerMessage locks the spinner's caption to whatever StatusMessage was at the
+// moment Loading flipped on, and clears that lock when Loading flips off. Called via a
+// deferred observer at the top of Model.Update so the snapshot reflects the final state
+// after the message has been fully processed (including any cascaded submodel updates).
+//
+// The "Loading=true with empty SpinnerMessage" branch is a safety net: it catches initial
+// app state where Loading might start true before the first Update arrives, and also any
+// future caller that flips Loading via a path other than Model.Update.
+func (m *Model) snapshotSpinnerMessage() {
+	if !m.appState.Loading {
+		m.appState.SpinnerMessage = ""
+		return
+	}
+	if m.appState.SpinnerMessage == "" {
+		m.appState.SpinnerMessage = m.appState.StatusMessage
+	}
+}
+
 // applyLoadingOverlay composites a centered busy box over the full main layout when Loading
 // or when an AI generate request is in flight (aiGenOverlayActive on form modals).
 func (m *Model) applyLoadingOverlay(fullView string) string {
 	if !m.showCenteredBusyOverlay() {
 		return fullView
 	}
-	msg := m.appState.StatusMessage
+	// Prefer the locked spinner caption (snapshot taken at Loading=false→true); fall back
+	// to StatusMessage so the AI-generate overlay (which doesn't go through the snapshot
+	// because it gates on aiGenOverlayActive, not Loading) still renders sensible text.
+	msg := m.appState.SpinnerMessage
+	if msg == "" {
+		msg = m.appState.StatusMessage
+	}
 	if msg == "" {
 		msg = "Loading…"
 	}
