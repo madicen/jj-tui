@@ -162,7 +162,7 @@ func CreatePRCmd(jjSvc *jj.Service, ghSvc *github.Service, params PRCreateParams
 					"This usually means the GitHub repo is fresh and that branch hasn't been pushed yet. Fixes:\n"+
 					"  - Push your local %s bookmark to origin (Settings → GitHub → Push all bookmarks),\n"+
 					"  - or change the repo's default branch on GitHub to one that does exist,\n"+
-					"  - or pick a different base when creating the PR.",
+					"  - or pick a different base when creating the PR",
 				params.BaseBranch, ghSvc.GetOwner(), ghSvc.GetRepo(), params.BaseBranch,
 			)}
 		}
