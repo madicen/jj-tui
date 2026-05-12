@@ -246,21 +246,28 @@ func ValidateBookmarkName(name string) string {
 	return ""
 }
 
-// GetExistingBookmarks returns sorted bookmarks excluding those on commitIdx.
+// GetExistingBookmarks returns sorted bookmarks excluding those whose LOCAL ref is on
+// commitIdx. Remote-tracking entries (e.g. "feature@origin") on the target commit are
+// intentionally NOT treated as "already here": the local bookmark of the same name lives
+// on a different commit, and moving it back onto its remote-tracking position is exactly
+// the operation the user wants the popup to offer.
 func GetExistingBookmarks(repo *internal.Repository, commitIdx int) []string {
 	if repo == nil || commitIdx < 0 || commitIdx >= len(repo.Graph.Commits) {
 		return nil
 	}
 	commit := repo.Graph.Commits[commitIdx]
-	existingOnCommit := make(map[string]bool)
+	localOnCommit := make(map[string]bool)
 	for _, b := range commit.Branches {
-		existingOnCommit[util.LocalBookmarkName(b)] = true
+		if strings.Contains(b, "@") {
+			continue
+		}
+		localOnCommit[util.LocalBookmarkName(b)] = true
 	}
 	bookmarkSet := make(map[string]bool)
 	for _, c := range repo.Graph.Commits {
 		for _, b := range c.Branches {
 			base := util.LocalBookmarkName(b)
-			if !existingOnCommit[base] {
+			if !localOnCommit[base] {
 				bookmarkSet[base] = true
 			}
 		}
