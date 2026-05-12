@@ -15,6 +15,7 @@ import (
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/styles"
+	"github.com/mattn/go-runewidth"
 )
 
 // Model represents the bookmark creation dialog
@@ -34,13 +35,24 @@ type Model struct {
 	repository                *internal.Repository
 	nameConflictSources       []string // Branch names + commit branch names (set by main); used for "name exists" check
 	zoneManager               *zone.Manager
+	// contentWidth is the available width inside the wrapping FrameFormModal (set by main on
+	// tea.WindowSizeMsg). The inner "Target:" / "Jira Ticket:" rounded boxes pin their Width to
+	// this so a long single-line commit description (which is what jj returns for Summary)
+	// can be word-wrapped instead of producing a giant border that the outer frame's Width
+	// then chops into stacked horizontal segments.
+	contentWidth int
 }
 
 // NewModel creates a new Bookmark model. zoneManager may be nil.
 func NewModel(zoneManager *zone.Manager) Model {
 	nameInput := textinput.New()
 	nameInput.Placeholder = "bookmark-name"
-	nameInput.CharLimit = 100
+	// CharLimit is the first-line defense against pathologically long names; the actual
+	// operational cap is jj.MaxBookmarkNameLen (50) enforced in bookmark.SubmitCmd. We
+	// leave a bit of headroom (80) so users can paste a slightly-too-long name, sanitize
+	// can compress it, and the backstop trims the rest — instead of textinput refusing
+	// the paste outright.
+	nameInput.CharLimit = 80
 	nameInput.Width = 50
 	nameInput.Focus()
 
@@ -373,6 +385,13 @@ func (m *Model) SetZoneManager(z *zone.Manager) {
 	m.zoneManager = z
 }
 
+// SetContentWidth records the modal's inner content width (cols available inside the
+// wrapping FrameFormModal). renderBookmark uses it to pin the inner rounded boxes so
+// long commit descriptions wrap into the box instead of stretching its border off-frame.
+func (m *Model) SetContentWidth(w int) {
+	m.contentWidth = w
+}
+
 func mark(z *zone.Manager, id, content string) string {
 	if z == nil {
 		return content
@@ -380,29 +399,43 @@ func mark(z *zone.Manager, id, content string) string {
 	return z.Mark(id, content)
 }
 
+// boxWidth returns the Width to set on the inner rounded boxes (Target / Jira Ticket).
+// Falls back to a sensible default when contentWidth hasn't been propagated yet (e.g. the
+// very first render before tea.WindowSizeMsg arrives), so we never call Width(0) which
+// would collapse the boxes to a single column.
+func (m Model) boxWidth() int {
+	if m.contentWidth >= 24 {
+		return m.contentWidth
+	}
+	return 50
+}
+
 func (m Model) renderBookmark() string {
 	var lines []string
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(styles.ColorPrimary).
+		Padding(0, 1)
+	// Pin the inner box to the modal's content width so a multi-paragraph or
+	// long-single-line commit description (jj's Summary is the full description) wraps
+	// inside the border instead of stretching the border well past the outer frame's
+	// Width — which would then chop the border into the stacked horizontal segments.
+	if w := m.boxWidth(); w > 0 {
+		boxStyle = boxStyle.Width(w)
+	}
 	if m.fromJira {
-		jiraBox := lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(styles.ColorPrimary).
-			Padding(0, 1).
-			Render(fmt.Sprintf("Jira Ticket: %s\n\nThis will create a new branch from main with the bookmark name below.",
-				lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render(m.jiraTicketKey),
-			))
+		jiraBox := boxStyle.Render(fmt.Sprintf("Jira Ticket: %s\n\nThis will create a new branch from main with the bookmark name below.",
+			lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render(m.jiraTicketKey),
+		))
 		lines = append(lines, jiraBox)
 		lines = append(lines, "")
 	} else {
 		if m.repository != nil && m.commitIdx >= 0 && m.commitIdx < len(m.repository.Graph.Commits) {
 			commit := m.repository.Graph.Commits[m.commitIdx]
-			commitBox := lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(styles.ColorPrimary).
-				Padding(0, 1).
-				Render(fmt.Sprintf("Target: %s\n%s",
-					lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render(commit.ShortID),
-					commit.Summary,
-				))
+			commitBox := boxStyle.Render(fmt.Sprintf("Target: %s\n%s",
+				lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render(commit.ShortID),
+				strings.TrimRight(commit.Summary, "\n"),
+			))
 			lines = append(lines, commitBox)
 			lines = append(lines, "")
 		}
@@ -410,6 +443,13 @@ func (m Model) renderBookmark() string {
 			lines = append(lines, lipgloss.NewStyle().Bold(true).Render("Move Existing Bookmark:"))
 			lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("Click or use j/k to select, Enter to move"))
 			lines = append(lines, "")
+			// Display-only truncation: the actual bookmark name in m.existingBookmarks
+			// is what gets resolved for move/click. New names are capped by
+			// jj.TruncateBookmarkName before creation, but historical repos may
+			// still carry long bookmark names from before that cap existed — those
+			// would otherwise be wider than the modal's content area on narrow
+			// terminals and force the outer frame to wrap the row.
+			nameW := m.boxWidth() - 2 // "  " or "► " prefix; "► " is 1 rune + space
 			for i, bookmark := range m.existingBookmarks {
 				prefix := "  "
 				style := styles.CommitStyle
@@ -417,7 +457,11 @@ func (m Model) renderBookmark() string {
 					prefix = "► "
 					style = styles.CommitSelectedStyle
 				}
-				bookmarkLine := fmt.Sprintf("%s%s", prefix, bookmark)
+				display := bookmark
+				if nameW > 0 {
+					display = runewidth.Truncate(display, nameW, "…")
+				}
+				bookmarkLine := fmt.Sprintf("%s%s", prefix, display)
 				lines = append(lines, mark(m.zoneManager, mouse.ZoneExistingBookmark(i), style.Render(bookmarkLine)))
 			}
 			lines = append(lines, "")

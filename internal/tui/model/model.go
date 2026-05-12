@@ -948,6 +948,15 @@ func (m *Model) Init() tea.Cmd {
 // modal request messages (descedit/bookmark/prform/warning forward to modals) →
 // async result messages (data.*, graphtab.*, prstab.*, etc.) → zone/key routing.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Lock the spinner label across the rest of this Update invocation. Submodels
+	// throughout the tree set m.appState.Loading directly and write progress text to
+	// StatusMessage, but StatusMessage is *also* the footer; any later footer update
+	// (background PR polls, "Loaded N tickets", "Ready") would otherwise overwrite the
+	// spinner's caption mid-operation. By snapshotting at the false→true edge here we
+	// keep the spinner text stable for the entire duration of the loading operation
+	// without having to plumb a separate setter through every call site.
+	defer m.snapshotSpinnerMessage()
+
 	switch msg := msg.(type) {
 	case SetStatusMsg:
 		m.appState.StatusMessage = msg.Status
@@ -994,6 +1003,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.ticketFormModal.GetBodyInput().SetHeight(bodyH)
 		}
 		m.bookmarkModal.GetNameInput().Width = inputWidth
+		m.bookmarkModal.SetContentWidth(inputWidth)
 
 		m.settingsTabModel.SetInputWidths(min(max(m.width-24, 36), 76))
 
@@ -1344,6 +1354,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.appState.Config != nil && m.appState.Config.ShouldSanitizeBookmarkNames() {
 				name = jj.SanitizeBookmarkName(name)
 			}
+			name = jj.TruncateBookmarkName(name)
 			m.bookmarkModal.SetBookmarkName(name)
 			m.bookmarkModal.UpdateNameExistsFromInput(m.appState.Config != nil && m.appState.Config.ShouldSanitizeBookmarkNames())
 			m.appState.StatusMessage = "Bookmark name suggested (edit if needed)"

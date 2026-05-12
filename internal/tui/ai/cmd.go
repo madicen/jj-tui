@@ -150,7 +150,12 @@ func GenerateBookmarkNameCmd(reqID int, jjSvc *jj.Service, cfg *config.Config, r
 			msg.Err = err
 			return msg
 		}
+		// The bookmark prompt advertises a 50-char ceiling, but local models routinely
+		// ignore it and emit two-paragraph branch names. Cap here so the suggestion the
+		// user sees in the input field is already operationally sane; SubmitCmd also
+		// re-applies the cap as a backstop for any other path that feeds SetBookmarkName.
 		line := strings.TrimSpace(strings.Split(out, "\n")[0])
+		line = jj.TruncateBookmarkName(line)
 		msg.Text = line
 		return msg
 	}

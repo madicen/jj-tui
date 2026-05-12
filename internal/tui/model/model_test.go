@@ -1620,6 +1620,107 @@ func TestAIGenOverlayShowsOnDescriptionEditor(t *testing.T) {
 	}
 }
 
+// TestSpinnerMessage_LocksAtLoadingTransition exercises the snapshotSpinnerMessage helper
+// directly. The helper is the unit doing the work; everything else (the defer in Update,
+// the read in applyLoadingOverlay) just plumbs state in and out of it. Three transitions
+// matter:
+//   - Loading flips false→true: snapshot StatusMessage as SpinnerMessage.
+//   - StatusMessage changes while Loading stays true: SpinnerMessage stays locked.
+//   - Loading flips true→false: SpinnerMessage clears so the next operation re-snapshots.
+//
+// We assert each transition independently because the lock semantics are the whole point
+// of the change; a regression that breaks the "stays locked" middle case is the exact bug
+// the change exists to prevent and would otherwise hide behind passing transition tests.
+func TestSpinnerMessage_LocksAtLoadingTransition(t *testing.T) {
+	m := newTestModel()
+	defer m.Close()
+
+	if m.appState.SpinnerMessage != "" {
+		t.Fatalf("initial SpinnerMessage should be empty, got %q", m.appState.SpinnerMessage)
+	}
+
+	m.appState.Loading = true
+	m.appState.StatusMessage = "Creating PR…"
+	m.snapshotSpinnerMessage()
+	if got := m.appState.SpinnerMessage; got != "Creating PR…" {
+		t.Fatalf("after false→true: SpinnerMessage=%q, want %q", got, "Creating PR…")
+	}
+
+	m.appState.StatusMessage = "Loaded 25 PRs"
+	m.snapshotSpinnerMessage()
+	if got := m.appState.SpinnerMessage; got != "Creating PR…" {
+		t.Fatalf("after unrelated footer update: SpinnerMessage=%q, want it locked to %q (got overwritten — the lock isn't working)", got, "Creating PR…")
+	}
+	if m.appState.StatusMessage != "Loaded 25 PRs" {
+		t.Fatalf("StatusMessage should still be free to update independently: got %q", m.appState.StatusMessage)
+	}
+
+	m.appState.Loading = false
+	m.snapshotSpinnerMessage()
+	if got := m.appState.SpinnerMessage; got != "" {
+		t.Fatalf("after true→false: SpinnerMessage=%q, want empty", got)
+	}
+}
+
+// TestSpinnerMessage_LockedThroughUpdateLoop is the integration-flavored counterpart that
+// goes through Model.Update so the deferred snapshotSpinnerMessage is exercised in its
+// real wiring. The flow mirrors the original bug report: an operation kicks off Loading
+// with a caption, a background message overwrites StatusMessage, and the spinner text
+// must not move. We use SetStatusMsg because (a) it's a stable production message type,
+// (b) its handler returns immediately without invoking submodels — so the only state
+// change between entry and the deferred snapshot is StatusMessage, isolating the lock
+// behavior from any other side effect that newTestModel's submodels might trigger.
+func TestSpinnerMessage_LockedThroughUpdateLoop(t *testing.T) {
+	m := newTestModel()
+	defer m.Close()
+
+	m.appState.Loading = true
+	newModel, _ := m.Update(SetStatusMsg{Status: "Creating PR…"})
+	m = newModel.(*Model)
+	if m.appState.SpinnerMessage != "Creating PR…" {
+		t.Fatalf("after start: SpinnerMessage=%q, want %q", m.appState.SpinnerMessage, "Creating PR…")
+	}
+
+	newModel, _ = m.Update(SetStatusMsg{Status: "Loaded 25 PRs"})
+	m = newModel.(*Model)
+	if m.appState.SpinnerMessage != "Creating PR…" {
+		t.Fatalf("after footer overwrite via Update: SpinnerMessage=%q, want it locked to %q", m.appState.SpinnerMessage, "Creating PR…")
+	}
+	if m.appState.StatusMessage != "Loaded 25 PRs" {
+		t.Fatalf("StatusMessage should update freely: got %q", m.appState.StatusMessage)
+	}
+
+	m.appState.Loading = false
+	newModel, _ = m.Update(SetStatusMsg{Status: "Ready"})
+	m = newModel.(*Model)
+	if m.appState.SpinnerMessage != "" {
+		t.Fatalf("after Loading=false: SpinnerMessage=%q, want empty", m.appState.SpinnerMessage)
+	}
+}
+
+// TestSpinnerMessage_AllowsExplicitBump documents the escape hatch described in the
+// AppState comment: a multi-phase operation can re-snapshot by clearing SpinnerMessage
+// before assigning a new StatusMessage. Without this test, future readers might assume
+// the lock is unconditional and refactor away the "snapshot when empty" branch.
+func TestSpinnerMessage_AllowsExplicitBump(t *testing.T) {
+	m := newTestModel()
+	defer m.Close()
+
+	m.appState.Loading = true
+	m.appState.StatusMessage = "Phase 1…"
+	m.snapshotSpinnerMessage()
+	if m.appState.SpinnerMessage != "Phase 1…" {
+		t.Fatalf("phase 1 snapshot failed: %q", m.appState.SpinnerMessage)
+	}
+
+	m.appState.SpinnerMessage = ""
+	m.appState.StatusMessage = "Phase 2…"
+	m.snapshotSpinnerMessage()
+	if m.appState.SpinnerMessage != "Phase 2…" {
+		t.Fatalf("expected re-snapshot after explicit clear: SpinnerMessage=%q, want %q", m.appState.SpinnerMessage, "Phase 2…")
+	}
+}
+
 func TestBookmarkConflictDialogNotHiddenByLoadingOverlay(t *testing.T) {
 	m := newTestModel()
 	defer m.Close()

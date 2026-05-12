@@ -69,6 +69,10 @@ func SubmitCmd(input SubmitInput) (tea.Cmd, string) {
 	if input.SanitizeBookmarks {
 		bookmarkName = jj.SanitizeBookmarkName(bookmarkName)
 	}
+	// Unconditional length backstop, applied after sanitize so the truncation can rely on
+	// a normalized character set. Catches any path that bypassed the AI-cmd / Jira-default
+	// cap (e.g. user pastes a long name into the input).
+	bookmarkName = jj.TruncateBookmarkName(bookmarkName)
 	if err := ValidateBookmarkName(bookmarkName); err != "" {
 		return nil, err
 	}
@@ -123,6 +127,11 @@ func OpenCreateBookmarkFromTicket(modal *Model, repo *internal.Repository, ticke
 	if sanitize {
 		defaultName = jj.SanitizeBookmarkName(defaultName)
 	}
+	// Jira summaries are usually a sentence ("Implement the hybrid backend for the
+	// product crawler with LLM fallback") and after sanitize they're sentence-length
+	// underscore-joined identifiers. Truncate so the default we drop into the input
+	// is already at the operational cap; user can still edit before submitting.
+	defaultName = jj.TruncateBookmarkName(defaultName)
 	modal.SetBookmarkName(defaultName)
 	modal.UpdateRepository(repo)
 	modal.SetNameConflictSources(conflictSources)
@@ -187,6 +196,11 @@ func SubmitBookmark(modal *Model, repo *internal.Repository, cfg *config.Config,
 		if sanitize {
 			bookmarkName = jj.SanitizeBookmarkName(bookmarkName)
 		}
+		// Mirror SubmitCmd's backstop so the Jira-title and ticket-key maps store the
+		// same key SubmitCmd ends up creating; otherwise a long un-truncated name here
+		// would diverge from the truncated bookmark actually created on disk, and later
+		// lookups against JiraBookmarkTitles[truncatedName] would miss.
+		bookmarkName = jj.TruncateBookmarkName(bookmarkName)
 		if input.JiraTitle != "" && input.JiraKey != "" {
 			keyForTitle := input.JiraKey
 			if input.DisplayKey != "" {
