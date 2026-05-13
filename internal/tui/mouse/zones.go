@@ -170,6 +170,8 @@ const (
 	ZoneSettingsAIEvologMultiStepwise      = "zone:settings:ai:evolog_multi_stepwise"
 	ZoneSettingsAIEvologMultiMaxDecrease   = "zone:settings:ai:evolog_multi_max_dec"
 	ZoneSettingsAIEvologMultiMaxIncrease   = "zone:settings:ai:evolog_multi_max_inc"
+	ZoneSettingsAITimeoutDecrease          = "zone:settings:ai:timeout_dec"
+	ZoneSettingsAITimeoutIncrease          = "zone:settings:ai:timeout_inc"
 	// AI provider rows: zone:settings:ai:provider:N (0=openai_compatible, 1=gemini, 2=ollama)
 	ZoneSettingsAIProviderPrefix = "zone:settings:ai:provider:"
 

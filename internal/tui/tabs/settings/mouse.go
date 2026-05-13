@@ -403,6 +403,12 @@ func handleAIZone(m *Model, zoneID string) (Model, tea.Cmd) {
 	case mouse.ZoneSettingsAIEvologMultiMaxIncrease:
 		aim.IncEvologMultiMax()
 		return *m, nil
+	case mouse.ZoneSettingsAITimeoutDecrease:
+		aim.DecAITimeout()
+		return *m, nil
+	case mouse.ZoneSettingsAITimeoutIncrease:
+		aim.IncAITimeout()
+		return *m, nil
 	default:
 		if strings.HasPrefix(zoneID, mouse.ZoneSettingsAIProviderPrefix) {
 			s := strings.TrimPrefix(zoneID, mouse.ZoneSettingsAIProviderPrefix)

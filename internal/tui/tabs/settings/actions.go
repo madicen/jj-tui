@@ -18,6 +18,7 @@ import (
 	"github.com/madicen/jj-tui/internal/tui/data"
 	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/styles"
+	"github.com/madicen/jj-tui/internal/tui/tabs/settings/ai"
 	"github.com/madicen/jj-tui/internal/tui/util"
 )
 
@@ -60,6 +61,7 @@ type SettingsParams struct {
 	AIModel                           string
 	AIProvider                        string
 	AIAPIKey                          string
+	AITimeoutSeconds                  int
 	AIEvologDescribeAfterSplitDefault bool
 	AIEvologFileSplitEnabled          bool
 	AIEvologHunkSplitEnabled          bool
@@ -190,6 +192,7 @@ func BuildSettingsParams(m *Model, githubOwner, githubRepo string) SettingsParam
 	params.AIModel = aim.GetAIModel()
 	params.AIProvider = aim.GetAIProvider()
 	params.AIAPIKey = aim.GetAIAPIKey()
+	params.AITimeoutSeconds = aim.GetAITimeoutSeconds()
 	params.AIEvologDescribeAfterSplitDefault = aim.GetEvologDescribeAfterSplitDefault()
 	params.AIEvologFileSplitEnabled = aim.GetEvologFileSplitEnabled()
 	params.AIEvologHunkSplitEnabled = aim.GetEvologHunkSplitEnabled()
@@ -253,6 +256,23 @@ func ConfirmCleanupCmd(confirmingType string, jjSvc *jj.Service, repo *internal.
 	return nil
 }
 
+// normalizeAITimeoutSeconds maps stepper output into the value we persist:
+//   - <=0  => 0 (caller should write nil so cfg.AITimeout() returns its 60s default).
+//   - else => clamped to the AI sub-model stepper bounds; using the sub-model's
+//     constants keeps the persisted floor/ceiling identical to what the UI displays.
+func normalizeAITimeoutSeconds(v int) int {
+	if v <= 0 {
+		return 0
+	}
+	if v < ai.AITimeoutMinSeconds {
+		return ai.AITimeoutMinSeconds
+	}
+	if v > ai.AITimeoutMaxSeconds {
+		return ai.AITimeoutMaxSeconds
+	}
+	return v
+}
+
 func applyGitHubSettingsToCfg(cfg *config.Config, params SettingsParams) {
 	cfg.GitHubTokenSource = config.NormalizeGitHubTokenSource(params.GitHubTokenSource)
 	switch cfg.GitHubTokenSource {
@@ -311,6 +331,11 @@ func SaveSettingsCmd(params SettingsParams) tea.Cmd {
 		cfg.AIModel = strings.TrimSpace(params.AIModel)
 		cfg.AIProvider = strings.TrimSpace(params.AIProvider)
 		cfg.AIAPIKey = strings.TrimSpace(params.AIAPIKey)
+		if t := normalizeAITimeoutSeconds(params.AITimeoutSeconds); t > 0 {
+			cfg.AITimeoutSeconds = &t
+		} else {
+			cfg.AITimeoutSeconds = nil
+		}
 		d := params.AIEvologDescribeAfterSplitDefault
 		cfg.AIEvologDescribeAfterSplitDefault = &d
 		f := params.AIEvologFileSplitEnabled
@@ -347,6 +372,12 @@ func SaveSettingsLocalCmd(params SettingsParams) tea.Cmd {
 			evMax = config.EvologAIMultiSplitHardMax
 		}
 		evMode := strings.TrimSpace(params.AIEvologMultiSplitMode)
+		// nil = "fall back to AITimeout() default"; only persist a concrete value
+		// when the user explicitly set one (any positive number through the stepper).
+		var aiTimeoutPtr *int
+		if t := normalizeAITimeoutSeconds(params.AITimeoutSeconds); t > 0 {
+			aiTimeoutPtr = &t
+		}
 		cfg := &config.Config{
 			TicketProvider:                    params.TicketProvider,
 			GitHubShowMerged:                  &params.ShowMerged,
@@ -365,6 +396,7 @@ func SaveSettingsLocalCmd(params SettingsParams) tea.Cmd {
 			AIModel:                           strings.TrimSpace(params.AIModel),
 			AIProvider:                        strings.TrimSpace(params.AIProvider),
 			AIAPIKey:                          strings.TrimSpace(params.AIAPIKey),
+			AITimeoutSeconds:                  aiTimeoutPtr,
 			AIEvologDescribeAfterSplitDefault: &evDesc,
 			AIEvologFileSplitEnabled:          &evFile,
 			AIEvologHunkSplitEnabled:          &evHunk,

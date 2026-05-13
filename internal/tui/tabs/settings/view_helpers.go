@@ -62,6 +62,7 @@ type RenderData struct {
 	AIEnabled              bool
 	AIProviderID           string // openai_compatible | gemini | ollama
 	AIAPIKeySet            bool   // key present (env overrides config)
+	AITimeoutSeconds       int    // HTTP timeout for LLM requests; rendered as a [-] N [+] stepper
 	EvologDescribeDefault  bool
 	EvologFileSplitEnabled bool
 	EvologHunkSplitEnabled bool
@@ -109,6 +110,7 @@ func BuildRenderData(sm *Model, opts ViewOpts) RenderData {
 		AIEnabled:              sm.GetAIModel().GetAIEnabled(),
 		AIProviderID:           sm.GetAIModel().GetAIProvider(),
 		AIAPIKeySet:            opts.Config != nil && opts.Config.AISupportsGenerationCredentials(),
+		AITimeoutSeconds:       sm.GetAIModel().GetAITimeoutSeconds(),
 		EvologDescribeDefault:  sm.GetAIModel().GetEvologDescribeAfterSplitDefault(),
 		EvologFileSplitEnabled: sm.GetAIModel().GetEvologFileSplitEnabled(),
 		EvologHunkSplitEnabled: sm.GetAIModel().GetEvologHunkSplitEnabled(),
@@ -665,7 +667,7 @@ func (r renderCtx) renderAI(data RenderData) []string {
 	} else {
 		lines = append(lines, "  "+lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("LLM credentials: set an API key ("+config.EnvAIAPIKey+" or field below), choose Ollama, or use base URL http://127.0.0.1:11434/v1"))
 	}
-	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Ollama: API key optional; first request after idle may exceed 60s—increase ai_timeout_seconds if needed."), "")
+	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Ollama: API key optional; first request after idle may exceed 60s—raise the generation timeout below if needed."), "")
 	baseURLLabel := "  API base URL (OpenAI/Ollama; empty = OpenAI public):"
 	if curProv == "gemini" {
 		baseURLLabel = "  API base URL (ignored for Gemini):"
@@ -686,6 +688,12 @@ func (r renderCtx) renderAI(data RenderData) []string {
 		lines = append(lines, "  "+r.mark(mouse.ZoneSettingsAIAPIKey, data.Inputs[18].View))
 	}
 	lines = append(lines, "", "")
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("  Generation timeout:"))
+	lines = append(lines, "    "+
+		r.mark(mouse.ZoneSettingsAITimeoutDecrease, lipgloss.NewStyle().Foreground(styles.ColorPrimary).Render("[-]"))+" "+
+		lipgloss.NewStyle().Bold(true).Render(fmt.Sprintf("%ds", data.AITimeoutSeconds))+" "+
+		r.mark(mouse.ZoneSettingsAITimeoutIncrease, lipgloss.NewStyle().Foreground(styles.ColorPrimary).Render("[+]")))
+	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Max time to wait for an LLM response. Local models (Ollama) may need 120s+ on first request (model load)."), "")
 	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render("AI evolog split (graph z)"), "")
 	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render(fmt.Sprintf("    Multi-split cap limits how many FAQ bases the model may suggest (1–%d; also capped by evolog row count). Stepwise: one split per Enter with evolog reload between steps.", config.EvologAIMultiSplitHardMax)), "")
 	tEvDesc := "[ ]"

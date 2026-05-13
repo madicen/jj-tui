@@ -8,6 +8,25 @@ import (
 	"github.com/madicen/jj-tui/internal/config"
 )
 
+// Timeout stepper bounds for the AI generation HTTP timeout (seconds).
+// Lower bound matches the implicit floor in (*config.Config).AITimeout (anything ≤0
+// falls back to the 60s default), and the upper bound caps practical local-model
+// cold-start waits. Step is small enough to feel responsive on a stepper button.
+const (
+	// AITimeoutMinSeconds is the smallest timeout the stepper can produce. Stays
+	// >0 so the saved value isn't silently coerced to the 60s default by AITimeout().
+	AITimeoutMinSeconds = 10
+	// AITimeoutMaxSeconds bounds the stepper at 10 minutes; cold-start of a large
+	// local Ollama model on a slow disk is the usual reason to push this high.
+	AITimeoutMaxSeconds = 600
+	// AITimeoutStepSeconds is the +/- click delta. 10s lets you go from 60→120s
+	// (the README's "local first-call cold start" guidance) in 6 clicks.
+	AITimeoutStepSeconds = 10
+	// AITimeoutDefaultSeconds matches (*config.Config).AITimeout's nil/0 fallback
+	// so the UI doesn't lie about what an unset config does.
+	AITimeoutDefaultSeconds = 60
+)
+
 // Model represents the AI settings sub-tab (LLM + evolog split defaults).
 type Model struct {
 	aiEnabled              bool
@@ -16,6 +35,7 @@ type Model struct {
 	aiModelInput           textinput.Model
 	aiAPIKeyInput          textinput.Model
 	focusedField           int // 0 = base URL, 1 = model, 2 = API key
+	aiTimeoutSeconds       int // clamped to [AITimeoutMinSeconds, AITimeoutMaxSeconds]; mirrors cfg.AITimeout() default
 	evologDescribeDefault  bool
 	evologFileSplitEnabled bool
 	evologHunkSplitEnabled bool
@@ -48,6 +68,7 @@ func NewModel() Model {
 		evologFileSplitEnabled: true,
 		evologHunkSplitEnabled: true,
 		evologMultiMax:         config.EvologAIMultiSplitHardMax,
+		aiTimeoutSeconds:       AITimeoutDefaultSeconds,
 		aiBaseURLInput:         aiURL,
 		aiModelInput:           aiModel,
 		aiAPIKeyInput:          aiKey,
@@ -79,7 +100,22 @@ func NewModelFromConfig(cfg *config.Config) Model {
 	m.evologHunkSplitEnabled = cfg.EvologAIHunkPhaseEnabled()
 	m.evologMultiStepwise = cfg.EvologAIMultiSplitStepwise()
 	m.evologMultiMax = cfg.EvologAIMultiSplitMaxCap()
+	// Derive the stepper value from AITimeout() so the UI displays the *effective*
+	// value (60s) for users whose config has the field unset, instead of showing
+	// 0s and silently meaning "default". cfg.AITimeout always returns >0.
+	m.aiTimeoutSeconds = clampAITimeout(int(cfg.AITimeout().Seconds()))
 	return m
+}
+
+// clampAITimeout snaps an arbitrary second count into the stepper's allowed range.
+func clampAITimeout(v int) int {
+	if v < AITimeoutMinSeconds {
+		return AITimeoutMinSeconds
+	}
+	if v > AITimeoutMaxSeconds {
+		return AITimeoutMaxSeconds
+	}
+	return v
 }
 
 // Init implements tea.Model.
@@ -147,6 +183,28 @@ func (m *Model) DecEvologMultiMax() {
 	if m.evologMultiMax > 1 {
 		m.evologMultiMax--
 	}
+}
+
+// GetAITimeoutSeconds returns the configured HTTP timeout for LLM requests, in
+// seconds. Always within [AITimeoutMinSeconds, AITimeoutMaxSeconds].
+func (m *Model) GetAITimeoutSeconds() int {
+	return clampAITimeout(m.aiTimeoutSeconds)
+}
+
+// SetAITimeoutSeconds sets the AI HTTP timeout (clamped to the stepper bounds).
+// Used by tests and any direct setter; UI uses Inc/DecAITimeout for stepper clicks.
+func (m *Model) SetAITimeoutSeconds(v int) {
+	m.aiTimeoutSeconds = clampAITimeout(v)
+}
+
+// IncAITimeout bumps the AI HTTP timeout up by AITimeoutStepSeconds (clamped).
+func (m *Model) IncAITimeout() {
+	m.aiTimeoutSeconds = clampAITimeout(m.aiTimeoutSeconds + AITimeoutStepSeconds)
+}
+
+// DecAITimeout decreases the AI HTTP timeout by AITimeoutStepSeconds (clamped).
+func (m *Model) DecAITimeout() {
+	m.aiTimeoutSeconds = clampAITimeout(m.aiTimeoutSeconds - AITimeoutStepSeconds)
 }
 
 // GetAIProvider returns the selected provider id.
