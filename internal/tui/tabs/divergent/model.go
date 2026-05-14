@@ -144,7 +144,7 @@ func (m *Model) renderDivergent() string {
 		if fileHint == "" {
 			fileHint = "(file list unavailable)"
 		}
-		fileHint = runewidth.Truncate(fileHint, modalW-6, "…")
+		fileHint = runewidth.Truncate(fileHint, modalW-8, "…")
 
 		metaParts := make([]string, 0, 5)
 		if s := strings.TrimSpace(v.Author); s != "" {
@@ -159,7 +159,7 @@ func (m *Model) renderDivergent() string {
 		if v.Immutable {
 			metaParts = append(metaParts, "immutable")
 		}
-		meta := muted.Render(runewidth.Truncate(strings.Join(metaParts, " · "), modalW-6, "…"))
+		meta := muted.Render(runewidth.Truncate(strings.Join(metaParts, " · "), modalW-8, "…"))
 
 		borderCol := normalBorder
 		if i == m.selectedIdx {
@@ -169,7 +169,7 @@ func (m *Model) renderDivergent() string {
 		if i == m.selectedIdx {
 			prefix = "► "
 		}
-		sumMax := max(8, modalW-14-runewidth.StringWidth(shortID))
+		sumMax := max(8, modalW-16-runewidth.StringWidth(shortID))
 		summaryShown := runewidth.Truncate(summary, sumMax, "…")
 		line1 := lipgloss.JoinHorizontal(lipgloss.Left,
 			lipgloss.NewStyle().Render(prefix),
@@ -181,11 +181,15 @@ func (m *Model) renderDivergent() string {
 			"  "+fileHint,
 			"  "+meta,
 		)
+		// Width(W) in lipgloss covers content+padding but not borders, so a
+		// child box with Width(modalW-2) actually renders modalW cells wide
+		// and overflows the outer modal's content area (modalW-2). Use
+		// modalW-4 so the rendered child (incl. border) is modalW-2 wide.
 		box := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(borderCol).
 			Padding(0, 1).
-			Width(modalW - 2).
+			Width(modalW - 4).
 			Render(inner)
 		lines = append(lines, m.mark(mouse.ZoneDivergentCommit(i), box))
 	}
