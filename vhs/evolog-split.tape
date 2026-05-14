@@ -1,6 +1,6 @@
 # split (z): evolog picker + step file list; o opens colored step diff overlay; Enter splits.
-# Also: s requests an AI split-row hint (needs AI in Settings); fixture uses ai_enabled:false and the
-# subshell unsets JJ_TUI_AI_API_KEY so `s` shows the in-modal "Enable AI…" line without network calls.
+# This demo stays on the manual split flow; AI suggest (s) is intentionally not exercised so the
+# "Enable AI…" hint does not appear.
 # Run: make evolog-split-gif
 # Requires: VHS, bash, jj, git, fixtures/setup-evolog-split-vhs-repo.sh
 
@@ -30,9 +30,7 @@ Sleep 3s
 
 Type "j"
 Sleep 1s
-
-# AI suggest split row (s): with AI off, modal shows a short hint — no API traffic.
-Type "s"
+Type "j"
 Sleep 1s
 
 # Colored step diff overlay (same styling as graph file diff), scroll, then dismiss
@@ -45,7 +43,6 @@ Sleep 500ms
 Escape
 Sleep 2s
 
-# Key Enter (not Type "Enter", which would type the word "Enter").
 Enter
 Sleep 4s
 
