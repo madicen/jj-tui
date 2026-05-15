@@ -2,10 +2,22 @@ package aiprompts
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 )
 
 const maxPromptDiffRunes = 100_000
+
+// maxChainCommitsInPrompt caps how many commit summaries from the chain we
+// inline into a prompt. Beyond this we collapse into a "+N more commits …"
+// line so the prompt stays roughly bounded for long stacks; the cumulative
+// diff still carries the full code context.
+const maxChainCommitsInPrompt = 50
+
+// maxChainCommitDescRunes truncates each commit's full description in the
+// chain summary so a single very-chatty commit can't blow past the prompt
+// budget. The first-line subject is always included verbatim.
+const maxChainCommitDescRunes = 800
 
 func truncateRunes(s string, max int) string {
 	if max <= 0 || len(s) <= max {
@@ -16,6 +28,71 @@ func truncateRunes(s string, max int) string {
 		return s
 	}
 	return string(r[:max]) + "\n\n[truncated]\n"
+}
+
+// ChainCommitSummary is the per-commit context the prompt builders inline
+// before the cumulative diff. Keeping it as plain strings (no jj-package
+// dependency) lets the aiprompts package stay free of the integration layer.
+type ChainCommitSummary struct {
+	ChangeIDShort string
+	Subject       string
+	Description   string
+}
+
+// FormatChainSummary renders a list of chain commits as a compact bulletted
+// block suitable for inlining in a user message. Returns "" when commits is
+// empty so callers can drop the whole block from the prompt.
+//
+// Format:
+//
+//	1. abc12345  Short subject of commit one
+//	   <indented full description>
+//	2. def67890  Subject of commit two
+//	   ...
+func FormatChainSummary(commits []ChainCommitSummary) string {
+	if len(commits) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	limit := len(commits)
+	overflow := 0
+	if limit > maxChainCommitsInPrompt {
+		overflow = limit - maxChainCommitsInPrompt
+		limit = maxChainCommitsInPrompt
+	}
+	for i := 0; i < limit; i++ {
+		c := commits[i]
+		subject := strings.TrimSpace(c.Subject)
+		if subject == "" {
+			subject = "(no description)"
+		}
+		fmt.Fprintf(&b, "%d. %s  %s\n", i+1, c.ChangeIDShort, subject)
+		desc := strings.TrimSpace(c.Description)
+		// Skip the body when it's identical to (or empty beyond) the subject
+		// — most commits in a stack are subject-only, and repeating it just
+		// wastes tokens. We compare on the description's first line so a
+		// commit with subject + extra body still gets the body included.
+		if desc == "" {
+			continue
+		}
+		firstLine := desc
+		if nl := strings.IndexByte(desc, '\n'); nl >= 0 {
+			firstLine = desc[:nl]
+		}
+		if strings.TrimSpace(firstLine) == subject && strings.TrimSpace(desc[len(firstLine):]) == "" {
+			continue
+		}
+		body := truncateRunes(desc, maxChainCommitDescRunes)
+		for _, line := range strings.Split(body, "\n") {
+			b.WriteString("   ")
+			b.WriteString(line)
+			b.WriteByte('\n')
+		}
+	}
+	if overflow > 0 {
+		fmt.Fprintf(&b, "… (+%d more commits in this chain not shown)\n", overflow)
+	}
+	return strings.TrimRight(b.String(), "\n")
 }
 
 // CommitDescriptionSystem is the system prompt for commit messages / jj descriptions.
@@ -44,8 +121,11 @@ The response must be valid JSON: newlines inside body must be \n escapes inside 
 Title: at most 200 characters. Body: markdown allowed, be clear and concise.
 If—and only if—the "Suggested title hint" in the user message already begins with a real ticket/issue id from that hint (e.g. a short alphanumeric key with hyphens, sometimes in brackets), copy that exact prefix into the JSON title and only improve the rest. If the hint has no such prefix, the JSON title must not add one: do not invent keys, placeholders, or example ids from these instructions.`
 
-// PRUser builds the user message for PR title+body.
-func PRUser(baseBranch, headBranch, hintTitle, diff string) string {
+// PRUser builds the user message for PR title+body. chainSummary is an
+// optional pre-formatted block listing the commits in baseBranch..headBranch
+// (oldest → newest); pass "" to omit. The diff should be the cumulative
+// baseBranch → head diff (everything the PR introduces).
+func PRUser(baseBranch, headBranch, hintTitle, chainSummary, diff string) string {
 	var b strings.Builder
 	b.WriteString("Base branch: ")
 	b.WriteString(baseBranch)
@@ -53,9 +133,13 @@ func PRUser(baseBranch, headBranch, hintTitle, diff string) string {
 	b.WriteString(headBranch)
 	b.WriteString("\n\nSuggested title hint (from branch or ticket; may be empty):\n")
 	b.WriteString(strings.TrimSpace(hintTitle))
-	b.WriteString("\n\nUnified diff:\n")
+	if s := strings.TrimSpace(chainSummary); s != "" {
+		b.WriteString("\n\nCommits in this PR (oldest → newest, the chain from base to head):\n")
+		b.WriteString(s)
+	}
+	b.WriteString("\n\nCumulative unified diff (base → head, covering every commit above):\n")
 	b.WriteString(truncateRunes(diff, maxPromptDiffRunes))
-	b.WriteString("\n\nWrite JSON with title and body for this pull request. Preserve a leading ticket/issue prefix only when it is already present in the hint above; never invent one.")
+	b.WriteString("\n\nWrite JSON with title and body for this pull request that reflects the whole chain of commits, not just the tip. Preserve a leading ticket/issue prefix only when it is already present in the hint above; never invent one.")
 	return b.String()
 }
 
@@ -68,7 +152,11 @@ The response must be valid JSON: any newlines inside body must be written as \n 
 Title: at most 300 characters. Body: markdown allowed. If—and only if—the draft title in the user message already starts with a real ticket/issue id from that text, keep that exact prefix in the JSON title; otherwise do not add any key or placeholder.`
 
 // TicketUser builds the user message for AI-filled create-ticket fields.
-func TicketUser(changeIDShort, hintSummary, hintDescription, diff string) string {
+// chainSummary is an optional pre-formatted block listing the commits in
+// trunk..changeID (oldest → newest); pass "" to omit. When provided, diff
+// should be the cumulative trunk → changeID diff so the AI sees the whole
+// stack of work the ticket should describe.
+func TicketUser(changeIDShort, hintSummary, hintDescription, chainSummary, diff string) string {
 	var b strings.Builder
 	b.WriteString("Revision (short id or @): ")
 	b.WriteString(changeIDShort)
@@ -76,9 +164,15 @@ func TicketUser(changeIDShort, hintSummary, hintDescription, diff string) string
 	b.WriteString(strings.TrimSpace(hintSummary))
 	b.WriteString("\n\nDraft description already in form (may be empty):\n")
 	b.WriteString(strings.TrimSpace(hintDescription))
-	b.WriteString("\n\nUnified diff (vs parents):\n")
+	if s := strings.TrimSpace(chainSummary); s != "" {
+		b.WriteString("\n\nCommits in this stack (oldest → newest, from trunk up to the selected change):\n")
+		b.WriteString(s)
+		b.WriteString("\n\nCumulative unified diff (trunk → selected change, covering every commit above):\n")
+	} else {
+		b.WriteString("\n\nUnified diff (vs parents):\n")
+	}
 	b.WriteString(truncateRunes(diff, maxPromptDiffRunes))
-	b.WriteString("\n\nWrite JSON with title and body for the tracker ticket this change would fix or implement.")
+	b.WriteString("\n\nWrite JSON with title and body for the tracker ticket this work would fix or implement, reflecting the whole chain of commits when more than one is shown.")
 	return b.String()
 }
 
@@ -254,16 +348,26 @@ func ParsePRTitleBody(raw string) (title, body string) {
 const BookmarkSystem = `You suggest a short git branch / bookmark name: lowercase, use hyphens between words, only letters, digits, hyphens, underscores.
 Output a single line: the name only, no quotes, no explanation. Max 60 characters.`
 
-// BookmarkUser builds context for bookmark name suggestion.
-func BookmarkUser(ticketHint, diff string) string {
+// BookmarkUser builds context for bookmark name suggestion. chainSummary is
+// an optional pre-formatted block listing the commits in trunk..selected
+// (oldest → newest); pass "" to omit. When provided, diff should be the
+// cumulative trunk → selected diff so the suggested name reflects the whole
+// stack of work, not just the tip commit's local changes.
+func BookmarkUser(ticketHint, chainSummary, diff string) string {
 	var b strings.Builder
 	if strings.TrimSpace(ticketHint) != "" {
 		b.WriteString("Ticket / context hint: ")
 		b.WriteString(strings.TrimSpace(ticketHint))
 		b.WriteString("\n\n")
 	}
-	b.WriteString("Unified diff:\n")
+	if s := strings.TrimSpace(chainSummary); s != "" {
+		b.WriteString("Commits in this stack (oldest → newest, from trunk up to the selected change):\n")
+		b.WriteString(s)
+		b.WriteString("\n\nCumulative unified diff (trunk → selected change, covering every commit above):\n")
+	} else {
+		b.WriteString("Unified diff:\n")
+	}
 	b.WriteString(truncateRunes(diff, maxPromptDiffRunes))
-	b.WriteString("\n\nSuggest one bookmark name for this work.")
+	b.WriteString("\n\nSuggest one bookmark name that covers the whole chain of work above, not just the tip commit.")
 	return b.String()
 }

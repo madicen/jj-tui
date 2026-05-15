@@ -268,6 +268,73 @@ func (s *Service) GitFormatDiffFromTo(ctx context.Context, fromRev, toRev string
 	return out, nil
 }
 
+// ChainCommit is one commit in a `from..to` chain, used to give the LLM
+// per-commit context (subject + full description) on top of the cumulative diff.
+type ChainCommit struct {
+	ChangeIDShort string // 8-char change id, stable across rebases
+	Subject       string // first line of the description (or "(no description)")
+	Description   string // full description; may be multi-line; may be empty
+}
+
+// ListChainCommits returns commits in the revset `fromRev..toRev`, ordered
+// oldest → newest (so the AI reads them in the order the work happened).
+//
+// `fromRev..toRev` is the standard jj revset for "descendants of fromRev that
+// are ancestors of (or equal to) toRev, excluding fromRev itself"; it gives the
+// chain of work introduced on top of fromRev that ends at toRev. Returns an
+// empty slice (no error) when the chain is empty (e.g. toRev is at or below
+// fromRev), so callers can cleanly fall back to single-revision context.
+func (s *Service) ListChainCommits(ctx context.Context, fromRev, toRev string) ([]ChainCommit, error) {
+	fromRev = strings.TrimSpace(fromRev)
+	toRev = strings.TrimSpace(toRev)
+	if fromRev == "" || toRev == "" {
+		return nil, fmt.Errorf("from and to revisions are required")
+	}
+	// Tab-separated row per commit. Replace embedded tabs/newlines in the
+	// description with safe placeholders so a single row is always one line
+	// with exactly three tab-separated fields; we restore newlines in the
+	// description after parsing (subject is single-line by definition).
+	const rowSep = "\x1e" // record separator: ends each commit row
+	const fieldSep = "\t"
+	const nlMarker = "\x1f" // unit separator: stand-in for '\n' inside description
+	const tabMarker = "\x1d" // group separator: stand-in for '\t' inside description
+	template := `change_id.short(8) ++ "` + fieldSep + `" ++ ` +
+		`if(description, description.first_line(), "(no description)") ++ "` + fieldSep + `" ++ ` +
+		`description.replace("\t", "` + tabMarker + `").replace("\n", "` + nlMarker + `") ++ ` +
+		`"` + rowSep + `"`
+	// `--reversed` orders oldest → newest; the revset itself doesn't guarantee
+	// a particular ordering for chains with merges, but for the common linear
+	// case this matches the reading order a human would expect.
+	revset := fmt.Sprintf("%s..%s", fromRev, toRev)
+	out, err := s.runJJOutput(ctx, "log", "-r", revset, "--no-graph", "--reversed", "-T", template)
+	if err != nil {
+		return nil, err
+	}
+	out = strings.TrimSpace(out)
+	if out == "" {
+		return nil, nil
+	}
+	var commits []ChainCommit
+	for _, row := range strings.Split(out, rowSep) {
+		row = strings.TrimSpace(row)
+		if row == "" {
+			continue
+		}
+		parts := strings.SplitN(row, fieldSep, 3)
+		if len(parts) < 3 {
+			continue
+		}
+		desc := strings.ReplaceAll(parts[2], nlMarker, "\n")
+		desc = strings.ReplaceAll(desc, tabMarker, "\t")
+		commits = append(commits, ChainCommit{
+			ChangeIDShort: strings.TrimSpace(parts[0]),
+			Subject:       strings.TrimSpace(parts[1]),
+			Description:   strings.TrimRight(desc, "\n"),
+		})
+	}
+	return commits, nil
+}
+
 // GetRevisionChangeID gets the change_id for any jj revision (e.g., "main@origin", "@", etc.)
 func (s *Service) GetRevisionChangeID(ctx context.Context, revision string) (string, error) {
 	out, err := s.runJJOutput(ctx, "log", "-r", revision, "--no-graph", "-T", "change_id")
