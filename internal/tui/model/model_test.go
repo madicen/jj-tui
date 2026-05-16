@@ -1698,6 +1698,43 @@ func TestSpinnerMessage_LockedThroughUpdateLoop(t *testing.T) {
 	}
 }
 
+// TestSpinnerMessage_LocksDuringAIGenerate is the AI-overlay counterpart of the Loading
+// lock tests. The bug being guarded against: opening Create PR triggers AI generation
+// ("Generating PR title and body…") which sets aiGenOverlayActive but *not* Loading;
+// meanwhile the background PR poll completes and writes "Loaded 14 PRs" to StatusMessage,
+// which used to overwrite the spinner caption because the snapshot only locked on Loading.
+// The fix extended snapshotSpinnerMessage to treat aiGenOverlayActive the same way; this
+// test exercises that path through Model.Update so the deferred snapshot is the thing
+// under test, not the helper in isolation.
+func TestSpinnerMessage_LocksDuringAIGenerate(t *testing.T) {
+	m := newTestModel()
+	defer m.Close()
+
+	m.appState.ViewMode = state.ViewCreatePR
+	m.aiGenOverlayActive = true
+	newModel, _ := m.Update(SetStatusMsg{Status: "Generating PR title and body…"})
+	m = newModel.(*Model)
+	if m.appState.SpinnerMessage != "Generating PR title and body…" {
+		t.Fatalf("after AI gen start: SpinnerMessage=%q, want %q", m.appState.SpinnerMessage, "Generating PR title and body…")
+	}
+
+	newModel, _ = m.Update(SetStatusMsg{Status: "Loaded 14 PRs"})
+	m = newModel.(*Model)
+	if m.appState.SpinnerMessage != "Generating PR title and body…" {
+		t.Fatalf("after background poll footer overwrite: SpinnerMessage=%q, want it locked to %q", m.appState.SpinnerMessage, "Generating PR title and body…")
+	}
+	if m.appState.StatusMessage != "Loaded 14 PRs" {
+		t.Fatalf("StatusMessage should update freely: got %q", m.appState.StatusMessage)
+	}
+
+	m.aiGenOverlayActive = false
+	newModel, _ = m.Update(SetStatusMsg{Status: "Ready"})
+	m = newModel.(*Model)
+	if m.appState.SpinnerMessage != "" {
+		t.Fatalf("after AI gen end: SpinnerMessage=%q, want empty", m.appState.SpinnerMessage)
+	}
+}
+
 // TestSpinnerMessage_AllowsExplicitBump documents the escape hatch described in the
 // AppState comment: a multi-phase operation can re-snapshot by clearing SpinnerMessage
 // before assigning a new StatusMessage. Without this test, future readers might assume

@@ -102,15 +102,21 @@ func (m *Model) wrapGraphTabCmd(cmd tea.Cmd) tea.Cmd {
 }
 
 // snapshotSpinnerMessage locks the spinner's caption to whatever StatusMessage was at the
-// moment Loading flipped on, and clears that lock when Loading flips off. Called via a
-// deferred observer at the top of Model.Update so the snapshot reflects the final state
-// after the message has been fully processed (including any cascaded submodel updates).
+// moment a busy state (Loading or aiGenOverlayActive) flipped on, and clears that lock
+// when both flip off. Called via a deferred observer at the top of Model.Update so the
+// snapshot reflects the final state after the message has been fully processed (including
+// any cascaded submodel updates).
 //
-// The "Loading=true with empty SpinnerMessage" branch is a safety net: it catches initial
+// aiGenOverlayActive is treated the same as Loading here because the AI generate flow
+// (Ctrl+G on description / PR / ticket / bookmark modals) shows the same centered busy
+// overlay but does not set Loading=true; without locking, background StatusMessage writes
+// (e.g. "Loaded 14 PRs" from a PR poll completing) would overwrite the spinner caption.
+//
+// The "busy=true with empty SpinnerMessage" branch is a safety net: it catches initial
 // app state where Loading might start true before the first Update arrives, and also any
 // future caller that flips Loading via a path other than Model.Update.
 func (m *Model) snapshotSpinnerMessage() {
-	if !m.appState.Loading {
+	if !m.appState.Loading && !m.aiGenOverlayActive {
 		m.appState.SpinnerMessage = ""
 		return
 	}
@@ -125,9 +131,9 @@ func (m *Model) applyLoadingOverlay(fullView string) string {
 	if !m.showCenteredBusyOverlay() {
 		return fullView
 	}
-	// Prefer the locked spinner caption (snapshot taken at Loading=false→true); fall back
-	// to StatusMessage so the AI-generate overlay (which doesn't go through the snapshot
-	// because it gates on aiGenOverlayActive, not Loading) still renders sensible text.
+	// Prefer the locked spinner caption (snapshot taken at the false→true edge of Loading
+	// or aiGenOverlayActive); fall back to StatusMessage only as a safety net if the
+	// snapshot hasn't been taken yet (e.g. very first frame).
 	msg := m.appState.SpinnerMessage
 	if msg == "" {
 		msg = m.appState.StatusMessage
