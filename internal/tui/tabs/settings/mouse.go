@@ -409,6 +409,23 @@ func handleAIZone(m *Model, zoneID string) (Model, tea.Cmd) {
 	case mouse.ZoneSettingsAITimeoutIncrease:
 		aim.IncAITimeout()
 		return *m, nil
+	case mouse.ZoneSettingsAIProfileNew:
+		aim.AddProfile()
+		return *m, nil
+	case mouse.ZoneSettingsAIProfileDelete:
+		// Deletion is rejected silently when only one profile remains; the
+		// Delete button is rendered struck-through in that case so the user
+		// already has visual feedback that the action is disabled.
+		_ = aim.DeleteSelectedProfile()
+		return *m, nil
+	case mouse.ZoneSettingsAIProfileCyclePrev:
+		aim.CycleSelected(-1)
+		return *m, nil
+	case mouse.ZoneSettingsAIProfileCycleNext:
+		aim.CycleSelected(1)
+		return *m, nil
+	case mouse.ZoneSettingsAIProfileName:
+		return *m, m.SetFocusedField(19)
 	default:
 		if strings.HasPrefix(zoneID, mouse.ZoneSettingsAIProviderPrefix) {
 			s := strings.TrimPrefix(zoneID, mouse.ZoneSettingsAIProviderPrefix)
@@ -421,6 +438,17 @@ func handleAIZone(m *Model, zoneID string) (Model, tea.Cmd) {
 				default:
 					aim.SetAIProvider("openai_compatible")
 				}
+			}
+			return *m, nil
+		}
+		if strings.HasPrefix(zoneID, mouse.ZoneSettingsAIProfileRowPrefix) {
+			s := strings.TrimPrefix(zoneID, mouse.ZoneSettingsAIProfileRowPrefix)
+			if idx, err := strconv.Atoi(s); err == nil {
+				// Click selects the row for editing AND marks it active so the
+				// user can switch the default model with a single click (the
+				// long-press menu still lets them override per-call).
+				aim.SelectProfile(idx)
+				aim.SetActiveByIndex(idx)
 			}
 			return *m, nil
 		}

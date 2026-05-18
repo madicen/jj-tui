@@ -17,6 +17,7 @@ import (
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	aitab "github.com/madicen/jj-tui/internal/tui/ai"
 	"github.com/madicen/jj-tui/internal/tui/data"
+	"github.com/madicen/jj-tui/internal/tui/genmenu"
 	"github.com/madicen/jj-tui/internal/tui/state"
 	bookmarktab "github.com/madicen/jj-tui/internal/tui/tabs/bookmark"
 	branchestab "github.com/madicen/jj-tui/internal/tui/tabs/branches"
@@ -73,6 +74,9 @@ type Model struct {
 	// keeps the open form modal and any text they had typed. Cleared on success or dismiss.
 	pendingAIRetryKind   state.NavigateKind
 	pendingAIRetryActive bool
+	// pendingAIRetryOverrideProfile preserves the long-press menu's one-shot profile selection so a retry
+	// after a transient error uses the same model the user picked. Empty = retry with active profile.
+	pendingAIRetryOverrideProfile string
 
 	// Tab-specific models (own all tab/modal state; main model does not duplicate)
 	graphTabModel    graphtab.GraphModel
@@ -150,6 +154,133 @@ func (m *Model) clearAIGenOverlay() {
 func (m *Model) clearPendingAIRetry() {
 	m.pendingAIRetryActive = false
 	m.pendingAIRetryKind = 0
+	m.pendingAIRetryOverrideProfile = ""
+}
+
+// resolveAIOverride looks up the optional one-shot profile override on t against the
+// active config. Returns nil when the override is empty or the profile is not found.
+// A missing profile name is treated as "use active" (the menu can only be populated
+// from the live profile list, so this is defensive only).
+func (m *Model) resolveAIOverride(t state.NavigateTarget) *config.AIProfile {
+	name := strings.TrimSpace(t.AIOverrideProfile)
+	if name == "" || m.appState.Config == nil {
+		return nil
+	}
+	if p, ok := m.appState.Config.FindAIProfile(name); ok {
+		return &p
+	}
+	return nil
+}
+
+// aiGenStatusMessage decorates a default generating-message with the profile name
+// when an override is in use so the user can see which model is actually running.
+func aiGenStatusMessage(base string, override *config.AIProfile) string {
+	if override == nil {
+		return base
+	}
+	return fmt.Sprintf("%s (using %s)", base, override.Name)
+}
+
+// pushAIProfilesToFormModals propagates the current config's AI profile list and
+// active profile name to every form modal that has a long-press generate menu.
+// Called whenever a generate-bearing modal opens and after settings changes
+// alter the saved profile list. When cfg is nil we still push an empty list so
+// the modals don't carry stale state from a previous repo.
+func (m *Model) pushAIProfilesToFormModals() {
+	var profiles []config.AIProfile
+	active := ""
+	if m.appState.Config != nil {
+		profiles = m.appState.Config.AIProfileList()
+		active = m.appState.Config.ActiveAIProfile().Name
+	}
+	m.desceditModal.SetAIProfiles(profiles, active)
+	m.prFormModal.SetAIProfiles(profiles, active)
+	m.bookmarkModal.SetAIProfiles(profiles, active)
+	m.ticketFormModal.SetAIProfiles(profiles, active)
+}
+
+// activeFormModalGenMenu returns the genmenu.State for the currently shown
+// form modal that has a generate-button long-press popover, or nil when no
+// such modal is active. Used by the mouse-routing path to forward press /
+// motion / release events and by the view layer to overlay the popover.
+func (m *Model) activeFormModalGenMenu() *genmenu.State {
+	switch m.appState.ViewMode {
+	case state.ViewEditDescription:
+		return m.desceditModal.MenuState()
+	case state.ViewCreatePR:
+		return m.prFormModal.MenuState()
+	case state.ViewCreateBookmark:
+		return m.bookmarkModal.MenuState()
+	case state.ViewCreateTicket:
+		return m.ticketFormModal.MenuState()
+	}
+	return nil
+}
+
+// forwardMouseToActiveFormModal forwards a tea.MouseMsg to whichever form modal
+// owns the active view so the modal's long-press genmenu can advance its state.
+// Returns the cmd from the modal Update (typically the tick cmd on a fresh press
+// or a NavigateGenerate* cmd on release over a menu row).
+func (m *Model) forwardMouseToActiveFormModal(msg tea.MouseMsg) tea.Cmd {
+	switch m.appState.ViewMode {
+	case state.ViewEditDescription:
+		updated, cmd := m.desceditModal.Update(msg)
+		m.desceditModal = updated
+		return cmd
+	case state.ViewCreatePR:
+		updated, cmd := m.prFormModal.Update(msg)
+		m.prFormModal = updated
+		return cmd
+	case state.ViewCreateBookmark:
+		updated, cmd := m.bookmarkModal.Update(msg)
+		m.bookmarkModal = updated
+		return cmd
+	case state.ViewCreateTicket:
+		updated, cmd := m.ticketFormModal.Update(msg)
+		m.ticketFormModal = updated
+		return cmd
+	}
+	return nil
+}
+
+// forwardGenMenuTickToActiveFormModal routes a genmenu.TickMsg to the active
+// form modal so its long-press tick can pop the menu when still pressed.
+func (m *Model) forwardGenMenuTickToActiveFormModal(msg genmenu.TickMsg) tea.Cmd {
+	switch m.appState.ViewMode {
+	case state.ViewEditDescription:
+		updated, cmd := m.desceditModal.Update(msg)
+		m.desceditModal = updated
+		return cmd
+	case state.ViewCreatePR:
+		updated, cmd := m.prFormModal.Update(msg)
+		m.prFormModal = updated
+		return cmd
+	case state.ViewCreateBookmark:
+		updated, cmd := m.bookmarkModal.Update(msg)
+		m.bookmarkModal = updated
+		return cmd
+	case state.ViewCreateTicket:
+		updated, cmd := m.ticketFormModal.Update(msg)
+		m.ticketFormModal = updated
+		return cmd
+	}
+	return nil
+}
+
+// activeFormModalGenMenuOverlay returns (view, x, y) for the currently visible
+// long-press popover, or ("", 0, 0) when none is shown. Used in view_helpers.go.
+func (m *Model) activeFormModalGenMenuOverlay() (string, int, int) {
+	switch m.appState.ViewMode {
+	case state.ViewEditDescription:
+		return m.desceditModal.MenuOverlay()
+	case state.ViewCreatePR:
+		return m.prFormModal.MenuOverlay()
+	case state.ViewCreateBookmark:
+		return m.bookmarkModal.MenuOverlay()
+	case state.ViewCreateTicket:
+		return m.ticketFormModal.MenuOverlay()
+	}
+	return "", 0, 0
 }
 
 // buildSettingsViewOpts builds ViewOpts for the settings tab (used when entering settings or on resize).
@@ -395,6 +526,7 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		m.beginModalUnderlay()
 		m.appState.ViewMode = state.ViewCreateBookmark
 		m.appState.StatusMessage = bookmarktab.OpenCreateBookmarkFromTicket(&m.bookmarkModal, m.appState.Repository, t.TicketKey, t.TicketTitle, t.TicketDisplayKey, m.branchesTabModel.BuildBookmarkNameConflictSources(), m.appState.Config != nil && m.appState.Config.ShouldSanitizeBookmarkNames(), ModalInnerWidth(m.width))
+		m.pushAIProfilesToFormModals()
 		return m, nil
 	case state.NavigateWarning:
 		m.warningModal.Show(t.WarningTitle, t.WarningMessage, t.WarningCommits)
@@ -644,9 +776,10 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		if m.pendingAIRetryActive {
 			m.errorModal.ClearError()
 			retryKind := m.pendingAIRetryKind
+			retryOverride := m.pendingAIRetryOverrideProfile
 			// pendingAIRetryActive will be set again by the NavigateGenerate* handler.
 			m.pendingAIRetryActive = false
-			return m.handleNavigate(state.NavigateTarget{Kind: retryKind})
+			return m.handleNavigate(state.NavigateTarget{Kind: retryKind, AIOverrideProfile: retryOverride})
 		}
 		// No replayable action: fall back to the legacy behavior of dismissing and refreshing
 		// the repository. Today the Retry button is hidden in this case (errortab.HasRetry is
@@ -693,14 +826,16 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		if changeID == "" {
 			return m, nil
 		}
+		override := m.resolveAIOverride(t)
 		m.aiGenReqID++
 		rid := m.aiGenReqID
-		m.appState.StatusMessage = "Generating description…"
+		m.appState.StatusMessage = aiGenStatusMessage("Generating description…", override)
 		m.aiGenOverlayActive = true
 		m.pendingAIRetryKind = state.NavigateGenerateCommitDescription
 		m.pendingAIRetryActive = true
+		m.pendingAIRetryOverrideProfile = t.AIOverrideProfile
 		return m, tea.Batch(
-			aitab.GenerateCommitDescriptionCmd(rid, m.appState.JJService, m.appState.Config, changeID, m.desceditModal.GetCommitShortID(), m.desceditModal.GetDescriptionValue()),
+			aitab.GenerateCommitDescriptionCmd(rid, m.appState.JJService, m.appState.Config, changeID, m.desceditModal.GetCommitShortID(), m.desceditModal.GetDescriptionValue(), override),
 			m.startBusySpinnerCmd(),
 		)
 	case state.NavigateGeneratePRForm:
@@ -714,14 +849,16 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		changeID := repo.Graph.Commits[idx].ChangeID
+		override := m.resolveAIOverride(t)
 		m.aiGenReqID++
 		rid := m.aiGenReqID
-		m.appState.StatusMessage = "Generating PR title and body…"
+		m.appState.StatusMessage = aiGenStatusMessage("Generating PR title and body…", override)
 		m.aiGenOverlayActive = true
 		m.pendingAIRetryKind = state.NavigateGeneratePRForm
 		m.pendingAIRetryActive = true
+		m.pendingAIRetryOverrideProfile = t.AIOverrideProfile
 		return m, tea.Batch(
-			aitab.GeneratePRFormCmd(rid, m.appState.JJService, m.appState.Config, changeID, m.prFormModal.GetBaseBranch(), m.prFormModal.GetHeadBranch(), m.prFormModal.GetTitle()),
+			aitab.GeneratePRFormCmd(rid, m.appState.JJService, m.appState.Config, changeID, m.prFormModal.GetBaseBranch(), m.prFormModal.GetHeadBranch(), m.prFormModal.GetTitle(), override),
 			m.startBusySpinnerCmd(),
 		)
 	case state.NavigateGenerateBookmarkName:
@@ -739,14 +876,16 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		if m.bookmarkModal.IsFromJira() {
 			hint = strings.TrimSpace(m.bookmarkModal.GetJiraKey() + " " + m.bookmarkModal.GetJiraTicketTitle())
 		}
+		override := m.resolveAIOverride(t)
 		m.aiGenReqID++
 		rid := m.aiGenReqID
-		m.appState.StatusMessage = "Generating bookmark name…"
+		m.appState.StatusMessage = aiGenStatusMessage("Generating bookmark name…", override)
 		m.aiGenOverlayActive = true
 		m.pendingAIRetryKind = state.NavigateGenerateBookmarkName
 		m.pendingAIRetryActive = true
+		m.pendingAIRetryOverrideProfile = t.AIOverrideProfile
 		return m, tea.Batch(
-			aitab.GenerateBookmarkNameCmd(rid, m.appState.JJService, m.appState.Config, rev, hint),
+			aitab.GenerateBookmarkNameCmd(rid, m.appState.JJService, m.appState.Config, rev, hint, override),
 			m.startBusySpinnerCmd(),
 		)
 	case state.NavigateGenerateTicketForm:
@@ -767,14 +906,16 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 				changeShort = changeID
 			}
 		}
+		override := m.resolveAIOverride(t)
 		m.aiGenReqID++
 		rid := m.aiGenReqID
-		m.appState.StatusMessage = "Generating ticket title and description…"
+		m.appState.StatusMessage = aiGenStatusMessage("Generating ticket title and description…", override)
 		m.aiGenOverlayActive = true
 		m.pendingAIRetryKind = state.NavigateGenerateTicketForm
 		m.pendingAIRetryActive = true
+		m.pendingAIRetryOverrideProfile = t.AIOverrideProfile
 		return m, tea.Batch(
-			aitab.GenerateTicketFormCmd(rid, m.appState.JJService, m.appState.Config, changeID, changeShort, m.ticketFormModal.GetSummary(), m.ticketFormModal.GetDescription()),
+			aitab.GenerateTicketFormCmd(rid, m.appState.JJService, m.appState.Config, changeID, changeShort, m.ticketFormModal.GetSummary(), m.ticketFormModal.GetDescription(), override),
 			m.startBusySpinnerCmd(),
 		)
 	default:
@@ -807,6 +948,7 @@ func (m *Model) startEditingDescription(commit internal.Commit) (tea.Model, tea.
 	m.beginModalUnderlay()
 	m.appState.ViewMode = state.ViewEditDescription
 	m.desceditModal, m.appState.StatusMessage = descedittab.StartEditing(m.desceditModal, commit, ModalInnerWidth(m.width), max(m.height-24, 3))
+	m.pushAIProfilesToFormModals()
 	return m, descedittab.LoadDescriptionCmd(m.appState.JJService, commit.ChangeID)
 }
 
@@ -820,6 +962,7 @@ func (m *Model) startCreateBookmark() {
 	idx := m.GetSelectedCommit()
 	m.appState.ViewMode = state.ViewCreateBookmark
 	m.appState.StatusMessage = bookmarktab.OpenCreateBookmark(&m.bookmarkModal, m.appState.Repository, idx, m.branchesTabModel.BuildBookmarkNameConflictSources(), m.appState.Config != nil && m.appState.Config.ShouldSanitizeBookmarkNames(), ModalInnerWidth(m.width))
+	m.pushAIProfilesToFormModals()
 }
 
 // startCreatePR opens the PR creation dialog for the selected commit's bookmark.
@@ -838,6 +981,7 @@ func (m *Model) startCreatePR() {
 	m.beginModalUnderlay()
 	m.appState.ViewMode = state.ViewCreatePR
 	m.appState.StatusMessage = res.StatusMessage
+	m.pushAIProfilesToFormModals()
 }
 
 // submitPR runs the PR creation command.
@@ -867,6 +1011,7 @@ func (m *Model) startCreateTicket() {
 	m.beginModalUnderlay()
 	m.appState.ViewMode = state.ViewCreateTicket
 	m.appState.StatusMessage = res.StatusMessage
+	m.pushAIProfilesToFormModals()
 }
 
 // submitTicket runs the create-ticket command and closes the modal on success.
@@ -1120,6 +1265,29 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKeyMsg(msg)
 
 	case tea.MouseMsg:
+		// Generate-bearing form modals: forward the raw MouseMsg first so the
+		// long-press AI profile picker can arm/cancel/hover/resolve. The modal
+		// returns a non-nil cmd only when it actually captured the event (the
+		// BeginPress tick, a menu-row release that fires NavigateGenerate*, etc.).
+		if genState := m.activeFormModalGenMenu(); genState != nil {
+			wasShown := genState.IsShown()
+			if cmd := m.forwardMouseToActiveFormModal(msg); cmd != nil {
+				return m, cmd
+			}
+			// When the popover was visible at the start of this event and is now
+			// closed (a release that landed off the menu), suppress the normal
+			// release-zone dispatch so the underlying generate-chip click does
+			// not also fire after the user dismissed the popover.
+			if wasShown && !genState.IsShown() && msg.Action == tea.MouseActionRelease {
+				return m, nil
+			}
+			// When the popover is currently shown, swallow non-release mouse
+			// events that didn't produce a cmd so they don't leak to the tab
+			// layer (hover updates already happened inside the modal Update).
+			if genState.IsShown() && msg.Action != tea.MouseActionRelease {
+				return m, nil
+			}
+		}
 		// Blocking overlays and modal views: run zone check on release first so clicks reach the modal, not the tab.
 		if msg.Action == tea.MouseActionRelease &&
 			(m.initRepoModel.Path() != "" || m.errorModal.GetError() != nil || m.warningModal.IsShown() ||
@@ -1227,6 +1395,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.Action == tea.MouseActionRelease {
 			return m.zoneManager.AnyInBoundsAndUpdate(m, msg)
+		}
+		return m, nil
+
+	case genmenu.TickMsg:
+		// Long-press tick for the AI profile picker on the active form modal.
+		// The modal gates this internally (Owner + PressID checks) so we can
+		// route it unconditionally; stale ticks become no-ops.
+		if cmd := m.forwardGenMenuTickToActiveFormModal(msg); cmd != nil {
+			return m, cmd
 		}
 		return m, nil
 
@@ -1670,6 +1847,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Reloaded config pointer; keep evolog split modal in sync if user returns to split (z) after saving AI settings.
 		m.evologSplitModal = m.evologSplitModal.WithSuggestConfig(m.appState.Config)
+		// Propagate the new AI profile list to any open generate-bearing modal so
+		// the long-press menu reflects edits made on the Settings → AI tab.
+		m.pushAIProfilesToFormModals()
 		if wasSettings {
 			m.settingsTabModel.SetViewOpts(m.buildSettingsViewOpts())
 		}

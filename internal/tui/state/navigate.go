@@ -119,6 +119,13 @@ type NavigateTarget struct {
 	// current bookmark (jj's default selection on @).
 	PushAll bool
 
+	// AIOverrideProfile, when non-empty, names the AI profile to use for a one-shot
+	// NavigateGenerate* call instead of the active profile. Set by the long-press
+	// generate-button menu when the user picks a non-active model. Empty = use the
+	// active profile (today's behavior). The profile name is resolved against
+	// cfg.AIProfiles in handleNavigate.
+	AIOverrideProfile string
+
 	// Init-repo screen options: forwarded to data.RunJJInit when the user accepts the welcome
 	// screen. Defaults (zero values) reproduce today's behavior of plain `jj git init`.
 	InitColocate     bool   // run `jj git init --colocate` instead of plain `jj git init`

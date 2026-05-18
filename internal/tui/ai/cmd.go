@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen/jj-tui/internal/config"
@@ -84,24 +85,45 @@ func loadChainContext(ctx context.Context, jjSvc *jj.Service, baseRev, toRev str
 	}, nil
 }
 
+// providerAndTimeout resolves the LLM provider + timeout to use for a generate
+// call. When override is non-nil, the provider is built from the override
+// profile (one-shot model switch from the long-press menu) and the timeout is
+// the override's own TimeoutSeconds (falling back to cfg.AITimeout). When
+// override is nil, the active profile is used and the cfg-wide timeout applies.
+func providerAndTimeout(cfg *config.Config, override *config.AIProfile) (llm.Provider, time.Duration, error) {
+	if override != nil {
+		provider, err := llm.NewProviderForProfile(*override, cfg)
+		if err != nil {
+			return nil, 0, err
+		}
+		return provider, cfg.AITimeoutForProfile(*override), nil
+	}
+	provider, err := llm.NewProviderForConfig(cfg)
+	if err != nil {
+		return nil, 0, err
+	}
+	return provider, cfg.AITimeout(), nil
+}
+
 // GenerateCommitDescriptionCmd runs the LLM and returns TextGeneratedMsg.
-func GenerateCommitDescriptionCmd(reqID int, jjSvc *jj.Service, cfg *config.Config, commitID, changeShort, currentDesc string) tea.Cmd {
+// When override is non-nil, that AI profile is used for this one call only.
+func GenerateCommitDescriptionCmd(reqID int, jjSvc *jj.Service, cfg *config.Config, commitID, changeShort, currentDesc string, override *config.AIProfile) tea.Cmd {
 	return func() tea.Msg {
 		msg := TextGeneratedMsg{ReqID: reqID, Kind: KindCommitDescription, CommitID: commitID}
 		if jjSvc == nil || cfg == nil || !cfg.AIConfiguredForGeneration() {
 			msg.Err = fmt.Errorf("AI is disabled or no API key (Settings → AI, or %s)", config.EnvAIAPIKey)
 			return msg
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), cfg.AITimeout())
+		provider, timeout, err := providerAndTimeout(cfg, override)
+		if err != nil {
+			msg.Err = err
+			return msg
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 		diff, err := jjSvc.GitFormatDiffForRevision(ctx, commitID, diffBytesCommit)
 		if err != nil {
 			msg.Err = fmt.Errorf("diff: %w", err)
-			return msg
-		}
-		provider, err := llm.NewProviderForConfig(cfg)
-		if err != nil {
-			msg.Err = err
 			return msg
 		}
 		out, err := provider.Complete(ctx, aiprompts.CommitDescriptionSystem, aiprompts.CommitDescriptionUser(changeShort, currentDesc, diff))
@@ -115,24 +137,25 @@ func GenerateCommitDescriptionCmd(reqID int, jjSvc *jj.Service, cfg *config.Conf
 }
 
 // GeneratePRFormCmd generates PR title and body.
-func GeneratePRFormCmd(reqID int, jjSvc *jj.Service, cfg *config.Config, changeID, baseBranch, headBranch, hintTitle string) tea.Cmd {
+// When override is non-nil, that AI profile is used for this one call only.
+func GeneratePRFormCmd(reqID int, jjSvc *jj.Service, cfg *config.Config, changeID, baseBranch, headBranch, hintTitle string, override *config.AIProfile) tea.Cmd {
 	return func() tea.Msg {
 		msg := TextGeneratedMsg{ReqID: reqID, Kind: KindPR, CommitID: changeID}
 		if jjSvc == nil || cfg == nil || !cfg.AIConfiguredForGeneration() {
 			msg.Err = fmt.Errorf("AI is disabled or no API key (Settings → AI, or %s)", config.EnvAIAPIKey)
 			return msg
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), cfg.AITimeout())
+		provider, timeout, err := providerAndTimeout(cfg, override)
+		if err != nil {
+			msg.Err = err
+			return msg
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 		fromRev := strings.TrimSpace(baseBranch) + "@origin"
 		chain, err := loadChainContext(ctx, jjSvc, fromRev, changeID, diffBytesPR)
 		if err != nil {
 			msg.Err = fmt.Errorf("diff: %w", err)
-			return msg
-		}
-		provider, err := llm.NewProviderForConfig(cfg)
-		if err != nil {
-			msg.Err = err
 			return msg
 		}
 		out, err := provider.Complete(ctx, aiprompts.PRSystem, aiprompts.PRUser(baseBranch, headBranch, hintTitle, chain.chainSummary, chain.diff))
@@ -153,14 +176,19 @@ func GeneratePRFormCmd(reqID int, jjSvc *jj.Service, cfg *config.Config, changeI
 // trunk → revision diff plus a summary of every commit in the chain so the
 // AI describes the whole stack. When the chain is empty (or trunk() can't
 // be resolved), we fall back to the single-revision diff.
-func GenerateTicketFormCmd(reqID int, jjSvc *jj.Service, cfg *config.Config, changeID, changeShort, hintSummary, hintDescription string) tea.Cmd {
+func GenerateTicketFormCmd(reqID int, jjSvc *jj.Service, cfg *config.Config, changeID, changeShort, hintSummary, hintDescription string, override *config.AIProfile) tea.Cmd {
 	return func() tea.Msg {
 		msg := TextGeneratedMsg{ReqID: reqID, Kind: KindTicket, CommitID: changeID}
 		if jjSvc == nil || cfg == nil || !cfg.AIConfiguredForGeneration() {
 			msg.Err = fmt.Errorf("AI is disabled or no API key (Settings → AI, or %s)", config.EnvAIAPIKey)
 			return msg
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), cfg.AITimeout())
+		provider, timeout, err := providerAndTimeout(cfg, override)
+		if err != nil {
+			msg.Err = err
+			return msg
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 		rev := strings.TrimSpace(changeID)
 		if rev == "" {
@@ -169,11 +197,6 @@ func GenerateTicketFormCmd(reqID int, jjSvc *jj.Service, cfg *config.Config, cha
 		chain, err := loadChainContext(ctx, jjSvc, "trunk()", rev, diffBytesTicket)
 		if err != nil {
 			msg.Err = fmt.Errorf("diff: %w", err)
-			return msg
-		}
-		provider, err := llm.NewProviderForConfig(cfg)
-		if err != nil {
-			msg.Err = err
 			return msg
 		}
 		short := strings.TrimSpace(changeShort)
@@ -196,14 +219,19 @@ func GenerateTicketFormCmd(reqID int, jjSvc *jj.Service, cfg *config.Config, cha
 // whole stack of work rather than only the tip commit's local changes. Falls
 // back to the single-revision diff when the chain is empty (e.g. the selected
 // commit IS trunk) or when trunk() can't be resolved.
-func GenerateBookmarkNameCmd(reqID int, jjSvc *jj.Service, cfg *config.Config, revision, ticketHint string) tea.Cmd {
+func GenerateBookmarkNameCmd(reqID int, jjSvc *jj.Service, cfg *config.Config, revision, ticketHint string, override *config.AIProfile) tea.Cmd {
 	return func() tea.Msg {
 		msg := TextGeneratedMsg{ReqID: reqID, Kind: KindBookmark}
 		if jjSvc == nil || cfg == nil || !cfg.AIConfiguredForGeneration() {
 			msg.Err = fmt.Errorf("AI is disabled or no API key (Settings → AI, or %s)", config.EnvAIAPIKey)
 			return msg
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), cfg.AITimeout())
+		provider, timeout, err := providerAndTimeout(cfg, override)
+		if err != nil {
+			msg.Err = err
+			return msg
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 		rev := strings.TrimSpace(revision)
 		if rev == "" {
@@ -212,11 +240,6 @@ func GenerateBookmarkNameCmd(reqID int, jjSvc *jj.Service, cfg *config.Config, r
 		chain, err := loadChainContext(ctx, jjSvc, "trunk()", rev, diffBytesBookmark)
 		if err != nil {
 			msg.Err = fmt.Errorf("diff: %w", err)
-			return msg
-		}
-		provider, err := llm.NewProviderForConfig(cfg)
-		if err != nil {
-			msg.Err = err
 			return msg
 		}
 		out, err := provider.Complete(ctx, aiprompts.BookmarkSystem, aiprompts.BookmarkUser(ticketHint, chain.chainSummary, chain.diff))

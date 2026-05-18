@@ -63,6 +63,15 @@ type RenderData struct {
 	AIProviderID           string // openai_compatible | gemini | ollama
 	AIAPIKeySet            bool   // key present (env overrides config)
 	AITimeoutSeconds       int    // HTTP timeout for LLM requests; rendered as a [-] N [+] stepper
+	// AI profile management: full list of saved profiles, the currently-selected
+	// (editing) index, and the name of the persistently-active profile. Rendered
+	// as a row list above the editor inputs.
+	AIProfiles             []config.AIProfile
+	AISelectedProfileIdx   int
+	AIActiveProfileName    string
+	// AIProfileNameInputView is the rendered view of the profile-name textinput
+	// (the new "name" field above provider). Empty when the AI tab has no profile.
+	AIProfileNameInputView string
 	EvologDescribeDefault  bool
 	EvologFileSplitEnabled bool
 	EvologHunkSplitEnabled bool
@@ -111,6 +120,10 @@ func BuildRenderData(sm *Model, opts ViewOpts) RenderData {
 		AIProviderID:           sm.GetAIModel().GetAIProvider(),
 		AIAPIKeySet:            opts.Config != nil && opts.Config.AISupportsGenerationCredentials(),
 		AITimeoutSeconds:       sm.GetAIModel().GetAITimeoutSeconds(),
+		AIProfiles:             sm.GetAIModel().Profiles(),
+		AISelectedProfileIdx:   sm.GetAIModel().SelectedIndex(),
+		AIActiveProfileName:    sm.GetAIModel().ActiveProfileName(),
+		AIProfileNameInputView: sm.GetAIModel().GetProfileNameInputView(),
 		EvologDescribeDefault:  sm.GetAIModel().GetEvologDescribeAfterSplitDefault(),
 		EvologFileSplitEnabled: sm.GetAIModel().GetEvologFileSplitEnabled(),
 		EvologHunkSplitEnabled: sm.GetAIModel().GetEvologHunkSplitEnabled(),
@@ -627,6 +640,43 @@ func (r renderCtx) renderTheme(data RenderData, startRow int) []string {
 	return lines
 }
 
+// renderAIProfileList renders the row list of saved AI profiles plus the
+// add/delete/cycle controls. Each row is clickable: a click selects it for
+// editing AND marks it active (the long-press menu picks per-call). The
+// "active" mark distinguishes whatever the global default model is.
+func (r renderCtx) renderAIProfileList(data RenderData) []string {
+	var lines []string
+	header := lipgloss.NewStyle().Bold(true).Foreground(styles.ColorSecondary).Render("AI profiles")
+	hint := lipgloss.NewStyle().Foreground(styles.ColorMuted).Render(
+		"    Each profile bundles provider + model + base URL + API key + timeout. " +
+			"Click a row to edit and set active. Long-press a generate button to pick one model for a single run.")
+	lines = append(lines, header, hint, "")
+	for i, p := range data.AIProfiles {
+		mark := "  "
+		if strings.EqualFold(p.Name, data.AIActiveProfileName) {
+			mark = lipgloss.NewStyle().Foreground(styles.ColorSecondary).Render("● ")
+		}
+		nameStyle := lipgloss.NewStyle()
+		summaryStyle := lipgloss.NewStyle().Foreground(styles.ColorMuted)
+		if i == data.AISelectedProfileIdx {
+			nameStyle = nameStyle.Bold(true).Foreground(styles.ColorPrimary)
+			summaryStyle = summaryStyle.Foreground(styles.ColorPrimary)
+		}
+		row := mark + nameStyle.Render(p.Name) + " " + summaryStyle.Render("— "+p.Summary())
+		lines = append(lines, "    "+r.mark(mouse.ZoneSettingsAIProfileRow(i), row))
+	}
+	prevBtn := r.mark(mouse.ZoneSettingsAIProfileCyclePrev, lipgloss.NewStyle().Foreground(styles.ColorPrimary).Render("[‹ prev]"))
+	nextBtn := r.mark(mouse.ZoneSettingsAIProfileCycleNext, lipgloss.NewStyle().Foreground(styles.ColorPrimary).Render("[next ›]"))
+	addBtn := r.mark(mouse.ZoneSettingsAIProfileNew, lipgloss.NewStyle().Foreground(styles.ColorSecondary).Render("[+ new]"))
+	delLabel := "[delete]"
+	if len(data.AIProfiles) <= 1 {
+		delLabel = lipgloss.NewStyle().Foreground(styles.ColorMuted).Strikethrough(true).Render("[delete]")
+	}
+	delBtn := r.mark(mouse.ZoneSettingsAIProfileDelete, delLabel)
+	lines = append(lines, "", "    "+prevBtn+" "+nextBtn+"    "+addBtn+"  "+delBtn, "")
+	return lines
+}
+
 func (r renderCtx) renderAI(data RenderData) []string {
 	var lines []string
 	focusStyle := func(i int) lipgloss.Style {
@@ -643,6 +693,8 @@ func (r renderCtx) renderAI(data RenderData) []string {
 		toggleAI = "[✓]"
 	}
 	lines = append(lines, "  "+r.mark(mouse.ZoneSettingsAIEnabled, lipgloss.NewStyle().Foreground(styles.ColorPrimary).Bold(true).Render(toggleAI+" Enable AI (✧ ^g chip in description, PR, Create ticket, and bookmark modals)")))
+	lines = append(lines, "")
+	lines = append(lines, r.renderAIProfileList(data)...)
 	curProv := strings.TrimSpace(data.AIProviderID)
 	if curProv == "" {
 		curProv = "openai_compatible"
@@ -686,6 +738,13 @@ func (r renderCtx) renderAI(data RenderData) []string {
 	lines = append(lines, focusStyle(18).Render("  API key (optional for Ollama / local http://127.0.0.1:11434/v1; env overrides):"))
 	if len(data.Inputs) > 18 {
 		lines = append(lines, "  "+r.mark(mouse.ZoneSettingsAIAPIKey, data.Inputs[18].View))
+	}
+	if data.AIProfileNameInputView != "" {
+		// Focused-field index 19 is the profile-name textinput (added when the
+		// settings AI tab grew profile management); shows under the API key field
+		// so renaming the active row is visually grouped with its other edits.
+		lines = append(lines, focusStyle(19).Render("  Profile name:"))
+		lines = append(lines, "  "+r.mark(mouse.ZoneSettingsAIProfileName, data.AIProfileNameInputView))
 	}
 	lines = append(lines, "", "")
 	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("  Generation timeout:"))

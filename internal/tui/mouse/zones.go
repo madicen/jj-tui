@@ -174,6 +174,13 @@ const (
 	ZoneSettingsAITimeoutIncrease          = "zone:settings:ai:timeout_inc"
 	// AI provider rows: zone:settings:ai:provider:N (0=openai_compatible, 1=gemini, 2=ollama)
 	ZoneSettingsAIProviderPrefix = "zone:settings:ai:provider:"
+	// AI profile management in Settings → AI: rows and action buttons
+	ZoneSettingsAIProfileRowPrefix = "zone:settings:ai:profile:"
+	ZoneSettingsAIProfileNew       = "zone:settings:ai:profile_new"
+	ZoneSettingsAIProfileDelete    = "zone:settings:ai:profile_delete"
+	ZoneSettingsAIProfileCyclePrev = "zone:settings:ai:profile_cycle_prev"
+	ZoneSettingsAIProfileCycleNext = "zone:settings:ai:profile_cycle_next"
+	ZoneSettingsAIProfileName      = "zone:settings:ai:profile_name"
 
 	// GitHub login zones
 	ZoneGitHubLoginCopyAndOpen = "zone:github_login:copy_and_open"
@@ -259,6 +266,20 @@ const (
 // ZoneSettingsExternalEditorPreset returns the zone ID for the external editor preset row at index (0..8).
 func ZoneSettingsExternalEditorPreset(index int) string {
 	return fmt.Sprintf("%s%d", ZoneSettingsExternalEditorPresetPrefix, index)
+}
+
+// ZoneSettingsAIProfileRow returns the zone ID for the AI profile row at the given index (Settings → AI).
+func ZoneSettingsAIProfileRow(index int) string {
+	return fmt.Sprintf("%s%d", ZoneSettingsAIProfileRowPrefix, index)
+}
+
+// ZoneGenMenuItemPrefix is the prefix for long-press generate-button menu rows.
+const ZoneGenMenuItemPrefix = "zone:genmenu:"
+
+// ZoneGenMenuItem returns the zone ID for an AI profile row in the long-press
+// generate-button popover at the given index.
+func ZoneGenMenuItem(index int) string {
+	return fmt.Sprintf("%s%d", ZoneGenMenuItemPrefix, index)
 }
 
 // ZoneSettingsAIProvider returns the zone ID for the AI provider preset row at index (0..2).
