@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/madicen/jj-tui/internal"
+	"github.com/madicen/jj-tui/internal/tui/longpress"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 )
@@ -147,8 +148,13 @@ func (m *Model) handleLongPress(msg tea.MouseMsg) tea.Cmd {
 
 	switch msg.Action {
 	case tea.MouseActionMotion:
+		// Keep the press armed while the cursor stays over the branch row
+		// (or drifts only a couple of cells from the anchor).
 		if m.contextMenu == nil && m.longPressItemIndex >= 0 {
-			m.longPressItemIndex = -1
+			origin := mouse.ZoneBranch(m.longPressItemIndex)
+			if !longpress.StillArmed(m.zoneManager, origin, m.longPressMouseX, m.longPressMouseY, msg) {
+				m.longPressItemIndex = -1
+			}
 		}
 
 	case tea.MouseActionPress:
