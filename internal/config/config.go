@@ -13,6 +13,42 @@ import (
 	"time"
 )
 
+// DefaultAIProfileName is the synthesized profile name used when a legacy
+// (flat) AI config has no `ai_profiles` list on disk.
+const DefaultAIProfileName = "default"
+
+// AIProfile is one named bundle of AI inference settings. The user can switch
+// between profiles from the long-press menu on generate buttons (one-shot
+// override) or from Settings → AI (persistent active profile).
+type AIProfile struct {
+	Name           string `json:"name"`
+	Provider       string `json:"provider,omitempty"`
+	BaseURL        string `json:"base_url,omitempty"`
+	Model          string `json:"model,omitempty"`
+	APIKey         string `json:"api_key,omitempty"`
+	TimeoutSeconds int    `json:"timeout_seconds,omitempty"`
+}
+
+// Summary returns a short "provider · model" label for UI rows.
+func (p AIProfile) Summary() string {
+	prov := strings.TrimSpace(p.Provider)
+	if prov == "" {
+		prov = "openai_compatible"
+	}
+	model := strings.TrimSpace(p.Model)
+	if model == "" {
+		switch prov {
+		case "gemini":
+			model = "gemini-2.5-flash"
+		case "ollama":
+			model = OllamaDefaultModel
+		default:
+			model = "gpt-4o-mini"
+		}
+	}
+	return prov + " · " + model
+}
+
 // GitHubAuthMethod represents how the user authenticated with GitHub
 type GitHubAuthMethod string
 
@@ -113,6 +149,14 @@ type Config struct {
 	AITimeoutSeconds *int   `json:"ai_timeout_seconds,omitempty"` // nil/0 = 60
 	AIProvider       string `json:"ai_provider,omitempty"`        // empty = openai_compatible; allowed: openai_compatible, gemini, ollama
 	AIAPIKey         string `json:"ai_api_key,omitempty"`         // optional; env overrides when set
+
+	// AIProfiles is the list of saved named (provider, model, base URL, key, timeout) presets.
+	// The active profile's fields are mirrored onto the flat AI* fields above for back-compat
+	// with callers like llm.NewProviderForConfig. Empty list = legacy single-profile config:
+	// a "default" profile is synthesized from the flat fields on Load.
+	AIProfiles []AIProfile `json:"ai_profiles,omitempty"`
+	// AIActiveProfile names the entry in AIProfiles that is currently active.
+	AIActiveProfile string `json:"ai_active_profile,omitempty"`
 
 	// AI evolog split (optional; nil = defaults below)
 	AIEvologDescribeAfterSplitDefault *bool  `json:"ai_evolog_describe_after_split_default,omitempty"` // nil/false = off when opening split modal
@@ -297,6 +341,13 @@ func mergeConfig(dest, source *Config) {
 	if source.AIAPIKey != "" {
 		dest.AIAPIKey = source.AIAPIKey
 	}
+	if len(source.AIProfiles) > 0 {
+		dest.AIProfiles = make([]AIProfile, len(source.AIProfiles))
+		copy(dest.AIProfiles, source.AIProfiles)
+	}
+	if source.AIActiveProfile != "" {
+		dest.AIActiveProfile = source.AIActiveProfile
+	}
 	if source.AIEvologDescribeAfterSplitDefault != nil {
 		dest.AIEvologDescribeAfterSplitDefault = source.AIEvologDescribeAfterSplitDefault
 	}
@@ -372,10 +423,12 @@ func Load() (*Config, error) {
 			return nil, err
 		}
 		if envCfg != nil {
+			envCfg.normalizeAIProfiles()
 			return envCfg, nil
 		}
 		// If env var is set but file doesn't exist, return empty config
 		cfg.loadedFrom = envPath
+		cfg.normalizeAIProfiles()
 		return cfg, nil
 	}
 
@@ -404,6 +457,7 @@ func Load() (*Config, error) {
 		cfg.loadedFrom = globalPath
 	}
 
+	cfg.normalizeAIProfiles()
 	return cfg, nil
 }
 
@@ -437,6 +491,13 @@ func (c *Config) SaveTo(path string) error {
 			return err
 		}
 	}
+
+	// Make the persisted view coherent: ensure the active profile reflects any
+	// in-memory edits to the flat AI* fields, then re-mirror the active profile
+	// onto the flat fields so both representations agree on disk.
+	c.normalizeAIProfiles()
+	c.syncActiveAIProfileFromFlat()
+	c.applyActiveAIProfile()
 
 	data, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
@@ -928,6 +989,272 @@ func (c *Config) AIProviderOrDefault() string {
 	default:
 		return "openai_compatible"
 	}
+}
+
+// NormalizeAIProvider returns a canonical provider id (openai_compatible, gemini, ollama).
+func NormalizeAIProvider(s string) string {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "gemini":
+		return "gemini"
+	case "ollama":
+		return "ollama"
+	default:
+		return "openai_compatible"
+	}
+}
+
+// snapshotAIProfileFromFlat builds an AIProfile from the current flat AI* fields.
+func (c *Config) snapshotAIProfileFromFlat(name string) AIProfile {
+	timeout := 0
+	if c.AITimeoutSeconds != nil && *c.AITimeoutSeconds > 0 {
+		timeout = *c.AITimeoutSeconds
+	}
+	return AIProfile{
+		Name:           strings.TrimSpace(name),
+		Provider:       NormalizeAIProvider(c.AIProvider),
+		BaseURL:        strings.TrimSpace(c.AIBaseURL),
+		Model:          strings.TrimSpace(c.AIModel),
+		APIKey:         c.AIAPIKey,
+		TimeoutSeconds: timeout,
+	}
+}
+
+// findAIProfileIndex returns the index of the named profile (case-insensitive on
+// the trimmed name) and whether it was found.
+func (c *Config) findAIProfileIndex(name string) (int, bool) {
+	if c == nil {
+		return -1, false
+	}
+	target := strings.ToLower(strings.TrimSpace(name))
+	if target == "" {
+		return -1, false
+	}
+	for i, p := range c.AIProfiles {
+		if strings.ToLower(strings.TrimSpace(p.Name)) == target {
+			return i, true
+		}
+	}
+	return -1, false
+}
+
+// FindAIProfile returns a copy of the named profile and whether it exists.
+func (c *Config) FindAIProfile(name string) (AIProfile, bool) {
+	idx, ok := c.findAIProfileIndex(name)
+	if !ok {
+		return AIProfile{}, false
+	}
+	return c.AIProfiles[idx], true
+}
+
+// applyActiveAIProfile copies the active profile's fields onto the flat AI*
+// fields so existing callers (llm.NewProviderForConfig) see the right values.
+// Called after Load and after SetActiveAIProfile.
+func (c *Config) applyActiveAIProfile() {
+	if c == nil || len(c.AIProfiles) == 0 {
+		return
+	}
+	idx, ok := c.findAIProfileIndex(c.AIActiveProfile)
+	if !ok {
+		idx = 0
+		c.AIActiveProfile = c.AIProfiles[idx].Name
+	}
+	p := c.AIProfiles[idx]
+	c.AIProvider = NormalizeAIProvider(p.Provider)
+	c.AIBaseURL = p.BaseURL
+	c.AIModel = p.Model
+	c.AIAPIKey = p.APIKey
+	if p.TimeoutSeconds > 0 {
+		v := p.TimeoutSeconds
+		c.AITimeoutSeconds = &v
+	} else {
+		c.AITimeoutSeconds = nil
+	}
+}
+
+// syncActiveAIProfileFromFlat copies the flat AI* fields back into the active
+// profile slot. Called after Load (legacy migration) and on Save so any in-memory
+// flat-field edits stay consistent with the persisted profile list.
+func (c *Config) syncActiveAIProfileFromFlat() {
+	if c == nil || len(c.AIProfiles) == 0 {
+		return
+	}
+	idx, ok := c.findAIProfileIndex(c.AIActiveProfile)
+	if !ok {
+		return
+	}
+	name := c.AIProfiles[idx].Name
+	c.AIProfiles[idx] = c.snapshotAIProfileFromFlat(name)
+}
+
+// normalizeAIProfiles ensures Profiles+ActiveProfile are coherent and flat
+// fields mirror the active profile. Idempotent. Called on Load and Save.
+func (c *Config) normalizeAIProfiles() {
+	if c == nil {
+		return
+	}
+	if len(c.AIProfiles) == 0 {
+		// Legacy migration: synthesize a single default profile from the flat fields.
+		c.AIProfiles = []AIProfile{c.snapshotAIProfileFromFlat(DefaultAIProfileName)}
+		c.AIActiveProfile = DefaultAIProfileName
+		return
+	}
+	for i := range c.AIProfiles {
+		c.AIProfiles[i].Name = strings.TrimSpace(c.AIProfiles[i].Name)
+		if c.AIProfiles[i].Name == "" {
+			c.AIProfiles[i].Name = fmt.Sprintf("profile-%d", i+1)
+		}
+		c.AIProfiles[i].Provider = NormalizeAIProvider(c.AIProfiles[i].Provider)
+		c.AIProfiles[i].BaseURL = strings.TrimSpace(c.AIProfiles[i].BaseURL)
+		c.AIProfiles[i].Model = strings.TrimSpace(c.AIProfiles[i].Model)
+	}
+	if _, ok := c.findAIProfileIndex(c.AIActiveProfile); !ok {
+		c.AIActiveProfile = c.AIProfiles[0].Name
+	}
+	c.applyActiveAIProfile()
+}
+
+// ActiveAIProfile returns a copy of the active AI profile, falling back to a
+// profile synthesised from the flat fields when none is configured.
+func (c *Config) ActiveAIProfile() AIProfile {
+	if c == nil {
+		return AIProfile{Name: DefaultAIProfileName, Provider: "openai_compatible"}
+	}
+	if idx, ok := c.findAIProfileIndex(c.AIActiveProfile); ok {
+		return c.AIProfiles[idx]
+	}
+	if len(c.AIProfiles) > 0 {
+		return c.AIProfiles[0]
+	}
+	return c.snapshotAIProfileFromFlat(DefaultAIProfileName)
+}
+
+// AIProfileList returns a copy of the profile list, guaranteeing at least one
+// (synthesised) entry. Safe to use for menu rendering.
+func (c *Config) AIProfileList() []AIProfile {
+	if c == nil {
+		return []AIProfile{{Name: DefaultAIProfileName, Provider: "openai_compatible"}}
+	}
+	if len(c.AIProfiles) == 0 {
+		return []AIProfile{c.snapshotAIProfileFromFlat(DefaultAIProfileName)}
+	}
+	out := make([]AIProfile, len(c.AIProfiles))
+	copy(out, c.AIProfiles)
+	return out
+}
+
+// SetActiveAIProfile switches the active profile and mirrors its fields onto
+// the flat AI* fields. Returns an error when name does not match any profile.
+func (c *Config) SetActiveAIProfile(name string) error {
+	if c == nil {
+		return fmt.Errorf("nil config")
+	}
+	idx, ok := c.findAIProfileIndex(name)
+	if !ok {
+		return fmt.Errorf("ai profile %q not found", name)
+	}
+	c.AIActiveProfile = c.AIProfiles[idx].Name
+	c.applyActiveAIProfile()
+	return nil
+}
+
+// AddAIProfile appends p to the profile list. Returns an error when a profile
+// with the same name already exists or the name is empty.
+func (c *Config) AddAIProfile(p AIProfile) error {
+	if c == nil {
+		return fmt.Errorf("nil config")
+	}
+	name := strings.TrimSpace(p.Name)
+	if name == "" {
+		return fmt.Errorf("profile name is empty")
+	}
+	if _, ok := c.findAIProfileIndex(name); ok {
+		return fmt.Errorf("ai profile %q already exists", name)
+	}
+	p.Name = name
+	p.Provider = NormalizeAIProvider(p.Provider)
+	c.AIProfiles = append(c.AIProfiles, p)
+	if c.AIActiveProfile == "" {
+		c.AIActiveProfile = name
+		c.applyActiveAIProfile()
+	}
+	return nil
+}
+
+// UpdateAIProfile replaces the profile identified by name. When the updated
+// profile is active, the flat AI* fields are re-synced.
+func (c *Config) UpdateAIProfile(name string, p AIProfile) error {
+	if c == nil {
+		return fmt.Errorf("nil config")
+	}
+	idx, ok := c.findAIProfileIndex(name)
+	if !ok {
+		return fmt.Errorf("ai profile %q not found", name)
+	}
+	newName := strings.TrimSpace(p.Name)
+	if newName == "" {
+		newName = c.AIProfiles[idx].Name
+	}
+	if !strings.EqualFold(newName, c.AIProfiles[idx].Name) {
+		if other, exists := c.findAIProfileIndex(newName); exists && other != idx {
+			return fmt.Errorf("ai profile %q already exists", newName)
+		}
+	}
+	p.Name = newName
+	p.Provider = NormalizeAIProvider(p.Provider)
+	wasActive := strings.EqualFold(c.AIActiveProfile, c.AIProfiles[idx].Name)
+	c.AIProfiles[idx] = p
+	if wasActive {
+		c.AIActiveProfile = p.Name
+		c.applyActiveAIProfile()
+	}
+	return nil
+}
+
+// DeleteAIProfile removes the named profile. The last profile cannot be deleted.
+// When the deleted profile was active, the first remaining profile becomes active.
+func (c *Config) DeleteAIProfile(name string) error {
+	if c == nil {
+		return fmt.Errorf("nil config")
+	}
+	if len(c.AIProfiles) <= 1 {
+		return fmt.Errorf("cannot delete the last AI profile")
+	}
+	idx, ok := c.findAIProfileIndex(name)
+	if !ok {
+		return fmt.Errorf("ai profile %q not found", name)
+	}
+	wasActive := strings.EqualFold(c.AIActiveProfile, c.AIProfiles[idx].Name)
+	c.AIProfiles = append(c.AIProfiles[:idx], c.AIProfiles[idx+1:]...)
+	if wasActive {
+		c.AIActiveProfile = c.AIProfiles[0].Name
+		c.applyActiveAIProfile()
+	}
+	return nil
+}
+
+// CycleActiveAIProfile moves the active pointer by delta (typically +/-1) through
+// the profile list, wrapping at the ends. No-op when fewer than 2 profiles exist.
+func (c *Config) CycleActiveAIProfile(delta int) {
+	if c == nil || len(c.AIProfiles) < 2 {
+		return
+	}
+	idx, ok := c.findAIProfileIndex(c.AIActiveProfile)
+	if !ok {
+		idx = 0
+	}
+	n := len(c.AIProfiles)
+	idx = ((idx+delta)%n + n) % n
+	c.AIActiveProfile = c.AIProfiles[idx].Name
+	c.applyActiveAIProfile()
+}
+
+// AITimeoutForProfile returns the HTTP timeout for the given profile, falling
+// back to the cfg-wide AITimeout default when the profile's timeout is unset.
+func (c *Config) AITimeoutForProfile(p AIProfile) time.Duration {
+	if p.TimeoutSeconds > 0 {
+		return time.Duration(p.TimeoutSeconds) * time.Second
+	}
+	return c.AITimeout()
 }
 
 // EvologAIMultiSplitHardMax is the upper bound for ai_evolog_multi_split_max (JSON + Settings UI).

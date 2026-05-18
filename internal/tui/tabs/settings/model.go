@@ -320,6 +320,18 @@ func (m *Model) ZoneIDs() []string {
 		mouse.ZoneSettingsAIEvologDescribeDefault, mouse.ZoneSettingsAIEvologFileSplit, mouse.ZoneSettingsAIEvologHunkSplit, mouse.ZoneSettingsAIEvologMultiStepwise,
 		mouse.ZoneSettingsAIEvologMultiMaxDecrease, mouse.ZoneSettingsAIEvologMultiMaxIncrease,
 		mouse.ZoneSettingsAITimeoutDecrease, mouse.ZoneSettingsAITimeoutIncrease,
+		// AI profile management (Settings → AI list + add/delete/cycle + name editor).
+		// resolveClickedZone only matches against ids in this list, so missing entries
+		// here silently drop clicks (the cause of the "+ new does nothing" bug).
+		mouse.ZoneSettingsAIProfileNew, mouse.ZoneSettingsAIProfileDelete,
+		mouse.ZoneSettingsAIProfileCyclePrev, mouse.ZoneSettingsAIProfileCycleNext,
+		mouse.ZoneSettingsAIProfileName,
+	}
+	// AI profile rows are indexed; enumerate all currently-visible ones so a
+	// click on any row resolves through resolveClickedZone. Use ProfileCount
+	// (not Profiles) so this read does not flush input edits.
+	for i := 0; i < m.aiModel.ProfileCount(); i++ {
+		ids = append(ids, mouse.ZoneSettingsAIProfileRow(i))
 	}
 	for i := range advanced.ExternalEditorPresetLabels {
 		ids = append(ids, mouse.ZoneSettingsExternalEditorPreset(i))
@@ -564,7 +576,7 @@ func (m *Model) GetFocusedField() int {
 	case 5: // Theme
 		return 0 // no inputs
 	case 6: // AI
-		return 16 + m.aiModel.GetFocusedField() // 16..18
+		return 16 + m.aiModel.GetFocusedField() // 16..19 (16=base URL, 17=model, 18=API key, 19=profile name)
 	case 7: // Advanced
 		return 14 + m.advancedModel.GetFocusedField() // 14..15
 	}

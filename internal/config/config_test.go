@@ -364,6 +364,168 @@ func TestResolveOpenAICompatibleBearerKey(t *testing.T) {
 	})
 }
 
+// TestAIProfileMigration ensures legacy flat AI configs are wrapped into a
+// single "default" profile on Load.
+func TestAIProfileMigration(t *testing.T) {
+	t.Run("legacyFlatWrappedAsDefault", func(t *testing.T) {
+		cfg := &Config{
+			AIProvider: "ollama",
+			AIBaseURL:  "http://127.0.0.1:11434/v1",
+			AIModel:    "qwen2.5:1.5b",
+			AIAPIKey:   "ignored",
+		}
+		cfg.normalizeAIProfiles()
+		if len(cfg.AIProfiles) != 1 {
+			t.Fatalf("expected 1 synthesised profile, got %d", len(cfg.AIProfiles))
+		}
+		if cfg.AIProfiles[0].Name != DefaultAIProfileName {
+			t.Fatalf("name: got %q", cfg.AIProfiles[0].Name)
+		}
+		if cfg.AIProfiles[0].Provider != "ollama" {
+			t.Fatalf("provider: got %q", cfg.AIProfiles[0].Provider)
+		}
+		if cfg.AIProfiles[0].Model != "qwen2.5:1.5b" {
+			t.Fatalf("model: got %q", cfg.AIProfiles[0].Model)
+		}
+		if cfg.AIActiveProfile != DefaultAIProfileName {
+			t.Fatalf("active: got %q", cfg.AIActiveProfile)
+		}
+	})
+
+	t.Run("multiProfileActiveMirrorsToFlat", func(t *testing.T) {
+		cfg := &Config{
+			AIProfiles: []AIProfile{
+				{Name: "openai", Provider: "openai_compatible", Model: "gpt-4o-mini", APIKey: "sk-a"},
+				{Name: "local", Provider: "ollama", Model: "qwen2.5:1.5b", BaseURL: "http://127.0.0.1:11434/v1"},
+			},
+			AIActiveProfile: "local",
+		}
+		cfg.normalizeAIProfiles()
+		if cfg.AIProvider != "ollama" {
+			t.Fatalf("flat provider: got %q", cfg.AIProvider)
+		}
+		if cfg.AIModel != "qwen2.5:1.5b" {
+			t.Fatalf("flat model: got %q", cfg.AIModel)
+		}
+		if cfg.AIBaseURL != "http://127.0.0.1:11434/v1" {
+			t.Fatalf("flat base url: got %q", cfg.AIBaseURL)
+		}
+	})
+
+	t.Run("invalidActiveFallsBackToFirst", func(t *testing.T) {
+		cfg := &Config{
+			AIProfiles: []AIProfile{
+				{Name: "openai", Provider: "openai_compatible", Model: "gpt-4o-mini"},
+				{Name: "local", Provider: "ollama", Model: "qwen2.5:1.5b"},
+			},
+			AIActiveProfile: "does-not-exist",
+		}
+		cfg.normalizeAIProfiles()
+		if cfg.AIActiveProfile != "openai" {
+			t.Fatalf("expected fallback to first; got %q", cfg.AIActiveProfile)
+		}
+	})
+}
+
+// TestAIProfileCRUD covers add/update/delete/cycle helpers.
+func TestAIProfileCRUD(t *testing.T) {
+	cfg := &Config{
+		AIProfiles: []AIProfile{
+			{Name: "a", Provider: "openai_compatible", Model: "gpt-4o-mini"},
+		},
+		AIActiveProfile: "a",
+	}
+	cfg.normalizeAIProfiles()
+
+	if err := cfg.AddAIProfile(AIProfile{Name: "b", Provider: "ollama", Model: "qwen2.5:1.5b"}); err != nil {
+		t.Fatalf("AddAIProfile: %v", err)
+	}
+	if err := cfg.AddAIProfile(AIProfile{Name: "a"}); err == nil {
+		t.Fatal("expected error adding duplicate profile name")
+	}
+	if err := cfg.AddAIProfile(AIProfile{Name: ""}); err == nil {
+		t.Fatal("expected error adding profile with empty name")
+	}
+	if err := cfg.SetActiveAIProfile("b"); err != nil {
+		t.Fatalf("SetActiveAIProfile: %v", err)
+	}
+	if cfg.AIProvider != "ollama" {
+		t.Fatalf("flat provider after set-active: %q", cfg.AIProvider)
+	}
+
+	cfg.CycleActiveAIProfile(1)
+	if cfg.AIActiveProfile != "a" {
+		t.Fatalf("cycle wrap: got %q", cfg.AIActiveProfile)
+	}
+	cfg.CycleActiveAIProfile(-1)
+	if cfg.AIActiveProfile != "b" {
+		t.Fatalf("cycle back: got %q", cfg.AIActiveProfile)
+	}
+
+	if err := cfg.UpdateAIProfile("b", AIProfile{Name: "b2", Provider: "ollama", Model: "llama3.2"}); err != nil {
+		t.Fatalf("UpdateAIProfile rename: %v", err)
+	}
+	if cfg.AIActiveProfile != "b2" {
+		t.Fatalf("active updated to renamed; got %q", cfg.AIActiveProfile)
+	}
+	if cfg.AIModel != "llama3.2" {
+		t.Fatalf("flat model after edit: %q", cfg.AIModel)
+	}
+	if err := cfg.UpdateAIProfile("b2", AIProfile{Name: "a"}); err == nil {
+		t.Fatal("expected rename collision error")
+	}
+
+	if err := cfg.DeleteAIProfile("b2"); err != nil {
+		t.Fatalf("DeleteAIProfile: %v", err)
+	}
+	if cfg.AIActiveProfile != "a" {
+		t.Fatalf("active after delete-active: %q", cfg.AIActiveProfile)
+	}
+	if err := cfg.DeleteAIProfile("a"); err == nil {
+		t.Fatal("expected error deleting last profile")
+	}
+}
+
+// TestAIProfileSaveLoadRoundTrip checks that ai_profiles + ai_active_profile
+// survive a Save → loadFromFile → normalizeAIProfiles round-trip and the flat
+// AI* fields are re-mirrored.
+func TestAIProfileSaveLoadRoundTrip(t *testing.T) {
+	dir, err := os.MkdirTemp("", "jj-tui-aiprofile-*")
+	if err != nil {
+		t.Fatalf("tempdir: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	path := filepath.Join(dir, "config.json")
+	original := &Config{
+		AIProfiles: []AIProfile{
+			{Name: "fast", Provider: "openai_compatible", Model: "gpt-4o-mini", APIKey: "sk-fast"},
+			{Name: "smart", Provider: "openai_compatible", Model: "gpt-4o", APIKey: "sk-smart", TimeoutSeconds: 180},
+		},
+		AIActiveProfile: "smart",
+	}
+	if err := original.SaveTo(path); err != nil {
+		t.Fatalf("SaveTo: %v", err)
+	}
+	loaded, err := loadFromFile(path)
+	if err != nil {
+		t.Fatalf("loadFromFile: %v", err)
+	}
+	loaded.normalizeAIProfiles()
+	if len(loaded.AIProfiles) != 2 {
+		t.Fatalf("profile count: %d", len(loaded.AIProfiles))
+	}
+	if loaded.AIActiveProfile != "smart" {
+		t.Fatalf("active: %q", loaded.AIActiveProfile)
+	}
+	if loaded.AIModel != "gpt-4o" {
+		t.Fatalf("flat model mirror: %q", loaded.AIModel)
+	}
+	if loaded.AITimeoutSeconds == nil || *loaded.AITimeoutSeconds != 180 {
+		t.Fatalf("flat timeout mirror: %+v", loaded.AITimeoutSeconds)
+	}
+}
+
 func TestGitHubTokenForAPI(t *testing.T) {
 	t.Run("savedIgnoresEnv", func(t *testing.T) {
 		t.Setenv("GITHUB_TOKEN", "env-token")

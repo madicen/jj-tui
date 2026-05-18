@@ -8,7 +8,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
+	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/tickets"
+	"github.com/madicen/jj-tui/internal/tui/genmenu"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/styles"
@@ -22,6 +24,11 @@ type Model struct {
 	bodyInput    textarea.Model
 	focusedField int // 0=title, 1=body
 	providerName string
+	// Long-press AI profile picker over the Generate chip. See descedit/model.go
+	// for the shared design notes.
+	genMenu       genmenu.State
+	profiles      []config.AIProfile
+	activeProfile string
 }
 
 // NewModel creates a new Create Ticket model. zoneManager may be nil.
@@ -60,12 +67,22 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case CancelRequestedMsg:
 		m.shown = false
 		m.Reset()
+		m.genMenu.Reset()
 		return m, state.NavigateTarget{Kind: state.NavigateBackFromTicketForm, StatusMessage: "Create ticket cancelled"}.Cmd()
 	case SubmitRequestedMsg:
 		return m, state.NavigateTarget{Kind: state.NavigateSubmitTicket}.Cmd()
 	}
 	switch msg := msg.(type) {
+	case genmenu.TickMsg:
+		m.genMenu.OpenIfMatches(msg)
+		return m, nil
+	case tea.MouseMsg:
+		return m.handleMouseForMenu(msg)
 	case zone.MsgZoneInBounds:
+		if m.genMenu.IsShown() {
+			return m, nil
+		}
+		m.genMenu.CancelPress()
 		if m.zoneManager != nil {
 			if zoneID := m.resolveClickedZone(msg); zoneID != "" {
 				return m.handleZoneClick(zoneID)
@@ -73,6 +90,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		return m, nil
 	case tea.KeyMsg:
+		if m.genMenu.IsShown() && msg.String() == "esc" {
+			m.genMenu.Close()
+			return m, nil
+		}
 		return m.handleKeyMsg(msg)
 	}
 
@@ -84,6 +105,46 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.bodyInput, cmd = m.bodyInput.Update(msg)
 	return m, cmd
+}
+
+// handleMouseForMenu drives the long-press AI profile picker for the Generate chip.
+func (m Model) handleMouseForMenu(msg tea.MouseMsg) (Model, tea.Cmd) {
+	if m.zoneManager == nil {
+		return m, nil
+	}
+	if m.genMenu.IsShown() {
+		switch msg.Action {
+		case tea.MouseActionMotion, tea.MouseActionPress:
+			m.genMenu.UpdateHover(m.zoneManager, msg, len(m.profiles))
+			return m, nil
+		case tea.MouseActionRelease:
+			if msg.Button != tea.MouseButtonLeft {
+				return m, nil
+			}
+			idx := m.genMenu.HitTestRelease(m.zoneManager, msg, len(m.profiles))
+			if idx >= 0 && idx < len(m.profiles) {
+				return m, state.NavigateTarget{
+					Kind:              state.NavigateGenerateTicketForm,
+					AIOverrideProfile: m.profiles[idx].Name,
+				}.Cmd()
+			}
+			return m, nil
+		}
+		return m, nil
+	}
+	switch msg.Action {
+	case tea.MouseActionPress:
+		if msg.Button != tea.MouseButtonLeft {
+			return m, nil
+		}
+		z := m.zoneManager.Get(mouse.ZoneTicketFormGenerate)
+		if z != nil && z.InBounds(msg) && len(m.profiles) > 0 {
+			return m, m.genMenu.BeginPress(mouse.ZoneTicketFormGenerate, msg)
+		}
+	case tea.MouseActionMotion:
+		m.genMenu.OnMotion(m.zoneManager, msg)
+	}
+	return m, nil
 }
 
 // View renders the Create Ticket dialog
@@ -291,4 +352,25 @@ func (m *Model) CreateTicketInput() *tickets.CreateTicketInput {
 		Summary:     m.GetSummary(),
 		Description: m.GetDescription(),
 	}
+}
+
+// SetAIProfiles updates the profile list shown by the long-press menu and the active profile mark.
+func (m *Model) SetAIProfiles(profiles []config.AIProfile, activeProfile string) {
+	m.profiles = profiles
+	m.activeProfile = activeProfile
+}
+
+// MenuState returns a pointer to the long-press menu state.
+func (m *Model) MenuState() *genmenu.State {
+	return &m.genMenu
+}
+
+// MenuOverlay returns the rendered popover (empty when hidden) and its (x, y) anchor.
+func (m *Model) MenuOverlay() (string, int, int) {
+	if !m.genMenu.IsShown() {
+		return "", 0, 0
+	}
+	view := genmenu.Render(m.zoneManager, m.profiles, m.activeProfile, m.genMenu.HoverIndex())
+	x, y := m.genMenu.MouseAnchor()
+	return view, x, y
 }

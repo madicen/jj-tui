@@ -1,6 +1,7 @@
 package model
 
 import (
+	overlay "github.com/madicen/bubble-overlay"
 	"github.com/madicen/jj-tui/internal/tui/state"
 )
 
@@ -96,6 +97,11 @@ func (m *Model) applyFormModalsOverlay(fullView string) string {
 		if content := m.bookmarkModal.View(); content != "" {
 			fullView = applyBubbleOverlayCentered(fullView, FrameFormModal(content, m.width), m.width, m.height)
 		}
+	}
+	// Long-press AI profile popover (descedit / PR / bookmark / ticket forms).
+	// Drawn after the modal so it overlays the generate chip at the click point.
+	if menuView, mx, my := m.activeFormModalGenMenuOverlay(); menuView != "" && m.width > 0 && m.height > 0 {
+		fullView = overlay.OverlayViewAtPoint(fullView, menuView, m.width, m.height, my, mx)
 	}
 	return fullView
 }

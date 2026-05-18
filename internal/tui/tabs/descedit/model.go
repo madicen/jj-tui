@@ -8,6 +8,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal"
+	"github.com/madicen/jj-tui/internal/config"
+	"github.com/madicen/jj-tui/internal/tui/genmenu"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/styles"
@@ -20,6 +22,13 @@ type Model struct {
 	editingCommitID  string
 	commitShortID    string // For header display (e.g. "abc123")
 	zoneManager      *zone.Manager
+	// genMenu drives the long-press AI profile picker that overlays the Generate chip.
+	// State is owned by the modal so press/tick/release transitions are local.
+	genMenu genmenu.State
+	// profiles + activeProfile are pushed in by main (SetAIProfiles) so the popover
+	// can render the live profile list without coupling this package to *config.Config.
+	profiles      []config.AIProfile
+	activeProfile string
 }
 
 // NewModel creates a new description-edit model. zoneManager may be nil.
@@ -59,10 +68,28 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.editingCommitID = ""
 		m.commitShortID = ""
 		m.descriptionInput.SetValue("")
+		m.genMenu.Reset()
 		return m, state.NavigateTarget{Kind: state.NavigateBackToGraph, StatusMessage: "Description edit cancelled"}.Cmd()
 	}
 	switch msg := msg.(type) {
+	case genmenu.TickMsg:
+		if m.genMenu.OpenIfMatches(msg) {
+			return m, nil
+		}
+		return m, nil
+	case tea.MouseMsg:
+		return m.handleMouseForMenu(msg)
 	case zone.MsgZoneInBounds:
+		// While the popover is shown a release click on a menu row was already
+		// resolved by handleMouseForMenu with the raw MouseMsg; ignore the
+		// follow-up zone dispatch so we don't double-fire.
+		if m.genMenu.IsShown() {
+			return m, nil
+		}
+		// Quick click on the generate chip (press → release before the long-press
+		// tick fires) — clear the pending armed state but still run the normal
+		// zone-click handler so the user gets the active-profile generate.
+		m.genMenu.CancelPress()
 		if m.zoneManager != nil {
 			if zoneID := m.resolveClickedZone(msg); zoneID != "" {
 				return m.handleZoneClick(zoneID)
@@ -70,6 +97,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		return m, nil
 	case tea.KeyMsg:
+		if m.genMenu.IsShown() && msg.String() == "esc" {
+			m.genMenu.Close()
+			return m, nil
+		}
 		switch msg.String() {
 		case "ctrl+s":
 			return m, SaveRequestedCmd()
@@ -84,6 +115,52 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.descriptionInput, cmd = m.descriptionInput.Update(msg)
 	return m, cmd
+}
+
+// handleMouseForMenu detects long-press over the Generate chip and resolves
+// row clicks while the popover is shown.
+func (m Model) handleMouseForMenu(msg tea.MouseMsg) (Model, tea.Cmd) {
+	if m.zoneManager == nil {
+		return m, nil
+	}
+	if m.genMenu.IsShown() {
+		switch msg.Action {
+		case tea.MouseActionMotion, tea.MouseActionPress:
+			m.genMenu.UpdateHover(m.zoneManager, msg, len(m.profiles))
+			return m, nil
+		case tea.MouseActionRelease:
+			if msg.Button != tea.MouseButtonLeft {
+				return m, nil
+			}
+			idx := m.genMenu.HitTestRelease(m.zoneManager, msg, len(m.profiles))
+			if idx >= 0 && idx < len(m.profiles) {
+				return m, state.NavigateTarget{
+					Kind:              state.NavigateGenerateCommitDescription,
+					AIOverrideProfile: m.profiles[idx].Name,
+				}.Cmd()
+			}
+			return m, nil
+		}
+		return m, nil
+	}
+	// Menu not shown: arm long-press on left-button press over the generate chip,
+	// cancel arm on motion (so a drag doesn't pop the menu), and clear arm on release.
+	switch msg.Action {
+	case tea.MouseActionPress:
+		if msg.Button != tea.MouseButtonLeft {
+			return m, nil
+		}
+		z := m.zoneManager.Get(mouse.ZoneDescGenerate)
+		if z != nil && z.InBounds(msg) && len(m.profiles) > 0 {
+			return m, m.genMenu.BeginPress(mouse.ZoneDescGenerate, msg)
+		}
+	case tea.MouseActionMotion:
+		m.genMenu.OnMotion(m.zoneManager, msg)
+	case tea.MouseActionRelease:
+		// Release lets the existing zone-click path fire; we only consume here
+		// if the long press is already armed (it isn't yet, since not shown).
+	}
+	return m, nil
 }
 
 // ZoneIDs returns the zone IDs this modal uses when rendering. Used to resolve clicks.
@@ -230,4 +307,29 @@ func (m *Model) SetDimensions(width, height int) {
 	if height > 0 {
 		m.descriptionInput.SetHeight(height)
 	}
+}
+
+// SetAIProfiles updates the profile list shown by the long-press menu and the
+// active profile mark. Main calls this when the modal opens (and after the
+// user saves changes to AI profiles in settings while the modal stays open).
+func (m *Model) SetAIProfiles(profiles []config.AIProfile, activeProfile string) {
+	m.profiles = profiles
+	m.activeProfile = activeProfile
+}
+
+// MenuState returns a pointer to the long-press menu state so main can render
+// the popover overlay or check IsShown when laying out the view.
+func (m *Model) MenuState() *genmenu.State {
+	return &m.genMenu
+}
+
+// MenuOverlay returns the rendered popover string (or empty when the menu is
+// not visible) along with the (x, y) terminal anchor where it should be drawn.
+func (m *Model) MenuOverlay() (string, int, int) {
+	if !m.genMenu.IsShown() {
+		return "", 0, 0
+	}
+	view := genmenu.Render(m.zoneManager, m.profiles, m.activeProfile, m.genMenu.HoverIndex())
+	x, y := m.genMenu.MouseAnchor()
+	return view, x, y
 }

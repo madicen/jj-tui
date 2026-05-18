@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -28,12 +29,16 @@ const (
 )
 
 // Model represents the AI settings sub-tab (LLM + evolog split defaults).
+// The five "live" inputs (provider, base URL, model, API key, timeout) edit
+// the currently selected profile; switching the selected profile reloads those
+// inputs from the new profile's saved values.
 type Model struct {
 	aiEnabled              bool
 	aiProvider             string
 	aiBaseURLInput         textinput.Model
 	aiModelInput           textinput.Model
 	aiAPIKeyInput          textinput.Model
+	aiProfileNameInput     textinput.Model
 	focusedField           int // 0 = base URL, 1 = model, 2 = API key
 	aiTimeoutSeconds       int // clamped to [AITimeoutMinSeconds, AITimeoutMaxSeconds]; mirrors cfg.AITimeout() default
 	evologDescribeDefault  bool
@@ -41,6 +46,15 @@ type Model struct {
 	evologHunkSplitEnabled bool
 	evologMultiStepwise    bool
 	evologMultiMax         int // 1..config.EvologAIMultiSplitHardMax
+
+	// AI profile management: profiles holds every saved profile (snapshots, not
+	// references to cfg.AIProfiles). selectedIdx points to the one being edited
+	// (its values are mirrored to aiProvider/aiBaseURLInput/aiModelInput/
+	// aiAPIKeyInput/aiTimeoutSeconds above). activeName tracks the persistently
+	// active profile so the row can be marked with ● and used as the default.
+	profiles    []config.AIProfile
+	selectedIdx int
+	activeName  string
 }
 
 // NewModel creates an AI settings model with defaults.
@@ -62,6 +76,11 @@ func NewModel() Model {
 	aiKey.EchoMode = textinput.EchoPassword
 	aiKey.EchoCharacter = '•'
 
+	aiName := textinput.New()
+	aiName.Placeholder = "profile name (e.g. fast, smart, local)"
+	aiName.CharLimit = 60
+	aiName.Width = 30
+
 	return Model{
 		aiEnabled:              false,
 		aiProvider:             "openai_compatible",
@@ -72,7 +91,13 @@ func NewModel() Model {
 		aiBaseURLInput:         aiURL,
 		aiModelInput:           aiModel,
 		aiAPIKeyInput:          aiKey,
+		aiProfileNameInput:     aiName,
 		focusedField:           0,
+		profiles: []config.AIProfile{
+			{Name: config.DefaultAIProfileName, Provider: "openai_compatible"},
+		},
+		selectedIdx: 0,
+		activeName:  config.DefaultAIProfileName,
 	}
 }
 
@@ -83,28 +108,79 @@ func NewModelFromConfig(cfg *config.Config) Model {
 		return m
 	}
 	m.aiEnabled = cfg.AIGenerationEnabled()
-	m.aiProvider = cfg.AIProviderOrDefault()
-	m.aiBaseURLInput.SetValue(cfg.AIBaseURL)
-	m.aiModelInput.SetValue(cfg.AIModel)
-	if cfg.AIProviderOrDefault() == "ollama" {
-		if strings.TrimSpace(cfg.AIBaseURL) == "" {
-			m.aiBaseURLInput.SetValue(config.OllamaDefaultChatBaseURL)
-		}
-		if strings.TrimSpace(cfg.AIModel) == "" {
-			m.aiModelInput.SetValue(config.OllamaDefaultModel)
+	m.profiles = cfg.AIProfileList()
+	m.activeName = cfg.ActiveAIProfile().Name
+	m.selectedIdx = 0
+	for i, p := range m.profiles {
+		if strings.EqualFold(p.Name, m.activeName) {
+			m.selectedIdx = i
+			break
 		}
 	}
-	m.aiAPIKeyInput.SetValue(cfg.AIAPIKey)
+	m.loadSelectedProfileIntoInputs()
 	m.evologDescribeDefault = cfg.DefaultEvologPostSplitDescribe()
 	m.evologFileSplitEnabled = cfg.EvologAIFilePhaseEnabled()
 	m.evologHunkSplitEnabled = cfg.EvologAIHunkPhaseEnabled()
 	m.evologMultiStepwise = cfg.EvologAIMultiSplitStepwise()
 	m.evologMultiMax = cfg.EvologAIMultiSplitMaxCap()
-	// Derive the stepper value from AITimeout() so the UI displays the *effective*
-	// value (60s) for users whose config has the field unset, instead of showing
-	// 0s and silently meaning "default". cfg.AITimeout always returns >0.
-	m.aiTimeoutSeconds = clampAITimeout(int(cfg.AITimeout().Seconds()))
 	return m
+}
+
+// loadSelectedProfileIntoInputs mirrors the selected profile onto the live
+// edit fields (provider, base URL, model, API key, timeout, name). Called on
+// init and whenever the user picks a different profile from the list.
+func (m *Model) loadSelectedProfileIntoInputs() {
+	if m.selectedIdx < 0 || m.selectedIdx >= len(m.profiles) {
+		m.selectedIdx = 0
+	}
+	if len(m.profiles) == 0 {
+		return
+	}
+	p := m.profiles[m.selectedIdx]
+	m.aiProvider = config.NormalizeAIProvider(p.Provider)
+	m.aiBaseURLInput.SetValue(p.BaseURL)
+	m.aiModelInput.SetValue(p.Model)
+	if m.aiProvider == "ollama" {
+		if strings.TrimSpace(p.BaseURL) == "" {
+			m.aiBaseURLInput.SetValue(config.OllamaDefaultChatBaseURL)
+		}
+		if strings.TrimSpace(p.Model) == "" {
+			m.aiModelInput.SetValue(config.OllamaDefaultModel)
+		}
+	}
+	m.aiAPIKeyInput.SetValue(p.APIKey)
+	m.aiProfileNameInput.SetValue(p.Name)
+	if p.TimeoutSeconds > 0 {
+		m.aiTimeoutSeconds = clampAITimeout(p.TimeoutSeconds)
+	} else {
+		m.aiTimeoutSeconds = AITimeoutDefaultSeconds
+	}
+}
+
+// commitInputsToSelectedProfile snapshots the current input/textbox values back
+// into the selected profile. Called before SetSelectedProfile, before
+// AddProfile/Delete, and on Save so the in-memory profile list never lags the
+// visible inputs.
+func (m *Model) commitInputsToSelectedProfile() {
+	if m.selectedIdx < 0 || m.selectedIdx >= len(m.profiles) {
+		return
+	}
+	timeout := 0
+	if t := clampAITimeout(m.aiTimeoutSeconds); t > 0 && t != AITimeoutDefaultSeconds {
+		timeout = t
+	}
+	name := strings.TrimSpace(m.aiProfileNameInput.Value())
+	if name == "" {
+		name = m.profiles[m.selectedIdx].Name
+	}
+	m.profiles[m.selectedIdx] = config.AIProfile{
+		Name:           name,
+		Provider:       config.NormalizeAIProvider(m.aiProvider),
+		BaseURL:        strings.TrimSpace(m.aiBaseURLInput.Value()),
+		Model:          strings.TrimSpace(m.aiModelInput.Value()),
+		APIKey:         strings.TrimSpace(m.aiAPIKeyInput.Value()),
+		TimeoutSeconds: timeout,
+	}
 }
 
 // clampAITimeout snaps an arbitrary second count into the stepper's allowed range.
@@ -135,6 +211,22 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case 2:
 		var cmd tea.Cmd
 		m.aiAPIKeyInput, cmd = m.aiAPIKeyInput.Update(msg)
+		return m, cmd
+	case 3:
+		var cmd tea.Cmd
+		m.aiProfileNameInput, cmd = m.aiProfileNameInput.Update(msg)
+		// Mirror the typed name back into the selected profile so the row label
+		// updates as the user types instead of waiting for Save.
+		if m.selectedIdx >= 0 && m.selectedIdx < len(m.profiles) {
+			name := strings.TrimSpace(m.aiProfileNameInput.Value())
+			if name != "" {
+				prevName := m.profiles[m.selectedIdx].Name
+				m.profiles[m.selectedIdx].Name = name
+				if strings.EqualFold(m.activeName, prevName) {
+					m.activeName = name
+				}
+			}
+		}
 		return m, cmd
 	default:
 		return m, nil
@@ -263,25 +355,29 @@ func (m *Model) GetFocusedField() int {
 	return m.focusedField
 }
 
-// SetFocusedField focuses one of the AI inputs (0–2). Returns tea.Cmd from Focus().
+// SetFocusedField focuses one of the AI inputs (0–3). Returns tea.Cmd from Focus().
+// 0 = base URL, 1 = model, 2 = API key, 3 = profile name.
 func (m *Model) SetFocusedField(i int) tea.Cmd {
 	if i < 0 {
 		i = 0
 	}
-	if i > 2 {
-		i = 2
+	if i > 3 {
+		i = 3
 	}
 	m.focusedField = i
 	m.aiBaseURLInput.Blur()
 	m.aiModelInput.Blur()
 	m.aiAPIKeyInput.Blur()
+	m.aiProfileNameInput.Blur()
 	switch m.focusedField {
 	case 0:
 		return m.aiBaseURLInput.Focus()
 	case 1:
 		return m.aiModelInput.Focus()
-	default:
+	case 2:
 		return m.aiAPIKeyInput.Focus()
+	default:
+		return m.aiProfileNameInput.Focus()
 	}
 }
 
@@ -293,4 +389,180 @@ func (m *Model) SetInputWidth(w int) {
 	m.aiBaseURLInput.Width = w
 	m.aiModelInput.Width = w
 	m.aiAPIKeyInput.Width = w
+	nameWidth := w / 2
+	if nameWidth < 20 {
+		nameWidth = 20
+	}
+	m.aiProfileNameInput.Width = nameWidth
+}
+
+// Profiles returns the current in-memory profile list (snapshots, not
+// references). Save uses this to write the full list into config. As a side
+// effect, the current input values are committed back to the selected profile
+// so the returned snapshot reflects unsaved edits.
+func (m *Model) Profiles() []config.AIProfile {
+	m.commitInputsToSelectedProfile()
+	out := make([]config.AIProfile, len(m.profiles))
+	copy(out, m.profiles)
+	return out
+}
+
+// ProfileCount returns the number of profiles without committing input edits.
+// Use this for purely structural needs (e.g. enumerating row zone ids) so
+// the count call doesn't itself mutate the selected profile.
+func (m *Model) ProfileCount() int {
+	return len(m.profiles)
+}
+
+// ActiveProfileName returns the persistently active profile's name.
+func (m *Model) ActiveProfileName() string {
+	return m.activeName
+}
+
+// SelectedIndex returns the index of the profile being edited.
+func (m *Model) SelectedIndex() int {
+	if m.selectedIdx < 0 || m.selectedIdx >= len(m.profiles) {
+		return 0
+	}
+	return m.selectedIdx
+}
+
+// SelectedName returns the name of the profile being edited.
+func (m *Model) SelectedName() string {
+	if m.selectedIdx < 0 || m.selectedIdx >= len(m.profiles) {
+		return ""
+	}
+	return m.profiles[m.selectedIdx].Name
+}
+
+// SelectProfile commits the current input values to the previously-selected
+// profile, then switches to the profile at idx and reloads its values into
+// the inputs. No-op when idx is out of range.
+func (m *Model) SelectProfile(idx int) {
+	if idx < 0 || idx >= len(m.profiles) || idx == m.selectedIdx {
+		return
+	}
+	m.commitInputsToSelectedProfile()
+	m.selectedIdx = idx
+	m.loadSelectedProfileIntoInputs()
+}
+
+// SetActiveProfile marks the named profile as the persistent active one.
+// Does not change which profile is being edited.
+func (m *Model) SetActiveProfile(name string) {
+	for _, p := range m.profiles {
+		if strings.EqualFold(strings.TrimSpace(p.Name), strings.TrimSpace(name)) {
+			m.activeName = p.Name
+			return
+		}
+	}
+}
+
+// SetActiveByIndex marks the profile at idx as active.
+func (m *Model) SetActiveByIndex(idx int) {
+	if idx < 0 || idx >= len(m.profiles) {
+		return
+	}
+	m.activeName = m.profiles[idx].Name
+}
+
+// AddProfile commits the current inputs, appends a new profile with an
+// auto-generated unique name based on the current selection, and selects it
+// for editing.
+func (m *Model) AddProfile() {
+	m.commitInputsToSelectedProfile()
+	base := "profile"
+	if m.selectedIdx >= 0 && m.selectedIdx < len(m.profiles) {
+		base = m.profiles[m.selectedIdx].Name
+	}
+	name := uniqueProfileName(m.profiles, base+" copy")
+	template := config.AIProfile{Name: name, Provider: "openai_compatible"}
+	if m.selectedIdx >= 0 && m.selectedIdx < len(m.profiles) {
+		template = m.profiles[m.selectedIdx]
+		template.Name = name
+	}
+	m.profiles = append(m.profiles, template)
+	m.selectedIdx = len(m.profiles) - 1
+	m.loadSelectedProfileIntoInputs()
+}
+
+// DeleteSelectedProfile removes the currently-selected profile. Returns an
+// error string for the status message when the deletion is not allowed (last
+// remaining profile). When the deleted profile was active, the first remaining
+// profile becomes active.
+func (m *Model) DeleteSelectedProfile() string {
+	if len(m.profiles) <= 1 {
+		return "Cannot delete the last AI profile"
+	}
+	if m.selectedIdx < 0 || m.selectedIdx >= len(m.profiles) {
+		return ""
+	}
+	wasActive := strings.EqualFold(m.activeName, m.profiles[m.selectedIdx].Name)
+	m.profiles = append(m.profiles[:m.selectedIdx], m.profiles[m.selectedIdx+1:]...)
+	if m.selectedIdx >= len(m.profiles) {
+		m.selectedIdx = len(m.profiles) - 1
+	}
+	if wasActive {
+		m.activeName = m.profiles[0].Name
+	}
+	m.loadSelectedProfileIntoInputs()
+	return ""
+}
+
+// CycleSelected moves the editing cursor by delta through the profile list,
+// wrapping at the ends.
+func (m *Model) CycleSelected(delta int) {
+	if len(m.profiles) < 2 {
+		return
+	}
+	m.commitInputsToSelectedProfile()
+	n := len(m.profiles)
+	m.selectedIdx = ((m.selectedIdx+delta)%n + n) % n
+	m.loadSelectedProfileIntoInputs()
+}
+
+// GetProfileNameInputView returns the rendered profile-name textinput for the
+// settings view layer. Kept here so the editor row can include a Mark/Zone.
+func (m *Model) GetProfileNameInputView() string {
+	return m.aiProfileNameInput.View()
+}
+
+// SetProfileNameInputValue replaces the profile-name textinput's contents.
+// Used by tests and any flow that wants to set the in-editor profile name
+// without typing keystroke-by-keystroke.
+func (m *Model) SetProfileNameInputValue(s string) {
+	m.aiProfileNameInput.SetValue(s)
+}
+
+// CommitInputs is the externally-callable form of commitInputsToSelectedProfile.
+// Used by the settings actions layer when building params for Save.
+func (m *Model) CommitInputs() {
+	m.commitInputsToSelectedProfile()
+}
+
+// uniqueProfileName returns base when free, or "base 2", "base 3", ... until
+// it finds a name no profile in profiles uses.
+func uniqueProfileName(profiles []config.AIProfile, base string) string {
+	candidate := strings.TrimSpace(base)
+	if candidate == "" {
+		candidate = "profile"
+	}
+	exists := func(name string) bool {
+		for _, p := range profiles {
+			if strings.EqualFold(strings.TrimSpace(p.Name), name) {
+				return true
+			}
+		}
+		return false
+	}
+	if !exists(candidate) {
+		return candidate
+	}
+	for i := 2; i < 999; i++ {
+		c := fmt.Sprintf("%s %d", candidate, i)
+		if !exists(c) {
+			return c
+		}
+	}
+	return candidate
 }

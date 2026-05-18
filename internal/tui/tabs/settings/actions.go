@@ -62,6 +62,12 @@ type SettingsParams struct {
 	AIProvider                        string
 	AIAPIKey                          string
 	AITimeoutSeconds                  int
+	// AIProfiles holds the full named-profile list to persist. The active
+	// profile's fields are mirrored onto the flat AIBaseURL/AIModel/AIProvider/
+	// AIAPIKey/AITimeoutSeconds above for backwards compatibility with code
+	// that reads the flat fields directly.
+	AIProfiles                        []config.AIProfile
+	AIActiveProfile                   string
 	AIEvologDescribeAfterSplitDefault bool
 	AIEvologFileSplitEnabled          bool
 	AIEvologHunkSplitEnabled          bool
@@ -188,11 +194,29 @@ func BuildSettingsParams(m *Model, githubOwner, githubRepo string) SettingsParam
 	params.ExternalFileEditor = preset
 	params.ExternalFileEditorCustom = custom
 	params.AIEnabled = aim.GetAIEnabled()
-	params.AIBaseURL = aim.GetAIBaseURL()
-	params.AIModel = aim.GetAIModel()
-	params.AIProvider = aim.GetAIProvider()
-	params.AIAPIKey = aim.GetAIAPIKey()
-	params.AITimeoutSeconds = aim.GetAITimeoutSeconds()
+	// Profiles + active. The visible inputs already correspond to the selected
+	// profile; aim.Profiles() commits any unsaved edits before snapshotting.
+	params.AIProfiles = aim.Profiles()
+	params.AIActiveProfile = aim.ActiveProfileName()
+	// Mirror the active profile's fields onto the flat AI* params so legacy
+	// readers (anything that hasn't migrated to AIProfileList yet) see the
+	// correct values when we save.
+	active := config.AIProfile{Name: params.AIActiveProfile, Provider: aim.GetAIProvider()}
+	for _, p := range params.AIProfiles {
+		if strings.EqualFold(strings.TrimSpace(p.Name), strings.TrimSpace(params.AIActiveProfile)) {
+			active = p
+			break
+		}
+	}
+	params.AIBaseURL = active.BaseURL
+	params.AIModel = active.Model
+	params.AIProvider = config.NormalizeAIProvider(active.Provider)
+	params.AIAPIKey = active.APIKey
+	if active.TimeoutSeconds > 0 {
+		params.AITimeoutSeconds = active.TimeoutSeconds
+	} else {
+		params.AITimeoutSeconds = aim.GetAITimeoutSeconds()
+	}
 	params.AIEvologDescribeAfterSplitDefault = aim.GetEvologDescribeAfterSplitDefault()
 	params.AIEvologFileSplitEnabled = aim.GetEvologFileSplitEnabled()
 	params.AIEvologHunkSplitEnabled = aim.GetEvologHunkSplitEnabled()
@@ -336,6 +360,12 @@ func SaveSettingsCmd(params SettingsParams) tea.Cmd {
 		} else {
 			cfg.AITimeoutSeconds = nil
 		}
+		if len(params.AIProfiles) > 0 {
+			cfg.AIProfiles = append([]config.AIProfile(nil), params.AIProfiles...)
+		} else {
+			cfg.AIProfiles = nil
+		}
+		cfg.AIActiveProfile = strings.TrimSpace(params.AIActiveProfile)
 		d := params.AIEvologDescribeAfterSplitDefault
 		cfg.AIEvologDescribeAfterSplitDefault = &d
 		f := params.AIEvologFileSplitEnabled
@@ -397,6 +427,8 @@ func SaveSettingsLocalCmd(params SettingsParams) tea.Cmd {
 			AIProvider:                        strings.TrimSpace(params.AIProvider),
 			AIAPIKey:                          strings.TrimSpace(params.AIAPIKey),
 			AITimeoutSeconds:                  aiTimeoutPtr,
+			AIProfiles:                        append([]config.AIProfile(nil), params.AIProfiles...),
+			AIActiveProfile:                   strings.TrimSpace(params.AIActiveProfile),
 			AIEvologDescribeAfterSplitDefault: &evDesc,
 			AIEvologFileSplitEnabled:          &evFile,
 			AIEvologHunkSplitEnabled:          &evHunk,
