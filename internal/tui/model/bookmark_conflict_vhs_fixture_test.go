@@ -130,7 +130,10 @@ func TestVHSTapeBookmarkConflictFixture_ModalAppears(t *testing.T) {
 		t.Fatalf("expected ViewBookmarkConflict after load, got %v (status=%q)", m.GetViewMode(), m.GetStatusMessage())
 	}
 	view := m.View()
-	if !strings.Contains(view, "Diverged bookmark") {
+	// chromedSlot now puts "Bookmark conflict: <name>" in the chrome tab
+	// instead of the modal body; both substrings still composite into the
+	// final view, just in the titlebar.
+	if !strings.Contains(view, "Bookmark conflict") {
 		t.Fatalf("expected conflict modal in View(); got snippet: %.400q", view)
 	}
 	if !strings.Contains(view, "vhs/conflict-feature") {
@@ -216,7 +219,8 @@ func TestVHSTapeBookmarkConflictFixture_KeySequence_bc(t *testing.T) {
 	if m.GetViewMode() != state.ViewBookmarkConflict {
 		t.Fatalf("expected ViewBookmarkConflict, got %v (status=%q)", m.GetViewMode(), m.GetStatusMessage())
 	}
-	if !strings.Contains(m.View(), "Diverged bookmark") {
+	// Title moved to the chrome tab; see chromedSlot.
+	if !strings.Contains(m.View(), "Bookmark conflict") {
 		t.Fatal("expected modal title in view")
 	}
 }

@@ -162,9 +162,11 @@ func (m Model) View() string {
 	return m.renderForm()
 }
 
-// renderForm builds the Create PR form UI (title, branch info, inputs, buttons)
+// renderForm builds the Create PR form UI (branch info, inputs, buttons).
+// The window title ("Create pull request") lives in the chrome tab — see
+// chromedSlot — so the form no longer carries its own header line. The AI
+// generate chip rides on the branch row, right-aligned.
 func (m Model) renderForm() string {
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#8BE9FD"))
 	subtitleStyle := lipgloss.NewStyle().Foreground(styles.ColorMuted)
 	buttonStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#FFFFFF")).
@@ -184,9 +186,8 @@ func (m Model) renderForm() string {
 		contentW = 60
 	}
 	genChip := mark(mouse.ZonePRGenerate, styles.AIGenerateChip())
-	headerRow := styles.SpreadRow(contentW, titleStyle.Render("Create Pull Request"), genChip)
+	branchLine := styles.SpreadRow(contentW, subtitleStyle.Render(fmt.Sprintf("Branch: %s → %s", m.baseBranch, m.headBranch)), genChip)
 
-	branchLine := subtitleStyle.Render(fmt.Sprintf("Branch: %s → %s", m.baseBranch, m.headBranch))
 	titleInput := mark(mouse.ZonePRTitle, m.titleInput.View())
 	bodyInput := mark(mouse.ZonePRBody, m.bodyInput.View())
 	submitBtn := mark(mouse.ZonePRSubmit, buttonStyle.Render("Create PR (Ctrl+S)"))
@@ -194,7 +195,6 @@ func (m Model) renderForm() string {
 
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
-		headerRow,
 		branchLine,
 		"",
 		"Title:",

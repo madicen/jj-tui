@@ -12,6 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/bubble-color-picker"
+	overlay "github.com/madicen/bubble-overlay"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
@@ -115,6 +116,9 @@ type Model struct {
 	githubLoginModel                githublogintab.Model
 
 	busySpinner spinner.Model
+
+	// chrome routes draggable window chrome for the active modal (see window_chrome.go).
+	chrome overlay.Window
 }
 
 // doPollMsg is a message used to trigger a GitHub token poll.
@@ -1175,6 +1179,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		// Window chrome keyboard nudge (Alt+arrow to move, Alt+Shift+arrow
+		// to resize) is consumed before any modal/tab handling so the
+		// keystroke can never collide with a textinput's own bindings —
+		// HandleChromeKey only matches the alt/alt-shift arrow combos and
+		// returns Consumed=false for everything else.
+		key, content, title, closeCmd := m.chromedSlot()
+		if consumed, cmd := m.chrome.Update(msg, content, title, key, m.width, m.height, closeCmd); consumed {
+			return m, cmd
+		}
 		if m.evologDescribePreviewActive {
 			switch msg.String() {
 			case "y", "Y":
@@ -1265,6 +1278,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKeyMsg(msg)
 
 	case tea.MouseMsg:
+		// Window chrome (title-bar drag, [x] close, edge resize) gets first
+		// look so a drag started on the tab keeps consuming subsequent
+		// motion / release events even if they cross over an underlying
+		// zone. We only swallow the event here when the chrome actually
+		// engaged — otherwise (Consumed=false, Pop=false) we fall through
+		// so the rest of the modal still receives normal clicks. Pop fires
+		// when the user clicked [x]; chromedSlot supplies the modal-specific
+		// Cancel / Dismiss navigation so close-via-tab and close-via-Esc go
+		// through the same teardown path.
+		key, content, title, closeCmd := m.chromedSlot()
+		if consumed, cmd := m.chrome.Update(msg, content, title, key, m.width, m.height, closeCmd); consumed {
+			return m, cmd
+		}
 		// Generate-bearing form modals: forward the raw MouseMsg first so the
 		// long-press AI profile picker can arm/cancel/hover/resolve. The modal
 		// returns a non-nil cmd only when it actually captured the event (the

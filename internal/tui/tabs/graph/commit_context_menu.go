@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/madicen/jj-tui/internal/tui/longpress"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 )
@@ -181,8 +182,13 @@ func (m *GraphModel) handleCommitLongPress(msg tea.MouseMsg) tea.Cmd {
 
 	switch msg.Action {
 	case tea.MouseActionMotion:
+		// Tolerate small drift while the press is armed; the zone match is
+		// authoritative when bubblezone has laid out, slack box is the fallback.
 		if m.commitContextMenu == nil && m.longPressCommitIndex >= 0 {
-			m.longPressCommitIndex = -1
+			origin := mouse.ZoneCommit(m.longPressCommitIndex)
+			if !longpress.StillArmed(m.zoneManager, origin, m.longPressCommitMouseX, m.longPressCommitMouseY, msg) {
+				m.longPressCommitIndex = -1
+			}
 		}
 
 	case tea.MouseActionPress:

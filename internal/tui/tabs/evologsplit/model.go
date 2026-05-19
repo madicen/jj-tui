@@ -1116,12 +1116,14 @@ func renderEvologSuggestSpinnerOverlay(base, spinGlyph string, elapsed time.Dura
 	return overlay.OverlayViewInCenterInMain(base, box)
 }
 
-// View renders the modal.
+// View renders the modal. The window title ("Evolog split") lives in the
+// chrome tab — see chromedSlot — so the modal no longer renders a "Split"
+// header line. The AI generate chip rides on the bookmark/change subtitle
+// row, right-aligned.
 func (m Model) View() string {
 	if !m.shown {
 		return ""
 	}
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#8BE9FD"))
 	muted := lipgloss.NewStyle().Foreground(styles.ColorMuted)
 	modalW := min(m.termW-4, 120)
 	if modalW < 72 {
@@ -1130,19 +1132,13 @@ func (m Model) View() string {
 	innerW := max(48, modalW-6)
 
 	if m.loading {
-		headerRow := styles.SpreadRow(innerW, titleStyle.Render("Split"), "")
 		var lines []string
-		lines = append(lines, headerRow)
-		lines = append(lines, "")
 		lines = append(lines, muted.Render("Loading jj evolog…"))
 		box := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(styles.ColorMuted).Padding(1, 2).Width(modalW)
 		return box.Render(strings.Join(lines, "\n"))
 	}
 	if m.loadErr != "" {
-		headerRow := styles.SpreadRow(innerW, titleStyle.Render("Split"), "")
 		var lines []string
-		lines = append(lines, headerRow)
-		lines = append(lines, "")
 		if strings.TrimSpace(m.bookmarkName) != "" {
 			lines = append(lines, muted.Render(fmt.Sprintf("Bookmark: %s  ·  change: %s", m.bookmarkName, m.tipChangeID)))
 		} else {
@@ -1167,14 +1163,13 @@ func (m Model) View() string {
 	default:
 		genChip = lipgloss.NewStyle().Foreground(styles.ColorMuted).Render(styles.AIGenerateMark)
 	}
-	headerRow := styles.SpreadRow(innerW, titleStyle.Render("Split"), genChip)
-	lines = append(lines, headerRow)
-	lines = append(lines, "")
+	var subtitle string
 	if strings.TrimSpace(m.bookmarkName) != "" {
-		lines = append(lines, muted.Render(fmt.Sprintf("Bookmark: %s  ·  change: %s", m.bookmarkName, m.tipChangeID)))
+		subtitle = muted.Render(fmt.Sprintf("Bookmark: %s  ·  change: %s", m.bookmarkName, m.tipChangeID))
 	} else {
-		lines = append(lines, muted.Render(fmt.Sprintf("Change: %s (no bookmark — only this revision is moved)", m.tipChangeID)))
+		subtitle = muted.Render(fmt.Sprintf("Change: %s (no bookmark — only this revision is moved)", m.tipChangeID))
 	}
+	lines = append(lines, styles.SpreadRow(innerW, subtitle, genChip))
 	lines = append(lines, muted.Render("Pick a parent row; the new commit keeps the tip’s tree."))
 	lines = append(lines, "")
 	leftW := max(38, modalW*42/100)

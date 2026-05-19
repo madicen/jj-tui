@@ -58,7 +58,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, nil
 }
 
-// View renders the Warning modal
+// View renders the Warning modal. The window title (m.title, e.g. "Empty
+// commit description") lives in the chrome tab — see chromedSlot — so the
+// body opens with the message rather than repeating the title.
 func (m Model) View() string {
 	if !m.shown {
 		return ""
@@ -70,7 +72,7 @@ func (m Model) View() string {
 		Padding(1, 2).
 		Width(70)
 
-	content := m.title + "\n\n" + m.message
+	content := m.message
 	if len(m.commits) > 0 {
 		content += "\n\nCommits with issues:\n"
 		for i, c := range m.commits {
@@ -176,6 +178,14 @@ func (m *Model) SetZoneManager(zm *zone.Manager) {
 // IsShown returns whether the modal is displayed
 func (m *Model) IsShown() bool {
 	return m.shown
+}
+
+// GetTitle returns the dynamic title set by Show ("" when not active). Main
+// uses this to drive the chromed window's titlebar so each warning kind
+// (e.g. "Empty commit description") appears in the tab instead of a
+// generic "Warning".
+func (m *Model) GetTitle() string {
+	return m.title
 }
 
 // Show displays the warning modal

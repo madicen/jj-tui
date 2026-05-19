@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/madicen/jj-tui/internal/tui/longpress"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 )
@@ -126,8 +127,13 @@ func (m *GraphModel) handleFileLongPress(msg tea.MouseMsg) tea.Cmd {
 
 	switch msg.Action {
 	case tea.MouseActionMotion:
+		// Tolerate small drift so trackpad jitter / cell-boundary grazes
+		// don't kill the press before the threshold fires. See longpress.
 		if m.contextMenu == nil && m.longPressFileIndex >= 0 {
-			m.longPressFileIndex = -1
+			origin := mouse.ZoneChangedFile(m.longPressFileIndex)
+			if !longpress.StillArmed(m.zoneManager, origin, m.longPressMouseX, m.longPressMouseY, msg) {
+				m.longPressFileIndex = -1
+			}
 		}
 
 	case tea.MouseActionPress:

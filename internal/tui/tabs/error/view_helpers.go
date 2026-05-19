@@ -39,11 +39,6 @@ const fixedChromeLines = 15
 func renderModal(zm *zone.Manager, width, height int, errStr string, copied, hasRetry bool) string {
 	modalWidth := min(max(width-8, 50), 80)
 
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#FF5555")).
-		MarginBottom(1)
-
 	errorStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#FFFFFF")).
 		Width(modalWidth - 4)
@@ -79,9 +74,9 @@ func renderModal(zm *zone.Manager, width, height int, errStr string, copied, has
 	}
 	errBody := strings.Join(bodyLines, "\n")
 
+	// Title intentionally omitted: the chrome tab carries the "Error" label
+	// (see chromedSlot) so duplicating it in the body just wasted a row.
 	var content strings.Builder
-	content.WriteString(titleStyle.Render("⚠ Error"))
-	content.WriteString("\n\n")
 	content.WriteString(errBody)
 	content.WriteString("\n\n")
 	content.WriteString(mutedStyle.Render("─────────────────────────────────────"))

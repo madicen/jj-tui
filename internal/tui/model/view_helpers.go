@@ -44,44 +44,54 @@ func (m *Model) View() string {
 		return "Loading..."
 	}
 
+	// chromedSlot picks one modal for WindowChrome; it's used both to skip
+	// that modal in applyFormModalsOverlay (so it isn't double-painted) and
+	// to feed the final chrome composite at the bottom of this function.
+	key, content, title, _ := m.chromedSlot()
+
 	v := m.renderMainLayoutView()
-	v = m.applyFormModalsOverlay(v)
+	// Form modals (descedit / PR / ticket / bookmark / GitHub login / init)
+	// are painted by applyFormModalsOverlay; it skips the chromed slot so the
+	// chrome.View composite below paints the chromed modal once at the dragged
+	// origin instead of twice (centered then chromed).
+	v = m.applyFormModalsOverlay(v, key)
+
+	// Non-chromed centered overlays: evolog describe preview is a brief
+	// confirm prompt that always sits centered, and the warning / error
+	// modals fall back to centered rendering only when they aren't the
+	// chromed slot (e.g. an error fired while a form modal is the topmost).
+	if m.evologDescribePreviewActive {
+		v = applyBubbleOverlayCentered(v, m.renderEvologDescribePreview(), m.width, m.height)
+	}
+	if key != "warning" {
+		if warningContent := m.warningModal.View(); warningContent != "" {
+			v = applyBubbleOverlayCentered(v, warningContent, m.width, m.height)
+		}
+	}
+	if key != "error" {
+		if errorContent := m.errorModal.View(); errorContent != "" {
+			v = applyBubbleOverlayCentered(v, errorContent, m.width, m.height)
+		}
+	}
+
+	// Composite the chromed modal next: its tab + drag origin sits above the
+	// modal stack below.
+	v = m.chrome.View(v, content, title, key, m.width, m.height)
+
+	// Transient overlays paint AFTER chrome so a dragged window doesn't bury
+	// the user's feedback. The busy spinner (Loading / AI generate) is
+	// centred and must remain visible while a form modal is chromed; the
+	// long-press AI profile popover is anchored to the generate-chip click
+	// point and would be unreachable if hidden under the window. Order
+	// within this group is "spinner first, popover last" so a user holding
+	// the chip while a stale spinner is fading still sees the menu they
+	// just opened.
 	// Busy overlay sits under graph pickers (evolog / divergent / conflict) so keys still target them.
 	// Form modals (PR, ticket, bookmark, init) are under loading so submit/init shows the spinner on top.
 	// AI generate (Ctrl+G / sparkles) uses aiGenOverlayActive so the same spinner shows on the description
 	// editor too; file diff still skips global Loading overlay (see shouldShowLoadingOverlay).
 	v = m.applyLoadingOverlay(v)
-
-	if m.appState.ViewMode == state.ViewEvologSplit {
-		if evologContent := m.evologSplitModal.View(); evologContent != "" {
-			v = applyBubbleOverlayCentered(v, evologContent, m.width, m.height)
-		}
-	}
-	if m.appState.ViewMode == state.ViewFileDiff {
-		if diffContent := m.fileDiffModal.View(); diffContent != "" {
-			v = applyBubbleOverlayCentered(v, diffContent, m.width, m.height)
-		}
-	}
-	if m.appState.ViewMode == state.ViewDivergentCommit {
-		if divergentContent := m.divergentModal.View(); divergentContent != "" {
-			v = applyBubbleOverlayCentered(v, divergentContent, m.width, m.height)
-		}
-	}
-	if m.appState.ViewMode == state.ViewBookmarkConflict {
-		if conflictContent := m.conflictModal.View(); conflictContent != "" {
-			v = applyBubbleOverlayCentered(v, conflictContent, m.width, m.height)
-		}
-	}
-
-	if warningContent := m.warningModal.View(); warningContent != "" {
-		v = applyBubbleOverlayCentered(v, warningContent, m.width, m.height)
-	}
-	if m.evologDescribePreviewActive {
-		v = applyBubbleOverlayCentered(v, m.renderEvologDescribePreview(), m.width, m.height)
-	}
-	if errorContent := m.errorModal.View(); errorContent != "" {
-		v = applyBubbleOverlayCentered(v, errorContent, m.width, m.height)
-	}
+	v = m.applyGenMenuOverlay(v)
 
 	return m.zoneManager.Scan(v)
 }

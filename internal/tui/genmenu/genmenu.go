@@ -18,6 +18,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal/config"
+	"github.com/madicen/jj-tui/internal/tui/longpress"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 )
@@ -27,14 +28,10 @@ import (
 // file context menu's threshold so the gesture feels consistent.
 const LongPressThreshold = 500 * time.Millisecond
 
-// MotionSlack is how many terminal cells the mouse may drift from the press
-// anchor while still keeping the long-press armed (used only when the zone
-// lookup can't confirm in-bounds, e.g. before the zone manager has laid out
-// or when the cursor briefly grazes a cell border). The primary cancel rule
-// is "mouse left the originating zone"; this slack just smooths over a few
-// stray motion events that terminals emit when the user is essentially
-// holding still. Two cells is generous in a TUI without enabling drag.
-const MotionSlack = 2
+// MotionSlack re-exports longpress.MotionSlack so existing genmenu callers
+// (and tests) can refer to the slack tolerance without importing the shared
+// package. The actual policy lives in internal/tui/longpress.
+const MotionSlack = longpress.MotionSlack
 
 // TickMsg fires after LongPressThreshold to open the menu, gated by PressID
 // so a release / new press before the tick fires does not reopen the menu.
@@ -140,11 +137,10 @@ func (s *State) CancelPress() {
 	s.pressOwner = ""
 }
 
-// OnMotion is the motion-event handler during the armed window. It keeps the
-// press armed when the mouse stays over the originating zone, or — as a
-// fallback when the zone manager can't confirm — when the cursor is still
-// within MotionSlack cells of the press anchor. Anything outside both
-// conditions cancels the press so the user can still click-drag other UI.
+// OnMotion is the motion-event handler during the armed window. It keeps
+// the press armed when longpress.StillArmed says we're still within the
+// originating zone or the slack box around the anchor, and cancels
+// otherwise so drags elsewhere in the UI work as before.
 //
 // This is what lets a couple of stray motion events (cell-boundary grazes,
 // trackpad jitter) coexist with a held long-press without forcing the user
@@ -153,20 +149,7 @@ func (s *State) OnMotion(zoneManager *zone.Manager, msg tea.MouseMsg) {
 	if s == nil || s.shown || !s.pressActive {
 		return
 	}
-	if zoneManager != nil && s.pressOwner != "" {
-		if z := zoneManager.Get(s.pressOwner); z != nil && z.InBounds(msg) {
-			return
-		}
-	}
-	dx := msg.X - s.mouseX
-	if dx < 0 {
-		dx = -dx
-	}
-	dy := msg.Y - s.mouseY
-	if dy < 0 {
-		dy = -dy
-	}
-	if dx <= MotionSlack && dy <= MotionSlack {
+	if longpress.StillArmed(zoneManager, s.pressOwner, s.mouseX, s.mouseY, msg) {
 		return
 	}
 	s.pressActive = false

@@ -890,9 +890,12 @@ func TestDescriptionEditingFlow(t *testing.T) {
 
 		view := m.View()
 
-		// Should show editing UI
-		if !containsString(view, "Edit Commit Description") {
-			t.Error("Edit view should show title")
+		// Should show editing UI. The window title ("Edit description") now
+		// lives in the chrome tab — see chromedSlot in modal_layer.go — so
+		// we assert on that label (it still composites into the final view)
+		// rather than the old in-content "Edit Commit Description" header.
+		if !containsString(view, "Edit description") {
+			t.Error("Edit view should show window title")
 		}
 		if !containsString(view, "Ctrl+S") {
 			t.Error("Edit view should show save instructions")
@@ -1578,7 +1581,11 @@ func TestBookmarkConflictOverlayKeepsBranchesUnderlay(t *testing.T) {
 	}
 
 	view := m.View()
-	if !strings.Contains(view, "Diverged bookmark") {
+	// The bookmark name and "Bookmark conflict" prefix now ride in the
+	// chrome tab (chromedSlot returns "Bookmark conflict: <name>") rather
+	// than the modal body. Both substrings still appear in the composite
+	// view, just in the titlebar instead of an in-content header line.
+	if !strings.Contains(view, "Bookmark conflict") {
 		t.Fatalf("expected conflict title in view")
 	}
 	if !strings.Contains(view, "vhs/conflict-feature") {
@@ -1779,7 +1786,8 @@ func TestBookmarkConflictDialogNotHiddenByLoadingOverlay(t *testing.T) {
 	m = newModel.(*Model)
 
 	view := m.View()
-	if !strings.Contains(view, "Diverged bookmark") {
+	// Title moved to the chrome tab; see chromedSlot.
+	if !strings.Contains(view, "Bookmark conflict") {
 		t.Fatalf("conflict dialog should appear above loading state; view snippet: %.200q", view)
 	}
 }

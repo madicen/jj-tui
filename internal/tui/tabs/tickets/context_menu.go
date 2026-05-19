@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/madicen/jj-tui/internal/tui/longpress"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 )
@@ -155,8 +156,15 @@ func (m *Model) handleLongPress(msg tea.MouseMsg) tea.Cmd {
 
 	switch msg.Action {
 	case tea.MouseActionMotion:
+		// Stay armed while the cursor remains over the ticket row or within
+		// the small slack box around the anchor. Doesn't apply once the
+		// context menu or status submenu is already shown — those have
+		// their own hover-tracking branches above.
 		if m.contextMenu == nil && m.statusSubmenu == nil && m.longPressItemIndex >= 0 {
-			m.longPressItemIndex = -1
+			origin := mouse.ZoneJiraTicket(m.longPressItemIndex)
+			if !longpress.StillArmed(m.zoneManager, origin, m.longPressMouseX, m.longPressMouseY, msg) {
+				m.longPressItemIndex = -1
+			}
 		}
 
 	case tea.MouseActionPress:
