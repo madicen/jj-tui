@@ -4,6 +4,7 @@ import (
 	"context"
 
 	zone "github.com/lrstanley/bubblezone"
+	overlay "github.com/madicen/bubble-overlay"
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/integrations/github"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
@@ -72,6 +73,14 @@ func New(ctx context.Context) *Model {
 	m.settingsTabModel.SetZoneManager(zm)
 	m.githubLoginModel.SetZoneManager(zm)
 	m.appState.Config = cfg
+	// ShowMinimizeButton renders a [-]/[+] toggle in the chrome tab so the
+	// user can collapse any chromed modal to its title strip and click on the
+	// underlying tab (graph / PRs / branches / tickets) while the modal stays
+	// open in the background. mouseTransparent() pairs with this by routing
+	// off-modal clicks to the underlay view once LayerState.Minimized flips.
+	m.chrome.Configure = func(c *overlay.OverlayConfig) {
+		c.WindowChrome.ShowMinimizeButton = true
+	}
 	return m
 }
 
