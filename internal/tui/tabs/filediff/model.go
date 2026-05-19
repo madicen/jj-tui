@@ -154,6 +154,11 @@ func (m *Model) Hide() {
 // IsShown reports whether the modal is active.
 func (m *Model) IsShown() bool { return m.shown }
 
+// OverlayTitle returns the title set by the caller (e.g. "Evolog step"),
+// or "" when no custom title was supplied. Main uses this to drive the
+// chromed window's titlebar, falling back to "File diff" when empty.
+func (m *Model) OverlayTitle() string { return m.overlayTitle }
+
 // Update handles load result, keys, mouse, and viewport scroll.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	if !m.shown {
@@ -230,12 +235,6 @@ func (m Model) View() string {
 		maxOuterH = max(10, m.termH-2)
 	}
 
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary)
-	titleText := m.overlayTitle
-	if titleText == "" {
-		titleText = "File diff"
-	}
-	title := titleStyle.Render(titleText)
 	var subLine string
 	if m.overlaySub != "" {
 		subLine = m.overlaySub
@@ -263,7 +262,7 @@ func (m Model) View() string {
 	}
 	footer := lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("Esc · j/k · PgUp/PgDn scroll  ") + closeLabel
 
-	inner := lipgloss.JoinVertical(lipgloss.Left, title, sub, "", body, "", footer)
+	inner := lipgloss.JoinVertical(lipgloss.Left, sub, "", body, "", footer)
 	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(styles.ColorPrimary).

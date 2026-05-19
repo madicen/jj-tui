@@ -111,8 +111,10 @@ func (m *Model) mark(id, content string) string {
 	return content
 }
 
+// renderDivergent draws the divergent-commit picker. The window title
+// ("Divergent commit") lives in the chrome tab — see chromedSlot — so the
+// body opens directly with the action hint.
 func (m *Model) renderDivergent() string {
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#8BE9FD"))
 	muted := lipgloss.NewStyle().Foreground(styles.ColorMuted)
 	cidStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#8BE9FD"))
 	normalBorder := styles.ColorMuted
@@ -120,8 +122,7 @@ func (m *Model) renderDivergent() string {
 	modalW := min(max(48, m.termW-8), 78)
 
 	var lines []string
-	lines = append(lines, titleStyle.Render(styles.DivergentMark+" Pick one revision to keep"))
-	lines = append(lines, muted.Render("Click a row to apply, or move with j/k and press Enter · Esc cancel"))
+	lines = append(lines, muted.Render("Pick one revision to keep · click a row to apply, or j/k + Enter · Esc cancel"))
 	lines = append(lines, "")
 
 	vr := m.listViewportRows

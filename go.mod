@@ -9,7 +9,7 @@ require (
 	github.com/google/go-github/v66 v66.0.0
 	github.com/lrstanley/bubblezone v1.0.0
 	github.com/madicen/bubble-color-picker v0.1.0
-	github.com/madicen/bubble-overlay v0.0.0-20260519001827-7ce294ec0d5e
+	github.com/madicen/bubble-overlay v0.0.0-20260519011042-3a30996730cf
 	github.com/shurcooL/githubv4 v0.0.0-20240727222349-48295856cce7
 	golang.org/x/mod v0.21.0
 	golang.org/x/oauth2 v0.34.0
@@ -43,3 +43,5 @@ require (
 	golang.org/x/sys v0.43.0 // indirect
 	golang.org/x/text v0.24.0 // indirect
 )
+
+replace github.com/madicen/bubble-overlay => ../bubble-overlay

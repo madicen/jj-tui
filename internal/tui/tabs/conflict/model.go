@@ -108,12 +108,12 @@ func (m *Model) layoutCols() (sideBySide bool, colW int) {
 	return sideBySide, colW
 }
 
+// renderConflict draws the side-by-side keep-local / match-origin choice.
+// The window title ("Bookmark conflict: <name>") lives in the chrome tab —
+// see chromedSlot — so the body no longer prints its own header line.
 func (m *Model) renderConflict() string {
 	sideBySide, colW := m.layoutCols()
 	sumMax := max(colW-4, 18)
-
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF5555"))
-	title := titleStyle.Render("⚠ Diverged bookmark: " + m.bookmarkName)
 
 	muted := lipgloss.NewStyle().Foreground(styles.ColorMuted)
 	hint := muted.Render("Enter applies highlighted side · click a side to apply · Esc cancel · h / ← / l / →")
@@ -209,8 +209,6 @@ func (m *Model) renderConflict() string {
 	cancel := m.mark(mouse.ZoneConflictCancel, muted.Render("Cancel"))
 	frame := lipgloss.JoinVertical(
 		lipgloss.Left,
-		title,
-		"",
 		hint,
 		"",
 		choiceRow,

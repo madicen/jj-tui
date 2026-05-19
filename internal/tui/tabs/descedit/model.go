@@ -202,12 +202,14 @@ func (m Model) clearDescription() (Model, tea.Cmd) {
 	return m, nil
 }
 
-// View renders the edit-description dialog
+// View renders the edit-description dialog. The window title ("Edit
+// description") lives in the chrome tab — see chromedSlot — so this view
+// no longer carries its own header line. The AI generate chip rides on
+// the commit-info row, right-aligned, so it stays a single click target.
 func (m Model) View() string {
 	if !m.shown {
 		return ""
 	}
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#8BE9FD"))
 	subtitleStyle := lipgloss.NewStyle().Foreground(styles.ColorMuted)
 
 	commitInfo := m.editingCommitID
@@ -230,8 +232,7 @@ func (m Model) View() string {
 		return m.zoneManager.Mark(id, s)
 	}
 	genChip := mark(mouse.ZoneDescGenerate, styles.AIGenerateChip())
-	headerRow := styles.SpreadRow(contentW, titleStyle.Render("Edit Commit Description"), genChip)
-	commitLine := subtitleStyle.Render(fmt.Sprintf("Commit: %s", commitInfo))
+	commitLine := styles.SpreadRow(contentW, subtitleStyle.Render(fmt.Sprintf("Commit: %s", commitInfo)), genChip)
 	actionButtons := lipgloss.JoinHorizontal(
 		lipgloss.Left,
 		mark(mouse.ZoneDescSave, styles.ButtonStyle.Render("Save (Ctrl+S)")),
@@ -240,7 +241,6 @@ func (m Model) View() string {
 	)
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
-		headerRow,
 		commitLine,
 		"",
 		m.descriptionInput.View(),

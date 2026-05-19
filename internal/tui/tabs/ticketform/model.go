@@ -155,8 +155,11 @@ func (m Model) View() string {
 	return m.renderForm()
 }
 
+// renderForm builds the Create Ticket form UI. The window title ("Create
+// ticket") lives in the chrome tab — see chromedSlot — so the form no
+// longer carries its own header line. The AI generate chip rides on the
+// diff-hint row, right-aligned.
 func (m Model) renderForm() string {
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#8BE9FD"))
 	subtitleStyle := lipgloss.NewStyle().Foreground(styles.ColorMuted)
 	buttonStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#FFFFFF")).
@@ -180,8 +183,7 @@ func (m Model) renderForm() string {
 		contentW = 60
 	}
 	genChip := mark(mouse.ZoneTicketFormGenerate, styles.AIGenerateChip())
-	headerRow := styles.SpreadRow(contentW, titleStyle.Render("Create Ticket"), genChip)
-	diffHint := subtitleStyle.Render("Uses diff for the selected graph revision, or @ if none selected")
+	diffHint := styles.SpreadRow(contentW, subtitleStyle.Render("Uses diff for the selected graph revision, or @ if none selected"), genChip)
 
 	titleInput := mark(mouse.ZoneTicketFormTitle, m.titleInput.View())
 	bodyInput := mark(mouse.ZoneTicketFormBody, m.bodyInput.View())
@@ -189,7 +191,6 @@ func (m Model) renderForm() string {
 	cancelBtn := mark(mouse.ZoneTicketFormCancel, buttonStyle.Render("Cancel (Esc)"))
 
 	blocks := []string{
-		headerRow,
 		diffHint,
 		providerLine,
 		"",

@@ -20,6 +20,12 @@ const (
 	LoginModeGhCLI
 )
 
+// Mode returns the current login mode. Main uses this to pick a
+// mode-specific chrome title ("GitHub login" vs "GitHub CLI login").
+func (m *Model) Mode() LoginMode {
+	return m.loginMode
+}
+
 // Model represents the GitHub login screen (device flow or `gh auth login`).
 type Model struct {
 	loginMode       LoginMode
@@ -74,16 +80,14 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, nil
 }
 
-// View renders the GitHub login screen (device flow or GitHub CLI).
+// View renders the GitHub login screen (device flow or GitHub CLI). The
+// window title ("GitHub login" / "GitHub CLI login") lives in the chrome
+// tab — see chromedSlot — so the body no longer carries its own header.
 func (m Model) View() string {
 	if m.loginMode == LoginModeGhCLI {
 		return m.viewGhCLI()
 	}
 	var lines []string
-
-	lines = append(lines, styles.TitleStyle.Render("GitHub Login"))
-	lines = append(lines, "")
-	lines = append(lines, "")
 
 	if m.userCode != "" {
 		lines = append(lines, lipgloss.NewStyle().Bold(true).Render("1. Visit this URL in your browser:"))
@@ -128,8 +132,6 @@ func (m Model) View() string {
 
 func (m Model) viewGhCLI() string {
 	var lines []string
-	lines = append(lines, styles.TitleStyle.Render("GitHub CLI login"))
-	lines = append(lines, "")
 	lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#8B949E")).Render("This will temporarily suspend jj-tui and run:"))
 	lines = append(lines, "")
 	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("   gh auth login"))
