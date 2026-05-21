@@ -1291,6 +1291,23 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if consumed, cmd := m.chrome.Update(msg, content, title, key, m.width, m.height, closeCmd); consumed {
 			return m, cmd
 		}
+		// Minimized-chrome pass-through: chromed modal is collapsed to its
+		// tab strip and the user clicked outside that strip — they're asking
+		// to interact with the underlying view, not the dormant modal. Send
+		// the raw MouseMsg to the underlay tab so wheel scrolls and hover
+		// updates land, then on release also fan out to bubblezone so
+		// underlay zones (commits / PR rows / etc) fire. The form-modal /
+		// genmenu interceptions below are skipped because the modal body
+		// isn't painted right now — its zones would either be stale or
+		// missing from the latest Scan.
+		if m.mouseTransparent(msg.X, msg.Y) {
+			cmd, _ := m.routeMouseToUnderlay(msg)
+			if msg.Action == tea.MouseActionRelease {
+				_, zoneCmd := m.zoneManager.AnyInBoundsAndUpdate(m, msg)
+				return m, tea.Batch(cmd, zoneCmd)
+			}
+			return m, cmd
+		}
 		// Generate-bearing form modals: forward the raw MouseMsg first so the
 		// long-press AI profile picker can arm/cancel/hover/resolve. The modal
 		// returns a non-nil cmd only when it actually captured the event (the
@@ -1434,6 +1451,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case zone.MsgZoneInBounds:
+		// Minimized-chrome pass-through: route the zone directly to the
+		// underlay tab so commits / PR rows / branches / tickets clicks
+		// reach the view the user can actually see behind the collapsed
+		// modal. Without this branch the existing routing keys off
+		// m.appState.ViewMode and forwards every zone to the dormant form
+		// modal, which silently drops it.
+		if m.mouseTransparent(msg.Event.X, msg.Event.Y) {
+			if cmd, handled := m.routeMouseToUnderlay(msg); handled {
+				return m, cmd
+			}
+			return m, nil
+		}
 		// Blocking overlays (init, error, warning) get zone clicks first so tabs don't consume them
 		if m.initRepoModel.Path() != "" || m.errorModal.GetError() != nil || m.warningModal.IsShown() {
 			return m.handleZoneClick(msg)

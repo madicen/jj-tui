@@ -9,6 +9,64 @@ import (
 	"github.com/madicen/jj-tui/internal/tui/util"
 )
 
+// mouseTransparent reports whether mouse coords land outside the chromed
+// modal's painted rect while the chrome is currently minimized. When true
+// the modal is collapsed to its tab strip and the user is signalling they
+// want to interact with the underlying view — wheel scrolls, commit / PR /
+// branch / ticket clicks should reach the underlay instead of being
+// swallowed by the dormant form modal.
+//
+// Always false when no chrome is up or the chrome is expanded; in those
+// cases the existing focus-trap routing is unchanged. Hits on the chrome
+// itself (tab drag area, [-] / [+] toggle, [x]) also return false so the
+// chrome's own mouse handling keeps running.
+func (m *Model) mouseTransparent(x, y int) bool {
+	if !m.chrome.State.Minimized {
+		return false
+	}
+	layout, ok := m.chrome.LastChromeLayout()
+	if !ok {
+		return false
+	}
+	return !layout.CellInModal(x, y)
+}
+
+// routeMouseToUnderlay forwards a mouse event to the underlay tab's
+// UpdateWithApp when the chromed modal is minimized. layoutContentMode()
+// already encodes "what tab is painted under the form modal", so reusing
+// it keeps the pass-through routing in lockstep with what the user sees
+// behind the collapsed window.
+//
+// Returns (cmd, true) when an underlay tab handled the event, otherwise
+// (nil, false) so the caller can fall back to default handling.
+func (m *Model) routeMouseToUnderlay(msg tea.Msg) (tea.Cmd, bool) {
+	switch m.layoutContentMode() {
+	case state.ViewCommitGraph:
+		updated, cmd := m.graphTabModel.UpdateWithApp(msg, &m.appState)
+		m.graphTabModel = updated
+		if cmd != nil {
+			return m.wrapGraphTabCmd(cmd), true
+		}
+		return nil, true
+	case state.ViewPullRequests:
+		updated, cmd := m.prsTabModel.UpdateWithApp(msg, &m.appState)
+		m.prsTabModel = updated
+		return cmd, true
+	case state.ViewBranches:
+		updated, cmd := m.branchesTabModel.UpdateWithApp(msg, &m.appState)
+		m.branchesTabModel = updated
+		if cmd != nil {
+			return m.wrapBranchFetchCmd(cmd), true
+		}
+		return nil, true
+	case state.ViewTickets:
+		updated, cmd := m.ticketsTabModel.UpdateWithApp(msg, &m.appState)
+		m.ticketsTabModel = updated
+		return cmd, true
+	}
+	return nil, false
+}
+
 // handleZoneClick handles clicks detected by bubblezone. Main forwards zone events to submodels or handles global zones.
 func (m *Model) handleZoneClick(msg zone.MsgZoneInBounds) (tea.Model, tea.Cmd) {
 	if msg.Zone == nil {
