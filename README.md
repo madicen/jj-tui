@@ -532,12 +532,12 @@ Configure from **Settings → AI** (recommended) or JSON below. Diffs are includ
 
 ### Graph view revset
 
-The commit graph shows commits selected by a **jj revset**. By default (empty `graph_revset`) jj-tui uses a built-in revset (see below) that: limits **mutable** rows to the **working copy’s ancestry or descendants**; shows **bookmarks** and **main@origin**; adds **`parents(bookmarks() & mutable())`** so sibling **mutable** bookmark branches meet at a real parent (not **`~`**) without pulling the parent of **immutable** tips such as **`main`**; adds **`::(bookmarks() & mutable()) & mutable()`** so mutable ancestors of bookmark tips are not missing when `@` is below the bookmark, and adds **`heads(::(bookmarks() & mutable()) & immutable()) | heads(::(@) & immutable())`** for each line’s **closest immutable**, plus **`heads(...)::(bookmarks() & mutable())`** and **`heads(...)::@`** so every commit **between** that immutable and the tips is included (jj `x::y` = descendants of `x` ∩ ancestors of `y`), fixing **`~`** gaps on merge-heavy paths where **`::(tip) & mutable()`** still missed rows. **`mutable()` alone** (without that intersection) selects **every** mutable revision in the repository—including unrelated colocated history—and is a bad default for large team repos.
+The commit graph shows commits selected by a **jj revset**. By default (empty `graph_revset`) jj-tui uses a built-in revset (see below) that limits **mutable** rows to the **working copy's DAG neighborhood** — `ancestors(@)`, `descendants(@)`, and the **sibling subtree** `(parents(@)+)::` (children of `@`'s parents, then their descendants) so split-off branches stay visible — and unions in **`bookmarks()`** and **`main@origin`** so named tips (including the immutable trunk anchor) are always shown. **`mutable()` alone** (without that intersection) selects **every** mutable revision in the repository — including unrelated colocated history — and is a bad default for large team repos.
 
 Built-in default (same as `jj.DefaultGraphRevset` in code):
 
 ```text
-(mutable() & (ancestors(@) | descendants(@))) | (bookmarks() & mutable()) | parents(bookmarks() & mutable()) | bookmarks() | main@origin | (::(bookmarks() & mutable()) & mutable()) | heads(::(bookmarks() & mutable()) & immutable()) | heads(::(@) & immutable()) | (heads(::(bookmarks() & mutable()) & immutable())::(bookmarks() & mutable())) | (heads(::(@) & immutable())::@)
+(mutable() & (ancestors(@) | descendants(@) | (parents(@)+)::)) | bookmarks() | main@origin
 ```
 
 Graph load still uses capped per-commit probes and parallel bookmark fetch so a deep `ancestors(@)` is less punishing than before.
@@ -552,11 +552,13 @@ To use a custom revset, set `graph_revset` in your config. Examples:
   `"graph_revset": "trunk() | (ancestors(@) - ancestors(trunk()))"`
 - **Only your commits** (author = you):  
   `"graph_revset": "mine() | trunk()"`
-- **Ancestors of @ only** (may hide split children):  
+- **Ancestors of @ only** (may hide split children and sibling branches):  
   `"graph_revset": "(mutable() & ancestors(@)) | bookmarks() | main@origin"`
-- **Older default** (no bookmark-parent or immutable-base helpers; more `~` in the graph):  
+- **Without sibling subtree** (drop `(parents(@)+)::` if split-off branches feel noisy):  
   `"graph_revset": "(mutable() & (ancestors(@) | descendants(@))) | bookmarks() | main@origin"`
-- **Also show parents of immutable bookmark tips** (e.g. parent of `main` when the bookmark sits on an immutable commit): append `| parents(bookmarks())` to the built-in default in Settings / JSON (after copying the full default from the code block above).
+- **Verbose bookmark-aware default** (seeds mutable bookmark tips, their mutable ancestors, and per-anchor immutable bases so merge-heavy lines don't elide rows with `~`):  
+  `"graph_revset": "(mutable() & (ancestors(@) | descendants(@))) | (bookmarks() & mutable()) | parents(bookmarks() & mutable()) | bookmarks() | main@origin | (::(bookmarks() & mutable()) & mutable()) | heads(::(bookmarks() & mutable()) & immutable()) | heads(::(@) & immutable()) | (heads(::(bookmarks() & mutable()) & immutable())::(bookmarks() & mutable())) | (heads(::(@) & immutable())::@)"`
+- **Also show parents of immutable bookmark tips** (e.g. parent of `main` when the bookmark sits on an immutable commit): append `| parents(bookmarks())` to the built-in default in Settings / JSON.
 
 Leave `graph_revset` empty to use the built-in default. See [jj revset docs](https://jj-vcs.github.io/jj/latest/revsets) for more.
 

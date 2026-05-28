@@ -119,6 +119,23 @@ type Model struct {
 
 	// chrome routes draggable window chrome for the active modal (see window_chrome.go).
 	chrome overlay.Window
+	// chromeConsumedPress is set when window chrome consumed a mouse press (e.g. the
+	// [x] close button, the title-bar drag handle, or a resize edge). The MouseMsg
+	// handler uses it to swallow the matching release when chrome doesn't claim it
+	// itself — without this, a [x] click closes the modal on press, then the release
+	// leaks through to the underlay zones (e.g. the graph tab's "split" button) and
+	// fires whatever happens to sit beneath the close button. Drag/resize releases
+	// stay handled by chrome.Update, so the flag only kicks in when chrome's release
+	// path didn't engage (i.e. the press triggered a Pop/close).
+	chromeConsumedPress bool
+	// lastFileDiffDimsSeq snapshots filediff.Model.DimensionsSeq() from the last
+	// frame. The file diff modal auto-sizes to its current patch, but bubble-
+	// overlay's chrome locks ContentWidth/ContentHeight after the first frame
+	// (see InitLayerContentSize). Comparing the sequence per frame lets View()
+	// nudge the chrome to re-seed only when our natural size actually changed
+	// (load complete, terminal resize), so user drag/resize/minimize state on
+	// quiet frames isn't clobbered by an unconditional reset.
+	lastFileDiffDimsSeq int
 }
 
 // doPollMsg is a message used to trigger a GitHub token poll.
@@ -1289,7 +1306,24 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// through the same teardown path.
 		key, content, title, closeCmd := m.chromedSlot()
 		if consumed, cmd := m.chrome.Update(msg, content, title, key, m.width, m.height, closeCmd); consumed {
+			// Track press/release pairing so a [x] close (which only consumes the
+			// press) doesn't leak its release into underlay zones — see the
+			// chromeConsumedPress field comment.
+			switch msg.Action {
+			case tea.MouseActionPress:
+				m.chromeConsumedPress = true
+			case tea.MouseActionRelease:
+				m.chromeConsumedPress = false
+			}
 			return m, cmd
+		}
+		// Chrome did NOT consume this event. If it's the release half of a click
+		// whose press chrome already claimed (typically the [x] close button),
+		// drop it here so bubblezone doesn't dispatch it to whatever underlay
+		// zone (e.g. the graph "split" button) happens to sit beneath the modal.
+		if msg.Action == tea.MouseActionRelease && m.chromeConsumedPress {
+			m.chromeConsumedPress = false
+			return m, nil
 		}
 		// Minimized-chrome pass-through: chromed modal is collapsed to its
 		// tab strip and the user clicked outside that strip — they're asking

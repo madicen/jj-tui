@@ -39,8 +39,8 @@ github.com/lucasb-eyer/go-colorful v1.4.0 h1:UtrWVfLdarDgc44HcS7pYloGHJUjHV/4FwW
 github.com/lucasb-eyer/go-colorful v1.4.0/go.mod h1:R4dSotOR9KMtayYi1e77YzuveK+i7ruzyGqttikkLy0=
 github.com/madicen/bubble-color-picker v0.1.0 h1:7s7FPeLxFxfPmrAnAAhLsqw36oHyCARX7gB7npyyT90=
 github.com/madicen/bubble-color-picker v0.1.0/go.mod h1:FYuObZ/Qmkoxe7Fbj63KQR76gKBgc0kBfkdqp8+S6gs=
-github.com/madicen/bubble-overlay v0.0.0-20260519210602-a1ea65bfa4f7 h1:hR9WMKEx9bdKd199dggELY0w3BqQNYmwIgev0kIH1mM=
-github.com/madicen/bubble-overlay v0.0.0-20260519210602-a1ea65bfa4f7/go.mod h1:ORdxBpICBUVKcWInZJbjk3ITTemh2rK3DYSDHykkp10=
+github.com/madicen/bubble-overlay v0.0.0-20260528215458-97d5221a8fee h1:HqAtffiPMA/2cGEZQ31JIybgPuNRw3C6wDVfbM/6B4c=
+github.com/madicen/bubble-overlay v0.0.0-20260528215458-97d5221a8fee/go.mod h1:ORdxBpICBUVKcWInZJbjk3ITTemh2rK3DYSDHykkp10=
 github.com/mattn/go-isatty v0.0.20 h1:xfD0iDuEKnDkl03q4limB+vH+GxLEtL/jb4xVJSWWEY=
 github.com/mattn/go-isatty v0.0.20/go.mod h1:W+V8PltTTMOvKvAeJH7IuucS94S2C6jfK/D7dTCTo3Y=
 github.com/mattn/go-localereader v0.0.1 h1:ygSAOl7ZXTx4RdPYinUpg6W99U8jWvWi9Ye2JC/oIi4=
