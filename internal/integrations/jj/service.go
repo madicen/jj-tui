@@ -1826,27 +1826,19 @@ func (s *Service) cleanupAfterFetch(ctx context.Context) error {
 
 // DefaultGraphRevset is used when config graph_revset is empty.
 //
-// We intersect mutable() with (ancestors(@) | descendants(@)) so the graph is tied to the
-// working copy's DAG neighborhood. Bare mutable() | bookmarks() | main@origin matches every
-// mutable revision repo-wide (including unrelated merged branches, stale divergent pairs, and
-// teammates' old lines), which is overwhelming in large colocated repos like access.
-// descendants(@) keeps move-to-parent / move-to-child splits visible.
+// We intersect mutable() with (ancestors(@) | descendants(@) | (parents(@)+)::) so the graph
+// is tied to the working copy's DAG neighborhood. Bare mutable() | bookmarks() | main@origin
+// matches every mutable revision repo-wide (including unrelated merged branches, stale
+// divergent pairs, and teammates' old lines), which is overwhelming in large colocated repos.
 //
-// (bookmarks() & mutable()) and parents(bookmarks() & mutable()) seed mutable tips (including
-// sibling branches) without pulling parents of immutable bookmark tips such as main.
+//   - ancestors(@) and descendants(@) give the working copy's own line plus any splits.
+//   - (parents(@)+):: adds sibling branches: parents(@)+ is the children of @'s parents
+//     (i.e. @ and its siblings), and `::` then includes their full descendant subtree so
+//     split-off branches stay visible.
 //
-// ::(bookmarks() & mutable()) & mutable() includes every mutable ancestor of mutable bookmark
-// tips (e.g. @ below the bookmark when the bookmark stayed on the parent), so the graph is not
-// missing intermediate mutables on that line.
-//
-// Closest immutable bases are added separately per anchor so heads() over unrelated lines does
-// not drop a bookmark stack's base when it is an ancestor of @'s closer immutable:
-//   heads(::(bookmarks() & mutable()) & immutable()) and heads(::(@) & immutable()).
-//
-// heads(...)::(bookmarks() & mutable()) and heads(...)::@ add every commit on the DAG between
-// that immutable and the tip (jj x::y = descendants(x) & ancestors(y)), so the graph does not
-// elide commits on merge-heavy lines where ::(tip) & mutable() alone still left gaps above ~.
-const DefaultGraphRevset = `(mutable() & (ancestors(@) | descendants(@))) | (bookmarks() & mutable()) | parents(bookmarks() & mutable()) | bookmarks() | main@origin | (::(bookmarks() & mutable()) & mutable()) | heads(::(bookmarks() & mutable()) & immutable()) | heads(::(@) & immutable()) | (heads(::(bookmarks() & mutable()) & immutable())::(bookmarks() & mutable())) | (heads(::(@) & immutable())::@)`
+// bookmarks() | main@origin keep named tips visible (including the immutable trunk anchor)
+// even when they fall outside the @ neighborhood above.
+const DefaultGraphRevset = `(mutable() & (ancestors(@) | descendants(@) | (parents(@)+)::)) | bookmarks() | main@origin`
 
 // Caps for per-commit jj subprocess work during getCommitGraph. After the main jj log, we run
 // enrichCommitsDeltaVsOrigin and enrichCommitsEvologSplitViable; each mutable commit with a feature

@@ -74,6 +74,32 @@ func (m *Model) View() string {
 		}
 	}
 
+	// The file diff modal sizes itself to its current patch (width = longest
+	// diff line + gutter; height = actual line count). bubble-overlay's chrome
+	// caches ContentWidth/ContentHeight on the first frame via
+	// InitLayerContentSize and never re-seeds — so without a nudge the chrome
+	// locks to the loading-state placeholder (~80 cols, full-height padded
+	// viewport) and afterwards truncates the wider real diff and keeps the
+	// box tall even when content shrinks. We can't reset unconditionally on
+	// every frame though, because the chrome's own drag/resize/minimize
+	// handlers write into State.OriginTop/Left and State.ContentWidth/Height
+	// — clobbering them every frame breaks user-initiated drag, resize, and
+	// (visually) minimize. DimensionsSeq() on filediff.Model ticks only when
+	// the natural outer size actually changes (load complete, terminal
+	// resize), so we re-seed exactly on those transitions and otherwise
+	// leave the chrome's State alone.
+	if key == "filediff" {
+		if seq := m.fileDiffModal.DimensionsSeq(); seq != m.lastFileDiffDimsSeq {
+			m.chrome.State.ContentSizeInitialized = false
+			m.chrome.State.OriginInitialized = false
+			m.lastFileDiffDimsSeq = seq
+		}
+	} else if m.lastFileDiffDimsSeq != 0 {
+		// Modal is closed (key != "filediff"): forget the prior seq so the
+		// next time it opens we re-seed on the first frame instead of
+		// inheriting a stale comparison against the previous session.
+		m.lastFileDiffDimsSeq = 0
+	}
 	// Composite the chromed modal next: its tab + drag origin sits above the
 	// modal stack below.
 	v = m.chrome.View(v, content, title, key, m.width, m.height)
