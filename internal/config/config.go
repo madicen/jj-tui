@@ -126,9 +126,22 @@ type Config struct {
 	BranchStatsLimit      *int  `json:"branch_limit,omitempty"`            // nil = 50 (default limit for branch stats calculation)
 	SanitizeBookmarkNames *bool `json:"sanitize_bookmark_names,omitempty"` // nil = true (auto-fix invalid bookmark names)
 
-	// Graph view: jj revset for which commits to show. Empty = jj.DefaultGraphRevset (see DefaultGraphRevset in jj package: mutable rows in @'s ancestors/descendants plus the (parents(@)+):: sibling subtree, unioned with bookmarks() and main@origin).
+	// Branches tab filter: when nil/false (default), the branches tab hides untracked
+	// origin/* bookmarks whose tip you did not author. Set to true to restore the legacy
+	// behavior of listing every entry from `jj bookmark list --all-remotes` (can be 1000+
+	// rows on shared repos with many open PR branches). The graph load uses the same flag
+	// to decide whether to use `bookmark list --tracked` (cheap) or `--all-remotes` (full).
+	BranchesShowAllRemotes *bool `json:"branches_show_all_remotes,omitempty"`
+
+	// Graph view: jj revset for which commits to show. Empty = jj.DefaultGraphRevset (see DefaultGraphRevset in jj package: mutable rows in @'s ancestors/descendants plus the (parents(@)+):: sibling subtree, unioned with (bookmarks() & mine()) and trunk()).
 	// Example: "trunk() | (ancestors(@) - ancestors(trunk()))" for main + your branch only.
 	GraphRevset string `json:"graph_revset,omitempty"`
+
+	// Graph tab filter: when nil/false (default), the graph revset is intersected with a
+	// "mine-or-neighborhood" filter so other contributors' branch tips don't clutter the
+	// view. Set true to disable the intersection and show every row the configured revset
+	// (or DefaultGraphRevset) matches.
+	GraphShowEveryonesCommits *bool `json:"graph_show_everyones_commits,omitempty"`
 
 	// ExternalFileEditor opens the selected changed file from the graph (files pane, key O).
 	// Values: none, cursor, vscode, zed, neovim, emacs, sublime, idea, custom (case-insensitive; see NormalizeExternalFileEditor).
@@ -305,8 +318,14 @@ func mergeConfig(dest, source *Config) {
 	if source.SanitizeBookmarkNames != nil {
 		dest.SanitizeBookmarkNames = source.SanitizeBookmarkNames
 	}
+	if source.BranchesShowAllRemotes != nil {
+		dest.BranchesShowAllRemotes = source.BranchesShowAllRemotes
+	}
 	if source.GraphRevset != "" {
 		dest.GraphRevset = source.GraphRevset
+	}
+	if source.GraphShowEveryonesCommits != nil {
+		dest.GraphShowEveryonesCommits = source.GraphShowEveryonesCommits
 	}
 	if source.ThemePrimary != "" {
 		dest.ThemePrimary = source.ThemePrimary
@@ -771,6 +790,25 @@ func (c *Config) ShouldSanitizeBookmarkNames() bool {
 		return true // Default: enabled
 	}
 	return *c.SanitizeBookmarkNames
+}
+
+// BranchesFilterToTrackedAndMine returns true when the branches tab should hide
+// untracked origin/* bookmarks whose tip you did not author. Nil-safe (defaults
+// to true so shared repos with many open PR branches don't drown the list).
+func (c *Config) BranchesFilterToTrackedAndMine() bool {
+	if c == nil || c.BranchesShowAllRemotes == nil {
+		return true
+	}
+	return !*c.BranchesShowAllRemotes
+}
+
+// GraphFilterToMine returns true when the graph revset should be intersected
+// with a "mine-or-@-neighborhood" filter. Nil-safe; defaults to true.
+func (c *Config) GraphFilterToMine() bool {
+	if c == nil || c.GraphShowEveryonesCommits == nil {
+		return true
+	}
+	return !*c.GraphShowEveryonesCommits
 }
 
 // HasJira returns true if Jira is fully configured

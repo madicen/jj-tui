@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/config"
+	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tui/data"
 	"github.com/madicen/jj-tui/internal/tui/state"
 	graphtab "github.com/madicen/jj-tui/internal/tui/tabs/graph"
@@ -268,6 +269,14 @@ func (m *Model) handleTickMsg() (tea.Model, tea.Cmd) {
 		revset := ""
 		if m.appState.Config != nil {
 			revset = m.appState.Config.GraphRevset
+			// Mirror LoadRepository's mine() intersection so the silent background
+			// refresh produces the same graph as the foreground load. Without this,
+			// the periodic tick would silently widen the revset and reintroduce
+			// other contributors' commits between user-initiated reloads.
+			if m.appState.Config.GraphFilterToMine() {
+				revset = jj.ApplyMineFilterToRevset(revset)
+			}
+			m.appState.JJService.BookmarkListPreferTracked = m.appState.Config.BranchesFilterToTrackedAndMine()
 		}
 		m.silentReloadInFlight = true
 		cmds = append(cmds, data.LoadRepositorySilent(m.appState.JJService, revset))

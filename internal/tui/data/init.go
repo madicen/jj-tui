@@ -44,6 +44,14 @@ func InitializeServices(demoMode bool) tea.Cmd {
 		revset := ""
 		if cfg != nil {
 			revset = cfg.GraphRevset
+			// Wire the config-driven bookmark list scope onto the long-lived Service
+			// so subsequent ListBranches / getCommitGraph calls use --tracked when the
+			// user (or the new default) opts into the noise-free view. Also apply the
+			// "only my commits" intersection to the configured (or default) revset.
+			jjSvc.BookmarkListPreferTracked = cfg.BranchesFilterToTrackedAndMine()
+			if cfg.GraphFilterToMine() {
+				revset = jj.ApplyMineFilterToRevset(revset)
+			}
 		}
 
 		// Run the two slow jj operations in parallel so we can show the UI as soon as both complete.

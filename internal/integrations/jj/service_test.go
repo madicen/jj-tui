@@ -106,10 +106,47 @@ func TestDefaultGraphRevset(t *testing.T) {
 	if !strings.Contains(rs, "(parents(@)+)::") {
 		t.Errorf("DefaultGraphRevset should include sibling subtree (parents(@)+):: for split branches; got %q", rs)
 	}
-	if !strings.Contains(rs, "bookmarks()") {
-		t.Errorf("DefaultGraphRevset should include bookmarks(); got %q", rs)
+	if !strings.Contains(rs, "bookmarks() & mine()") {
+		t.Errorf("DefaultGraphRevset should pin (bookmarks() & mine()) so other contributors' branch tips don't clutter the view; got %q", rs)
 	}
-	if !strings.Contains(rs, "main@origin") {
-		t.Errorf("DefaultGraphRevset should include main@origin; got %q", rs)
+	if !strings.Contains(rs, "trunk()") {
+		t.Errorf("DefaultGraphRevset should anchor on trunk(); got %q", rs)
+	}
+}
+
+func TestApplyMineFilterToRevsetEmpty(t *testing.T) {
+	out := ApplyMineFilterToRevset("")
+	if !strings.Contains(out, DefaultGraphRevset) {
+		t.Errorf("ApplyMineFilterToRevset(\"\") should fall back to DefaultGraphRevset; got %q", out)
+	}
+	if !strings.Contains(out, "ancestors(mine() | trunk() | @, 2)") {
+		t.Errorf("expected mine|trunk|@ ancestor pin in output; got %q", out)
+	}
+	// Pin terms after the intersection guarantee @ and trunk() are always visible
+	// even if the base revset is narrow and excludes them.
+	if !strings.HasSuffix(out, "| trunk() | @") {
+		t.Errorf("expected output to end with `| trunk() | @` pins; got %q", out)
+	}
+}
+
+func TestApplyMineFilterToRevsetCustomBase(t *testing.T) {
+	base := "all()"
+	out := ApplyMineFilterToRevset(base)
+	if !strings.Contains(out, "(all())") {
+		t.Errorf("custom base should be wrapped in parens to preserve precedence; got %q", out)
+	}
+	if strings.Contains(out, DefaultGraphRevset) {
+		t.Errorf("custom base should not pull in DefaultGraphRevset; got %q", out)
+	}
+}
+
+func TestServiceBookmarkListRemoteFlag(t *testing.T) {
+	s := &Service{}
+	if got := s.BookmarkListRemoteFlag(); got != "--all-remotes" {
+		t.Errorf("zero-value Service should default to --all-remotes (legacy); got %q", got)
+	}
+	s.BookmarkListPreferTracked = true
+	if got := s.BookmarkListRemoteFlag(); got != "--tracked" {
+		t.Errorf("BookmarkListPreferTracked=true should yield --tracked; got %q", got)
 	}
 }
