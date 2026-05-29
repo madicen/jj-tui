@@ -34,6 +34,28 @@ type Service struct {
 	commandHistory []CommandHistoryEntry
 	historyMu      sync.RWMutex
 	maxHistory     int // Maximum number of commands to keep
+
+	// BookmarkListPreferTracked, when true, makes helpers that need a bookmark
+	// listing call `jj bookmark list --tracked` instead of `--all-remotes`. The
+	// `--tracked` form is significantly cheaper on colocated repos with hundreds
+	// of stale origin/* PR branches; it's sufficient for the graph load's origin
+	// divergence enrichment (which only inspects local→@origin pairs) and the
+	// branches tab pairs it with a second `remote_bookmarks() & mine()` query so
+	// you still see your own untracked branches.
+	//
+	// Production callers should set this from config.BranchesFilterToTrackedAndMine
+	// (see data.InitializeServices). The zero value is false to preserve legacy
+	// behavior for tests / direct NewService callers.
+	BookmarkListPreferTracked bool
+}
+
+// BookmarkListRemoteFlag returns the flag to pass to `jj bookmark list`
+// (`--tracked` or `--all-remotes`) based on BookmarkListPreferTracked.
+func (s *Service) BookmarkListRemoteFlag() string {
+	if s.BookmarkListPreferTracked {
+		return "--tracked"
+	}
+	return "--all-remotes"
 }
 
 // SanitizeBookmarkName converts a string into a valid bookmark name: Unicode letters
@@ -1836,9 +1858,37 @@ func (s *Service) cleanupAfterFetch(ctx context.Context) error {
 //     (i.e. @ and its siblings), and `::` then includes their full descendant subtree so
 //     split-off branches stay visible.
 //
-// bookmarks() | main@origin keep named tips visible (including the immutable trunk anchor)
-// even when they fall outside the @ neighborhood above.
-const DefaultGraphRevset = `(mutable() & (ancestors(@) | descendants(@) | (parents(@)+)::)) | bookmarks() | main@origin`
+// (bookmarks() & mine()) | trunk() keeps your named tips and the immutable trunk anchor
+// visible even when they fall outside the @ neighborhood above. We deliberately do NOT
+// union plain bookmarks() here: in colocated repos `jj git import` materializes a local
+// bookmark for every origin/* PR branch and would balloon the graph to 1000+ rows.
+const DefaultGraphRevset = `(mutable() & (ancestors(@) | descendants(@) | (parents(@)+)::)) | (bookmarks() & mine()) | trunk()`
+
+// graphMineFilterAncestors is the ancestor depth used when intersecting the configured
+// graph revset with the "mine() | trunk() | @" pin set (see ApplyMineFilterToRevset).
+// 2 matches the upstream jj `revsets.log` default (`ancestors(immutable_heads().., 2)`)
+// so rows authored by others still get up to 2 generations of parent context.
+const graphMineFilterAncestors = 2
+
+// ApplyMineFilterToRevset wraps an arbitrary graph revset with a "mine-or-context" filter:
+//
+//	(<base>) & ancestors(mine() | trunk() | @, 2) | trunk() | @
+//
+// The intersection drops rows authored by other contributors, while the trailing pins
+// guarantee the working copy and trunk tip stay visible even if the user's authored
+// commits don't intersect the base revset (e.g. fresh clone, no local work yet).
+// Callers that want the legacy "show everyone" behavior should skip this wrapper —
+// see config.GraphFilterToMine().
+func ApplyMineFilterToRevset(base string) string {
+	base = strings.TrimSpace(base)
+	if base == "" {
+		base = DefaultGraphRevset
+	}
+	return fmt.Sprintf(
+		"((%s) & ancestors(mine() | trunk() | @, %d)) | trunk() | @",
+		base, graphMineFilterAncestors,
+	)
+}
 
 // Caps for per-commit jj subprocess work during getCommitGraph. After the main jj log, we run
 // enrichCommitsDeltaVsOrigin and enrichCommitsEvologSplitViable; each mutable commit with a feature
@@ -1881,13 +1931,16 @@ func (s *Service) getCommitGraph(ctx context.Context, revset string, recordGraph
 	)`
 
 	// Run bookmark list concurrently with log; enrichment needs it later and it does not depend on log output.
+	// Uses --tracked when BookmarkListPreferTracked is set: divergence enrichment only inspects
+	// local→@origin pairs (see bookmarkListParseOriginDivergence), so untracked origin/* entries
+	// add no signal and cost ~1.3k extra rows to parse on big colocated repos.
 	var bmOut string
 	var bmErr error
 	var bmWG sync.WaitGroup
 	bmWG.Add(1)
 	go func() {
 		defer bmWG.Done()
-		bmOut, bmErr = s.runJJOutputNoHistory(ctx, "bookmark", "list", "--all-remotes")
+		bmOut, bmErr = s.runJJOutputNoHistory(ctx, "bookmark", "list", s.BookmarkListRemoteFlag())
 	}()
 
 	// Run WITH the graph to get ASCII art (no --reversed, keep natural newest-first order)
@@ -2514,11 +2567,70 @@ func (s *Service) runJJOutput(ctx context.Context, args ...string) (string, erro
 	return stdout.String(), nil
 }
 
-// ListBranches returns all local and remote branches
-// statsLimit controls how many branches get ahead/behind stats calculated (0 = all)
+// listMineUntrackedRemoteBookmarks returns one Branch per (remote_bookmark, remote)
+// pair where the tip change was authored by the current user. Used by ListBranches
+// in BookmarkListPreferTracked mode to backfill PR branches you opened but haven't
+// tracked locally — `jj bookmark list --tracked` omits those, but you almost
+// certainly want them visible in the branches tab.
+//
+// Implementation: one `jj log -r 'remote_bookmarks() & mine()'` call with a template
+// that emits "name|remote|change_id_short|commit_id_short" per remote_bookmark
+// attached to each row. We can't use the bookmark list parser here because it
+// doesn't accept revsets; the log template path is both faster (one query, no parse
+// of 1000+ unrelated rows) and richer (we get the change/commit ids inline).
+func (s *Service) listMineUntrackedRemoteBookmarks(ctx context.Context) ([]internal.Branch, error) {
+	const fieldSep = "\x1f" // unit separator
+	const rowSep = "\x1e"   // record separator
+	template := `remote_bookmarks.map(|b| ` +
+		`b.name() ++ "` + fieldSep + `" ++ ` +
+		`b.remote() ++ "` + fieldSep + `" ++ ` +
+		`self.change_id().short(8) ++ "` + fieldSep + `" ++ ` +
+		`self.commit_id().short(8) ++ "` + rowSep + `"` +
+		`).join("")`
+	out, err := s.runJJOutputNoHistory(ctx, "log",
+		"-r", "remote_bookmarks() & mine()",
+		"--no-graph",
+		"-T", template,
+	)
+	if err != nil {
+		return nil, err
+	}
+	var branches []internal.Branch
+	for _, row := range strings.Split(out, rowSep) {
+		row = strings.TrimSpace(row)
+		if row == "" {
+			continue
+		}
+		parts := strings.Split(row, fieldSep)
+		if len(parts) < 4 {
+			continue
+		}
+		remote := strings.TrimSpace(parts[1])
+		if remote == "" || remote == "git" {
+			continue
+		}
+		branches = append(branches, internal.Branch{
+			Name:      strings.TrimSpace(parts[0]),
+			Remote:    remote,
+			CommitID:  strings.TrimSpace(parts[2]),
+			ShortID:   strings.TrimSpace(parts[3]),
+			IsTracked: false,
+			IsLocal:   false,
+		})
+	}
+	return branches, nil
+}
+
+// ListBranches returns all local and remote branches.
+//
+// statsLimit controls how many branches get ahead/behind stats calculated (0 = all).
+//
+// When BookmarkListPreferTracked is set the listing uses `jj bookmark list --tracked`
+// (cheap; ~tens of rows even on 1000-branch repos) and then augments the result with
+// any remote bookmarks whose tip you authored (via a separate `remote_bookmarks() & mine()`
+// jj log query) so you don't lose visibility of your own un-tracked PR branches.
 func (s *Service) ListBranches(ctx context.Context, statsLimit int) ([]internal.Branch, error) {
-	// Get all bookmarks including remote ones
-	out, err := s.runJJOutput(ctx, "bookmark", "list", "--all-remotes")
+	out, err := s.runJJOutput(ctx, "bookmark", "list", s.BookmarkListRemoteFlag())
 	if err != nil {
 		return nil, fmt.Errorf("failed to list bookmarks: %w", err)
 	}
@@ -2629,6 +2741,29 @@ func (s *Service) ListBranches(ctx context.Context, statsLimit int) ([]internal.
 					IsTracked:    true, // Always tracked if shown as indented @remote: line
 					IsLocal:      false,
 				})
+			}
+		}
+	}
+
+	// When BookmarkListPreferTracked is on, the listing above used `--tracked` and
+	// therefore omitted every untracked origin/* bookmark — including PR branches
+	// you authored but haven't tracked. Backfill those with one extra jj log so the
+	// branches tab still surfaces your own work. The dedup set keys off (name, remote)
+	// so we never double-add a branch that is also a tracked counterpart of a local.
+	if s.BookmarkListPreferTracked {
+		mineBranches, mineErr := s.listMineUntrackedRemoteBookmarks(ctx)
+		if mineErr == nil && len(mineBranches) > 0 {
+			seen := make(map[string]bool, len(branches))
+			for _, b := range branches {
+				if !b.IsLocal {
+					seen[b.Name+"@"+b.Remote] = true
+				}
+			}
+			for _, b := range mineBranches {
+				if seen[b.Name+"@"+b.Remote] {
+					continue
+				}
+				branches = append(branches, b)
 			}
 		}
 	}
