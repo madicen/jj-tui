@@ -145,12 +145,32 @@ func updateModelWithCmd(m *tui.Model, msg tea.Msg) *tui.Model {
 
 // runPendingCmds runs Update with the given msg, then repeatedly runs any returned Cmd
 // and Updates with its result, up to maxRounds times. Use for multi-step flows (e.g. Save Local).
+// A returned tea.BatchMsg (from tea.Batch, e.g. when an action also starts the busy spinner)
+// is expanded: its child cmds are queued and drained like the real bubbletea runtime would.
 func runPendingCmds(m *tui.Model, msg tea.Msg, maxRounds int) *tui.Model {
 	newModel, cmd := m.Update(msg)
 	m = newModel.(*tui.Model)
-	for i := 0; i < maxRounds && cmd != nil; i++ {
-		newModel, cmd = m.Update(cmd())
+	var queue []tea.Cmd
+	if cmd != nil {
+		queue = append(queue, cmd)
+	}
+	for i := 0; i < maxRounds && len(queue) > 0; i++ {
+		next := queue[0]
+		queue = queue[1:]
+		out := next()
+		if batch, ok := out.(tea.BatchMsg); ok {
+			for _, c := range batch {
+				if c != nil {
+					queue = append(queue, c)
+				}
+			}
+			continue
+		}
+		newModel, cmd = m.Update(out)
 		m = newModel.(*tui.Model)
+		if cmd != nil {
+			queue = append(queue, cmd)
+		}
 	}
 	return m
 }

@@ -718,8 +718,10 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.appState.Loading = true
-			// Single cmd (no tea.Batch): integration tests and simple Cmd chains drain one message per step.
-			return m, cmd
+			// Batch the spinner tick so the busy overlay animates while jj creates the bookmark
+			// and the repo reloads (cleared by applyRepositoryLoaded). Test harnesses that drain
+			// cmds one message per step must expand the resulting tea.BatchMsg.
+			return m, tea.Batch(cmd, m.startBusySpinnerCmd())
 		}
 		return m, nil
 	case state.NavigateSubmitPR:
@@ -946,16 +948,18 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 
 func (m *Model) handleUndo() (tea.Model, tea.Cmd) {
 	if m.appState.JJService != nil {
+		m.appState.Loading = true
 		m.appState.StatusMessage = "Undoing..."
-		return m, graphtab.UndoCmd(m.appState.JJService)
+		return m, tea.Batch(graphtab.UndoCmd(m.appState.JJService), m.startBusySpinnerCmd())
 	}
 	return m, nil
 }
 
 func (m *Model) handleRedo() (tea.Model, tea.Cmd) {
 	if m.appState.JJService != nil && m.redoOperationID != "" {
+		m.appState.Loading = true
 		m.appState.StatusMessage = "Redoing..."
-		return m, graphtab.RedoCmd(m.appState.JJService, m.redoOperationID)
+		return m, tea.Batch(graphtab.RedoCmd(m.appState.JJService, m.redoOperationID), m.startBusySpinnerCmd())
 	}
 	return m, nil
 }
@@ -2358,8 +2362,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.clearAIGenOverlay()
 		m.desceditModal.Hide()
 		m.clearModalUnderlay()
-		m.appState.Loading = false
-		return m, cmd
+		// Keep Loading true through the LoadRepository reload returned above so the busy
+		// overlay stays up (now over the graph) until applyRepositoryLoaded renders the
+		// updated description. Re-batch a spinner tick in case clearAIGenOverlay stopped it.
+		return m, tea.Batch(cmd, m.startBusySpinnerCmd())
 	case descedittab.DescriptionLoadedMsg:
 		if m.appState.ViewMode != state.ViewEditDescription || m.desceditModal.GetEditingCommitID() != msg.CommitID {
 			return m, nil
@@ -2420,6 +2426,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case graphtab.UndoCompletedMsg:
 		cmd, errInfo := graphtab.HandleUndoCompletedMsg(msg, &m.appState)
 		if errInfo != nil {
+			m.appState.Loading = false
 			m.errorModal.SetError(errInfo.Err, false, "")
 			return m, nil
 		}

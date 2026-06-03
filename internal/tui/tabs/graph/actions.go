@@ -50,11 +50,11 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 	}
 	if r.Checkout {
 		cmd, status := executeCheckout(ctx)
-		return Result{Cmd: cmd, Status: status}
+		return Result{Cmd: cmd, Status: status, SuccessStatus: "Editing working copy…", Loading: true}
 	}
 	if r.Squash {
 		cmd, status := executeSquash(ctx)
-		return Result{Cmd: cmd, Status: status}
+		return Result{Cmd: cmd, Status: status, SuccessStatus: "Squashing…", Loading: true}
 	}
 	if r.Abandon {
 		if ctx.IsSelectedCommitValid() {
@@ -64,7 +64,7 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 			}
 		}
 		cmd, status := executeAbandon(ctx)
-		return Result{Cmd: cmd, Status: status}
+		return Result{Cmd: cmd, Status: status, SuccessStatus: "Abandoning commit…", Loading: true}
 	}
 	if r.PerformRebase {
 		cmd, status := executePerformRebase(r.RebaseDestIndex, ctx)
@@ -75,9 +75,9 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 			r.RebaseDestIndex >= 0 && r.RebaseDestIndex < len(ctx.Repository.Graph.Commits) {
 			src := ctx.Repository.Graph.Commits[ctx.RebaseSourceCommit]
 			dst := ctx.Repository.Graph.Commits[r.RebaseDestIndex]
-			return Result{Cmd: cmd, SuccessStatus: fmt.Sprintf("Rebasing %s onto %s...", src.ShortID, dst.ShortID), PerformRebase: true}
+			return Result{Cmd: cmd, SuccessStatus: fmt.Sprintf("Rebasing %s onto %s...", src.ShortID, dst.ShortID), PerformRebase: true, Loading: true}
 		}
-		return Result{Cmd: cmd, PerformRebase: true}
+		return Result{Cmd: cmd, PerformRebase: true, Loading: true}
 	}
 	if r.DragRebase {
 		if ctx.JJService == nil {
@@ -100,7 +100,7 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 	}
 	if r.DeleteBookmark {
 		cmd, status := executeDeleteBookmark(ctx)
-		return Result{Cmd: cmd, Status: status}
+		return Result{Cmd: cmd, Status: status, SuccessStatus: "Deleting bookmark…", Loading: true}
 	}
 	if r.MoveFileUp {
 		cmd, status := executeMoveFileUp(ctx)
@@ -214,7 +214,7 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 			commit := ctx.Repository.Graph.Commits[ctx.SelectedCommit]
 			status = fmt.Sprintf("Creating new commit from %s...", commit.ShortID)
 		}
-		return Result{Cmd: cmd, NewCommitStatus: status}
+		return Result{Cmd: cmd, NewCommitStatus: status, Loading: true}
 	}
 	if r.ResolveDivergent != nil {
 		if !ctx.IsSelectedCommitValid() {
