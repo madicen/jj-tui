@@ -1597,11 +1597,12 @@ func TestBookmarkConflictOverlayKeepsBranchesUnderlay(t *testing.T) {
 	}
 }
 
-// Regression: centered busy overlay used to paint after the bookmark-conflict dialog, hiding it while
-// keystrokes still went to the modal (demo looked like instant resolve with no popup).
-func TestShouldShowLoadingOverlaySkipsDescriptionAndFileDiff(t *testing.T) {
-	if shouldShowLoadingOverlay(state.ViewEditDescription, "Saving description…") {
-		t.Fatal("expected no centered overlay while editing description")
+// The busy overlay should stay visible while a description save is in flight (and through the
+// follow-up repository reload) so slow describes show feedback. Full-screen file diff still draws
+// above the overlay so it stays skipped.
+func TestShouldShowLoadingOverlaySkipsFileDiff(t *testing.T) {
+	if !shouldShowLoadingOverlay(state.ViewEditDescription, "Saving description…") {
+		t.Fatal("expected centered overlay while saving description")
 	}
 	if shouldShowLoadingOverlay(state.ViewFileDiff, "Pushing main…") {
 		t.Fatal("expected no centered overlay while file diff modal is open")
@@ -1612,7 +1613,7 @@ func TestShouldShowLoadingOverlaySkipsDescriptionAndFileDiff(t *testing.T) {
 }
 
 // AI generation uses aiGenOverlayActive so the centered spinner shows on the description modal even
-// when global Loading is false (saving description still uses Loading without centered overlay).
+// when global Loading is false (saving description sets Loading, which now also shows the overlay).
 func TestAIGenOverlayShowsOnDescriptionEditor(t *testing.T) {
 	m := newTestModel()
 	defer m.Close()

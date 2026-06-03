@@ -42,10 +42,6 @@ func shouldShowLoadingOverlay(viewMode state.ViewMode, msg string) bool {
 	if viewMode == state.ViewBookmarkConflict || viewMode == state.ViewDivergentCommit {
 		return false
 	}
-	// Description editor: keep the textarea usable; show progress in the status bar only.
-	if viewMode == state.ViewEditDescription {
-		return false
-	}
 	// Full-screen file diff draws above this overlay anyway; skipping avoids a misleading box if
 	// StatusMessage was overwritten while another operation left Loading true.
 	if viewMode == state.ViewFileDiff {
