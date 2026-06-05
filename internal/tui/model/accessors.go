@@ -69,6 +69,11 @@ func (m *Model) GetRebaseSourceCommit() int {
 	return m.graphTabModel.GetRebaseSourceCommit()
 }
 
+// GetMergeTargetCommit returns the graph tab's merge target commit index.
+func (m *Model) GetMergeTargetCommit() int {
+	return m.graphTabModel.GetMergeTargetCommit()
+}
+
 // GetChangedFiles returns the graph tab's changed files list.
 func (m *Model) GetChangedFiles() []jj.ChangedFile {
 	return m.graphTabModel.GetChangedFiles()

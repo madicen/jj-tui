@@ -124,6 +124,10 @@ type Request struct {
 	DragRebase     bool
 	DragRebaseFrom int
 	DragRebaseTo   int
+	// StartMergeMode begins selecting a source commit/bookmark to merge into the selected commit (e.g. merge main into current bookmark).
+	StartMergeMode   bool
+	PerformMerge     bool
+	MergeSourceIndex int
 	ResolveDivergent     *string
 	CreateBookmark       bool
 	DeleteBookmark       bool
@@ -155,6 +159,7 @@ const (
 	FollowUpResolveDivergent
 	FollowUpStartEditDescription
 	FollowUpStartRebaseMode
+	FollowUpStartMergeMode
 	FollowUpCreateBookmark
 	FollowUpCreatePR
 	FollowUpUpdatePR
@@ -179,6 +184,7 @@ type Result struct {
 	WarningMessage  string
 	WarningCommits  []internal.Commit
 	PerformRebase   bool
+	PerformMerge    bool
 	// Loading: when true with Cmd, main shows the busy overlay until the command completes (e.g. file move/revert).
 	Loading bool
 	// BookmarkConflictName is the local bookmark name when FollowUp is FollowUpResolveBookmarkConflict.
@@ -198,4 +204,9 @@ func FocusMessage(graphFocused bool) string {
 // RebaseModeStartMessage returns the status message when entering rebase mode.
 func RebaseModeStartMessage(shortID string) string {
 	return fmt.Sprintf("Select destination for rebasing %s (Esc to cancel)", shortID)
+}
+
+// MergeModeStartMessage returns the status message when entering merge mode.
+func MergeModeStartMessage(shortID string) string {
+	return fmt.Sprintf("Select source to merge into %s (Esc to cancel)", shortID)
 }

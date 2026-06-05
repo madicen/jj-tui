@@ -18,6 +18,18 @@ var (
 				Foreground(lipgloss.Color("#FFAA00")).
 				Bold(true)
 
+	// Special styles for merge mode
+	MergeTargetStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color("#55AA55")).
+				Foreground(lipgloss.Color("#FFFFFF")).
+				Bold(true)
+	MergeSourceStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color("#5555AA")).
+				Foreground(lipgloss.Color("#FFFFFF"))
+	MergeHeaderStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#FFAA00")).
+				Bold(true)
+
 	CommitStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#F8F8F2"))
 

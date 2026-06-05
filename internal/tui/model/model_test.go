@@ -1103,6 +1103,104 @@ func TestRebaseModeFlow(t *testing.T) {
 	})
 }
 
+// TestMergeModeFlow verifies the merge-from mode workflow
+func TestMergeModeFlow(t *testing.T) {
+	t.Run("pressing M enters merge mode", func(t *testing.T) {
+		m := newTestModel()
+		defer m.Close()
+
+		m.appState.JJService = &jj.Service{RepoPath: "/test/repo"}
+
+		m.graphTabModel.SelectCommit(0)
+		m.appState.Repository.Graph.Commits[0].Immutable = false
+
+		// Press 'M' - graph returns StartMergeMode request; main runs it and enters merge mode
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'M'}}
+		newModel, cmd := m.Update(msg)
+		m = newModel.(*Model)
+		if cmd != nil {
+			var v tea.Model
+			v, _ = m.Update(cmd())
+			m = v.(*Model)
+		}
+
+		if !m.graphTabModel.IsInMergeMode() {
+			t.Error("Expected to enter merge source selection mode")
+		}
+		if m.graphTabModel.GetMergeTargetCommit() != 0 {
+			t.Errorf("Expected merge target to be 0, got %d", m.graphTabModel.GetMergeTargetCommit())
+		}
+	})
+
+	t.Run("merge mode shows special UI", func(t *testing.T) {
+		m := newTestModel()
+		defer m.Close()
+
+		m.graphTabModel.SelectCommit(0)
+		m.appState.Repository.Graph.Commits[0].Immutable = false
+		m.graphTabModel.StartMergeMode(0)
+
+		view := m.View()
+
+		if !containsString(view, "MERGE MODE") {
+			t.Error("Expected 'MERGE MODE' header in merge mode")
+		}
+		if !containsString(view, "Select source") {
+			t.Error("Expected 'Select source' instruction in merge mode")
+		}
+	})
+
+	t.Run("esc cancels merge mode", func(t *testing.T) {
+		m := newTestModel()
+		defer m.Close()
+
+		m.graphTabModel.SelectCommit(0)
+		m.graphTabModel.StartMergeMode(0)
+
+		// Press Esc to cancel
+		msg := tea.KeyMsg{Type: tea.KeyEsc}
+		newModel, _ := m.Update(msg)
+		m = newModel.(*Model)
+
+		if m.graphTabModel.IsInMergeMode() {
+			t.Error("Expected to exit merge mode on Esc")
+		}
+		if m.graphTabModel.GetMergeTargetCommit() != -1 {
+			t.Error("Expected merge target to be reset on cancel")
+		}
+	})
+
+	t.Run("cannot merge into immutable commit", func(t *testing.T) {
+		m := newTestModel()
+		defer m.Close()
+
+		m.appState.JJService = &jj.Service{RepoPath: "/test/repo"}
+		m.graphTabModel.SelectCommit(0)
+		m.appState.Repository.Graph.Commits[0].Immutable = true
+
+		// Press 'M' - graph returns Request; run it then run returned effect cmd so status is applied
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'M'}}
+		newModel, cmd := m.Update(msg)
+		m = newModel.(*Model)
+		if cmd != nil {
+			var v tea.Model
+			v, cmd = m.Update(cmd())
+			m = v.(*Model)
+			if cmd != nil {
+				v, _ = m.Update(cmd())
+				m = v.(*Model)
+			}
+		}
+
+		if m.graphTabModel.IsInMergeMode() {
+			t.Error("Should not enter merge mode for immutable target commit")
+		}
+		if !containsString(m.appState.StatusMessage, "immutable") {
+			t.Errorf("Expected immutable warning in status message, got: %q", m.appState.StatusMessage)
+		}
+	})
+}
+
 // TestMouseScrollingOnViews tests that mouse scrolling works correctly on different views
 func TestMouseScrollingOnViews(t *testing.T) {
 	// Helper to create test model with many PRs for scrolling

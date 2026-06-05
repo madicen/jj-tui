@@ -39,7 +39,7 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 		commit := ctx.Repository.Graph.Commits[idx]
 		return Result{FollowUp: FollowUpLoadChangedFiles, ChangeID: commit.ChangeID, CommitIndex: idx}
 	}
-	if ctx.JJService == nil && !r.StartEditDescription && !r.StartRebaseMode && r.ResolveDivergent == nil && !r.DragRebase {
+	if ctx.JJService == nil && !r.StartEditDescription && !r.StartRebaseMode && !r.StartMergeMode && r.ResolveDivergent == nil && !r.DragRebase {
 		if r.Checkout {
 			return Result{Status: "Cannot edit: not in a jj repository"}
 		}
@@ -97,6 +97,19 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 			return Result{Cmd: cmd, SuccessStatus: fmt.Sprintf("Rebasing %s onto %s...", src.ShortID, dst.ShortID), PerformRebase: true, Loading: true}
 		}
 		return Result{Cmd: cmd, PerformRebase: true, Loading: true}
+	}
+	if r.PerformMerge {
+		cmd, status := executePerformMerge(r.MergeSourceIndex, ctx)
+		if status != "" {
+			return Result{Status: status}
+		}
+		if cmd != nil && ctx.MergeTargetCommit >= 0 && ctx.MergeTargetCommit < len(ctx.Repository.Graph.Commits) &&
+			r.MergeSourceIndex >= 0 && r.MergeSourceIndex < len(ctx.Repository.Graph.Commits) {
+			target := ctx.Repository.Graph.Commits[ctx.MergeTargetCommit]
+			src := ctx.Repository.Graph.Commits[r.MergeSourceIndex]
+			return Result{Cmd: cmd, SuccessStatus: fmt.Sprintf("Merging %s into %s...", src.ShortID, target.ShortID), PerformMerge: true, Loading: true}
+		}
+		return Result{Cmd: cmd, PerformMerge: true, Loading: true}
 	}
 	if r.DeleteBookmark {
 		cmd, status := executeDeleteBookmark(ctx)
@@ -246,6 +259,16 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 		}
 		return Result{FollowUp: FollowUpStartRebaseMode}
 	}
+	if r.StartMergeMode {
+		if !ctx.IsSelectedCommitValid() {
+			return Result{}
+		}
+		commit := ctx.Repository.Graph.Commits[ctx.SelectedCommit]
+		if commit.Immutable {
+			return Result{Status: "Cannot merge: target commit is immutable"}
+		}
+		return Result{FollowUp: FollowUpStartMergeMode}
+	}
 	if r.CreateBookmark {
 		if !ctx.IsSelectedCommitValid() || ctx.JJService == nil {
 			return Result{}
@@ -358,6 +381,26 @@ func executePerformRebase(destIndex int, ctx *RequestContext) (tea.Cmd, string) 
 	sourceCommit := ctx.Repository.Graph.Commits[ctx.RebaseSourceCommit]
 	destCommit := ctx.Repository.Graph.Commits[destIndex]
 	return Rebase(ctx.JJService, sourceCommit.ChangeID, destCommit.ChangeID), ""
+}
+
+func executePerformMerge(sourceIndex int, ctx *RequestContext) (tea.Cmd, string) {
+	if ctx.Repository == nil || ctx.MergeTargetCommit < 0 ||
+		ctx.MergeTargetCommit >= len(ctx.Repository.Graph.Commits) ||
+		sourceIndex < 0 || sourceIndex >= len(ctx.Repository.Graph.Commits) {
+		return nil, ""
+	}
+	if ctx.JJService == nil {
+		return nil, "Cannot merge: not in a jj repository"
+	}
+	if ctx.MergeTargetCommit == sourceIndex {
+		return nil, "Cannot merge a commit into itself"
+	}
+	targetCommit := ctx.Repository.Graph.Commits[ctx.MergeTargetCommit]
+	sourceCommit := ctx.Repository.Graph.Commits[sourceIndex]
+	if targetCommit.Immutable {
+		return nil, "Cannot merge: target commit is immutable"
+	}
+	return Merge(ctx.JJService, targetCommit.ChangeID, sourceCommit.ChangeID), ""
 }
 
 func executeDragRebase(fromIndex, toIndex int, ctx *RequestContext) (tea.Cmd, string) {
@@ -566,6 +609,12 @@ func ApplyResult(res Result, graphModel *GraphModel, ctx *RequestContext, app *s
 			app.StatusMessage = RebaseModeStartMessage(ctx.Repository.Graph.Commits[ctx.SelectedCommit].ShortID)
 		}
 		return nil
+	case FollowUpStartMergeMode:
+		if ctx != nil && ctx.Repository != nil && ctx.SelectedCommit >= 0 && ctx.SelectedCommit < len(ctx.Repository.Graph.Commits) {
+			graphModel.StartMergeMode(ctx.SelectedCommit)
+			app.StatusMessage = MergeModeStartMessage(ctx.Repository.Graph.Commits[ctx.SelectedCommit].ShortID)
+		}
+		return nil
 	case FollowUpCreateBookmark:
 		return state.NavigateTarget{Kind: state.NavigateCreateBookmark}.Cmd()
 	case FollowUpShowEmptyDescWarning:
@@ -616,6 +665,9 @@ func ApplyResult(res Result, graphModel *GraphModel, ctx *RequestContext, app *s
 	if res.Cmd != nil {
 		if res.PerformRebase {
 			graphModel.CancelRebaseMode()
+		}
+		if res.PerformMerge {
+			graphModel.CancelMergeMode()
 		}
 		if res.NewCommitStatus != "" {
 			app.StatusMessage = res.NewCommitStatus
@@ -709,6 +761,20 @@ func Rebase(svc *jj.Service, sourceChangeID, destChangeID string) tea.Cmd {
 	return func() tea.Msg {
 		if err := svc.RebaseCommit(context.Background(), sourceChangeID, destChangeID); err != nil {
 			return util.ErrorMsg{Err: fmt.Errorf("failed to rebase: %w", err)}
+		}
+		repo, err := svc.GetRepository(context.Background(), "")
+		if err != nil {
+			return util.ErrorMsg{Err: err}
+		}
+		return RepositoryLoadedMsg{Repository: repo}
+	}
+}
+
+// Merge creates a merge commit whose parents are the target and source commits (jj new <target> <source>).
+func Merge(svc *jj.Service, targetChangeID, sourceChangeID string) tea.Cmd {
+	return func() tea.Msg {
+		if err := svc.MergeCommit(context.Background(), targetChangeID, sourceChangeID); err != nil {
+			return util.ErrorMsg{Err: fmt.Errorf("failed to merge: %w", err)}
 		}
 		repo, err := svc.GetRepository(context.Background(), "")
 		if err != nil {

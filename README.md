@@ -49,6 +49,7 @@ When a bookmark was pushed and then amended or moved locally, **jj** may show th
 - **File diff overlay**: **`o`** (files pane) opens a full **jj** diff for the selected path in a scrollable modal
 - **External editor**: **`O`** (files pane) opens the selected file in Cursor, VS Code, Zed, Neovim (`nvr`), etc.—configured under **Settings → Advanced** (editor presets and custom command)
 - **Rebase**: **`r`** enters destination-pick mode, or **drag** a commit row onto another (mouse) for the same `jj rebase -s … -d …` flow
+- **Merge from**: **`M`** enters source-pick mode; select a bookmark/commit to merge into the selected commit (e.g. merge `main` into your current bookmark) via `jj new <target> <source>`
 - **Keyboard & mouse**: Zone-based clicks across tabs, settings, PRs, tickets, and branch lists
 - **GitHub**: Create/update PRs, device-flow login, PR list with CI and review hints
 - **Tickets**: Jira, Codecks, or GitHub Issues—provider choice in Settings; create a bookmark from a ticket on your current commit; status transitions where supported
@@ -205,6 +206,7 @@ The graph view has two panes: the commit graph (left) and changed files (right).
 - `s`: Squash into parent (hidden when the parent would be immutable)
 - `r`: Rebase mode—pick destination with `Enter`/`e`, or **Esc** to cancel
 - **Mouse**: Press on a commit row, drag, release on another commit to rebase (same as `r` + pick destination); **Esc** cancels an in-progress drag
+- `M` (shift+m): Merge-from mode—the selected commit is the target; pick a source commit/bookmark to merge in with `Enter`/`e` or click (creates a merge commit via `jj new <target> <source>`); **Esc** to cancel
 - `a`: Abandon commit
 - `m`: Create or move bookmark
 - `x`: Delete bookmark

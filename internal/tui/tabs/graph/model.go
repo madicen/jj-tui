@@ -44,6 +44,9 @@ type GraphModel struct {
 	selectionMode      SelectionMode
 	rebaseSourceCommit int // Index of commit being rebased
 
+	// Merge mode state: index of the commit being merged into (the destination/target).
+	mergeTargetCommit int
+
 	// Click-drag rebase: press on commit row, release on another (not used with keyboard rebase mode).
 	rebasePressAnchor   int // commit index at mouse-down (-1 = none); does not affect styling until drag starts
 	rebaseDragSource    int // set when pointer leaves press row (motion) so simple clicks do not look like rebase
@@ -75,6 +78,7 @@ type SelectionMode int
 const (
 	SelectionNormal            SelectionMode = iota // Normal selection
 	SelectionRebaseDestination                      // Selecting destination for rebase
+	SelectionMergeSource                            // Selecting source to merge into the target commit
 )
 
 // ChangedFile represents a file changed in a commit
@@ -92,6 +96,8 @@ type GraphData struct {
 	SelectedCommit     int
 	InRebaseMode       bool            // True when selecting rebase destination
 	RebaseSourceCommit int             // Index of commit being rebased
+	InMergeMode        bool            // True when selecting source to merge into the target
+	MergeTargetCommit  int             // Index of commit being merged into
 	OpenPRBranches     map[string]bool // Map of branch names that have open PRs
 	CommitPRBranch     map[int]string  // Maps commit index to PR branch it can push to (including descendants)
 	CommitBookmark     map[int]string  // Maps commit index to bookmark it can create a PR with (including descendants)
@@ -118,6 +124,7 @@ func NewGraphModel(zoneManager *zone.Manager) GraphModel {
 		rebasePressAnchor:    -1,
 		rebaseDragSource:     -1,
 		rebaseDragHoverDest:  -1,
+		mergeTargetCommit:    -1,
 		longPressFileIndex:   -1,
 		longPressCommitIndex: -1,
 	}
@@ -623,6 +630,8 @@ func (m *GraphModel) buildGraphData() GraphData {
 		SelectedCommit:      m.selectedCommit,
 		InRebaseMode:        m.selectionMode == SelectionRebaseDestination,
 		RebaseSourceCommit:  m.rebaseSourceCommit,
+		InMergeMode:         m.selectionMode == SelectionMergeSource,
+		MergeTargetCommit:   m.mergeTargetCommit,
 		OpenPRBranches:      openPRBranches,
 		CommitPRBranch:      commitPRBranch,
 		CommitBookmark:      commitBookmark,
@@ -841,4 +850,26 @@ func (m *GraphModel) CancelRebaseMode() {
 // IsInRebaseMode returns whether the graph is in rebase mode.
 func (m *GraphModel) IsInRebaseMode() bool {
 	return m.selectionMode == SelectionRebaseDestination
+}
+
+// StartMergeMode starts merge mode with the given target commit (the commit being merged into).
+func (m *GraphModel) StartMergeMode(targetCommitIdx int) {
+	m.selectionMode = SelectionMergeSource
+	m.mergeTargetCommit = targetCommitIdx
+}
+
+// CancelMergeMode cancels merge mode.
+func (m *GraphModel) CancelMergeMode() {
+	m.selectionMode = SelectionNormal
+	m.mergeTargetCommit = -1
+}
+
+// IsInMergeMode returns whether the graph is in merge mode.
+func (m *GraphModel) IsInMergeMode() bool {
+	return m.selectionMode == SelectionMergeSource
+}
+
+// GetMergeTargetCommit returns the commit index being merged into.
+func (m *GraphModel) GetMergeTargetCommit() int {
+	return m.mergeTargetCommit
 }

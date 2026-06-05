@@ -94,6 +94,28 @@ func TestLongPressTickMsg_ReleasedBeforeTick_NoMenu(t *testing.T) {
 	}
 }
 
+func TestCommitContextMenu_HasMergeFromItem(t *testing.T) {
+	var found *commitContextMenuItem
+	for i, item := range commitContextMenuItems() {
+		if item.Label == "Merge from" {
+			found = &commitContextMenuItems()[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatal("expected a 'Merge from' item in the commit context menu")
+	}
+	if found.Key != "M" {
+		t.Errorf("expected 'Merge from' key to be 'M', got %q", found.Key)
+	}
+	if !found.Request.StartMergeMode {
+		t.Error("expected 'Merge from' item to carry a StartMergeMode request")
+	}
+	if !found.Mutable {
+		t.Error("expected 'Merge from' item to be marked Mutable")
+	}
+}
+
 func TestContextMenu_EscDismisses(t *testing.T) {
 	m := newTestGraphModel()
 	m.contextMenu = &ContextMenuState{FileIndex: 0, MouseX: 10, MouseY: 20, PressID: 1}

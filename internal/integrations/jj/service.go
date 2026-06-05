@@ -1105,6 +1105,14 @@ func (s *Service) RebaseCommit(ctx context.Context, sourceCommitID, destCommitID
 	return s.runJJ(ctx, "rebase", "-s", sourceCommitID, "-d", destCommitID)
 }
 
+// MergeCommit creates a new merge commit whose parents are the target and source commits.
+// This is the jj way to "merge from" (e.g. merge main into the current bookmark): the new
+// working-copy commit becomes a child of both <target> and <source>.
+func (s *Service) MergeCommit(ctx context.Context, targetCommitID, sourceCommitID string) error {
+	// jj new <target> <source>
+	return s.runJJ(ctx, "new", targetCommitID, sourceCommitID)
+}
+
 // SplitFileToParent moves a single file from a commit to a new parent commit.
 // This creates a new commit between the current commit and its parent,
 // then moves just the file's changes to that new commit.

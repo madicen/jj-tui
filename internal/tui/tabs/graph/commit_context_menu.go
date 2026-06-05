@@ -42,6 +42,7 @@ func commitContextMenuItems() []commitContextMenuItem {
 		{Label: "Describe", Key: "d", Request: Request{StartEditDescription: true}, Mutable: true},
 		{Label: "Squash", Key: "s", Request: Request{Squash: true}, Mutable: true, HideWhenFirstParentImmutable: true},
 		{Label: "Rebase", Key: "r", Request: Request{StartRebaseMode: true}, Mutable: true},
+		{Label: "Merge from", Key: "M", Request: Request{StartMergeMode: true}, Mutable: true},
 		{Label: "Abandon", Key: "a", Request: Request{Abandon: true}, Mutable: true},
 		{Label: "Bookmark", Key: "m", Request: Request{CreateBookmark: true}, Mutable: true},
 	}

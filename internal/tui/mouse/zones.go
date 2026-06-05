@@ -31,6 +31,7 @@ const (
 	ZoneActionDescribe = "zone:action:describe"
 	ZoneActionSquash   = "zone:action:squash"
 	ZoneActionRebase   = "zone:action:rebase"
+	ZoneActionMerge    = "zone:action:merge"
 	ZoneActionAbandon  = "zone:action:abandon"
 
 	// Description editor zones
