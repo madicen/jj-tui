@@ -140,10 +140,10 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 				style = RebaseDestStyle
 			}
 		} else if data.InMergeMode {
-			switch {
-			case i == data.MergeTargetCommit:
+			switch i {
+			case data.MergeTargetCommit:
 				style = MergeTargetStyle
-			case i == data.SelectedCommit:
+			case data.SelectedCommit:
 				style = MergeSourceStyle
 			}
 		} else if i == data.SelectedCommit {
@@ -184,10 +184,10 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 				selectionPrefix = "→ "
 			}
 		} else if data.InMergeMode {
-			switch {
-			case data.MergeTargetCommit == i:
+			switch i {
+			case data.MergeTargetCommit:
 				selectionPrefix = "→ "
-			case data.SelectedCommit == i:
+			case data.SelectedCommit:
 				selectionPrefix = "⚡ "
 			}
 		} else if i == data.SelectedCommit {
