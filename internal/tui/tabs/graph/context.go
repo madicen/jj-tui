@@ -13,6 +13,7 @@ type ContextProvider interface {
 	GetRepository() *internal.Repository
 	GetSelectedCommit() int
 	GetRebaseSourceCommit() int
+	GetMergeTargetCommit() int
 	GetChangedFiles() []jj.ChangedFile
 	GetChangedFilesCommitID() string
 	GetSelectedFile() int
@@ -33,6 +34,7 @@ func BuildRequestContextFrom(p ContextProvider) *RequestContext {
 		Repository:           p.GetRepository(),
 		SelectedCommit:       p.GetSelectedCommit(),
 		RebaseSourceCommit:   p.GetRebaseSourceCommit(),
+		MergeTargetCommit:    p.GetMergeTargetCommit(),
 		ChangedFiles:         p.GetChangedFiles(),
 		ChangedFilesCommitID: p.GetChangedFilesCommitID(),
 		SelectedFile:         p.GetSelectedFile(),
@@ -51,6 +53,7 @@ type RequestContext struct {
 	Repository           *internal.Repository
 	SelectedCommit       int
 	RebaseSourceCommit   int
+	MergeTargetCommit    int
 	ChangedFiles         []jj.ChangedFile
 	ChangedFilesCommitID string
 	SelectedFile         int
@@ -67,6 +70,7 @@ type ContextInput struct {
 	Repository           *internal.Repository
 	SelectedCommit       int
 	RebaseSourceCommit   int
+	MergeTargetCommit    int
 	ChangedFiles         []jj.ChangedFile
 	ChangedFilesCommitID string
 	SelectedFile         int
@@ -87,6 +91,7 @@ func BuildRequestContext(input *ContextInput) *RequestContext {
 		Repository:           input.Repository,
 		SelectedCommit:       input.SelectedCommit,
 		RebaseSourceCommit:   input.RebaseSourceCommit,
+		MergeTargetCommit:    input.MergeTargetCommit,
 		ChangedFiles:         input.ChangedFiles,
 		ChangedFilesCommitID: input.ChangedFilesCommitID,
 		SelectedFile:         input.SelectedFile,
@@ -118,6 +123,7 @@ func BuildRequestContextFromApp(app *state.AppState, m *GraphModel) *RequestCont
 		Repository:           app.Repository,
 		SelectedCommit:       m.GetSelectedCommit(),
 		RebaseSourceCommit:   m.GetRebaseSourceCommit(),
+		MergeTargetCommit:    m.GetMergeTargetCommit(),
 		ChangedFiles:         m.GetChangedFiles(),
 		ChangedFilesCommitID: m.GetChangedFilesCommitID(),
 		SelectedFile:         m.GetSelectedFile(),

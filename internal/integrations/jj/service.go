@@ -216,14 +216,23 @@ func (s *Service) getRepository(ctx context.Context, revset string, recordGraphI
 	}, nil
 }
 
+// jjMessageArg returns the argument form for a commit message that is safe even when the message
+// starts with '-'. Passing "-m"/"--message" followed by a separate value makes jj's (clap) arg
+// parser treat a leading-dash message (e.g. a markdown bullet list) as an unknown flag and fail
+// with "unexpected argument '-...' found". The "--message=<value>" form binds the whole value to
+// the flag, including any leading '-', so descriptions can start with any character.
+func jjMessageArg(message string) string {
+	return "--message=" + message
+}
+
 // CreateNewCommit creates a new commit with the given description
 func (s *Service) CreateNewCommit(ctx context.Context, description string) error {
-	return s.runJJ(ctx, "commit", "-m", description)
+	return s.runJJ(ctx, "commit", jjMessageArg(description))
 }
 
 // DescribeCommit sets a new description for a commit (non-interactive)
 func (s *Service) DescribeCommit(ctx context.Context, commitID string, message string) error {
-	_, err := s.runJJOutput(ctx, "describe", commitID, "-m", message)
+	_, err := s.runJJOutput(ctx, "describe", commitID, jjMessageArg(message))
 	if err == nil {
 		return nil
 	}
@@ -233,7 +242,7 @@ func (s *Service) DescribeCommit(ctx context.Context, commitID string, message s
 	if uerr := s.runJJ(ctx, "workspace", "update-stale"); uerr != nil {
 		return fmt.Errorf("%w\n\nCould not refresh stale working copy (jj workspace update-stale): %v", err, uerr)
 	}
-	_, err2 := s.runJJOutput(ctx, "describe", commitID, "-m", message)
+	_, err2 := s.runJJOutput(ctx, "describe", commitID, jjMessageArg(message))
 	return err2
 }
 
@@ -1022,7 +1031,7 @@ func (s *Service) SquashCommit(ctx context.Context, commitID string) error {
 	}
 
 	// Squash the commit into its parent with explicit message to avoid interactive editor
-	return s.runJJ(ctx, "squash", "-r", commitID, "-m", combinedDesc)
+	return s.runJJ(ctx, "squash", "-r", commitID, jjMessageArg(combinedDesc))
 }
 
 // NewCommit creates a new commit. If parentCommitID is provided, creates a child of that commit.
@@ -1103,6 +1112,14 @@ func (s *Service) RebaseCommit(ctx context.Context, sourceCommitID, destCommitID
 	// jj rebase -s <source> -d <destination>
 	// Using -s (source) instead of -r (revision) so descendants follow along
 	return s.runJJ(ctx, "rebase", "-s", sourceCommitID, "-d", destCommitID)
+}
+
+// MergeCommit creates a new merge commit whose parents are the target and source commits.
+// This is the jj way to "merge from" (e.g. merge main into the current bookmark): the new
+// working-copy commit becomes a child of both <target> and <source>.
+func (s *Service) MergeCommit(ctx context.Context, targetCommitID, sourceCommitID string) error {
+	// jj new <target> <source>
+	return s.runJJ(ctx, "new", targetCommitID, sourceCommitID)
 }
 
 // SplitFileToParent moves a single file from a commit to a new parent commit.
@@ -1459,7 +1476,7 @@ func (s *Service) SplitRevisionByFilesets(ctx context.Context, revision, firstMe
 	if revision == "" {
 		revision = "@"
 	}
-	args := []string{"split", "-r", revision, "-m", strings.TrimSpace(firstMessage), "--"}
+	args := []string{"split", "-r", revision, jjMessageArg(strings.TrimSpace(firstMessage)), "--"}
 	for _, p := range paths {
 		p = strings.TrimSpace(p)
 		if p != "" {
@@ -1777,9 +1794,10 @@ func (s *Service) PushToGit(ctx context.Context, branch string) (string, error) 
 		return "", fmt.Errorf("bookmark '%s' does not exist. Create it first with 'm' (Bookmark)", branch)
 	}
 
-	// --allow-new permits creating new remote bookmarks
+	// Naming the bookmark explicitly with --bookmark is enough for jj to create it on the
+	// remote if it's new (the old --allow-new flag is deprecated/removed in current jj).
 	// Use runJJOutput to capture any output/errors
-	pushOut, err := s.runJJOutput(ctx, "git", "push", "--bookmark", util.JJExactBookmarkPattern(branch), "--allow-new")
+	pushOut, err := s.runJJOutput(ctx, "git", "push", "--bookmark", util.JJExactBookmarkPattern(branch))
 	if err != nil {
 		return pushOut, fmt.Errorf("push failed: %w", err)
 	}
@@ -3286,9 +3304,11 @@ func (s *Service) RestoreLocalBranch(ctx context.Context, branchName, commitID s
 	return s.runJJ(ctx, "bookmark", "set", util.BookmarkArgForSetMove(branchName), "-r", commitID)
 }
 
-// PushBranch pushes a local branch to remote
+// PushBranch pushes a local branch to remote. Naming the bookmark explicitly with --bookmark is
+// enough for jj to create it on the remote if it's new (the old --allow-new flag is deprecated/
+// removed in current jj).
 func (s *Service) PushBranch(ctx context.Context, branchName string) error {
-	return s.runJJ(ctx, "git", "push", "--allow-new", "--bookmark", util.JJExactBookmarkPattern(branchName))
+	return s.runJJ(ctx, "git", "push", "--bookmark", util.JJExactBookmarkPattern(branchName))
 }
 
 // FetchFromRemote fetches updates from a remote

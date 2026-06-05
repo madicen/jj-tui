@@ -116,6 +116,13 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 		graphLines = append(graphLines, "")
 	}
 
+	if data.InMergeMode {
+		mergeHeader := MergeHeaderStyle.
+			Render("🔗 MERGE MODE - Select source commit to merge from (Esc to cancel)")
+		graphLines = append(graphLines, mergeHeader)
+		graphLines = append(graphLines, "")
+	}
+
 	for i, commit := range data.Repository.Graph.Commits {
 		style := CommitStyle
 		if data.RebaseDragSource >= 0 {
@@ -131,6 +138,13 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 				style = RebaseSourceStyle
 			case data.SelectedCommit > -1:
 				style = RebaseDestStyle
+			}
+		} else if data.InMergeMode {
+			switch i {
+			case data.MergeTargetCommit:
+				style = MergeTargetStyle
+			case data.SelectedCommit:
+				style = MergeSourceStyle
 			}
 		} else if i == data.SelectedCommit {
 			style = CommitSelectedStyle
@@ -168,6 +182,13 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 				selectionPrefix = "⚡ "
 			case data.SelectedCommit == i:
 				selectionPrefix = "→ "
+			}
+		} else if data.InMergeMode {
+			switch i {
+			case data.MergeTargetCommit:
+				selectionPrefix = "→ "
+			case data.SelectedCommit:
+				selectionPrefix = "⚡ "
 			}
 		} else if i == data.SelectedCommit {
 			selectionPrefix = "► "
@@ -209,7 +230,7 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 		)
 		afterStatus := statusIndicator
 		var commitRow string
-		onSelectedRow := !data.InRebaseMode && data.RebaseDragSource < 0 && i == data.SelectedCommit
+		onSelectedRow := !data.InRebaseMode && !data.InMergeMode && data.RebaseDragSource < 0 && i == data.SelectedCommit
 		// (f) whenever origin-delta applies; bookmark may also show as diverged vs @origin for the same case.
 		showForgot := onSelectedRow && commit.HasDeltaVsBookmarkOrigin
 		// split (z): only when graph enrichment found a viable evolog split for this change.
@@ -255,6 +276,16 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 	if data.InRebaseMode {
 		graphLines = append(graphLines, "")
 		graphLines = append(graphLines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("Press Enter or click to select destination, Esc to cancel"))
+		graphContent := strings.Join(graphLines, "\n")
+		return GraphResult{
+			GraphContent: graphContent,
+			FullContent:  graphContent,
+		}
+	}
+
+	if data.InMergeMode {
+		graphLines = append(graphLines, "")
+		graphLines = append(graphLines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("Press Enter or click to select source to merge from, Esc to cancel"))
 		graphContent := strings.Join(graphLines, "\n")
 		return GraphResult{
 			GraphContent: graphContent,
@@ -318,6 +349,7 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 				}
 				actionButtons = append(actionButtons,
 					m.zoneManager.Mark(mouse.ZoneActionRebase, styles.ButtonStyle.Render("Rebase (r)")),
+					m.zoneManager.Mark(mouse.ZoneActionMerge, styles.ButtonStyle.Render("Merge from (M)")),
 					m.zoneManager.Mark(mouse.ZoneActionAbandon, styles.ButtonStyle.Render("Abandon (a)")),
 					m.zoneManager.Mark(mouse.ZoneActionBookmark, styles.ButtonStyle.Render("Bookmark (m)")),
 				)

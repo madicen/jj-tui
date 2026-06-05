@@ -91,8 +91,8 @@ func ApplyOriginCmd(svc *jj.Service, url string) tea.Cmd {
 }
 
 // CreateGhRepoCmd creates a new GitHub repository via `gh repo create`, wires up `origin`, and
-// then attempts an inline push of every local bookmark (`jj git push --allow-new --bookmark
-// <name>` repeated per name) so the user's existing work reaches the new remote in a single
+// then attempts an inline push of every local bookmark (`jj git push --bookmark <name>` repeated
+// per name) so the user's existing work reaches the new remote in a single
 // user action. We use jj's push (not `gh repo create --push`) because gh's --push runs raw
 // `git push -u origin <branch>` which skips jj's import/export step and can leave colocated
 // repos slightly out of sync; pushing every bookmark explicitly also handles stacked work and
@@ -152,13 +152,14 @@ func CreateGhRepoCmd(svc *jj.Service, name string, private bool) tea.Cmd {
 	}
 }
 
-// PushBookmarksCmd runs `jj git push --allow-new` against the configured origin. The "all"
-// branch enumerates local bookmarks and pushes each via `--bookmark <name>` so we don't depend
-// on `--all-bookmarks`, which is unrecognized on some currently-supported jj versions; the
-// "current" branch passes no bookmark flag and lets jj's default selection apply (the bookmark
-// on @). Used by the standalone Push current / Push all buttons in the Repository remote
-// panel. Independent of CreateGhRepoCmd's auto-push so users can retry / push later without
-// re-creating the GitHub repo.
+// PushBookmarksCmd runs `jj git push` against the configured origin. The "all" branch enumerates
+// local bookmarks and pushes each via `--bookmark <name>` so we don't depend on `--all-bookmarks`,
+// which is unrecognized on some currently-supported jj versions; the "current" branch resolves the
+// bookmark on @ and pushes it explicitly via `--bookmark <name>` so a brand-new bookmark is still
+// created on the remote (jj's default selection refuses to create new remote bookmarks now that the
+// deprecated `--allow-new` flag is gone). Used by the standalone Push current / Push all buttons in
+// the Repository remote panel. Independent of CreateGhRepoCmd's auto-push so users can retry / push
+// later without re-creating the GitHub repo.
 func PushBookmarksCmd(svc *jj.Service, all bool) tea.Cmd {
 	return func() tea.Msg {
 		msg := PushResultMsg{All: all}
@@ -186,35 +187,40 @@ func PushBookmarksCmd(svc *jj.Service, all bool) tea.Cmd {
 			msg.PushedCount = len(names)
 			return msg
 		}
-		out, err := pushBookmarks(ctx, svc, nil)
+		// Resolve the bookmark(s) on @ (or nearest ancestor) and push them explicitly so a
+		// brand-new bookmark is created on the remote. If none is found we fall back to a default
+		// push (no --bookmark), which still updates already-tracked bookmarks on @ and ancestors.
+		currentNames := bookmarkFields(svc.GetCurrentBranch(ctx))
+		out, err := pushBookmarks(ctx, svc, currentNames)
 		msg.Output = out
 		if err != nil {
 			msg.Err = err
 			return msg
 		}
-		// Resolve the bookmark on @ for the status line. Best-effort; failure here just leaves
-		// PushedNames empty and PushedCount=1 (we successfully pushed something).
-		if name, derr := svc.GetCurrentBranch(ctx); derr == nil && strings.TrimSpace(name) != "" {
-			msg.PushedNames = []string{strings.TrimSpace(name)}
+		if len(currentNames) > 0 {
+			msg.PushedNames = currentNames
 		}
 		msg.PushedCount = 1
 		return msg
 	}
 }
 
-// pushBookmarks runs `jj git push --allow-new` against origin and returns its combined output.
-// When names is empty, no `--bookmark` flag is passed and jj's default selection applies (the
-// bookmark on @). When names is non-empty, each entry is forwarded as `--bookmark <name>`, which
-// is the version-portable way to push multiple bookmarks at once: jj historically renamed the
-// "all bookmarks" shorthand (e.g. `--all-bookmarks`), and some currently-shipping jj builds
-// reject it outright, while every bookmark-era jj accepts the singular `--bookmark` flag. The
-// helper is shared between CreateGhRepoCmd's auto-push step and PushBookmarksCmd so both entry
-// points produce identical jj invocations.
+// pushBookmarks runs `jj git push` against origin and returns its combined output. When names is
+// empty, no `--bookmark` flag is passed and jj's default selection applies (the bookmark on @);
+// note that default selection will not create a brand-new remote bookmark, so callers that want
+// to push a possibly-new bookmark should pass its name explicitly. When names is non-empty, each
+// entry is forwarded as `--bookmark <name>`, which both creates new remote bookmarks and is the
+// version-portable way to push multiple bookmarks at once: jj historically renamed the "all
+// bookmarks" shorthand (e.g. `--all-bookmarks`), and some jj builds reject it outright, while
+// every bookmark-era jj accepts the singular `--bookmark` flag. Naming a bookmark explicitly also
+// replaces the deprecated `--allow-new` flag, which current jj removes. The helper is shared
+// between CreateGhRepoCmd's auto-push step and PushBookmarksCmd so both entry points produce
+// identical jj invocations.
 func pushBookmarks(ctx context.Context, svc *jj.Service, names []string) (string, error) {
 	if svc == nil {
 		return "", fmt.Errorf("jj service unavailable")
 	}
-	args := []string{"git", "push", "--allow-new"}
+	args := []string{"git", "push"}
 	for _, name := range names {
 		name = strings.TrimSpace(name)
 		if name == "" {
@@ -232,6 +238,18 @@ func pushBookmarks(ctx context.Context, svc *jj.Service, names []string) (string
 		return output, fmt.Errorf("jj %s: %s", strings.Join(args, " "), output)
 	}
 	return output, nil
+}
+
+// bookmarkFields splits the result of GetCurrentBranch (a space-separated list of bookmark names
+// pointing at @, e.g. "feat" or "feat main") into individual names. The error is intentionally
+// ignored: a lookup failure just yields no explicit names, leaving callers to fall back to jj's
+// default push selection.
+func bookmarkFields(raw string, _ error) []string {
+	fields := strings.Fields(raw)
+	if len(fields) == 0 {
+		return nil
+	}
+	return fields
 }
 
 // listLocalBookmarks returns the names of local bookmarks (no @remote suffix). Used to decide

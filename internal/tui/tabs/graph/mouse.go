@@ -195,6 +195,9 @@ func (m GraphModel) handleZoneClick(msg zone.MsgZoneInBounds) (GraphModel, *Requ
 	if inBounds(mouse.ZoneActionRebase) {
 		return m, &Request{StartRebaseMode: true}, nil
 	}
+	if inBounds(mouse.ZoneActionMerge) {
+		return m, &Request{StartMergeMode: true}, nil
+	}
 	if inBounds(mouse.ZoneActionAbandon) {
 		return m, &Request{Abandon: true}, nil
 	}
@@ -243,6 +246,9 @@ func applyCommitRowMouseSelection(m GraphModel, commitIndex int, event tea.Mouse
 	m.graphFocused = true
 	if m.selectionMode == SelectionRebaseDestination {
 		return m, &Request{PerformRebase: true, RebaseDestIndex: commitIndex}, nil
+	}
+	if m.selectionMode == SelectionMergeSource {
+		return m, &Request{PerformMerge: true, MergeSourceIndex: commitIndex}, nil
 	}
 	if m.repository == nil || commitIndex < 0 || commitIndex >= len(m.repository.Graph.Commits) {
 		return m, nil, nil

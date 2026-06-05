@@ -89,6 +89,7 @@ func (m Model) lines() []string {
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("Enter/e"), styles.HelpDescStyle.Render("Edit selected commit (jj edit)")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("s"), styles.HelpDescStyle.Render("Squash commit into parent")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("r"), styles.HelpDescStyle.Render("Rebase commit (with descendants)")))
+	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("M"), styles.HelpDescStyle.Render("Merge from: pick a source to merge into the selected commit (e.g. merge main into current bookmark)")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("mouse"), styles.HelpDescStyle.Render("Drag a commit row onto another to rebase (same as r, then pick destination)")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("dbl-click"), styles.HelpDescStyle.Render("Commit row: edit (jj edit); changed-file row: open in external editor")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("d"), styles.HelpDescStyle.Render("Edit description; or resolve divergent when commit is divergent")))

@@ -49,6 +49,7 @@ When a bookmark was pushed and then amended or moved locally, **jj** may show th
 - **File diff overlay**: **`o`** (files pane) opens a full **jj** diff for the selected path in a scrollable modal
 - **External editor**: **`O`** (files pane) opens the selected file in Cursor, VS Code, Zed, Neovim (`nvr`), etc.—configured under **Settings → Advanced** (editor presets and custom command)
 - **Rebase**: **`r`** enters destination-pick mode, or **drag** a commit row onto another (mouse) for the same `jj rebase -s … -d …` flow
+- **Merge from**: **`M`** enters source-pick mode; select a bookmark/commit to merge into the selected commit (e.g. merge `main` into your current bookmark) via `jj new <target> <source>`
 - **Keyboard & mouse**: Zone-based clicks across tabs, settings, PRs, tickets, and branch lists
 - **GitHub**: Create/update PRs, device-flow login, PR list with CI and review hints
 - **Tickets**: Jira, Codecks, or GitHub Issues—provider choice in Settings; create a bookmark from a ticket on your current commit; status transitions where supported
@@ -205,6 +206,7 @@ The graph view has two panes: the commit graph (left) and changed files (right).
 - `s`: Squash into parent (hidden when the parent would be immutable)
 - `r`: Rebase mode—pick destination with `Enter`/`e`, or **Esc** to cancel
 - **Mouse**: Press on a commit row, drag, release on another commit to rebase (same as `r` + pick destination); **Esc** cancels an in-progress drag
+- `M` (shift+m): Merge-from mode—the selected commit is the target; pick a source commit/bookmark to merge in with `Enter`/`e` or click (creates a merge commit via `jj new <target> <source>`); **Esc** to cancel
 - `a`: Abandon commit
 - `m`: Create or move bookmark
 - `x`: Delete bookmark
@@ -283,7 +285,7 @@ The **GitHub** sub-tab hosts both the API/auth configuration (token / device log
 - **Remote URL** input: pre-filled with the existing origin URL when present so you can edit it; **`Tab`** / **`down`** focuses the field, then paste the new URL.
   - **`Enter`** while focused (or click **Apply**): runs `jj git remote add origin <url>` (when no origin yet) or `jj git remote set-url origin <url>` (when changing it), then a best-effort `jj git fetch` so any remote bookmarks (`main@origin`, etc.) appear in the graph immediately. Empty URL + Apply when an origin already exists routes to **Remove** instead.
   - **`Ctrl+x`** or click **Remove origin**: deletes the existing `origin` (no-op if none configured).
-- **Push current bookmark (`p`)** / **Push all bookmarks (`P`)**: run `jj git push --allow-new` (current bookmark on `@`) or `jj git push --allow-new --bookmark <name>` once per local bookmark against the configured origin. The "all" path enumerates bookmarks and passes each explicitly so it stays compatible across jj versions (some currently-supported builds reject `--all-bookmarks`). Both buttons are disabled with a hint to set up origin first when none is configured. Use these after **Apply** to push existing work to a freshly-pointed remote, or anytime you want a one-click push that doesn't require switching to the Branches tab.
+- **Push current bookmark (`p`)** / **Push all bookmarks (`P`)**: run `jj git push --bookmark <name>` for the bookmark on `@` (current) or once per local bookmark (all) against the configured origin. Naming each bookmark explicitly creates new remote bookmarks without the deprecated `--allow-new` flag, and the "all" path enumerates bookmarks and passes each explicitly so it stays compatible across jj versions (some currently-supported builds reject `--all-bookmarks`). Both buttons are disabled with a hint to set up origin first when none is configured. Use these after **Apply** to push existing work to a freshly-pointed remote, or anytime you want a one-click push that doesn't require switching to the Branches tab.
 - **Create new GitHub repo (`g`)**: when the [GitHub CLI (`gh`)](https://cli.github.com/) is installed and authenticated, runs `gh repo create <dir> --private/--public --source=. --remote=origin`, then **automatically pushes all local bookmarks** to the new origin in the same action — so the most common workflow ("create the repo and push my work") is a single click. The repo name defaults to the current directory name. Requires no existing origin (Apply / Remove first if you want to replace).
   - **`Ctrl+v`** or click **Visibility**: toggles between **Private** (default) and **Public** before pressing `g`.
   - **No bookmarks yet?** The auto-push step is skipped silently and the status reads `Created GitHub repo (no bookmarks to push yet)`. Make a commit / bookmark and use **Push all bookmarks** when you're ready.

@@ -4,6 +4,14 @@
 
 set -e
 
+# Push a bookmark to origin in a way that works across jj versions: jj 0.18+ uses
+# --allow-new to create new remote bookmarks (deprecated in newer releases), while
+# older/other builds reject the flag entirely. Try with the flag, then fall back.
+push_bookmark() {
+	jj git push --bookmark "$1" --remote origin --allow-new 2>/dev/null \
+		|| jj git push --bookmark "$1" --remote origin
+}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEMO_REPO="$SCRIPT_DIR/demo-repo"
 FAKE_ORIGIN="$SCRIPT_DIR/fake-origin.git"
@@ -166,9 +174,9 @@ echo "- User settings" >> README.md
 # Push main and some branches to origin to create remote tracking branches
 echo ""
 echo "Pushing to fake origin to create remote tracking branches..."
-jj git push --bookmark main --remote origin --allow-new
-jj git push --bookmark feature/dark-mode --remote origin --allow-new
-jj git push --bookmark fix/pagination --remote origin --allow-new
+push_bookmark main
+push_bookmark feature/dark-mode
+push_bookmark fix/pagination
 
 # Fetch to ensure jj knows about the remote branches
 jj git fetch --remote origin

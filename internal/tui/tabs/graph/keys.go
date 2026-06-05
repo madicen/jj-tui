@@ -72,6 +72,10 @@ func (m GraphModel) handleKeyMsg(msg tea.KeyMsg) (GraphModel, *Request, tea.Cmd)
 			m.selectionMode = SelectionNormal
 			m.rebaseSourceCommit = -1
 		}
+		if m.selectionMode == SelectionMergeSource {
+			m.selectionMode = SelectionNormal
+			m.mergeTargetCommit = -1
+		}
 		m.rebasePressAnchor = -1
 		m.rebaseDragSource = -1
 		m.rebaseDragHoverDest = -1
@@ -83,10 +87,19 @@ func (m GraphModel) handleKeyMsg(msg tea.KeyMsg) (GraphModel, *Request, tea.Cmd)
 		}
 		return m, nil, nil
 
+	case "M":
+		if m.repository != nil && m.selectedCommit >= 0 && m.selectedCommit < len(m.repository.Graph.Commits) {
+			return m, &Request{StartMergeMode: true}, nil
+		}
+		return m, nil, nil
+
 	case "enter", "e":
 		if m.graphFocused && m.repository != nil && m.selectedCommit >= 0 && m.selectedCommit < len(m.repository.Graph.Commits) {
 			if m.selectionMode == SelectionRebaseDestination {
 				return m, &Request{PerformRebase: true, RebaseDestIndex: m.selectedCommit}, nil
+			}
+			if m.selectionMode == SelectionMergeSource {
+				return m, &Request{PerformMerge: true, MergeSourceIndex: m.selectedCommit}, nil
 			}
 			return m, &Request{Checkout: true}, nil
 		}
