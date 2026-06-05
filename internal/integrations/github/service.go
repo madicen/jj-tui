@@ -311,18 +311,6 @@ func (s *Service) GetPullRequests(ctx context.Context) ([]internal.GitHubPR, err
 	})
 }
 
-// prQueryStates returns the GraphQL PR states to query based on filter options
-func prQueryStates(filterOpts PRFilterOptions) []githubv4.PullRequestState {
-	states := []githubv4.PullRequestState{githubv4.PullRequestStateOpen}
-	if filterOpts.ShowMerged {
-		states = append(states, githubv4.PullRequestStateMerged)
-	}
-	if filterOpts.ShowClosed {
-		states = append(states, githubv4.PullRequestStateClosed)
-	}
-	return states
-}
-
 // GetPullRequestsWithOptions retrieves pull requests with the specified filter options
 // Uses GraphQL to fetch PRs with check status and reviews in a single API call
 // Falls back to REST API if GraphQL fails due to permission issues
@@ -344,7 +332,13 @@ func (s *Service) GetPullRequestsWithOptions(ctx context.Context, filterOpts PRF
 	return prs, nil
 }
 
-// getPullRequestsGraphQL fetches PRs using GraphQL (includes check status and reviews)
+// getPullRequestsGraphQL fetches PRs using GraphQL (includes check status and reviews).
+//
+// Open PRs are always fetched in full (no limit); merged/closed PRs are then fetched up to the
+// configured limit. A single newest-first query capped by Limit would, in busy repos with
+// thousands of PRs, push older still-open PRs out of the result. That broke the graph's
+// "Update PR" vs "Create PR" detection, which depends on every open PR's head branch being
+// present so it can be matched against local bookmarks.
 func (s *Service) getPullRequestsGraphQL(ctx context.Context, filterOpts PRFilterOptions) ([]internal.GitHubPR, error) {
 	// Get authenticated username if filtering by user
 	var username string
@@ -356,9 +350,34 @@ func (s *Service) getPullRequestsGraphQL(ctx context.Context, filterOpts PRFilte
 		}
 	}
 
-	// Build the list of states to query
-	states := prQueryStates(filterOpts)
+	// Always retrieve every open PR so a local bookmark can be reliably matched to its PR.
+	openPRs, err := s.queryPullRequestsGraphQL(ctx, []githubv4.PullRequestState{githubv4.PullRequestStateOpen}, 0, filterOpts, username)
+	if err != nil {
+		return nil, err
+	}
 
+	var otherStates []githubv4.PullRequestState
+	if filterOpts.ShowMerged {
+		otherStates = append(otherStates, githubv4.PullRequestStateMerged)
+	}
+	if filterOpts.ShowClosed {
+		otherStates = append(otherStates, githubv4.PullRequestStateClosed)
+	}
+	if len(otherStates) == 0 {
+		return openPRs, nil
+	}
+
+	otherPRs, err := s.queryPullRequestsGraphQL(ctx, otherStates, filterOpts.Limit, filterOpts, username)
+	if err != nil {
+		return nil, err
+	}
+	return append(openPRs, otherPRs...), nil
+}
+
+// queryPullRequestsGraphQL fetches PRs for the given states, paginating until the results are
+// exhausted or until limit PRs have been collected (limit <= 0 means no limit). When
+// filterOpts.OnlyMine is set, results are filtered to PRs authored by username.
+func (s *Service) queryPullRequestsGraphQL(ctx context.Context, states []githubv4.PullRequestState, limit int, filterOpts PRFilterOptions, username string) ([]internal.GitHubPR, error) {
 	// GraphQL query structure
 	var query struct {
 		Repository struct {
@@ -403,8 +422,8 @@ func (s *Service) getPullRequestsGraphQL(ctx context.Context, filterOpts PRFilte
 
 	// Set query limit
 	first := 100
-	if filterOpts.Limit > 0 && filterOpts.Limit < first {
-		first = filterOpts.Limit
+	if limit > 0 && limit < first {
+		first = limit
 	}
 
 	variables := map[string]any{
@@ -464,7 +483,7 @@ func (s *Service) getPullRequestsGraphQL(ctx context.Context, filterOpts PRFilte
 			})
 
 			// Check limit
-			if filterOpts.Limit > 0 && len(allPRs) >= filterOpts.Limit {
+			if limit > 0 && len(allPRs) >= limit {
 				return allPRs, nil
 			}
 		}
@@ -476,7 +495,7 @@ func (s *Service) getPullRequestsGraphQL(ctx context.Context, filterOpts PRFilte
 		variables["after"] = githubv4.NewString(query.Repository.PullRequests.PageInfo.EndCursor)
 
 		// Early exit if we've hit the limit
-		if filterOpts.Limit > 0 && len(allPRs) >= filterOpts.Limit {
+		if limit > 0 && len(allPRs) >= limit {
 			break
 		}
 	}
@@ -484,8 +503,11 @@ func (s *Service) getPullRequestsGraphQL(ctx context.Context, filterOpts PRFilte
 	return allPRs, nil
 }
 
-// getPullRequestsREST fetches PRs using REST API (fallback when GraphQL permissions are insufficient)
-// This provides basic PR info but no check status or review status
+// getPullRequestsREST fetches PRs using REST API (fallback when GraphQL permissions are insufficient).
+// This provides basic PR info but no check status or review status.
+//
+// Like the GraphQL path, open PRs are fetched in full so branch->PR matching is reliable, while
+// merged/closed PRs honor the configured limit.
 func (s *Service) getPullRequestsREST(ctx context.Context, filterOpts PRFilterOptions) ([]internal.GitHubPR, error) {
 	// Get authenticated username if filtering by user
 	var username string
@@ -497,9 +519,29 @@ func (s *Service) getPullRequestsREST(ctx context.Context, filterOpts PRFilterOp
 		}
 	}
 
+	// Always retrieve every open PR (no limit) so a local bookmark can be matched to its PR.
+	openPRs, err := s.queryPullRequestsREST(ctx, "open", 0, filterOpts, username)
+	if err != nil {
+		return nil, err
+	}
+	if !filterOpts.ShowMerged && !filterOpts.ShowClosed {
+		return openPRs, nil
+	}
+
+	// "closed" returns both closed and merged PRs; classification/skip is handled in the helper.
+	closedPRs, err := s.queryPullRequestsREST(ctx, "closed", filterOpts.Limit, filterOpts, username)
+	if err != nil {
+		return nil, err
+	}
+	return append(openPRs, closedPRs...), nil
+}
+
+// queryPullRequestsREST fetches PRs for the given REST state filter ("open", "closed", or "all"),
+// paginating until exhausted or until limit PRs are collected (limit <= 0 means no limit).
+func (s *Service) queryPullRequestsREST(ctx context.Context, stateFilter string, limit int, filterOpts PRFilterOptions, username string) ([]internal.GitHubPR, error) {
 	var allPRs []internal.GitHubPR
 	opts := &github.PullRequestListOptions{
-		State:     "all", // We'll filter below
+		State:     stateFilter,
 		Sort:      "created",
 		Direction: "desc",
 		ListOptions: github.ListOptions{
@@ -547,7 +589,7 @@ func (s *Service) getPullRequestsREST(ctx context.Context, filterOpts PRFilterOp
 			})
 
 			// Check limit
-			if filterOpts.Limit > 0 && len(allPRs) >= filterOpts.Limit {
+			if limit > 0 && len(allPRs) >= limit {
 				return allPRs, nil
 			}
 		}
@@ -559,7 +601,7 @@ func (s *Service) getPullRequestsREST(ctx context.Context, filterOpts PRFilterOp
 		opts.Page = resp.NextPage
 
 		// Early exit if we've hit the limit
-		if filterOpts.Limit > 0 && len(allPRs) >= filterOpts.Limit {
+		if limit > 0 && len(allPRs) >= limit {
 			break
 		}
 	}
