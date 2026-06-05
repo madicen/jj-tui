@@ -52,10 +52,11 @@ const (
 	NavigateRemoteApply
 	NavigateRemoteCreateGh
 	NavigateRemoteRemove
-	// NavigatePushBookmarks runs `jj git push --allow-new` against the configured origin —
-	// without `--bookmark` for PushAll=false (jj selects the bookmark on @), or with one
-	// `--bookmark <name>` per local bookmark for PushAll=true. We avoid `--all-bookmarks`
-	// because some currently-supported jj versions reject it. Wired to the Push current /
+	// NavigatePushBookmarks runs `jj git push` against the configured origin — with a single
+	// `--bookmark <name>` for the bookmark on @ (PushAll=false), or one `--bookmark <name>` per
+	// local bookmark for PushAll=true. Naming bookmarks explicitly creates new remote bookmarks
+	// without the deprecated `--allow-new` flag, and we avoid `--all-bookmarks` because some
+	// currently-supported jj versions reject it. Wired to the Push current /
 	// Push all buttons in the Repository remote panel. Separate from the auto-push-after-create
 	// flow so users can retry pushes after configuration changes without re-creating the
 	// GitHub repo.

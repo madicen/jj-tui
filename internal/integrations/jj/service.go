@@ -1785,9 +1785,10 @@ func (s *Service) PushToGit(ctx context.Context, branch string) (string, error) 
 		return "", fmt.Errorf("bookmark '%s' does not exist. Create it first with 'm' (Bookmark)", branch)
 	}
 
-	// --allow-new permits creating new remote bookmarks
+	// Naming the bookmark explicitly with --bookmark is enough for jj to create it on the
+	// remote if it's new (the old --allow-new flag is deprecated/removed in current jj).
 	// Use runJJOutput to capture any output/errors
-	pushOut, err := s.runJJOutput(ctx, "git", "push", "--bookmark", util.JJExactBookmarkPattern(branch), "--allow-new")
+	pushOut, err := s.runJJOutput(ctx, "git", "push", "--bookmark", util.JJExactBookmarkPattern(branch))
 	if err != nil {
 		return pushOut, fmt.Errorf("push failed: %w", err)
 	}
@@ -3294,9 +3295,11 @@ func (s *Service) RestoreLocalBranch(ctx context.Context, branchName, commitID s
 	return s.runJJ(ctx, "bookmark", "set", util.BookmarkArgForSetMove(branchName), "-r", commitID)
 }
 
-// PushBranch pushes a local branch to remote
+// PushBranch pushes a local branch to remote. Naming the bookmark explicitly with --bookmark is
+// enough for jj to create it on the remote if it's new (the old --allow-new flag is deprecated/
+// removed in current jj).
 func (s *Service) PushBranch(ctx context.Context, branchName string) error {
-	return s.runJJ(ctx, "git", "push", "--allow-new", "--bookmark", util.JJExactBookmarkPattern(branchName))
+	return s.runJJ(ctx, "git", "push", "--bookmark", util.JJExactBookmarkPattern(branchName))
 }
 
 // FetchFromRemote fetches updates from a remote
