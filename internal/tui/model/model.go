@@ -386,6 +386,47 @@ func (m *Model) applyRepositoryLoaded(repo *internal.Repository) (*Model, tea.Cm
 	return m, tea.Batch(cmds...)
 }
 
+// bookmarksNeedingPRLookup collects local bookmark names in the graph that should be resolved to an
+// open PR via a targeted query. It skips the default branch and bookmarks already matched to an open
+// PR in the current list, and caps the count so a graph with many bookmarks can't fan out unboundedly.
+func (m *Model) bookmarksNeedingPRLookup() []string {
+	if m.appState.Repository == nil {
+		return nil
+	}
+	openPRBranches := make(map[string]bool)
+	for _, pr := range m.appState.Repository.PRs {
+		if pr.State == "open" {
+			openPRBranches[pr.HeadBranch] = true
+		}
+	}
+	const maxLookups = 25
+	seen := make(map[string]bool)
+	var names []string
+	for _, commit := range m.appState.Repository.Graph.Commits {
+		for _, branch := range commit.Branches {
+			local := util.LocalBookmarkName(branch)
+			if local == "" || seen[local] {
+				continue
+			}
+			if m.appState.DefaultBranch != "" && local == m.appState.DefaultBranch {
+				continue
+			}
+			if local == "main" || local == "master" || local == "trunk" {
+				continue
+			}
+			if openPRBranches[local] || openPRBranches[branch] {
+				continue
+			}
+			seen[local] = true
+			names = append(names, local)
+			if len(names) >= maxLookups {
+				return names
+			}
+		}
+	}
+	return names
+}
+
 // refreshRepository starts a refresh of the repository data.
 func (m *Model) refreshRepository() tea.Cmd {
 	m.appState.StatusMessage = "Refreshing..."
@@ -1822,7 +1863,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		updated, cmd := m.prsTabModel.UpdateWithApp(msg, &m.appState)
 		m.prsTabModel = updated
 		m.prsTabModel.UpdateRepository(m.appState.Repository)
+		// The bulk list just replaced Repository.PRs; resolve any still-unmatched local bookmarks to
+		// their open PR via targeted lookups so the graph can offer "Update PR" for branches the
+		// limited bulk fetch omitted. Run after the bulk load so PrsLoadedMsg can't clobber the result.
+		if resolveCmd := prstab.ResolveOpenPRsForBookmarksCmd(m.appState.GitHubService, m.bookmarksNeedingPRLookup(), m.appState.DemoMode); resolveCmd != nil {
+			cmd = tea.Batch(cmd, resolveCmd)
+		}
 		return m, cmd
+	case prstab.OpenPRsResolvedMsg:
+		return m.handleOpenPRsResolvedMsg(msg)
 	case prstab.PrMergedMsg, prstab.PrClosedMsg:
 		updated, cmd := m.prsTabModel.UpdateWithApp(msg, &m.appState)
 		m.prsTabModel = updated

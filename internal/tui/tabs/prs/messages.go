@@ -19,6 +19,13 @@ type PrsLoadedMsg struct {
 	Prs []internal.GitHubPR
 }
 
+// OpenPRsResolvedMsg carries open PRs resolved by a targeted per-branch lookup. These are merged
+// into the repository's PR list so the graph can offer "Update PR" for branches whose PR was not
+// in the bulk list (e.g. older open PRs crowded out by the fetch limit in busy repos).
+type OpenPRsResolvedMsg struct {
+	Prs []internal.GitHubPR
+}
+
 // PrMergedMsg is sent when a PR merge completes.
 type PrMergedMsg struct {
 	PRNumber int

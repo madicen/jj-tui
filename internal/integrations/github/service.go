@@ -657,6 +657,130 @@ func parseReviewStatus(reviews []struct {
 	return internal.ReviewStatusPending
 }
 
+// GetOpenPRForBranch looks up a single open PR by its head branch name, independent of the bulk
+// PR list. The bulk list can omit older open PRs in busy repos (it fetches newest-first across all
+// states up to a limit), which breaks the graph's "Update PR" vs "Create PR" detection. This
+// targeted query always resolves the branch's open PR if one exists. Returns nil when there is none.
+func (s *Service) GetOpenPRForBranch(ctx context.Context, branch string) (*internal.GitHubPR, error) {
+	if branch == "" {
+		return nil, nil
+	}
+	if s.graphqlClient != nil {
+		pr, err := s.getOpenPRForBranchGraphQL(ctx, branch)
+		if err == nil {
+			return pr, nil
+		}
+		errStr := err.Error()
+		if !strings.Contains(errStr, "Resource not accessible") &&
+			!strings.Contains(errStr, "Could not resolve to a Repository") &&
+			!strings.Contains(errStr, "403") &&
+			!strings.Contains(errStr, "insufficient") {
+			return nil, err
+		}
+		// Permission/access error: fall back to REST.
+	}
+	return s.getOpenPRForBranchREST(ctx, branch)
+}
+
+func (s *Service) getOpenPRForBranchGraphQL(ctx context.Context, branch string) (*internal.GitHubPR, error) {
+	var query struct {
+		Repository struct {
+			PullRequests struct {
+				Nodes []struct {
+					Number      int
+					Title       string
+					Body        string
+					Url         string
+					State       string
+					BaseRefName string
+					HeadRefName string
+					Commits     struct {
+						Nodes []struct {
+							Commit struct {
+								StatusCheckRollup struct {
+									State string
+								}
+							}
+						}
+					} `graphql:"commits(last: 1)"`
+					Reviews struct {
+						Nodes []struct {
+							State  string
+							Author struct {
+								Login string
+							}
+						}
+					} `graphql:"reviews(last: 20)"`
+				}
+			} `graphql:"pullRequests(headRefName: $head, states: [OPEN], first: 1, orderBy: {field: CREATED_AT, direction: DESC})"`
+		} `graphql:"repository(owner: $owner, name: $name)"`
+	}
+	variables := map[string]any{
+		"owner": githubv4.String(s.owner),
+		"name":  githubv4.String(s.repo),
+		"head":  githubv4.String(branch),
+	}
+	if err := s.graphqlClient.Query(ctx, &query, variables); err != nil {
+		return nil, fmt.Errorf("failed to query open PR for branch %q: %w", branch, err)
+	}
+	if len(query.Repository.PullRequests.Nodes) == 0 {
+		return nil, nil
+	}
+	pr := query.Repository.PullRequests.Nodes[0]
+	checkStatus := internal.CheckStatusNone
+	if len(pr.Commits.Nodes) > 0 {
+		switch pr.Commits.Nodes[0].Commit.StatusCheckRollup.State {
+		case "SUCCESS":
+			checkStatus = internal.CheckStatusSuccess
+		case "FAILURE", "ERROR":
+			checkStatus = internal.CheckStatusFailure
+		case "PENDING", "EXPECTED":
+			checkStatus = internal.CheckStatusPending
+		}
+	}
+	return &internal.GitHubPR{
+		Number:       pr.Number,
+		Title:        pr.Title,
+		Body:         pr.Body,
+		URL:          pr.Url,
+		State:        strings.ToLower(pr.State),
+		BaseBranch:   pr.BaseRefName,
+		HeadBranch:   pr.HeadRefName,
+		CheckStatus:  checkStatus,
+		ReviewStatus: parseReviewStatus(pr.Reviews.Nodes),
+	}, nil
+}
+
+func (s *Service) getOpenPRForBranchREST(ctx context.Context, branch string) (*internal.GitHubPR, error) {
+	opts := &github.PullRequestListOptions{
+		State:       "open",
+		Head:        s.owner + ":" + branch,
+		ListOptions: github.ListOptions{PerPage: 1},
+	}
+	prs, resp, err := s.client.PullRequests.List(ctx, s.owner, s.repo, opts)
+	if err != nil {
+		if resp != nil && resp.StatusCode == http.StatusNotFound {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to list open PR for branch %q: %w", branch, err)
+	}
+	if len(prs) == 0 {
+		return nil, nil
+	}
+	pr := prs[0]
+	return &internal.GitHubPR{
+		Number:       pr.GetNumber(),
+		Title:        pr.GetTitle(),
+		Body:         pr.GetBody(),
+		URL:          pr.GetHTMLURL(),
+		State:        pr.GetState(),
+		BaseBranch:   pr.GetBase().GetRef(),
+		HeadBranch:   pr.GetHead().GetRef(),
+		CheckStatus:  internal.CheckStatusNone,
+		ReviewStatus: internal.ReviewStatusNone,
+	}, nil
+}
+
 // GetPullRequest retrieves a specific pull request
 func (s *Service) GetPullRequest(ctx context.Context, prNumber int) (*internal.GitHubPR, error) {
 	pr, _, err := s.client.PullRequests.Get(ctx, s.owner, s.repo, prNumber)

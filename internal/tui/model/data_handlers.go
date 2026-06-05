@@ -214,6 +214,33 @@ func (m *Model) handleActionsRepositoryLoadedMsg(msg graphtab.RepositoryLoadedMs
 	return m.applyRepositoryLoaded(msg.Repository)
 }
 
+// handleOpenPRsResolvedMsg merges targeted per-branch open-PR lookups into the repository's PR list
+// (deduped by PR number) so the graph can offer "Update PR" for branches whose PR was missing from
+// the bulk list. Existing entries win to avoid clobbering richer data (e.g. merged/closed state).
+func (m *Model) handleOpenPRsResolvedMsg(msg prstab.OpenPRsResolvedMsg) (tea.Model, tea.Cmd) {
+	if m.appState.Repository == nil || len(msg.Prs) == 0 {
+		return m, nil
+	}
+	existingByNumber := make(map[int]bool)
+	for _, pr := range m.appState.Repository.PRs {
+		existingByNumber[pr.Number] = true
+	}
+	added := false
+	for _, pr := range msg.Prs {
+		if existingByNumber[pr.Number] {
+			continue
+		}
+		m.appState.Repository.PRs = append(m.appState.Repository.PRs, pr)
+		existingByNumber[pr.Number] = true
+		added = true
+	}
+	if added {
+		m.graphTabModel.UpdateRepository(m.appState.Repository)
+		m.prsTabModel.UpdateRepository(m.appState.Repository)
+	}
+	return m, nil
+}
+
 // handleDataSilentRepositoryLoadedMsg applies silent repo update and propagates to all tabs.
 func (m *Model) handleDataSilentRepositoryLoadedMsg(msg data.SilentRepositoryLoadedMsg) (tea.Model, tea.Cmd) {
 	m.silentReloadInFlight = false

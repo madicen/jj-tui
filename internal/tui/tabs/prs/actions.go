@@ -60,6 +60,30 @@ func LoadPRsCmd(ghSvc *github.Service, githubInfo string, demoMode bool, existin
 	}
 }
 
+// ResolveOpenPRsForBookmarksCmd looks up the open PR for each bookmark via a targeted GitHub query
+// and sends OpenPRsResolvedMsg with the ones found. This guarantees the graph can detect an existing
+// PR for a local bookmark even when the bulk PR list omitted it (busy repos can have thousands of PRs,
+// so a newest-first capped fetch can push an older still-open PR out of the result).
+func ResolveOpenPRsForBookmarksCmd(ghSvc *github.Service, bookmarks []string, demoMode bool) tea.Cmd {
+	if ghSvc == nil || demoMode || len(bookmarks) == 0 {
+		return nil
+	}
+	svc := ghSvc
+	names := append([]string(nil), bookmarks...)
+	return func() tea.Msg {
+		ctx := context.Background()
+		var found []internal.GitHubPR
+		for _, name := range names {
+			pr, err := svc.GetOpenPRForBranch(ctx, name)
+			if err != nil || pr == nil {
+				continue
+			}
+			found = append(found, *pr)
+		}
+		return OpenPRsResolvedMsg{Prs: found}
+	}
+}
+
 // MergePRCmd returns a command that merges the PR and sends PrMergedMsg.
 func MergePRCmd(ghSvc *github.Service, prNumber int, demoMode bool) tea.Cmd {
 	if demoMode {
