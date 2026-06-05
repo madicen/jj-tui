@@ -9,6 +9,14 @@
 # Requires: jj, git
 set -euo pipefail
 
+# Push a bookmark to origin in a way that works across jj versions: jj 0.18+ uses
+# --allow-new to create new remote bookmarks (deprecated in newer releases), while
+# older/other builds reject the flag entirely. Try with the flag, then fall back.
+push_bookmark() {
+	jj git push --bookmark "$1" --remote origin --allow-new 2>/dev/null \
+		|| jj git push --bookmark "$1" --remote origin
+}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$SCRIPT_DIR/bookmark-conflict-vhs-repo"
 ORIG="$SCRIPT_DIR/bookmark-conflict-fake-origin.git"
@@ -36,8 +44,8 @@ echo 'package demo' > src/app.go
 jj describe -m "Add feature"
 jj bookmark create vhs/conflict-feature
 
-jj git push --bookmark main --remote origin --allow-new
-jj git push --bookmark vhs/conflict-feature --remote origin --allow-new
+push_bookmark main
+push_bookmark vhs/conflict-feature
 jj git fetch >/dev/null
 
 jj describe -m "Add feature (amended after push)"
