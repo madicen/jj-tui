@@ -11,6 +11,7 @@ import (
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/integrations/llm"
+	"github.com/madicen/jj-tui/internal/tui/aiprompts"
 )
 
 const evologDescribeSplitMaxDiff = 60_000
@@ -20,9 +21,10 @@ Reply with a single JSON object only (no markdown fences):
 {"parent_description":"...","child_description":"..."}
 
 Rules:
-- parent_description is for the immediate parent of the working copy (@-): one short title line, optional blank line and bullets.
+- parent_description is for the immediate parent of the working copy (@-): exactly one short imperative subject line (aim for under ~72 characters), no body, no bullets.
 - child_description is for the working copy (@): same style.
-- Plain text only; no markdown code fences in the values.
+- Summarize each change's primary purpose; use its "Files changed" summary to judge scope. If a diff spans unrelated areas, describe the overarching intent rather than one file.
+- Plain text only; no markdown code fences, no trailing period in the values.
 `
 
 const evologDescribeSplitSystemChildOnly = `You write one jj change description for the working copy (@) after an evolog-based split.
@@ -32,8 +34,9 @@ Reply with a single JSON object only (no markdown fences):
 {"child_description":"..."}
 
 Rules:
-- child_description is for @ only: one short title line, optional blank line and bullets.
-- Plain text only; no markdown code fences in the value.
+- child_description is for @ only: exactly one short imperative subject line (aim for under ~72 characters), no body, no bullets.
+- Summarize the change's primary purpose; use the "Files changed" summary to judge scope. If the diff spans unrelated areas, describe the overarching intent rather than one file.
+- Plain text only; no markdown code fences, no trailing period in the value.
 `
 
 // EvologDescribeSplitDoneMsg is sent after optional AI-generated descriptions for @- and/or @.
@@ -84,9 +87,23 @@ func buildDescribeSplitUserContentDual(ctx context.Context, svc *jj.Service) (st
 	parentLine, _ := svc.GetCommitDescription(ctx, "@-")
 	childLine, _ := svc.GetCommitDescription(ctx, "@")
 	var ub strings.Builder
-	fmt.Fprintf(&ub, "Current parent (@-) description:\n%s\n\nCurrent child (@) description:\n%s\n\nUnified diff for @- (vs its parents):\n%s\n\nUnified diff for @ (vs its parents):\n%s\n\nWrite JSON parent_description and child_description.",
-		strings.TrimSpace(parentLine), strings.TrimSpace(childLine), strings.TrimSpace(parentDiff), strings.TrimSpace(childDiff))
+	fmt.Fprintf(&ub, "Current parent (@-) description:\n%s\n\nCurrent child (@) description:\n%s\n\n%sUnified diff for @- (vs its parents):\n%s\n\n%sUnified diff for @ (vs its parents):\n%s\n\nWrite JSON parent_description and child_description.",
+		strings.TrimSpace(parentLine), strings.TrimSpace(childLine),
+		fileStatBlock(parentDiff, "@-"), strings.TrimSpace(parentDiff),
+		fileStatBlock(childDiff, "@"), strings.TrimSpace(childDiff))
 	return ub.String(), nil
+}
+
+// fileStatBlock renders the "Files changed" summary for a single revision's diff
+// with a trailing blank line, or "" when the diff has no detectable files, so it
+// can be slotted into the describe-split prompt before each unified diff. The
+// revision is folded into the header, e.g. "Files changed in @- (2):".
+func fileStatBlock(diff, rev string) string {
+	stat := aiprompts.FormatDiffFileStat(diff)
+	if stat == "" {
+		return ""
+	}
+	return fmt.Sprintf("Files changed in %s %s\n\n", rev, strings.TrimPrefix(stat, "Files changed "))
 }
 
 func buildDescribeSplitUserContentChildOnly(ctx context.Context, svc *jj.Service) (string, error) {
@@ -96,8 +113,8 @@ func buildDescribeSplitUserContentChildOnly(ctx context.Context, svc *jj.Service
 	}
 	childLine, _ := svc.GetCommitDescription(ctx, "@")
 	var ub strings.Builder
-	fmt.Fprintf(&ub, "The parent of @ (@-) is immutable; propose a description for @ only.\n\nCurrent @ description:\n%s\n\nUnified diff for @ (vs its parents):\n%s\n\nWrite JSON child_description only.",
-		strings.TrimSpace(childLine), strings.TrimSpace(childDiff))
+	fmt.Fprintf(&ub, "The parent of @ (@-) is immutable; propose a description for @ only.\n\nCurrent @ description:\n%s\n\n%sUnified diff for @ (vs its parents):\n%s\n\nWrite JSON child_description only.",
+		strings.TrimSpace(childLine), fileStatBlock(childDiff, "@"), strings.TrimSpace(childDiff))
 	return ub.String(), nil
 }
 
