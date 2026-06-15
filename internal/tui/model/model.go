@@ -136,6 +136,14 @@ type Model struct {
 	// (load complete, terminal resize), so user drag/resize/minimize state on
 	// quiet frames isn't clobbered by an unconditional reset.
 	lastFileDiffDimsSeq int
+	// lastEvologContentSig is the "WxH" signature of the evolog split modal's
+	// rendered content on the last frame. The modal opens on a tiny "Loading
+	// jj evolog…" placeholder and only grows to full size once the evolog
+	// loads (and again when an AI plan adds lines), but chrome locks its
+	// content size on the first frame — so without re-seeding it stays stuck
+	// at the placeholder's height ("mostly minimized"). Comparing the signature
+	// per frame lets View() re-seed only when the natural size actually changed.
+	lastEvologContentSig string
 }
 
 // doPollMsg is a message used to trigger a GitHub token poll.
