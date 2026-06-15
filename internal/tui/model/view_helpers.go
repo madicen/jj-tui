@@ -100,6 +100,21 @@ func (m *Model) View() string {
 		// inheriting a stale comparison against the previous session.
 		m.lastFileDiffDimsSeq = 0
 	}
+	// The evolog split modal opens on a one-line "Loading…" placeholder and
+	// then grows to its full size once the evolog loads (and again when an AI
+	// plan adds lines). Like filediff, chrome locks the content size on the
+	// first frame, so we re-seed whenever the rendered content's measured size
+	// changes — keeping user drag/resize untouched on quiet frames.
+	if key == "evolog" {
+		sig := fmt.Sprintf("%dx%d", lipgloss.Width(content), lipgloss.Height(content))
+		if sig != m.lastEvologContentSig {
+			m.chrome.State.ContentSizeInitialized = false
+			m.chrome.State.OriginInitialized = false
+			m.lastEvologContentSig = sig
+		}
+	} else if m.lastEvologContentSig != "" {
+		m.lastEvologContentSig = ""
+	}
 	// Composite the chromed modal next: its tab + drag origin sits above the
 	// modal stack below.
 	v = m.chrome.View(v, content, title, key, m.width, m.height)
