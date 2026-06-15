@@ -24,44 +24,45 @@ import (
 
 // SettingsParams contains all settings values.
 type SettingsParams struct {
-	GitHubToken                       string
-	GitHubTokenSource                 string // config: saved | env | gh_cli
-	JiraURL                           string
-	JiraUser                          string
-	JiraToken                         string
-	JiraProject                       string
-	JiraProjectFilter                 string
-	JiraIssueType                     string
-	JiraJQL                           string
-	JiraExcludedStatuses              string
-	CodecksSubdomain                  string
-	CodecksToken                      string
-	CodecksProject                    string
-	CodecksExcludedStatuses           string
-	GitHubIssuesExcludedStatuses      string
-	TicketProvider                    string
-	ShowMerged                        bool
-	ShowClosed                        bool
-	OnlyMine                          bool
-	PRLimit                           int
-	PRRefreshInterval                 int
-	AutoInProgress                    bool
-	BranchLimit                       int
-	SanitizeBookmarks                 bool
-	GraphRevset                       string
-	GitHubOwner                       string
-	GitHubRepo                        string
-	ThemePrimary                      string
-	ThemeSecondary                    string
-	ThemeMuted                        string
-	ExternalFileEditor                string
-	ExternalFileEditorCustom          string
-	AIEnabled                         bool
-	AIBaseURL                         string
-	AIModel                           string
-	AIProvider                        string
-	AIAPIKey                          string
-	AITimeoutSeconds                  int
+	GitHubToken                  string
+	GitHubTokenSource            string // config: saved | env | gh_cli
+	JiraURL                      string
+	JiraUser                     string
+	JiraToken                    string
+	JiraProject                  string
+	JiraProjectFilter            string
+	JiraIssueType                string
+	JiraJQL                      string
+	JiraExcludedStatuses         string
+	CodecksSubdomain             string
+	CodecksToken                 string
+	CodecksProject               string
+	CodecksExcludedStatuses      string
+	GitHubIssuesExcludedStatuses string
+	TicketProvider               string
+	ShowMerged                   bool
+	ShowClosed                   bool
+	OnlyMine                     bool
+	PRLimit                      int
+	PRRefreshInterval            int
+	AutoInProgress               bool
+	BranchLimit                  int
+	BranchesShowAllRemotes       bool
+	SanitizeBookmarks            bool
+	GraphRevset                  string
+	GitHubOwner                  string
+	GitHubRepo                   string
+	ThemePrimary                 string
+	ThemeSecondary               string
+	ThemeMuted                   string
+	ExternalFileEditor           string
+	ExternalFileEditorCustom     string
+	AIEnabled                    bool
+	AIBaseURL                    string
+	AIModel                      string
+	AIProvider                   string
+	AIAPIKey                     string
+	AITimeoutSeconds             int
 	// AIProfiles holds the full named-profile list to persist. The active
 	// profile's fields are mirrored onto the flat AIBaseURL/AIModel/AIProvider/
 	// AIAPIKey/AITimeoutSeconds above for backwards compatibility with code
@@ -177,18 +178,19 @@ func BuildSettingsParams(m *Model, githubOwner, githubRepo string) SettingsParam
 	adv := m.GetAdvancedModel()
 	aim := m.GetAIModel()
 	params := SettingsParams{
-		TicketProvider:    tk.GetTicketProvider(),
-		ShowMerged:        gh.GetShowMerged(),
-		ShowClosed:        gh.GetShowClosed(),
-		OnlyMine:          gh.GetOnlyMine(),
-		PRLimit:           gh.GetPRLimit(),
-		PRRefreshInterval: gh.GetRefreshInterval(),
-		AutoInProgress:    tk.GetAutoInProgress(),
-		BranchLimit:       br.GetBranchLimit(),
-		SanitizeBookmarks: adv.GetSanitizeBookmarks(),
-		GraphRevset:       strings.TrimSpace(adv.GetGraphRevset()),
-		GitHubOwner:       githubOwner,
-		GitHubRepo:        githubRepo,
+		TicketProvider:         tk.GetTicketProvider(),
+		ShowMerged:             gh.GetShowMerged(),
+		ShowClosed:             gh.GetShowClosed(),
+		OnlyMine:               gh.GetOnlyMine(),
+		PRLimit:                gh.GetPRLimit(),
+		PRRefreshInterval:      gh.GetRefreshInterval(),
+		AutoInProgress:         tk.GetAutoInProgress(),
+		BranchLimit:            br.GetBranchLimit(),
+		BranchesShowAllRemotes: br.GetShowAllRemotes(),
+		SanitizeBookmarks:      adv.GetSanitizeBookmarks(),
+		GraphRevset:            strings.TrimSpace(adv.GetGraphRevset()),
+		GitHubOwner:            githubOwner,
+		GitHubRepo:             githubRepo,
 	}
 	preset, custom := adv.SavedExternalEditor()
 	params.ExternalFileEditor = preset
@@ -342,6 +344,7 @@ func SaveSettingsCmd(params SettingsParams) tea.Cmd {
 		cfg.CodecksExcludedStatuses = params.CodecksExcludedStatuses
 		cfg.GitHubIssuesExcludedStatuses = params.GitHubIssuesExcludedStatuses
 		cfg.BranchStatsLimit = &params.BranchLimit
+		cfg.BranchesShowAllRemotes = &params.BranchesShowAllRemotes
 		cfg.SanitizeBookmarkNames = &params.SanitizeBookmarks
 		cfg.GraphRevset = params.GraphRevset
 		cfg.ExternalFileEditor = params.ExternalFileEditor
@@ -417,6 +420,7 @@ func SaveSettingsLocalCmd(params SettingsParams) tea.Cmd {
 			GitHubRefreshInterval:             &params.PRRefreshInterval,
 			TicketAutoInProgress:              &params.AutoInProgress,
 			BranchStatsLimit:                  &params.BranchLimit,
+			BranchesShowAllRemotes:            &params.BranchesShowAllRemotes,
 			SanitizeBookmarkNames:             &params.SanitizeBookmarks,
 			GraphRevset:                       params.GraphRevset,
 			ExternalFileEditor:                params.ExternalFileEditor,

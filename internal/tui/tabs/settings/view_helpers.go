@@ -51,11 +51,12 @@ type RenderData struct {
 	GitHubIssuesConfigured bool
 	GitHubTokenSource      string // saved | env | gh_cli
 	// Repository remote section (Settings → GitHub)
-	CurrentOrigin     string // live `origin` URL ("" if not configured); cached on Settings open
-	OriginInputView   string // rendered view of the origin URL textinput
-	GhAvailable       bool   // gh CLI present in PATH (controls the "Create new GitHub repo" button)
-	GhRepoPrivate     bool   // visibility flag for "Create new GitHub repo" (true => --private)
+	CurrentOrigin          string // live `origin` URL ("" if not configured); cached on Settings open
+	OriginInputView        string // rendered view of the origin URL textinput
+	GhAvailable            bool   // gh CLI present in PATH (controls the "Create new GitHub repo" button)
+	GhRepoPrivate          bool   // visibility flag for "Create new GitHub repo" (true => --private)
 	BranchLimit            int
+	BranchesShowAllRemotes bool
 	SanitizeBookmarks      bool
 	ConfirmingCleanup      string
 	ExternalEditorPreset   int // Advanced: selected external editor preset index (radio rows)
@@ -66,9 +67,9 @@ type RenderData struct {
 	// AI profile management: full list of saved profiles, the currently-selected
 	// (editing) index, and the name of the persistently-active profile. Rendered
 	// as a row list above the editor inputs.
-	AIProfiles             []config.AIProfile
-	AISelectedProfileIdx   int
-	AIActiveProfileName    string
+	AIProfiles           []config.AIProfile
+	AISelectedProfileIdx int
+	AIActiveProfileName  string
 	// AIProfileNameInputView is the rendered view of the profile-name textinput
 	// (the new "name" field above provider). Empty when the AI tab has no profile.
 	AIProfileNameInputView string
@@ -113,6 +114,7 @@ func BuildRenderData(sm *Model, opts ViewOpts) RenderData {
 		TicketProviderName:     opts.TicketServiceName,
 		AutoInProgressOnBranch: sm.GetSettingsAutoInProgress(),
 		BranchLimit:            sm.GetSettingsBranchLimit(),
+		BranchesShowAllRemotes: sm.GetSettingsShowAllRemotes(),
 		SanitizeBookmarks:      sm.GetSettingsSanitizeBookmarks(),
 		ConfirmingCleanup:      sm.GetConfirmingCleanup(),
 		ExternalEditorPreset:   sm.GetAdvancedModel().GetExternalEditorPreset(),
@@ -608,6 +610,9 @@ func (r renderCtx) renderBranches(data RenderData) []string {
 		r.mark(mouse.ZoneSettingsBranchLimitIncrease, lipgloss.NewStyle().Foreground(styles.ColorPrimary).Render("[+]")))
 	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Total branches to show (0 = all)"))
 	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Local always included, remote filtered by recency"))
+	lines = append(lines, "")
+	lines = append(lines, "  "+r.renderToggle("Show all remote branches", data.BranchesShowAllRemotes, mouse.ZoneSettingsBranchShowAllRemotes))
+	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Off: only tracked + your own branches. On: includes coworkers' untracked branches"))
 	return lines
 }
 

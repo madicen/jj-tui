@@ -155,6 +155,7 @@ func (m Model) lines() []string {
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("j/↓"), styles.HelpDescStyle.Render("Move down")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("k/↑"), styles.HelpDescStyle.Render("Move up")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("T"), styles.HelpDescStyle.Render("Track remote branch")))
+	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("t"), styles.HelpDescStyle.Render("Pull & track remote branch by name")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("U"), styles.HelpDescStyle.Render("Untrack remote branch")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("L"), styles.HelpDescStyle.Render("Restore deleted local branch")))
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("x"), styles.HelpDescStyle.Render("Delete local bookmark")))

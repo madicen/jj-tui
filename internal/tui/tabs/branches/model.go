@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 	overlay "github.com/madicen/bubble-overlay"
@@ -29,17 +30,28 @@ type Model struct {
 	longPressMouseX    int
 	longPressMouseY    int
 	contextMenu        *ContextMenuState
+
+	// Inline "pull & track remote branch by name" input. When addingRemote is true the input
+	// captures all keystrokes; Enter submits a FetchAndTrack request, Esc cancels.
+	addingRemote bool
+	remoteInput  textinput.Model
 }
 
 // NewModel creates a new Branches tab model. zoneManager may be nil (e.g. in tests).
 // Default dimensions (80x24) ensure wheel scroll works before first View()/SetDimensions, same as Graph viewports.
 func NewModel(zoneManager *zone.Manager) Model {
+	remoteInput := textinput.New()
+	remoteInput.Placeholder = "branch-name or branch-name@remote"
+	remoteInput.CharLimit = 200
+	remoteInput.Width = 40
+
 	return Model{
 		zoneManager:        zoneManager,
 		selectedBranch:     -1,
 		width:              80,
 		height:             24,
 		longPressItemIndex: -1,
+		remoteInput:        remoteInput,
 	}
 }
 
@@ -157,7 +169,7 @@ func (m Model) update(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
 			if statusMsg != "" {
 				app.StatusMessage = statusMsg
 			}
-			if req.FetchAll && runCmd != nil {
+			if (req.FetchAll || req.FetchAndTrack) && runCmd != nil {
 				app.BranchRemoteFetchPending = true
 				app.Loading = true
 			}
@@ -175,7 +187,7 @@ func (m Model) update(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
 			if statusMsg != "" {
 				app.StatusMessage = statusMsg
 			}
-			if req.FetchAll && runCmd != nil {
+			if (req.FetchAll || req.FetchAndTrack) && runCmd != nil {
 				app.BranchRemoteFetchPending = true
 				app.Loading = true
 			}
@@ -229,7 +241,27 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, *Request, tea.Cmd) {
 		m.contextMenu = nil
 		return m, nil, nil
 	}
+	// While the inline track-by-name input is open, it owns the keyboard.
+	if m.addingRemote {
+		switch msg.String() {
+		case "esc":
+			m.closeRemoteInput()
+			return m, nil, nil
+		case "enter":
+			val := strings.TrimSpace(m.remoteInput.Value())
+			m.closeRemoteInput()
+			if val == "" {
+				return m, nil, nil
+			}
+			return m, &Request{FetchAndTrack: true, RemoteBranchInput: val}, nil
+		}
+		var cmd tea.Cmd
+		m.remoteInput, cmd = m.remoteInput.Update(msg)
+		return m, nil, cmd
+	}
 	switch msg.String() {
+	case "t":
+		return m.openRemoteInput()
 	case "j", "down":
 		if m.selectedBranch < len(m.branchList)-1 {
 			m.selectedBranch++
@@ -256,6 +288,21 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, *Request, tea.Cmd) {
 		return m, &Request{DeleteBranchBookmark: true}, nil
 	}
 	return m, nil, nil
+}
+
+// openRemoteInput shows and focuses the inline track-by-name input.
+func (m Model) openRemoteInput() (Model, *Request, tea.Cmd) {
+	m.addingRemote = true
+	m.remoteInput.SetValue("")
+	cmd := m.remoteInput.Focus()
+	return m, nil, tea.Batch(cmd, textinput.Blink)
+}
+
+// closeRemoteInput hides the inline input and clears its value.
+func (m *Model) closeRemoteInput() {
+	m.addingRemote = false
+	m.remoteInput.SetValue("")
+	m.remoteInput.Blur()
 }
 
 // handleZoneClick handles zone clicks; returns (updated model, optional request, cmd).
@@ -306,6 +353,9 @@ func (m Model) handleZoneClick(z *zone.ZoneInfo, event tea.MouseMsg) (Model, *Re
 	}
 	if m.zoneManager.Get(mouse.ZoneBranchPush) == z {
 		return m, &Request{PushBranch: true}, nil
+	}
+	if m.zoneManager.Get(mouse.ZoneBranchTrackRemote) == z {
+		return m.openRemoteInput()
 	}
 	if m.zoneManager.Get(mouse.ZoneBranchFetch) == z {
 		return m, &Request{FetchAll: true}, nil

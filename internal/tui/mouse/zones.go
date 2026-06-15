@@ -60,10 +60,10 @@ const (
 	ZoneActionUpdatePR = "zone:action:push"
 
 	// Init screen zones (shown when not in a jj repo)
-	ZoneActionJJInit                = "zone:action:jj_init"
-	ZoneActionInitURLInput          = "zone:action:init_url_input"
-	ZoneActionInitGhRepoCreate      = "zone:action:init_gh_repo_create"
-	ZoneActionInitVisibilityToggle  = "zone:action:init_visibility_toggle"
+	ZoneActionJJInit               = "zone:action:jj_init"
+	ZoneActionInitURLInput         = "zone:action:init_url_input"
+	ZoneActionInitGhRepoCreate     = "zone:action:init_gh_repo_create"
+	ZoneActionInitVisibilityToggle = "zone:action:init_visibility_toggle"
 
 	// Warning modal zones
 	ZoneWarningGoToCommit = "zone:warning:goto_commit"
@@ -107,6 +107,7 @@ const (
 
 	// Branch action zones
 	ZoneBranchTrack           = "zone:branch:track"
+	ZoneBranchTrackRemote     = "zone:branch:track_remote"
 	ZoneBranchUntrack         = "zone:branch:untrack"
 	ZoneBranchRestore         = "zone:branch:restore"
 	ZoneBranchDelete          = "zone:branch:delete"
@@ -146,8 +147,9 @@ const (
 	ZoneSettingsGitHubIssuesExcludedClear  = "zone:settings:github_issues_excluded_clear"
 
 	// Branch settings zones
-	ZoneSettingsBranchLimitDecrease = "zone:settings:branch_limit_decrease"
-	ZoneSettingsBranchLimitIncrease = "zone:settings:branch_limit_increase"
+	ZoneSettingsBranchLimitDecrease  = "zone:settings:branch_limit_decrease"
+	ZoneSettingsBranchLimitIncrease  = "zone:settings:branch_limit_increase"
+	ZoneSettingsBranchShowAllRemotes = "zone:settings:branch_show_all_remotes"
 
 	// Advanced/Maintenance operations
 	ZoneSettingsAdvancedDeleteBookmarks   = "zone:settings:advanced:delete_bookmarks"
@@ -189,20 +191,20 @@ const (
 	ZoneGitHubLoginCancel      = "zone:github_login:cancel"
 
 	// Settings zones
-	ZoneSettingsGitHubToken            = "zone:settings:github_token"
-	ZoneSettingsGitHubAuthSaved        = "zone:settings:github_auth:saved"
-	ZoneSettingsGitHubAuthEnv          = "zone:settings:github_auth:env"
-	ZoneSettingsGitHubAuthGhCLI        = "zone:settings:github_auth:gh_cli"
-	ZoneSettingsGitHubShowMerged       = "zone:settings:github_show_merged"
-	ZoneSettingsGitHubShowClosed       = "zone:settings:github_show_closed"
-	ZoneSettingsGitHubOnlyMine         = "zone:settings:github_only_mine"
-	ZoneSettingsGitHubPRLimitDecrease  = "zone:settings:github_pr_limit_decrease"
-	ZoneSettingsGitHubPRLimitIncrease  = "zone:settings:github_pr_limit_increase"
-	ZoneSettingsGitHubRefreshDecrease  = "zone:settings:github_refresh_decrease"
-	ZoneSettingsGitHubRefreshIncrease  = "zone:settings:github_refresh_increase"
-	ZoneSettingsGitHubRefreshToggle    = "zone:settings:github_refresh_toggle"
-	ZoneSettingsGitHubTokenClear       = "zone:settings:github_token_clear"
-	ZoneSettingsGitHubLogin            = "zone:settings:github_login"
+	ZoneSettingsGitHubToken           = "zone:settings:github_token"
+	ZoneSettingsGitHubAuthSaved       = "zone:settings:github_auth:saved"
+	ZoneSettingsGitHubAuthEnv         = "zone:settings:github_auth:env"
+	ZoneSettingsGitHubAuthGhCLI       = "zone:settings:github_auth:gh_cli"
+	ZoneSettingsGitHubShowMerged      = "zone:settings:github_show_merged"
+	ZoneSettingsGitHubShowClosed      = "zone:settings:github_show_closed"
+	ZoneSettingsGitHubOnlyMine        = "zone:settings:github_only_mine"
+	ZoneSettingsGitHubPRLimitDecrease = "zone:settings:github_pr_limit_decrease"
+	ZoneSettingsGitHubPRLimitIncrease = "zone:settings:github_pr_limit_increase"
+	ZoneSettingsGitHubRefreshDecrease = "zone:settings:github_refresh_decrease"
+	ZoneSettingsGitHubRefreshIncrease = "zone:settings:github_refresh_increase"
+	ZoneSettingsGitHubRefreshToggle   = "zone:settings:github_refresh_toggle"
+	ZoneSettingsGitHubTokenClear      = "zone:settings:github_token_clear"
+	ZoneSettingsGitHubLogin           = "zone:settings:github_login"
 	// Repository remote management (Settings → GitHub → Repository remote panel)
 	ZoneSettingsRemoteOriginInput      = "zone:settings:remote:origin_input"
 	ZoneSettingsRemoteApply            = "zone:settings:remote:apply"

@@ -39,6 +39,10 @@ type Request struct {
 	PushBranch              bool
 	FetchAll                bool
 	ResolveBookmarkConflict bool
+	// FetchAndTrack pulls a remote bookmark down by name and tracks it. RemoteBranchInput
+	// holds the raw user entry ("name" or "name@remote"); no selected branch is required.
+	FetchAndTrack     bool
+	RemoteBranchInput string
 }
 
 // Cmd returns a tea.Cmd that sends this request.

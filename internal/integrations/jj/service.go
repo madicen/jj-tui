@@ -327,7 +327,7 @@ func (s *Service) ListChainCommits(ctx context.Context, fromRev, toRev string) (
 	// description after parsing (subject is single-line by definition).
 	const rowSep = "\x1e" // record separator: ends each commit row
 	const fieldSep = "\t"
-	const nlMarker = "\x1f" // unit separator: stand-in for '\n' inside description
+	const nlMarker = "\x1f"  // unit separator: stand-in for '\n' inside description
 	const tabMarker = "\x1d" // group separator: stand-in for '\t' inside description
 	template := `change_id.short(8) ++ "` + fieldSep + `" ++ ` +
 		`if(description, description.first_line(), "(no description)") ++ "` + fieldSep + `" ++ ` +
@@ -3290,6 +3290,28 @@ func (s *Service) GetBranchStats(ctx context.Context, branchName string, remoteN
 func (s *Service) TrackBranch(ctx context.Context, branchName, remote string) error {
 	remoteBranch := fmt.Sprintf("%s@%s", branchName, remote)
 	return s.runJJ(ctx, "bookmark", "track", remoteBranch)
+}
+
+// FetchAndTrackBranch pulls a single bookmark down from a remote and starts tracking it.
+// This is the "paste a branch name" path: it works even when the bookmark isn't yet in the
+// local view (e.g. a coworker's branch that hasn't been fetched, or one hidden by the
+// default --tracked listing). When remote is empty we fetch from every remote and default
+// the tracking ref to origin; pass "name@remote" upstream to target a specific remote.
+func (s *Service) FetchAndTrackBranch(ctx context.Context, branchName, remote string) error {
+	fetchArgs := []string{"git", "fetch", "--branch", branchName}
+	if remote != "" {
+		fetchArgs = append(fetchArgs, "--remote", remote)
+	} else {
+		fetchArgs = append(fetchArgs, "--all-remotes")
+	}
+	if err := s.runJJ(ctx, fetchArgs...); err != nil {
+		return fmt.Errorf("failed to fetch bookmark %q: %w", branchName, err)
+	}
+	trackRemote := remote
+	if trackRemote == "" {
+		trackRemote = "origin"
+	}
+	return s.TrackBranch(ctx, branchName, trackRemote)
 }
 
 // UntrackBranch stops tracking a remote branch

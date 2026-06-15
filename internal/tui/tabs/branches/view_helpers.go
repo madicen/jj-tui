@@ -27,19 +27,40 @@ func findBranchIndex(branches []internal.Branch, target internal.Branch) int {
 	return -1
 }
 
+// renderAddRemoteInput renders the inline "pull & track remote branch by name" prompt.
+func (m Model) renderAddRemoteInput() string {
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(styles.ColorPrimary).
+		Padding(0, 1)
+	label := lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render("Pull & track remote branch")
+	hint := lipgloss.NewStyle().Foreground(styles.ColorMuted).
+		Render("Enter to fetch + track · Esc to cancel · use name@remote to pick a remote")
+	return box.Render(strings.Join([]string{label, m.remoteInput.View(), hint}, "\n"))
+}
+
 func (m Model) renderBranches() string {
 	if len(m.branchList) == 0 {
 		content := []string{
 			styles.TitleStyle.Render("Branches"),
 			"",
+		}
+		if m.addingRemote {
+			content = append(content, m.renderAddRemoteInput(), "")
+		}
+		content = append(content,
 			"No branches found.",
 			"",
+			"Press 't' to pull and track a remote branch by name.",
 			"Press 'F' to fetch from all remotes.",
-		}
+		)
 		return strings.Join(content, "\n")
 	}
 
 	var headerLines []string
+	if m.addingRemote {
+		headerLines = append(headerLines, m.renderAddRemoteInput())
+	}
 
 	if m.selectedBranch >= 0 && m.selectedBranch < len(m.branchList) {
 		branch := m.branchList[m.selectedBranch]
@@ -113,6 +134,7 @@ func (m Model) renderBranches() string {
 			)
 		}
 		actionButtons = append(actionButtons,
+			mark(m.zoneManager, mouse.ZoneBranchTrackRemote, styles.ButtonStyle.Render("Track by name (t)")),
 			mark(m.zoneManager, mouse.ZoneBranchFetch, styles.ButtonStyle.Render("Fetch All (F)")),
 		)
 		headerLines = append(headerLines, strings.Join(actionButtons, " "))
