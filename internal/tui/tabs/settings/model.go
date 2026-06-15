@@ -348,7 +348,7 @@ func (m *Model) ZoneIDs() []string {
 		mouse.ZoneSettingsGitHubOnlyMine, mouse.ZoneSettingsGitHubShowMerged, mouse.ZoneSettingsGitHubShowClosed,
 		mouse.ZoneSettingsGitHubPRLimitDecrease, mouse.ZoneSettingsGitHubPRLimitIncrease,
 		mouse.ZoneSettingsGitHubRefreshDecrease, mouse.ZoneSettingsGitHubRefreshIncrease, mouse.ZoneSettingsGitHubRefreshToggle,
-		mouse.ZoneSettingsBranchLimitDecrease, mouse.ZoneSettingsBranchLimitIncrease,
+		mouse.ZoneSettingsBranchLimitDecrease, mouse.ZoneSettingsBranchLimitIncrease, mouse.ZoneSettingsBranchShowAllRemotes,
 		mouse.ZoneSettingsGitHubTokenClear, mouse.ZoneSettingsJiraURLClear, mouse.ZoneSettingsJiraUserClear,
 		mouse.ZoneSettingsJiraTokenClear, mouse.ZoneSettingsJiraProjectClear, mouse.ZoneSettingsJiraProjectFilterClear, mouse.ZoneSettingsJiraIssueTypeClear, mouse.ZoneSettingsJiraJQLClear,
 		mouse.ZoneSettingsJiraExcludedClear, mouse.ZoneSettingsCodecksSubdomainClear, mouse.ZoneSettingsCodecksTokenClear,
@@ -732,6 +732,7 @@ func (m *Model) GetSettingsPRLimit() int            { return m.githubModel.GetPR
 func (m *Model) GetSettingsPRRefreshInterval() int  { return m.githubModel.GetRefreshInterval() }
 func (m *Model) GetSettingsAutoInProgress() bool    { return m.ticketsModel.GetAutoInProgress() }
 func (m *Model) GetSettingsBranchLimit() int        { return m.branchesModel.GetBranchLimit() }
+func (m *Model) GetSettingsShowAllRemotes() bool    { return m.branchesModel.GetShowAllRemotes() }
 func (m *Model) GetSettingsSanitizeBookmarks() bool { return m.advancedModel.GetSanitizeBookmarks() }
 func (m *Model) GetSettingsTicketProvider() string  { return m.ticketsModel.GetTicketProvider() }
 func (m *Model) GetConfirmingCleanup() string       { return m.advancedModel.GetConfirmingCleanup() }
@@ -744,6 +745,7 @@ func (m *Model) SetSettingsPRLimit(v int)            { m.githubModel.SetPRLimit(
 func (m *Model) SetSettingsPRRefreshInterval(v int)  { m.githubModel.SetRefreshInterval(v) }
 func (m *Model) SetSettingsAutoInProgress(v bool)    { m.ticketsModel.SetAutoInProgress(v) }
 func (m *Model) SetSettingsBranchLimit(v int)        { m.branchesModel.SetBranchLimit(v) }
+func (m *Model) SetSettingsShowAllRemotes(v bool)    { m.branchesModel.SetShowAllRemotes(v) }
 func (m *Model) SetSettingsSanitizeBookmarks(v bool) { m.advancedModel.SetSanitizeBookmarks(v) }
 func (m *Model) SetSettingsTicketProvider(s string)  { m.ticketsModel.SetTicketProvider(s) }
 func (m *Model) SetConfirmingCleanup(s string)       { m.advancedModel.SetConfirmingCleanup(s) }

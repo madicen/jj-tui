@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen/jj-tui/internal"
@@ -175,6 +176,26 @@ func FetchAllRemotes(svc *jj.Service) tea.Cmd {
 	}
 }
 
+// FetchAndTrackBranchCmd returns a command that fetches a remote bookmark by name and tracks it.
+func FetchAndTrackBranchCmd(jjSvc *jj.Service, branchName, remote string) tea.Cmd {
+	return FetchAndTrackBranch(jjSvc, branchName, remote)
+}
+
+// FetchAndTrackBranch pulls a remote bookmark down by name and starts tracking it. Reports as
+// the "track" action so the success message and reload behave like a normal track.
+func FetchAndTrackBranch(svc *jj.Service, branchName, remote string) tea.Cmd {
+	if svc == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		err := svc.FetchAndTrackBranch(context.Background(), branchName, remote)
+		if err != nil {
+			return BranchActionMsg{Action: "track", Branch: branchName, Err: err}
+		}
+		return BranchActionMsg{Action: "track", Branch: branchName}
+	}
+}
+
 // LoadBookmarkConflictInfo loads information about a conflicted bookmark.
 func LoadBookmarkConflictInfo(svc *jj.Service, bookmarkName string) tea.Cmd {
 	if svc == nil {
@@ -196,6 +217,20 @@ func LoadBookmarkConflictInfo(svc *jj.Service, bookmarkName string) tea.Cmd {
 	}
 }
 
+// parseBranchRemoteInput splits a typed entry into (name, remote). Accepts "name" (remote
+// empty -> caller defaults to origin / all-remotes) or "name@remote". Surrounding whitespace
+// and a leading "@" on the remote are trimmed.
+func parseBranchRemoteInput(input string) (name, remote string) {
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return "", ""
+	}
+	if i := strings.LastIndex(input, "@"); i > 0 {
+		return strings.TrimSpace(input[:i]), strings.TrimSpace(input[i+1:])
+	}
+	return input, ""
+}
+
 // ExecuteRequest validates the request and returns (statusMsg, cmd). Main sets statusMsg and returns the cmd.
 func ExecuteRequest(r Request, ctx *RequestContext) (statusMsg string, cmd tea.Cmd) {
 	if ctx == nil {
@@ -204,6 +239,15 @@ func ExecuteRequest(r Request, ctx *RequestContext) (statusMsg string, cmd tea.C
 
 	if r.FetchAll {
 		return "Fetching from all remotes...", FetchAllRemotesCmd(ctx.JJService)
+	}
+
+	if r.FetchAndTrack {
+		// No selected branch required: this pulls a bookmark down by typed name.
+		name, remote := parseBranchRemoteInput(r.RemoteBranchInput)
+		if name == "" {
+			return "Enter a branch name to track", nil
+		}
+		return fmt.Sprintf("Fetching and tracking %s...", name), FetchAndTrackBranchCmd(ctx.JJService, name, remote)
 	}
 
 	if !ctx.SelectedBranchValid() {

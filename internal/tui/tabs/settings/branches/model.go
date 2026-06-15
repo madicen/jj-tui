@@ -4,9 +4,10 @@ import (
 	"github.com/madicen/jj-tui/internal/config"
 )
 
-// Model represents the Branches settings sub-tab (branch limit).
+// Model represents the Branches settings sub-tab (branch limit, show-all-remotes).
 type Model struct {
-	branchLimit int
+	branchLimit    int
+	showAllRemotes bool
 }
 
 // NewModel creates a new Branches settings model with default state.
@@ -19,6 +20,8 @@ func NewModelFromConfig(cfg *config.Config) Model {
 	m := NewModel()
 	if cfg != nil {
 		m.branchLimit = cfg.BranchLimit()
+		// Filter-on (default) means "don't show all remotes"; invert for the toggle.
+		m.showAllRemotes = !cfg.BranchesFilterToTrackedAndMine()
 	}
 	return m
 }
@@ -37,4 +40,19 @@ func (m *Model) SetBranchLimit(n int) {
 		n = 500
 	}
 	m.branchLimit = n
+}
+
+// GetShowAllRemotes returns whether untracked remote branches should be listed.
+func (m *Model) GetShowAllRemotes() bool {
+	return m.showAllRemotes
+}
+
+// SetShowAllRemotes sets whether untracked remote branches should be listed.
+func (m *Model) SetShowAllRemotes(v bool) {
+	m.showAllRemotes = v
+}
+
+// ToggleShowAllRemotes flips the show-all-remotes setting.
+func (m *Model) ToggleShowAllRemotes() {
+	m.showAllRemotes = !m.showAllRemotes
 }

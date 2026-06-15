@@ -2003,6 +2003,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if wasSettings {
 			m.settingsTabModel.SetViewOpts(m.buildSettingsViewOpts())
 		}
+		// The "show all remote branches" toggle changes how bookmarks are listed; re-apply it
+		// to the live service and reload the branch list so the change is reflected immediately.
+		if m.appState.JJService != nil && m.appState.Config != nil {
+			m.appState.JJService.BookmarkListPreferTracked = m.appState.Config.BranchesFilterToTrackedAndMine()
+			cmd = tea.Batch(cmd, branchestab.LoadBranchesCmd(m.appState.JJService, m.settingsTabModel.GetSettingsBranchLimit()))
+		}
 		return m, cmd
 
 	case settingstab.GitHubDeviceFlowStartedMsg:

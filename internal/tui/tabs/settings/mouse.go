@@ -268,6 +268,9 @@ func handleBranchesZone(m *Model, zoneID string) (Model, tea.Cmd) {
 			br.SetBranchLimit(n + 10)
 		}
 		return *m, nil
+	case mouse.ZoneSettingsBranchShowAllRemotes:
+		br.ToggleShowAllRemotes()
+		return *m, nil
 	}
 	return *m, nil
 }
