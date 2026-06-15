@@ -1,6 +1,7 @@
 package aiprompts
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -89,6 +90,141 @@ func TestPRUser_chainSummaryAddedBetweenHintAndDiff(t *testing.T) {
 		if !strings.Contains(u, want) {
 			t.Fatalf("PRUser with chain missing %q; got:\n%s", want, u)
 		}
+	}
+}
+
+func makeDiff(files, changedLinesPerFile int) string {
+	var b strings.Builder
+	for f := 0; f < files; f++ {
+		fmt.Fprintf(&b, "diff --git a/file%d.go b/file%d.go\n", f, f)
+		b.WriteString("--- a/file" + string(rune('0'+f%10)) + ".go\n")
+		b.WriteString("+++ b/file" + string(rune('0'+f%10)) + ".go\n")
+		b.WriteString("@@ -1,3 +1,3 @@\n")
+		for i := 0; i < changedLinesPerFile; i++ {
+			b.WriteString("+added line\n")
+		}
+	}
+	return b.String()
+}
+
+func TestPrDetailGuidance_tiers(t *testing.T) {
+	small := prDetailGuidance(makeDiff(1, 5))
+	if !strings.Contains(small, "single sentence") {
+		t.Fatalf("small tier guidance unexpected: %q", small)
+	}
+	medium := prDetailGuidance(makeDiff(3, 40)) // ~120 changed lines, 3 files
+	if !strings.Contains(medium, "1-2 sentence") {
+		t.Fatalf("medium tier guidance unexpected: %q", medium)
+	}
+	large := prDetailGuidance(makeDiff(10, 60)) // ~600 changed lines
+	if !strings.Contains(large, "large change") {
+		t.Fatalf("large tier guidance unexpected: %q", large)
+	}
+}
+
+// A multi-file diff with few total lines is not "small": the file count alone
+// pushes it past the small tier into medium.
+func TestPrDetailGuidance_multipleFilesNotSmall(t *testing.T) {
+	g := prDetailGuidance(makeDiff(3, 2)) // only 6 changed lines but 3 files
+	if strings.Contains(g, "single sentence") {
+		t.Fatalf("multi-file diff should not be small tier; got: %q", g)
+	}
+}
+
+func TestCountDiffChange_ignoresHeaders(t *testing.T) {
+	changed, files := countDiffChange(makeDiff(2, 3))
+	if files != 2 {
+		t.Fatalf("files = %d, want 2", files)
+	}
+	if changed != 6 {
+		t.Fatalf("changedLines = %d, want 6 (headers must be excluded)", changed)
+	}
+}
+
+func TestPRUser_includesLengthBudget(t *testing.T) {
+	smallU := PRUser("main", "fix", "", "", makeDiff(1, 3))
+	if !strings.Contains(smallU, "Length budget for the body:") || !strings.Contains(smallU, "single sentence") {
+		t.Fatalf("PRUser for small diff missing small budget; got:\n%s", smallU)
+	}
+	largeU := PRUser("main", "refactor", "", "", makeDiff(10, 60))
+	if !strings.Contains(largeU, "large change") {
+		t.Fatalf("PRUser for large diff missing large budget; got:\n%s", largeU)
+	}
+}
+
+func TestFormatDiffFileStat_perFileCounts(t *testing.T) {
+	diff := "diff --git a/foo.go b/foo.go\n" +
+		"--- a/foo.go\n+++ b/foo.go\n@@ -1,2 +1,3 @@\n+a\n+b\n-c\n" +
+		"diff --git a/bar.go b/bar.go\n" +
+		"--- a/bar.go\n+++ b/bar.go\n@@ -1 +1 @@\n+x\n"
+	stat := FormatDiffFileStat(diff)
+	for _, want := range []string{"Files changed (2):", "foo.go  (+2 -1)", "bar.go  (+1 -0)"} {
+		if !strings.Contains(stat, want) {
+			t.Fatalf("stat missing %q; got:\n%s", want, stat)
+		}
+	}
+}
+
+func TestFormatDiffFileStat_emptyForNoFiles(t *testing.T) {
+	if got := FormatDiffFileStat(""); got != "" {
+		t.Fatalf("FormatDiffFileStat(\"\") = %q, want empty", got)
+	}
+}
+
+func TestFormatDiffFileStat_overflowTrailer(t *testing.T) {
+	var b strings.Builder
+	for i := 0; i < maxFilesInStat+3; i++ {
+		fmt.Fprintf(&b, "diff --git a/f%d.go b/f%d.go\n--- a/f%d.go\n+++ b/f%d.go\n@@ -1 +1 @@\n+x\n", i, i, i, i)
+	}
+	stat := FormatDiffFileStat(b.String())
+	if !strings.Contains(stat, "+3 more files") {
+		t.Fatalf("overflow trailer missing; got:\n%s", stat)
+	}
+}
+
+func TestCommitDescriptionUser_includesFileStat(t *testing.T) {
+	diff := "diff --git a/foo.go b/foo.go\n--- a/foo.go\n+++ b/foo.go\n@@ -1 +1 @@\n+a\n"
+	u := CommitDescriptionUser("abc123", "", diff)
+	if !strings.Contains(u, "Files changed (1):") || !strings.Contains(u, "foo.go") {
+		t.Fatalf("CommitDescriptionUser missing file stat; got:\n%s", u)
+	}
+}
+
+func TestPRUser_includesFileStat(t *testing.T) {
+	diff := "diff --git a/foo.go b/foo.go\n--- a/foo.go\n+++ b/foo.go\n@@ -1 +1 @@\n+a\n"
+	u := PRUser("main", "feature", "", "", diff)
+	if !strings.Contains(u, "Files changed (1):") {
+		t.Fatalf("PRUser missing file stat; got:\n%s", u)
+	}
+}
+
+func TestTicketUser_includesFileStatAndBudget(t *testing.T) {
+	small := TicketUser("abc123", "", "", "", makeDiff(1, 3))
+	if !strings.Contains(small, "Files changed (1):") {
+		t.Fatalf("TicketUser missing file stat; got:\n%s", small)
+	}
+	if !strings.Contains(small, "Length budget for the description:") || !strings.Contains(small, "sentence or two") {
+		t.Fatalf("TicketUser missing small budget; got:\n%s", small)
+	}
+	large := TicketUser("abc123", "", "", "", makeDiff(10, 60))
+	if !strings.Contains(large, "large change") {
+		t.Fatalf("TicketUser missing large budget; got:\n%s", large)
+	}
+}
+
+func TestBookmarkUser_includesFileStat(t *testing.T) {
+	u := BookmarkUser("", "", makeDiff(2, 4))
+	if !strings.Contains(u, "Files changed (2):") {
+		t.Fatalf("BookmarkUser missing file stat; got:\n%s", u)
+	}
+}
+
+func TestTicketDetailGuidance_tiers(t *testing.T) {
+	if !strings.Contains(ticketDetailGuidance(makeDiff(1, 5)), "sentence or two") {
+		t.Fatal("small ticket tier wrong")
+	}
+	if !strings.Contains(ticketDetailGuidance(makeDiff(10, 60)), "large change") {
+		t.Fatal("large ticket tier wrong")
 	}
 }
 
