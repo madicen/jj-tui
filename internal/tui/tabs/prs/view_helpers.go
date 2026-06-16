@@ -55,11 +55,15 @@ func (m *Model) renderPRs() string {
 		pr := m.repository.PRs[m.selectedPR]
 
 		var detailLines []string
-		detailLines = append(detailLines, fmt.Sprintf("%s #%d: %s",
+		titleLine := fmt.Sprintf("%s #%d: %s",
 			lipgloss.NewStyle().Bold(true).Render("Selected:"),
 			pr.Number,
 			pr.Title,
-		))
+		)
+		if pr.IsDraft {
+			titleLine += "  " + lipgloss.NewStyle().Foreground(lipgloss.Color("#6a737d")).Render("[Draft]")
+		}
+		detailLines = append(detailLines, titleLine)
 		detailLines = append(detailLines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render(pr.URL))
 		detailLines = append(detailLines, fmt.Sprintf("Base: %s ← Head: %s", pr.BaseBranch, pr.HeadBranch))
 
@@ -136,7 +140,11 @@ func (m *Model) renderPRs() string {
 		var stateIndicator string
 		switch pr.State {
 		case "open":
-			stateIndicator = lipgloss.NewStyle().Foreground(lipgloss.Color("#2ea44f")).Render("●")
+			if pr.IsDraft {
+				stateIndicator = lipgloss.NewStyle().Foreground(lipgloss.Color("#6a737d")).Render("●")
+			} else {
+				stateIndicator = lipgloss.NewStyle().Foreground(lipgloss.Color("#2ea44f")).Render("●")
+			}
 		case "closed":
 			stateIndicator = lipgloss.NewStyle().Foreground(lipgloss.Color("#cb2431")).Render("●")
 		case "merged":

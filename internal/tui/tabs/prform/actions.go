@@ -74,6 +74,7 @@ type SubmitPRInput struct {
 	HeadBranch        string
 	BaseBranch        string
 	NeedsMoveBookmark bool
+	Draft             bool
 	CommitChangeID    string
 	CommitIDsForDemo  []string // optional; used in demo mode for PR.CommitIDs
 	JJService         *jj.Service
@@ -105,6 +106,7 @@ func SubmitPRCmd(input SubmitPRInput) (tea.Cmd, string) {
 			CommitIDs:    commitIDs,
 			CheckStatus:  internal.CheckStatusPending,
 			ReviewStatus: internal.ReviewStatusNone,
+			IsDraft:      input.Draft,
 		}
 		// Delay so demo/VHS shows the same loading overlay as real create (push + GitHub API).
 		const demoPRCreateDelay = 2 * time.Second
@@ -118,6 +120,7 @@ func SubmitPRCmd(input SubmitPRInput) (tea.Cmd, string) {
 		HeadBranch:        input.HeadBranch,
 		BaseBranch:        input.BaseBranch,
 		NeedsMoveBookmark: input.NeedsMoveBookmark,
+		Draft:             input.Draft,
 		CommitChangeID:    input.CommitChangeID,
 	}), ""
 }
@@ -129,6 +132,7 @@ type PRCreateParams struct {
 	HeadBranch        string
 	BaseBranch        string
 	NeedsMoveBookmark bool
+	Draft             bool
 	CommitChangeID    string
 }
 
@@ -175,6 +179,7 @@ func CreatePRCmd(jjSvc *jj.Service, ghSvc *github.Service, params PRCreateParams
 				Body:       params.Body,
 				HeadBranch: params.HeadBranch,
 				BaseBranch: params.BaseBranch,
+				Draft:      params.Draft,
 			})
 			if lastErr == nil {
 				break
@@ -241,8 +246,9 @@ func OpenCreatePR(modal *Model, repo *internal.Repository, commitIdx int, jiraTi
 	modal.SetBody("")
 	modal.GetTitleInput().Width = width
 	modal.GetBodyInput().SetWidth(width)
-	// Use full content height: fixed lines (title, branch, "Title:", title input, "Body:", buttons) ≈ 11
-	const fixedFormLines = 11
+	// Use full content height: fixed lines (branch, "Title:", title input, "Body:",
+	// draft toggle + spacer, buttons) ≈ 13
+	const fixedFormLines = 13
 	bodyHeight := height - fixedFormLines
 	if bodyHeight < 3 {
 		bodyHeight = 3
@@ -281,6 +287,7 @@ func SubmitPR(modal *Model, repo *internal.Repository, jjService *jj.Service, gi
 		HeadBranch:        modal.GetHeadBranch(),
 		BaseBranch:        modal.GetBaseBranch(),
 		NeedsMoveBookmark: modal.NeedsMoveBookmark(),
+		Draft:             modal.GetDraft(),
 		CommitChangeID:    commitChangeID,
 		CommitIDsForDemo:  commitIDsForDemo,
 		JJService:         jjService,

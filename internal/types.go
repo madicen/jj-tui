@@ -72,6 +72,7 @@ type GitHubPR struct {
 	CommitIDs    []string     `json:"commit_ids"`
 	CheckStatus  CheckStatus  `json:"check_status"`  // CI check status
 	ReviewStatus ReviewStatus `json:"review_status"` // Review status
+	IsDraft      bool         `json:"is_draft"`      // True if the PR is a draft
 }
 
 // Repository represents the current jj repository state

@@ -320,6 +320,7 @@ func DemoPullRequests() []internal.GitHubPR {
 			CommitIDs:    []string{"jkl012"},
 			CheckStatus:  internal.CheckStatusPending,
 			ReviewStatus: internal.ReviewStatusPending,
+			IsDraft:      true,
 		},
 		{
 			Number:       128,
