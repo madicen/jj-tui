@@ -201,6 +201,7 @@ func (m Model) lines() []string {
 	lines = append(lines, "")
 	lines = append(lines, "  State:")
 	lines = append(lines, "    ● green   Open PR")
+	lines = append(lines, "    ● grey    Draft PR")
 	lines = append(lines, "    ● red     Closed PR")
 	lines = append(lines, "    ● purple  Merged PR")
 	lines = append(lines, "")

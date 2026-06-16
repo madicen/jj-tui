@@ -27,6 +27,7 @@ type Model struct {
 	focusedField      int  // 0=title, 1=body
 	commitIndex       int  // Index of commit PR is being created from
 	needsMoveBookmark bool // True if we need to move the bookmark to include all commits
+	draft             bool // True if the PR should be created as a draft
 	// Long-press AI profile picker over the Generate chip; same structure used in
 	// the descedit, bookmark, and ticketform modals.
 	genMenu       genmenu.State
@@ -190,6 +191,7 @@ func (m Model) renderForm() string {
 
 	titleInput := mark(mouse.ZonePRTitle, m.titleInput.View())
 	bodyInput := mark(mouse.ZonePRBody, m.bodyInput.View())
+	draftToggle := mark(mouse.ZonePRDraft, m.renderDraftToggle())
 	submitBtn := mark(mouse.ZonePRSubmit, buttonStyle.Render("Create PR (Ctrl+S)"))
 	cancelBtn := mark(mouse.ZonePRCancel, buttonStyle.Render("Cancel (Esc)"))
 
@@ -203,8 +205,22 @@ func (m Model) renderForm() string {
 		"Body:",
 		bodyInput,
 		"",
+		draftToggle,
+		"",
 		lipgloss.JoinHorizontal(lipgloss.Left, submitBtn, "  ", cancelBtn),
 	)
+}
+
+// renderDraftToggle renders the "Open as draft" checkbox using the same look as
+// the settings toggles ([✓]/[ ], green-on / muted-off).
+func (m Model) renderDraftToggle() string {
+	label := "Open as draft (Ctrl+D)"
+	if m.draft {
+		on := lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B")).Bold(true)
+		return on.Render("[✓]") + " " + label
+	}
+	off := lipgloss.NewStyle().Foreground(styles.ColorMuted)
+	return off.Render("[ ]") + " " + off.Render(label)
 }
 
 // handleKeyMsg handles keyboard input; returns request cmds for main to handle cancel/submit.
@@ -214,6 +230,9 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, CancelRequestedCmd()
 	case "ctrl+g":
 		return m, state.NavigateTarget{Kind: state.NavigateGeneratePRForm}.Cmd()
+	case "ctrl+d":
+		m.draft = !m.draft
+		return m, nil
 	case "ctrl+s", "ctrl+enter":
 		return m, SubmitRequestedCmd()
 	case "tab":
@@ -241,7 +260,7 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 // ZoneIDs returns the zone IDs this modal uses when rendering. Used to resolve clicks.
 func (m Model) ZoneIDs() []string {
-	return []string{mouse.ZonePRTitle, mouse.ZonePRBody, mouse.ZonePRSubmit, mouse.ZonePRGenerate, mouse.ZonePRCancel}
+	return []string{mouse.ZonePRTitle, mouse.ZonePRBody, mouse.ZonePRDraft, mouse.ZonePRSubmit, mouse.ZonePRGenerate, mouse.ZonePRCancel}
 }
 
 func (m Model) resolveClickedZone(msg zone.MsgZoneInBounds) string {
@@ -267,6 +286,9 @@ func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
 		return m, nil
 	case mouse.ZonePRBody:
 		m.SetFocusedField(1)
+		return m, nil
+	case mouse.ZonePRDraft:
+		m.draft = !m.draft
 		return m, nil
 	case mouse.ZonePRSubmit:
 		return m, SubmitRequestedCmd()
@@ -309,6 +331,17 @@ func (m *Model) Reset() {
 	m.bodyInput.SetValue("")
 	m.focusedField = 0
 	m.needsMoveBookmark = false
+	m.draft = false
+}
+
+// GetDraft returns whether the PR should be created as a draft
+func (m *Model) GetDraft() bool {
+	return m.draft
+}
+
+// SetDraft sets whether the PR should be created as a draft
+func (m *Model) SetDraft(draft bool) {
+	m.draft = draft
 }
 
 // GetTitle returns the PR title

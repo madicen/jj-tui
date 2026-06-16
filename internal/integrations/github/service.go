@@ -395,6 +395,7 @@ func (s *Service) queryPullRequestsGraphQL(ctx context.Context, states []githubv
 					BaseRefName string
 					HeadRefName string
 					Merged      bool
+					IsDraft     bool
 					Author      struct {
 						Login string
 					}
@@ -480,6 +481,7 @@ func (s *Service) queryPullRequestsGraphQL(ctx context.Context, states []githubv
 				HeadBranch:   pr.HeadRefName,
 				CheckStatus:  checkStatus,
 				ReviewStatus: reviewStatus,
+				IsDraft:      pr.IsDraft,
 			})
 
 			// Check limit
@@ -586,6 +588,7 @@ func (s *Service) queryPullRequestsREST(ctx context.Context, stateFilter string,
 				HeadBranch:   pr.GetHead().GetRef(),
 				CheckStatus:  internal.CheckStatusNone,  // Not available with REST fallback
 				ReviewStatus: internal.ReviewStatusNone, // Not available with REST fallback
+				IsDraft:      pr.GetDraft(),
 			})
 
 			// Check limit
