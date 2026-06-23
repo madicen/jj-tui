@@ -5,8 +5,11 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	zone "github.com/lrstanley/bubblezone"
+	bubbledropdown "github.com/madicen/bubble-dropdown"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/config"
+	"github.com/madicen/jj-tui/internal/tui/styles"
 )
 
 // Model represents the Advanced settings sub-tab (sanitize bookmarks, graph revset, external editor, cleanup).
@@ -17,6 +20,10 @@ type Model struct {
 	customEditorInput    textinput.Model
 	focusedField         int // 0 = graph revset, 1 = custom editor
 	externalEditorPreset int // 0..8 — see externalEditorPresetLabels
+
+	// editorDropdown replaces the old radio rows for picking the external editor
+	// preset. The selected index maps 1:1 onto externalEditorPreset.
+	editorDropdown *bubbledropdown.Dropdown
 }
 
 // ExternalEditorPresetLabels are UI labels for each editor preset (same order as config values below).
@@ -62,6 +69,11 @@ func NewModel() Model {
 		graphRevsetInput:  revsetInput,
 		customEditorInput: customIn,
 		focusedField:      0,
+		editorDropdown: bubbledropdown.New(
+			bubbledropdown.WithOptions(ExternalEditorPresetLabels),
+			bubbledropdown.WithMaxVisible(len(ExternalEditorPresetLabels)),
+			bubbledropdown.WithAccentColor(string(styles.ColorPrimary)),
+		),
 	}
 }
 
@@ -74,6 +86,7 @@ func NewModelFromConfig(cfg *config.Config) Model {
 		m.customEditorInput.SetValue(cfg.ExternalFileEditorCustom)
 		m.externalEditorPreset = presetIndexFromConfig(cfg.ExternalFileEditor)
 	}
+	m.editorDropdown.SetSelectedIndex(m.externalEditorPreset)
 	return m
 }
 
@@ -199,6 +212,41 @@ func (m *Model) SetExternalEditorPreset(i int) {
 		return
 	}
 	m.externalEditorPreset = i
+	if m.editorDropdown != nil {
+		m.editorDropdown.SetSelectedIndex(i)
+	}
+}
+
+// EditorDropdown returns the external-editor preset dropdown (for rendering and
+// overlay). It syncs the accent so the panel tracks the live theme primary color.
+func (m *Model) EditorDropdown() *bubbledropdown.Dropdown {
+	if accent := string(styles.ColorPrimary); m.editorDropdown.AccentColor() != accent {
+		m.editorDropdown.SetAccentColor(accent)
+	}
+	return m.editorDropdown
+}
+
+// DropdownOpen reports whether the editor preset dropdown panel is open.
+func (m *Model) DropdownOpen() bool { return m.editorDropdown.Open() }
+
+// SetZoneManager wires the bubblezone manager into the editor dropdown.
+func (m *Model) SetZoneManager(zm *zone.Manager) {
+	m.editorDropdown.SetZoneManager(zm)
+}
+
+// UpdateDropdown forwards a message to the editor dropdown and, on selection,
+// applies the chosen preset index. Returns any tea.Cmd the dropdown emits.
+func (m *Model) UpdateDropdown(msg tea.Msg) tea.Cmd {
+	if m.editorDropdown == nil {
+		return nil
+	}
+	wasOpen := m.editorDropdown.Open()
+	dd, cmd := m.editorDropdown.Update(msg)
+	m.editorDropdown = dd
+	if chosen, ok := msg.(bubbledropdown.ItemChosenMsg); ok && wasOpen {
+		m.SetExternalEditorPreset(chosen.Index)
+	}
+	return cmd
 }
 
 // SavedExternalEditor returns config strings to persist.

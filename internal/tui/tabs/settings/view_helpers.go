@@ -6,10 +6,10 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
+	bubbledropdown "github.com/madicen/bubble-dropdown"
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/styles"
-	"github.com/madicen/jj-tui/internal/tui/tabs/settings/advanced"
 	"github.com/madicen/jj-tui/internal/tui/tabs/settings/theme"
 	"github.com/madicen/jj-tui/internal/version"
 )
@@ -82,6 +82,13 @@ type RenderData struct {
 	// ThemeModel is set by BuildRenderData for rendering the Theme tab (swatches + bounds).
 	ThemeModel *theme.Model
 
+	// Dropdown widgets that replace the old radio groups. Each is rendered as a
+	// single trigger line; the open panel is composited by settings.Model.View.
+	GitHubTokenSourceDD *bubbledropdown.Dropdown
+	TicketProviderDD    *bubbledropdown.Dropdown
+	AIProviderDD        *bubbledropdown.Dropdown
+	EditorPresetDD      *bubbledropdown.Dropdown
+
 	// Scroll: when ContentHeight > 0, only lines [YOffset : YOffset+ContentHeight] are shown
 	YOffset       int
 	ContentHeight int
@@ -134,6 +141,10 @@ func BuildRenderData(sm *Model, opts ViewOpts) RenderData {
 		YOffset:                sm.GetSettingsYOffset(),
 		ContentHeight:          opts.ContentHeight,
 		ThemeModel:             sm.GetThemeModel(),
+		GitHubTokenSourceDD:    sm.GetGitHubModel().TokenSourceDropdown(),
+		TicketProviderDD:       sm.GetTicketsModel().ProviderDropdown(),
+		AIProviderDD:           sm.GetAIModel().ProviderDropdown(),
+		EditorPresetDD:         sm.GetAdvancedModel().EditorDropdown(),
 		GitHubTokenSource:      sm.GetGitHubTokenSource(),
 		CurrentOrigin:          sm.GetGitHubModel().GetCurrentOrigin(),
 		OriginInputView:        sm.GetGitHubModel().GetOriginInputView(),
@@ -163,6 +174,18 @@ func RenderWithState(zm *zone.Manager, sm *Model, opts ViewOpts) string {
 
 type renderCtx struct {
 	zm *zone.Manager
+	// ddBounds collects (dropdown, absolute line index, column) tuples recorded
+	// while building the line list, so SetBounds can be applied after the scroll
+	// offset is known (the trigger's on-screen row = lineIndex - scrollStart).
+	ddBounds *[]ddBound
+}
+
+// ddBound records where a dropdown trigger was placed so its overlay bounds can
+// be set once the scroll start offset is known.
+type ddBound struct {
+	dd        *bubbledropdown.Dropdown
+	lineIndex int
+	col       int
 }
 
 func (r renderCtx) mark(id, content string) string {
@@ -172,9 +195,17 @@ func (r renderCtx) mark(id, content string) string {
 	return content
 }
 
+// recordDropdown notes a trigger's absolute line index and column for later SetBounds.
+func (r renderCtx) recordDropdown(dd *bubbledropdown.Dropdown, lineIndex, col int) {
+	if r.ddBounds != nil && dd != nil {
+		*r.ddBounds = append(*r.ddBounds, ddBound{dd: dd, lineIndex: lineIndex, col: col})
+	}
+}
+
 // Render renders the full settings view using the given zone manager and data
 func Render(zm *zone.Manager, data RenderData) string {
-	r := renderCtx{zm: zm}
+	bounds := make([]ddBound, 0, 1)
+	r := renderCtx{zm: zm, ddBounds: &bounds}
 	var lines []string
 
 	if data.ConfigSource != "" {
@@ -194,22 +225,22 @@ func Render(zm *zone.Manager, data RenderData) string {
 
 	switch data.ActiveTab {
 	case TabGitHub:
-		lines = append(lines, r.renderGitHub(data)...)
+		lines = append(lines, r.renderGitHub(data, len(lines))...)
 	case TabJira:
 		lines = append(lines, r.renderJira(data)...)
 	case TabCodecks:
 		lines = append(lines, r.renderCodecks(data)...)
 	case TabTickets:
-		lines = append(lines, r.renderTickets(data)...)
+		lines = append(lines, r.renderTickets(data, len(lines))...)
 	case TabBranches:
 		lines = append(lines, r.renderBranches(data)...)
 	case TabTheme:
 		themeStartRow := len(lines)
 		lines = append(lines, r.renderTheme(data, themeStartRow)...)
 	case TabAI:
-		lines = append(lines, r.renderAI(data)...)
+		lines = append(lines, r.renderAI(data, len(lines))...)
 	case TabAdvanced:
-		lines = append(lines, r.renderAdvanced(data)...)
+		lines = append(lines, r.renderAdvanced(data, len(lines))...)
 	}
 
 	lines = append(lines, "")
@@ -244,16 +275,24 @@ func Render(zm *zone.Manager, data RenderData) string {
 	cancelBtn := r.mark(mouse.ZoneSettingsCancel, styles.ButtonStyle.Render("Cancel (Esc)"))
 	lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Left, saveBtn, " ", saveLocalBtn, " ", cancelBtn))
 
+	start := 0
 	if data.ContentHeight > 0 {
 		visibleHeight := data.ContentHeight
 		totalLines := len(lines)
 		maxOffset := max(0, totalLines-visibleHeight)
-		start := min(data.YOffset, maxOffset)
+		start = min(data.YOffset, maxOffset)
 		if start < 0 {
 			start = 0
 		}
 		end := min(start+visibleHeight, totalLines)
 		lines = lines[start:end]
+	}
+	// Position each dropdown panel relative to its on-screen trigger row. The
+	// trigger sits at (lineIndex - start) within the scrolled, joined string that
+	// settings.Model.View composites the open panel onto.
+	for _, b := range bounds {
+		tw, th := b.dd.TriggerSize()
+		b.dd.SetBounds(b.lineIndex-start, b.col, tw, th)
 	}
 	return strings.Join(lines, "\n")
 }
@@ -303,7 +342,7 @@ func (r renderCtx) renderToggle(label string, enabled bool, zoneID string) strin
 	return r.mark(zoneID, toggleOffStyle.Render("[ ]")+" "+lipgloss.NewStyle().Foreground(styles.ColorMuted).Render(label))
 }
 
-func (r renderCtx) renderGitHub(data RenderData) []string {
+func (r renderCtx) renderGitHub(data RenderData, base int) []string {
 	var lines []string
 	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render("GitHub Integration"))
 	lines = append(lines, "", lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("Connect to GitHub for PR management."), "")
@@ -312,20 +351,12 @@ func (r renderCtx) renderGitHub(data RenderData) []string {
 	if src == "" {
 		src = config.GitHubTokenSourceSaved
 	}
-	authRadio := func(label, value, zone string) string {
-		selected := src == value
-		var radioText string
-		if selected {
-			radioText = toggleOnStyle.Render("(●) " + label)
-		} else {
-			radioText = lipgloss.NewStyle().Foreground(styles.ColorPrimary).Render("( ) " + label)
-		}
-		return r.mark(zone, radioText)
-	}
 	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("  API token source:"), "")
-	lines = append(lines, "    "+authRadio("Saved in jj-tui (device flow or paste below)", config.GitHubTokenSourceSaved, mouse.ZoneSettingsGitHubAuthSaved))
-	lines = append(lines, "    "+authRadio("Environment variable (GITHUB_TOKEN)", config.GitHubTokenSourceEnv, mouse.ZoneSettingsGitHubAuthEnv))
-	lines = append(lines, "    "+authRadio("GitHub CLI (`gh auth token`)", config.GitHubTokenSourceGhCLI, mouse.ZoneSettingsGitHubAuthGhCLI))
+	if data.GitHubTokenSourceDD != nil {
+		idx := base + len(lines)
+		lines = append(lines, "    "+r.mark(mouse.ZoneSettingsGitHubAuthSource, data.GitHubTokenSourceDD.TriggerView()))
+		r.recordDropdown(data.GitHubTokenSourceDD, idx, 4)
+	}
 	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Only the selected source is used (no fallback). Restart jj-tui after changing GITHUB_TOKEN in your shell."), "")
 	lines = append(lines, "")
 
@@ -541,31 +572,17 @@ func (r renderCtx) renderCodecks(data RenderData) []string {
 	return lines
 }
 
-func (r renderCtx) renderTickets(data RenderData) []string {
+func (r renderCtx) renderTickets(data RenderData, base int) []string {
 	var lines []string
 	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render("Ticket Provider"))
 	lines = append(lines, "", lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("Choose which ticket service to use for the Tickets tab."), "")
 	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("  Active Provider:"), "")
 
-	renderRadio := func(label, provider, zone string, available bool) string {
-		selected := data.TicketProvider == provider
-		var radioText string
-		if selected {
-			radioText = toggleOnStyle.Render("(●) " + label)
-		} else if available {
-			radioText = lipgloss.NewStyle().Foreground(styles.ColorPrimary).Render("( ) " + label)
-		} else {
-			radioText = lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("( ) " + label + " (not configured)")
-		}
-		if available || selected {
-			return r.mark(zone, radioText)
-		}
-		return radioText
+	if data.TicketProviderDD != nil {
+		idx := base + len(lines)
+		lines = append(lines, "    "+r.mark(mouse.ZoneSettingsTicketProvider, data.TicketProviderDD.TriggerView()))
+		r.recordDropdown(data.TicketProviderDD, idx, 4)
 	}
-	lines = append(lines, "    "+renderRadio("None (Disabled)", "", mouse.ZoneSettingsTicketProviderNone, true))
-	lines = append(lines, "    "+renderRadio("Jira", "jira", mouse.ZoneSettingsTicketProviderJira, data.JiraConfigured))
-	lines = append(lines, "    "+renderRadio("Codecks", "codecks", mouse.ZoneSettingsTicketProviderCodecks, data.CodecksConfigured))
-	lines = append(lines, "    "+renderRadio("GitHub Issues", "github_issues", mouse.ZoneSettingsTicketProviderGitHubIssues, data.GitHubIssuesConfigured))
 	lines = append(lines, "")
 
 	if data.JiraService && data.TicketProviderName != "" {
@@ -682,7 +699,7 @@ func (r renderCtx) renderAIProfileList(data RenderData) []string {
 	return lines
 }
 
-func (r renderCtx) renderAI(data RenderData) []string {
+func (r renderCtx) renderAI(data RenderData, base int) []string {
 	var lines []string
 	focusStyle := func(i int) lipgloss.Style {
 		s := lipgloss.NewStyle()
@@ -705,19 +722,11 @@ func (r renderCtx) renderAI(data RenderData) []string {
 		curProv = "openai_compatible"
 	}
 	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("  Provider:"), "")
-	renderAIProv := func(idx int, id string, label string) string {
-		selected := curProv == id
-		var radioText string
-		if selected {
-			radioText = toggleOnStyle.Render("(●) " + label)
-		} else {
-			radioText = lipgloss.NewStyle().Foreground(styles.ColorPrimary).Render("( ) " + label)
-		}
-		return r.mark(mouse.ZoneSettingsAIProvider(idx), radioText)
+	if data.AIProviderDD != nil {
+		idx := base + len(lines)
+		lines = append(lines, "    "+r.mark(mouse.ZoneSettingsAIProvider, data.AIProviderDD.TriggerView()))
+		r.recordDropdown(data.AIProviderDD, idx, 4)
 	}
-	lines = append(lines, "    "+renderAIProv(0, "openai_compatible", "OpenAI-compatible (Chat Completions)"))
-	lines = append(lines, "    "+renderAIProv(1, "gemini", "Google Gemini (Generative Language API)"))
-	lines = append(lines, "    "+renderAIProv(2, "ollama", "Ollama (local Chat Completions)"))
 	lines = append(lines, "")
 	if data.AIAPIKeySet {
 		lines = append(lines, "  "+lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B")).Render("LLM credentials: ready (API key, Ollama preset, or local Ollama URL)"))
@@ -788,7 +797,7 @@ func (r renderCtx) renderAI(data RenderData) []string {
 	return lines
 }
 
-func (r renderCtx) renderAdvanced(data RenderData) []string {
+func (r renderCtx) renderAdvanced(data RenderData, base int) []string {
 	var lines []string
 	focusStyle := func(i int) lipgloss.Style {
 		s := lipgloss.NewStyle()
@@ -800,18 +809,10 @@ func (r renderCtx) renderAdvanced(data RenderData) []string {
 	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render("Open in external editor"), "")
 	lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("    Graph files pane: O opens the selected file. Install the editor CLI on your PATH (e.g. Cursor “Install cursor command”)."), "")
 	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("  Editor:"), "")
-	renderEditorRadio := func(idx int, label string) string {
-		selected := data.ExternalEditorPreset == idx
-		var radioText string
-		if selected {
-			radioText = toggleOnStyle.Render("(●) " + label)
-		} else {
-			radioText = lipgloss.NewStyle().Foreground(styles.ColorPrimary).Render("( ) " + label)
-		}
-		return r.mark(mouse.ZoneSettingsExternalEditorPreset(idx), radioText)
-	}
-	for i, label := range advanced.ExternalEditorPresetLabels {
-		lines = append(lines, "    "+renderEditorRadio(i, label))
+	if data.EditorPresetDD != nil {
+		idx := base + len(lines)
+		lines = append(lines, "    "+r.mark(mouse.ZoneSettingsExternalEditor, data.EditorPresetDD.TriggerView()))
+		r.recordDropdown(data.EditorPresetDD, idx, 4)
 	}
 	lines = append(lines, "")
 	lines = append(lines, focusStyle(15).Render("  Custom command (when preset is Custom, run via sh -c):"))

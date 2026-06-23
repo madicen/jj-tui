@@ -6,8 +6,32 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	zone "github.com/lrstanley/bubblezone"
+	bubbledropdown "github.com/madicen/bubble-dropdown"
 	"github.com/madicen/jj-tui/internal/config"
+	"github.com/madicen/jj-tui/internal/tui/styles"
 )
+
+// aiProviderValues maps the provider dropdown indices to their config values;
+// aiProviderLabels are the user-facing strings shown in the dropdown.
+var (
+	aiProviderValues = []string{"openai_compatible", "gemini", "ollama"}
+	aiProviderLabels = []string{
+		"OpenAI-compatible (Chat Completions)",
+		"Google Gemini (Generative Language API)",
+		"Ollama (local Chat Completions)",
+	}
+)
+
+// aiProviderIndex returns the dropdown index for a provider value (0 when unknown).
+func aiProviderIndex(value string) int {
+	for i, v := range aiProviderValues {
+		if v == value {
+			return i
+		}
+	}
+	return 0
+}
 
 // Timeout stepper bounds for the AI generation HTTP timeout (seconds).
 // Lower bound matches the implicit floor in (*config.Config).AITimeout (anything ≤0
@@ -55,6 +79,9 @@ type Model struct {
 	profiles    []config.AIProfile
 	selectedIdx int
 	activeName  string
+
+	// providerDropdown replaces the old radio rows for the LLM provider.
+	providerDropdown *bubbledropdown.Dropdown
 }
 
 // NewModel creates an AI settings model with defaults.
@@ -98,6 +125,10 @@ func NewModel() Model {
 		},
 		selectedIdx: 0,
 		activeName:  config.DefaultAIProfileName,
+		providerDropdown: bubbledropdown.New(
+			bubbledropdown.WithOptions(aiProviderLabels),
+			bubbledropdown.WithAccentColor(string(styles.ColorPrimary)),
+		),
 	}
 }
 
@@ -138,6 +169,9 @@ func (m *Model) loadSelectedProfileIntoInputs() {
 	}
 	p := m.profiles[m.selectedIdx]
 	m.aiProvider = config.NormalizeAIProvider(p.Provider)
+	if m.providerDropdown != nil {
+		m.providerDropdown.SetSelectedIndex(aiProviderIndex(m.aiProvider))
+	}
 	m.aiBaseURLInput.SetValue(p.BaseURL)
 	m.aiModelInput.SetValue(p.Model)
 	if m.aiProvider == "ollama" {
@@ -324,6 +358,43 @@ func (m *Model) SetAIProvider(s string) {
 			m.aiModelInput.SetValue(config.OllamaDefaultModel)
 		}
 	}
+	if m.providerDropdown != nil {
+		m.providerDropdown.SetSelectedIndex(aiProviderIndex(m.aiProvider))
+	}
+}
+
+// ProviderDropdown returns the LLM provider dropdown (for rendering and
+// overlay). It syncs the accent so the panel tracks the live theme primary color.
+func (m *Model) ProviderDropdown() *bubbledropdown.Dropdown {
+	if accent := string(styles.ColorPrimary); m.providerDropdown.AccentColor() != accent {
+		m.providerDropdown.SetAccentColor(accent)
+	}
+	return m.providerDropdown
+}
+
+// DropdownOpen reports whether the provider dropdown panel is open.
+func (m *Model) DropdownOpen() bool { return m.providerDropdown.Open() }
+
+// SetZoneManager wires the bubblezone manager into the provider dropdown.
+func (m *Model) SetZoneManager(zm *zone.Manager) {
+	m.providerDropdown.SetZoneManager(zm)
+}
+
+// UpdateDropdown forwards a message to the provider dropdown and, on selection,
+// applies the chosen provider value. Returns any tea.Cmd the dropdown emits.
+func (m *Model) UpdateDropdown(msg tea.Msg) tea.Cmd {
+	if m.providerDropdown == nil {
+		return nil
+	}
+	wasOpen := m.providerDropdown.Open()
+	dd, cmd := m.providerDropdown.Update(msg)
+	m.providerDropdown = dd
+	if chosen, ok := msg.(bubbledropdown.ItemChosenMsg); ok && wasOpen {
+		if chosen.Index >= 0 && chosen.Index < len(aiProviderValues) {
+			m.SetAIProvider(aiProviderValues[chosen.Index])
+		}
+	}
+	return cmd
 }
 
 // GetAIBaseURL returns the configured API base URL field.

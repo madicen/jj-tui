@@ -12,6 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/bubble-color-picker"
+	bubbledropdown "github.com/madicen/bubble-dropdown"
 	overlay "github.com/madicen/bubble-overlay"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/config"
@@ -1605,6 +1606,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m.handleZoneClick(msg)
+
+	case bubbledropdown.ItemChosenMsg, bubbledropdown.ItemCanceledMsg:
+		// A settings dropdown emitted its selection/cancel via a deferred cmd.
+		// Route it to the settings tab so the active sub-model applies and closes.
+		if m.appState.ViewMode == state.ViewSettings {
+			updated, cmd := m.settingsTabModel.Update(msg)
+			m.settingsTabModel = updated
+			return m, cmd
+		}
+		return m, nil
 
 	case state.NavigateMsg:
 		return m.handleNavigate(msg.Target)
