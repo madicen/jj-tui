@@ -44,23 +44,6 @@ func handleGitHubZone(m *Model, zoneID string) (Model, tea.Cmd) {
 	}
 	gh := m.GetGitHubModel()
 	switch zoneID {
-	case mouse.ZoneSettingsGitHubAuthSaved:
-		gh.SetTokenSource(config.GitHubTokenSourceSaved)
-		if cfg, _ := config.Load(); cfg != nil && cfg.GitHubToken != "" {
-			gh.SetToken(cfg.GitHubToken)
-		}
-		m.SetFocusedField(0)
-		return *m, nil
-	case mouse.ZoneSettingsGitHubAuthEnv:
-		gh.SetTokenSource(config.GitHubTokenSourceEnv)
-		gh.SetToken("")
-		m.SetFocusedField(1)
-		return *m, nil
-	case mouse.ZoneSettingsGitHubAuthGhCLI:
-		gh.SetTokenSource(config.GitHubTokenSourceGhCLI)
-		gh.SetToken("")
-		m.SetFocusedField(1)
-		return *m, nil
 	case mouse.ZoneSettingsGitHubOnlyMine:
 		gh.SetOnlyMine(!gh.GetOnlyMine())
 		return *m, nil
@@ -222,18 +205,6 @@ func handleCodecksZone(m *Model, zoneID string) (Model, tea.Cmd) {
 func handleTicketsZone(m *Model, zoneID string) (Model, tea.Cmd) {
 	tk := m.GetTicketsModel()
 	switch zoneID {
-	case mouse.ZoneSettingsTicketProviderNone:
-		tk.SetTicketProvider("")
-		return *m, nil
-	case mouse.ZoneSettingsTicketProviderJira:
-		tk.SetTicketProvider("jira")
-		return *m, nil
-	case mouse.ZoneSettingsTicketProviderCodecks:
-		tk.SetTicketProvider("codecks")
-		return *m, nil
-	case mouse.ZoneSettingsTicketProviderGitHubIssues:
-		tk.SetTicketProvider("github_issues")
-		return *m, nil
 	case mouse.ZoneSettingsAutoInProgress:
 		tk.SetAutoInProgress(!tk.GetAutoInProgress())
 		return *m, nil
@@ -321,14 +292,6 @@ func handleAdvancedZone(m *Model, zoneID string) (Model, tea.Cmd) {
 		return *m, m.SetFocusedField(14)
 	case mouse.ZoneSettingsExternalEditorCustom:
 		return *m, m.SetFocusedField(15)
-	default:
-		if strings.HasPrefix(zoneID, mouse.ZoneSettingsExternalEditorPresetPrefix) {
-			s := strings.TrimPrefix(zoneID, mouse.ZoneSettingsExternalEditorPresetPrefix)
-			if idx, err := strconv.Atoi(s); err == nil {
-				adv.SetExternalEditorPreset(idx)
-			}
-			return *m, nil
-		}
 	}
 	return *m, nil
 }
@@ -430,20 +393,6 @@ func handleAIZone(m *Model, zoneID string) (Model, tea.Cmd) {
 	case mouse.ZoneSettingsAIProfileName:
 		return *m, m.SetFocusedField(19)
 	default:
-		if strings.HasPrefix(zoneID, mouse.ZoneSettingsAIProviderPrefix) {
-			s := strings.TrimPrefix(zoneID, mouse.ZoneSettingsAIProviderPrefix)
-			if idx, err := strconv.Atoi(s); err == nil {
-				switch idx {
-				case 1:
-					aim.SetAIProvider("gemini")
-				case 2:
-					aim.SetAIProvider("ollama")
-				default:
-					aim.SetAIProvider("openai_compatible")
-				}
-			}
-			return *m, nil
-		}
 		if strings.HasPrefix(zoneID, mouse.ZoneSettingsAIProfileRowPrefix) {
 			s := strings.TrimPrefix(zoneID, mouse.ZoneSettingsAIProfileRowPrefix)
 			if idx, err := strconv.Atoi(s); err == nil {

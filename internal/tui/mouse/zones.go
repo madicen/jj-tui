@@ -139,13 +139,10 @@ const (
 	ZoneHelpTabCommands  = "zone:help:tab:commands"
 	ZoneHelpCommandCopy  = "zone:help:command:copy:" // Prefix for copy buttons
 
-	// Ticket provider selection zones
-	ZoneSettingsTicketProviderNone         = "zone:settings:ticket_provider:none"
-	ZoneSettingsTicketProviderJira         = "zone:settings:ticket_provider:jira"
-	ZoneSettingsTicketProviderCodecks      = "zone:settings:ticket_provider:codecks"
-	ZoneSettingsTicketProviderGitHubIssues = "zone:settings:ticket_provider:github_issues"
-	ZoneSettingsGitHubIssuesExcluded       = "zone:settings:github_issues_excluded"
-	ZoneSettingsGitHubIssuesExcludedClear  = "zone:settings:github_issues_excluded_clear"
+	// Ticket provider selection (single dropdown trigger)
+	ZoneSettingsTicketProvider            = "zone:settings:ticket_provider"
+	ZoneSettingsGitHubIssuesExcluded      = "zone:settings:github_issues_excluded"
+	ZoneSettingsGitHubIssuesExcludedClear = "zone:settings:github_issues_excluded_clear"
 
 	// Branch settings zones
 	ZoneSettingsBranchLimitDecrease  = "zone:settings:branch_limit_decrease"
@@ -159,25 +156,25 @@ const (
 	ZoneSettingsAdvancedConfirmNo         = "zone:settings:advanced:confirm_no"
 	ZoneSettingsGraphRevset               = "zone:settings:graph_revset"
 	ZoneSettingsGraphRevsetClear          = "zone:settings:graph_revset_clear"
-	// External editor preset rows: zone:settings:external_editor_preset:N for N in 0..8
-	ZoneSettingsExternalEditorPresetPrefix = "zone:settings:external_editor_preset:"
-	ZoneSettingsExternalEditorCustom       = "zone:settings:external_editor_custom"
-	ZoneSettingsAutoInProgress             = "zone:settings:auto_in_progress"
-	ZoneSettingsSanitizeBookmarks          = "zone:settings:sanitize_bookmarks"
-	ZoneSettingsAIEnabled                  = "zone:settings:ai:enabled"
-	ZoneSettingsAIBaseURL                  = "zone:settings:ai:base_url"
-	ZoneSettingsAIModel                    = "zone:settings:ai:model"
-	ZoneSettingsAIAPIKey                   = "zone:settings:ai:api_key"
-	ZoneSettingsAIEvologDescribeDefault    = "zone:settings:ai:evolog_describe_default"
-	ZoneSettingsAIEvologFileSplit          = "zone:settings:ai:evolog_file_split"
-	ZoneSettingsAIEvologHunkSplit          = "zone:settings:ai:evolog_hunk_split"
-	ZoneSettingsAIEvologMultiStepwise      = "zone:settings:ai:evolog_multi_stepwise"
-	ZoneSettingsAIEvologMultiMaxDecrease   = "zone:settings:ai:evolog_multi_max_dec"
-	ZoneSettingsAIEvologMultiMaxIncrease   = "zone:settings:ai:evolog_multi_max_inc"
-	ZoneSettingsAITimeoutDecrease          = "zone:settings:ai:timeout_dec"
-	ZoneSettingsAITimeoutIncrease          = "zone:settings:ai:timeout_inc"
-	// AI provider rows: zone:settings:ai:provider:N (0=openai_compatible, 1=gemini, 2=ollama)
-	ZoneSettingsAIProviderPrefix = "zone:settings:ai:provider:"
+	// External editor preset (single dropdown trigger)
+	ZoneSettingsExternalEditor           = "zone:settings:external_editor"
+	ZoneSettingsExternalEditorCustom     = "zone:settings:external_editor_custom"
+	ZoneSettingsAutoInProgress           = "zone:settings:auto_in_progress"
+	ZoneSettingsSanitizeBookmarks        = "zone:settings:sanitize_bookmarks"
+	ZoneSettingsAIEnabled                = "zone:settings:ai:enabled"
+	ZoneSettingsAIBaseURL                = "zone:settings:ai:base_url"
+	ZoneSettingsAIModel                  = "zone:settings:ai:model"
+	ZoneSettingsAIAPIKey                 = "zone:settings:ai:api_key"
+	ZoneSettingsAIEvologDescribeDefault  = "zone:settings:ai:evolog_describe_default"
+	ZoneSettingsAIEvologFileSplit        = "zone:settings:ai:evolog_file_split"
+	ZoneSettingsAIEvologHunkSplit        = "zone:settings:ai:evolog_hunk_split"
+	ZoneSettingsAIEvologMultiStepwise    = "zone:settings:ai:evolog_multi_stepwise"
+	ZoneSettingsAIEvologMultiMaxDecrease = "zone:settings:ai:evolog_multi_max_dec"
+	ZoneSettingsAIEvologMultiMaxIncrease = "zone:settings:ai:evolog_multi_max_inc"
+	ZoneSettingsAITimeoutDecrease        = "zone:settings:ai:timeout_dec"
+	ZoneSettingsAITimeoutIncrease        = "zone:settings:ai:timeout_inc"
+	// AI provider selection (single dropdown trigger)
+	ZoneSettingsAIProvider = "zone:settings:ai:provider"
 	// AI profile management in Settings → AI: rows and action buttons
 	ZoneSettingsAIProfileRowPrefix = "zone:settings:ai:profile:"
 	ZoneSettingsAIProfileNew       = "zone:settings:ai:profile_new"
@@ -193,9 +190,7 @@ const (
 
 	// Settings zones
 	ZoneSettingsGitHubToken           = "zone:settings:github_token"
-	ZoneSettingsGitHubAuthSaved       = "zone:settings:github_auth:saved"
-	ZoneSettingsGitHubAuthEnv         = "zone:settings:github_auth:env"
-	ZoneSettingsGitHubAuthGhCLI       = "zone:settings:github_auth:gh_cli"
+	ZoneSettingsGitHubAuthSource      = "zone:settings:github_auth:source"
 	ZoneSettingsGitHubShowMerged      = "zone:settings:github_show_merged"
 	ZoneSettingsGitHubShowClosed      = "zone:settings:github_show_closed"
 	ZoneSettingsGitHubOnlyMine        = "zone:settings:github_only_mine"
@@ -267,11 +262,6 @@ const (
 	ZoneHelpCommand = "zone:help:command:" // Prefix for command history entries
 )
 
-// ZoneSettingsExternalEditorPreset returns the zone ID for the external editor preset row at index (0..8).
-func ZoneSettingsExternalEditorPreset(index int) string {
-	return fmt.Sprintf("%s%d", ZoneSettingsExternalEditorPresetPrefix, index)
-}
-
 // ZoneSettingsAIProfileRow returns the zone ID for the AI profile row at the given index (Settings → AI).
 func ZoneSettingsAIProfileRow(index int) string {
 	return fmt.Sprintf("%s%d", ZoneSettingsAIProfileRowPrefix, index)
@@ -284,11 +274,6 @@ const ZoneGenMenuItemPrefix = "zone:genmenu:"
 // generate-button popover at the given index.
 func ZoneGenMenuItem(index int) string {
 	return fmt.Sprintf("%s%d", ZoneGenMenuItemPrefix, index)
-}
-
-// ZoneSettingsAIProvider returns the zone ID for the AI provider preset row at index (0..2).
-func ZoneSettingsAIProvider(index int) string {
-	return fmt.Sprintf("%s%d", ZoneSettingsAIProviderPrefix, index)
 }
 
 // ZoneExistingBookmark returns the zone ID for an existing bookmark at the given index

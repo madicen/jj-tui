@@ -18,10 +18,10 @@ func TestRenderAI_TimeoutStepperVisible(t *testing.T) {
 		AIProviderID:     "openai_compatible",
 		AITimeoutSeconds: 120,
 		// Inputs slots 16..18 are required by renderAI but we don't assert on them.
-		Inputs:        make([]struct{ View string }, 19),
+		Inputs:         make([]struct{ View string }, 19),
 		EvologMultiMax: 1,
 	}
-	out := strings.Join(r.renderAI(data), "\n")
+	out := strings.Join(r.renderAI(data, 0), "\n")
 
 	for _, want := range []string{
 		"Generation timeout:",

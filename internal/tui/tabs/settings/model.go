@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/bubble-color-picker"
+	bubbledropdown "github.com/madicen/bubble-dropdown"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
@@ -29,6 +30,7 @@ type Model struct {
 	panelYOffset [8]int // scroll offset per sub-tab; index matches settingsTab order above
 	width        int
 	height       int
+	contentTop   int // absolute terminal row where settings content begins; for dropdown mouse mapping
 	viewOpts     *ViewOpts
 
 	githubModel   github.Model
@@ -83,6 +85,30 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		return m, nil
+	}
+	// When the active tab's dropdown is open, route all input to it (mirrors the
+	// theme swatch capture below). It closes via ItemChosen/ItemCanceled, which
+	// the active sub-model applies in UpdateDropdown.
+	if m.activeDropdownOpen() {
+		if _, ok := msg.(zone.MsgZoneInBounds); ok {
+			// Swallow stray release-zone dispatches so background zones (tab
+			// headers, Save) don't fire while the panel is open.
+			return m, nil
+		}
+		cmd := m.updateActiveDropdown(msg)
+		return m, cmd
+	}
+	// Open a dropdown when its trigger zone is pressed. Zones only emit
+	// MsgZoneInBounds on release, so (like the theme swatch) we detect the press
+	// here and forward it to the sub-model, which opens the panel.
+	if m.zoneManager != nil {
+		if mouseMsg, ok := msg.(tea.MouseMsg); ok && mouseMsg.Action == tea.MouseActionPress && mouseMsg.Button == tea.MouseButtonLeft {
+			if zoneID, ok := m.dropdownZoneForActiveTab(); ok {
+				if z := m.zoneManager.Get(zoneID); z != nil && z.InBounds(mouseMsg) {
+					return m, m.updateActiveDropdown(mouseMsg)
+				}
+			}
+		}
 	}
 	// When Theme tab is active and a color picker is open, forward all input to the theme model.
 	if m.settingsTab == 5 && m.themeModel.AnyOpen() { // Theme
@@ -158,6 +184,9 @@ func (m Model) View() string {
 	if m.settingsTab == 5 && m.themeModel.AnyOpen() { // Theme
 		out = m.themeModel.ViewWithOverlay(out, m.width, m.height)
 	}
+	if dd := m.activeDropdown(); dd != nil && dd.Open() {
+		out = dd.ViewWithOverlay(out, m.width, m.height)
+	}
 	return out
 }
 
@@ -172,7 +201,83 @@ func (m Model) EscHandledInsideSettings() bool {
 	if m.advancedModel.GetConfirmingCleanup() != "" {
 		return true
 	}
+	if m.anyDropdownOpen() {
+		return true
+	}
 	return m.settingsTab == 5 && m.themeModel.AnyOpen() // Theme
+}
+
+// dropdownZoneForActiveTab returns the trigger zone id for the active tab's
+// dropdown (GitHub token source, ticket provider, AI provider, editor preset).
+func (m *Model) dropdownZoneForActiveTab() (string, bool) {
+	switch m.settingsTab {
+	case 0: // GitHub
+		return mouse.ZoneSettingsGitHubAuthSource, true
+	case 3: // Tickets
+		return mouse.ZoneSettingsTicketProvider, true
+	case 6: // AI
+		return mouse.ZoneSettingsAIProvider, true
+	case 7: // Advanced
+		return mouse.ZoneSettingsExternalEditor, true
+	}
+	return "", false
+}
+
+// activeDropdown returns the dropdown for the active tab (nil for tabs without one).
+func (m *Model) activeDropdown() *bubbledropdown.Dropdown {
+	switch m.settingsTab {
+	case 0: // GitHub
+		return m.githubModel.TokenSourceDropdown()
+	case 3: // Tickets
+		return m.ticketsModel.ProviderDropdown()
+	case 6: // AI
+		return m.aiModel.ProviderDropdown()
+	case 7: // Advanced
+		return m.advancedModel.EditorDropdown()
+	}
+	return nil
+}
+
+// activeDropdownOpen reports whether the active tab's dropdown panel is open.
+func (m *Model) activeDropdownOpen() bool {
+	dd := m.activeDropdown()
+	return dd != nil && dd.Open()
+}
+
+// anyDropdownOpen reports whether any settings dropdown panel is open.
+func (m *Model) anyDropdownOpen() bool {
+	return m.githubModel.DropdownOpen() ||
+		m.ticketsModel.DropdownOpen() ||
+		m.aiModel.DropdownOpen() ||
+		m.advancedModel.DropdownOpen()
+}
+
+// updateActiveDropdown forwards a message to the active tab's dropdown sub-model.
+// Mouse coordinates are translated from absolute screen space into the
+// settings-content coordinate system the open panel was composited in.
+func (m *Model) updateActiveDropdown(msg tea.Msg) tea.Cmd {
+	if mouseMsg, ok := msg.(tea.MouseMsg); ok {
+		mouseMsg.Y -= m.contentTop
+		msg = mouseMsg
+	}
+	switch m.settingsTab {
+	case 0: // GitHub
+		return m.githubModel.UpdateDropdown(msg)
+	case 3: // Tickets
+		return m.ticketsModel.UpdateDropdown(msg)
+	case 6: // AI
+		return m.aiModel.UpdateDropdown(msg)
+	case 7: // Advanced
+		return m.advancedModel.UpdateDropdown(msg)
+	}
+	return nil
+}
+
+// SetContentOrigin records the absolute terminal row where the settings content
+// begins (header + separator). Used to map absolute mouse coordinates into the
+// settings-local space the open dropdown panel uses for hit-testing.
+func (m *Model) SetContentOrigin(top int) {
+	m.contentTop = top
 }
 
 // handleKeyMsg handles all keyboard input for the Settings tab (cleanup confirm, nav, focus, save, inputs).
@@ -309,13 +414,12 @@ func (m *Model) ZoneIDs() []string {
 		mouse.ZoneSettingsTabTickets, mouse.ZoneSettingsTabBranches, mouse.ZoneSettingsTabTheme, mouse.ZoneSettingsTabAI, mouse.ZoneSettingsTabAdvanced,
 		mouse.ZoneSettingsThemePrimary, mouse.ZoneSettingsThemeSecondary, mouse.ZoneSettingsThemeMuted,
 		mouse.ZoneSettingsThemePrimaryDefault, mouse.ZoneSettingsThemeSecondaryDefault, mouse.ZoneSettingsThemeMutedDefault,
-		mouse.ZoneSettingsTicketProviderNone, mouse.ZoneSettingsTicketProviderJira,
-		mouse.ZoneSettingsTicketProviderCodecks, mouse.ZoneSettingsTicketProviderGitHubIssues,
+		mouse.ZoneSettingsTicketProvider,
 		mouse.ZoneSettingsAutoInProgress,
 		mouse.ZoneSettingsAdvancedConfirmYes, mouse.ZoneSettingsAdvancedConfirmNo,
 		mouse.ZoneSettingsAdvancedDeleteBookmarks, mouse.ZoneSettingsAdvancedAbandonOldCommits,
 		mouse.ZoneSettingsGraphRevset, mouse.ZoneSettingsGraphRevsetClear,
-		mouse.ZoneSettingsAIEnabled, mouse.ZoneSettingsAIProvider(0), mouse.ZoneSettingsAIProvider(1), mouse.ZoneSettingsAIProvider(2),
+		mouse.ZoneSettingsAIEnabled, mouse.ZoneSettingsAIProvider,
 		mouse.ZoneSettingsAIBaseURL, mouse.ZoneSettingsAIModel, mouse.ZoneSettingsAIAPIKey,
 		mouse.ZoneSettingsAIEvologDescribeDefault, mouse.ZoneSettingsAIEvologFileSplit, mouse.ZoneSettingsAIEvologHunkSplit, mouse.ZoneSettingsAIEvologMultiStepwise,
 		mouse.ZoneSettingsAIEvologMultiMaxDecrease, mouse.ZoneSettingsAIEvologMultiMaxIncrease,
@@ -333,10 +437,8 @@ func (m *Model) ZoneIDs() []string {
 	for i := 0; i < m.aiModel.ProfileCount(); i++ {
 		ids = append(ids, mouse.ZoneSettingsAIProfileRow(i))
 	}
-	for i := range advanced.ExternalEditorPresetLabels {
-		ids = append(ids, mouse.ZoneSettingsExternalEditorPreset(i))
-	}
 	ids = append(ids,
+		mouse.ZoneSettingsExternalEditor,
 		mouse.ZoneSettingsExternalEditorCustom,
 		mouse.ZoneSettingsSanitizeBookmarks,
 		mouse.ZoneSettingsGitHubLogin,
@@ -344,7 +446,7 @@ func (m *Model) ZoneIDs() []string {
 		mouse.ZoneSettingsRemoteCreateGh, mouse.ZoneSettingsRemoteRemove,
 		mouse.ZoneSettingsRemoteVisibilityToggle,
 		mouse.ZoneSettingsRemotePushCurrent, mouse.ZoneSettingsRemotePushAll,
-		mouse.ZoneSettingsGitHubAuthSaved, mouse.ZoneSettingsGitHubAuthEnv, mouse.ZoneSettingsGitHubAuthGhCLI,
+		mouse.ZoneSettingsGitHubAuthSource,
 		mouse.ZoneSettingsGitHubOnlyMine, mouse.ZoneSettingsGitHubShowMerged, mouse.ZoneSettingsGitHubShowClosed,
 		mouse.ZoneSettingsGitHubPRLimitDecrease, mouse.ZoneSettingsGitHubPRLimitIncrease,
 		mouse.ZoneSettingsGitHubRefreshDecrease, mouse.ZoneSettingsGitHubRefreshIncrease, mouse.ZoneSettingsGitHubRefreshToggle,
@@ -379,6 +481,10 @@ func (m *Model) resolveClickedZone(msg zone.MsgZoneInBounds) string {
 func (m *Model) SetZoneManager(zm *zone.Manager) {
 	m.zoneManager = zm
 	m.themeModel.SetZoneManager(zm)
+	m.githubModel.SetZoneManager(zm)
+	m.ticketsModel.SetZoneManager(zm)
+	m.aiModel.SetZoneManager(zm)
+	m.advancedModel.SetZoneManager(zm)
 }
 
 // Sub-model getters (return pointers so zone handlers and BuildSettingsParams can mutate)

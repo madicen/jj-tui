@@ -200,6 +200,11 @@ func (m *Model) renderMainLayoutView() string {
 	case state.ViewTickets:
 		content = m.ticketsTabModel.View()
 	case state.ViewSettings:
+		// Settings content is composited below the header and a one-line
+		// separator (see JoinVertical below). Tell the settings model where its
+		// content starts so it can map absolute mouse coords into the local
+		// space its open dropdown panels are drawn in.
+		m.settingsTabModel.SetContentOrigin(headerHeight + 1)
 		content = m.settingsTabModel.View()
 	case state.ViewHelp:
 		content = m.helpTabModel.View()

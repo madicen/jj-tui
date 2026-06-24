@@ -3,9 +3,37 @@ package github
 import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	zone "github.com/lrstanley/bubblezone"
+	bubbledropdown "github.com/madicen/bubble-dropdown"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/config"
+	"github.com/madicen/jj-tui/internal/tui/styles"
 )
+
+// tokenSourceValues maps the token-source dropdown indices to their config
+// values; tokenSourceLabels are the user-facing strings shown in the dropdown.
+var (
+	tokenSourceValues = []string{
+		config.GitHubTokenSourceSaved,
+		config.GitHubTokenSourceEnv,
+		config.GitHubTokenSourceGhCLI,
+	}
+	tokenSourceLabels = []string{
+		"Saved in jj-tui",
+		"Environment variable (GITHUB_TOKEN)",
+		"GitHub CLI (gh auth token)",
+	}
+)
+
+// tokenSourceIndex returns the dropdown index for a token-source value (0 = Saved when unknown).
+func tokenSourceIndex(value string) int {
+	for i, v := range tokenSourceValues {
+		if v == value {
+			return i
+		}
+	}
+	return 0
+}
 
 // Model represents the GitHub settings sub-tab.
 //
@@ -39,6 +67,9 @@ type Model struct {
 	originInput   textinput.Model
 	ghPrivate     bool
 	currentOrigin string
+
+	// tokenSourceDropdown replaces the old radio rows for the API token source.
+	tokenSourceDropdown *bubbledropdown.Dropdown
 }
 
 // MaxFocusedField is the highest valid focusedField index for the GitHub tab. Used by parent
@@ -71,6 +102,10 @@ func NewModel() Model {
 		focusedField:      0,
 		originInput:       originInput,
 		ghPrivate:         true, // Match the welcome-screen default; users can flip with Ctrl+v.
+		tokenSourceDropdown: bubbledropdown.New(
+			bubbledropdown.WithOptions(tokenSourceLabels),
+			bubbledropdown.WithAccentColor(string(styles.ColorPrimary)),
+		),
 	}
 }
 
@@ -90,12 +125,13 @@ func NewModelFromConfig(cfg *config.Config) Model {
 			m.tokenInput.SetValue("")
 		}
 	}
+	m.tokenSourceDropdown.SetSelectedIndex(tokenSourceIndex(m.tokenSource))
 	return m
 }
 
 // Init initializes the model
 func (m Model) Init() tea.Cmd {
-return nil
+	return nil
 }
 
 // Update handles messages
@@ -121,7 +157,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 // View renders the model
 func (m Model) View() string {
-return "" // Rendered by parent
+	return "" // Rendered by parent
 }
 
 // handleKeyMsg handles keyboard input
@@ -195,46 +231,94 @@ func (m *Model) SetTokenSource(src string) {
 	if m.tokenSource != config.GitHubTokenSourceSaved {
 		m.tokenInput.Blur()
 	}
+	if m.tokenSourceDropdown != nil {
+		m.tokenSourceDropdown.SetSelectedIndex(tokenSourceIndex(m.tokenSource))
+	}
+}
+
+// TokenSourceDropdown returns the API-token-source dropdown (for rendering and
+// overlay). It syncs the accent so the panel tracks the live theme primary color.
+func (m *Model) TokenSourceDropdown() *bubbledropdown.Dropdown {
+	if accent := string(styles.ColorPrimary); m.tokenSourceDropdown.AccentColor() != accent {
+		m.tokenSourceDropdown.SetAccentColor(accent)
+	}
+	return m.tokenSourceDropdown
+}
+
+// DropdownOpen reports whether the token-source dropdown panel is open.
+func (m *Model) DropdownOpen() bool { return m.tokenSourceDropdown.Open() }
+
+// SetZoneManager wires the bubblezone manager into the token-source dropdown.
+func (m *Model) SetZoneManager(zm *zone.Manager) {
+	m.tokenSourceDropdown.SetZoneManager(zm)
+}
+
+// UpdateDropdown forwards a message to the token-source dropdown and, on
+// selection, applies the chosen source (loading or clearing the saved token to
+// match the prior radio behaviour). Returns any tea.Cmd the dropdown emits.
+func (m *Model) UpdateDropdown(msg tea.Msg) tea.Cmd {
+	if m.tokenSourceDropdown == nil {
+		return nil
+	}
+	wasOpen := m.tokenSourceDropdown.Open()
+	dd, cmd := m.tokenSourceDropdown.Update(msg)
+	m.tokenSourceDropdown = dd
+	if chosen, ok := msg.(bubbledropdown.ItemChosenMsg); ok && wasOpen {
+		if chosen.Index >= 0 && chosen.Index < len(tokenSourceValues) {
+			src := tokenSourceValues[chosen.Index]
+			m.SetTokenSource(src)
+			if src == config.GitHubTokenSourceSaved {
+				if cfg, _ := config.Load(); cfg != nil && cfg.GitHubToken != "" {
+					m.SetToken(cfg.GitHubToken)
+				}
+				m.focusedField = 0
+				m.refocus()
+			} else {
+				m.SetToken("")
+			}
+		}
+	}
+	return cmd
 }
 
 // GetShowMerged returns whether to show merged PRs
 func (m *Model) GetShowMerged() bool {
-return m.showMerged
+	return m.showMerged
 }
 
 // SetShowMerged sets whether to show merged PRs
 func (m *Model) SetShowMerged(show bool) {
-m.showMerged = show
+	m.showMerged = show
 }
 
 // GetShowClosed returns whether to show closed PRs
 func (m *Model) GetShowClosed() bool {
-return m.showClosed
+	return m.showClosed
 }
 
 // SetShowClosed sets whether to show closed PRs
 func (m *Model) SetShowClosed(show bool) {
-m.showClosed = show
+	m.showClosed = show
 }
 
 // GetOnlyMine returns whether to show only own PRs
 func (m *Model) GetOnlyMine() bool {
-return m.onlyMine
+	return m.onlyMine
 }
 
 // SetOnlyMine sets whether to show only own PRs
 func (m *Model) SetOnlyMine(only bool) {
-m.onlyMine = only
+	m.onlyMine = only
 }
 
 // GetPRLimit returns the PR limit
 func (m *Model) GetPRLimit() int {
-return m.prLimit
+	return m.prLimit
 }
 
 // SetPRLimit sets the PR limit
 func (m *Model) SetPRLimit(limit int) {
-m.prLimit = limit
+	m.prLimit = limit
 }
 
 // GetRefreshInterval returns the refresh interval
@@ -333,5 +417,5 @@ func (m *Model) FocusOriginInput() {
 
 // UpdateRepository updates the repository
 func (m *Model) UpdateRepository(repo *internal.Repository) {
-// GitHub settings don't depend on repository
+	// GitHub settings don't depend on repository
 }
