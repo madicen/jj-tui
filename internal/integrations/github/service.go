@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/go-github/v66/github"
@@ -350,12 +351,6 @@ func (s *Service) getPullRequestsGraphQL(ctx context.Context, filterOpts PRFilte
 		}
 	}
 
-	// Always retrieve every open PR so a local bookmark can be reliably matched to its PR.
-	openPRs, err := s.queryPullRequestsGraphQL(ctx, []githubv4.PullRequestState{githubv4.PullRequestStateOpen}, 0, filterOpts, username)
-	if err != nil {
-		return nil, err
-	}
-
 	var otherStates []githubv4.PullRequestState
 	if filterOpts.ShowMerged {
 		otherStates = append(otherStates, githubv4.PullRequestStateMerged)
@@ -363,13 +358,38 @@ func (s *Service) getPullRequestsGraphQL(ctx context.Context, filterOpts PRFilte
 	if filterOpts.ShowClosed {
 		otherStates = append(otherStates, githubv4.PullRequestStateClosed)
 	}
-	if len(otherStates) == 0 {
-		return openPRs, nil
+
+	// The open-PR query (unlimited) and the merged/closed query (capped) are independent, so run
+	// them concurrently. The merged/closed query in particular can paginate, and serializing the
+	// two was a large part of the multi-second tab load. The githubv4 client is safe for concurrent
+	// use and each goroutine fills its own result/error variables, so there's no shared state.
+	var (
+		openPRs, otherPRs []internal.GitHubPR
+		openErr, otherErr error
+		wg                sync.WaitGroup
+	)
+
+	// Always retrieve every open PR so a local bookmark can be reliably matched to its PR.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		openPRs, openErr = s.queryPullRequestsGraphQL(ctx, []githubv4.PullRequestState{githubv4.PullRequestStateOpen}, 0, filterOpts, username)
+	}()
+
+	if len(otherStates) > 0 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			otherPRs, otherErr = s.queryPullRequestsGraphQL(ctx, otherStates, filterOpts.Limit, filterOpts, username)
+		}()
 	}
 
-	otherPRs, err := s.queryPullRequestsGraphQL(ctx, otherStates, filterOpts.Limit, filterOpts, username)
-	if err != nil {
-		return nil, err
+	wg.Wait()
+	if openErr != nil {
+		return nil, openErr
+	}
+	if otherErr != nil {
+		return nil, otherErr
 	}
 	return append(openPRs, otherPRs...), nil
 }
@@ -521,19 +541,37 @@ func (s *Service) getPullRequestsREST(ctx context.Context, filterOpts PRFilterOp
 		}
 	}
 
+	// Fetch open PRs (unlimited) and closed/merged PRs (capped) concurrently; they are independent
+	// paginated calls and running them in parallel cuts the fallback load time roughly in half.
+	showOthers := filterOpts.ShowMerged || filterOpts.ShowClosed
+	var (
+		openPRs, closedPRs []internal.GitHubPR
+		openErr, closedErr error
+		wg                 sync.WaitGroup
+	)
+
 	// Always retrieve every open PR (no limit) so a local bookmark can be matched to its PR.
-	openPRs, err := s.queryPullRequestsREST(ctx, "open", 0, filterOpts, username)
-	if err != nil {
-		return nil, err
-	}
-	if !filterOpts.ShowMerged && !filterOpts.ShowClosed {
-		return openPRs, nil
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		openPRs, openErr = s.queryPullRequestsREST(ctx, "open", 0, filterOpts, username)
+	}()
+
+	if showOthers {
+		// "closed" returns both closed and merged PRs; classification/skip is handled in the helper.
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			closedPRs, closedErr = s.queryPullRequestsREST(ctx, "closed", filterOpts.Limit, filterOpts, username)
+		}()
 	}
 
-	// "closed" returns both closed and merged PRs; classification/skip is handled in the helper.
-	closedPRs, err := s.queryPullRequestsREST(ctx, "closed", filterOpts.Limit, filterOpts, username)
-	if err != nil {
-		return nil, err
+	wg.Wait()
+	if openErr != nil {
+		return nil, openErr
+	}
+	if closedErr != nil {
+		return nil, closedErr
 	}
 	return append(openPRs, closedPRs...), nil
 }
