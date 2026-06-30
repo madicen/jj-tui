@@ -3,6 +3,7 @@ package prs
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -72,13 +73,33 @@ func ResolveOpenPRsForBookmarksCmd(ghSvc *github.Service, bookmarks []string, de
 	names := append([]string(nil), bookmarks...)
 	return func() tea.Msg {
 		ctx := context.Background()
+		// Each lookup is an independent GitHub round-trip. Running them serially (up to 25) was the
+		// dominant cost of loading the PR tab, especially when GitHub throttled the burst. Fan them
+		// out with a bounded worker pool so the total latency is roughly one round-trip, not 25.
+		const maxConcurrent = 8
+		results := make([]*internal.GitHubPR, len(names))
+		sem := make(chan struct{}, maxConcurrent)
+		var wg sync.WaitGroup
+		for i, name := range names {
+			wg.Add(1)
+			sem <- struct{}{}
+			go func(i int, name string) {
+				defer wg.Done()
+				defer func() { <-sem }()
+				pr, err := svc.GetOpenPRForBranch(ctx, name)
+				if err == nil && pr != nil {
+					results[i] = pr
+				}
+			}(i, name)
+		}
+		wg.Wait()
+
+		// Preserve the input order so the merged result is deterministic.
 		var found []internal.GitHubPR
-		for _, name := range names {
-			pr, err := svc.GetOpenPRForBranch(ctx, name)
-			if err != nil || pr == nil {
-				continue
+		for _, pr := range results {
+			if pr != nil {
+				found = append(found, *pr)
 			}
-			found = append(found, *pr)
 		}
 		return OpenPRsResolvedMsg{Prs: found}
 	}
