@@ -1,7 +1,6 @@
 package jj
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -48,6 +47,31 @@ type Service struct {
 	// (see data.InitializeServices). The zero value is false to preserve legacy
 	// behavior for tests / direct NewService callers.
 	BookmarkListPreferTracked bool
+
+	// cmdRunner executes jj commands. NewService installs an execRunner; tests can
+	// inject a fake via NewServiceWithRunner. Hand-constructed Services (e.g.
+	// &Service{RepoPath: …} in tests) fall back to a lazily-built execRunner.
+	cmdRunner Runner
+}
+
+// runner returns the installed Runner, lazily building a default execRunner for
+// Services constructed without NewService (e.g. in tests that never execute jj).
+func (s *Service) runner() Runner {
+	if s.cmdRunner == nil {
+		s.cmdRunner = newExecRunner(s.RepoPath, s.addToHistory)
+	}
+	return s.cmdRunner
+}
+
+// NewServiceWithRunner builds a Service backed by a custom Runner without
+// verifying a jj binary or repository. Intended for fast unit tests that feed
+// canned command output through a fake Runner (see internal/mock.FakeRunner).
+func NewServiceWithRunner(repoPath string, r Runner) *Service {
+	return &Service{
+		RepoPath:   repoPath,
+		maxHistory: 100,
+		cmdRunner:  r,
+	}
 }
 
 // BookmarkListRemoteFlag returns the flag to pass to `jj bookmark list`
@@ -144,6 +168,7 @@ func NewService(repoPath string) (*Service, error) {
 		RepoPath:   repoPath,
 		maxHistory: 100, // Keep last 100 commands
 	}
+	service.cmdRunner = newExecRunner(repoPath, service.addToHistory)
 
 	// Test that we can actually run jj commands
 	ctx := context.Background()
@@ -1332,18 +1357,6 @@ const EvologSplitHunkPeelMessage = "Follow-up (evolog hunk peel)"
 // cannot use this flag (jj requires a writable working copy for that command).
 var jjEvologSplitPrepareGlobals = []string{"--ignore-working-copy"}
 
-func jjMergeGlobalArgs(global, args []string) []string {
-	if len(global) == 0 {
-		out := make([]string, len(args))
-		copy(out, args)
-		return out
-	}
-	out := make([]string, 0, len(global)+len(args))
-	out = append(out, global...)
-	out = append(out, args...)
-	return out
-}
-
 // reconcileColocatedGitBeforeEvologSplit syncs colocated Git with jj before `jj new`.
 // When Git HEAD and jj disagree (e.g. `git checkout` without `jj git import`), `jj new` can fail with
 // "reference HEAD should have content …, actual content was …". `jj git export` updates Git to match jj.
@@ -2276,21 +2289,7 @@ func (s *Service) runJJOutputNoHistory(ctx context.Context, args ...string) (str
 
 // runJJOutputNoHistoryWithGlobal is like runJJOutputNoHistory but prepends global jj flags.
 func (s *Service) runJJOutputNoHistoryWithGlobal(ctx context.Context, global []string, args ...string) (string, error) {
-	merged := jjMergeGlobalArgs(global, args)
-	cmd := exec.CommandContext(ctx, "jj", merged...)
-	cmd.Dir = s.RepoPath
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	if err != nil {
-		errOut := stderr.String()
-		if errOut == "" {
-			errOut = stdout.String()
-		}
-		return "", fmt.Errorf("%w: %s", err, strings.TrimSpace(errOut))
-	}
-	return stdout.String(), nil
+	return s.runner().RunOutput(ctx, RunOpts{Global: global, NoHistory: true}, args...)
 }
 
 // getCommitGraphSimple is a fallback that uses simpler parsing
@@ -2375,110 +2374,17 @@ func (s *Service) getCommitGraphSimple(ctx context.Context, revset string, recor
 
 // runJJWithGlobal runs jj with optional global flags before subcommand (e.g. --ignore-working-copy).
 func (s *Service) runJJWithGlobal(ctx context.Context, global []string, args ...string) error {
-	merged := jjMergeGlobalArgs(global, args)
-	cmdStr := "jj " + strings.Join(merged, " ")
-	startTime := time.Now()
-
-	cmd := exec.CommandContext(ctx, "jj", merged...)
-	cmd.Dir = s.RepoPath
-	out, err := cmd.CombinedOutput()
-	duration := time.Since(startTime)
-
-	entry := CommandHistoryEntry{
-		Command:   cmdStr,
-		Timestamp: startTime,
-		Duration:  duration,
-		Success:   err == nil,
-	}
-	if err != nil {
-		errMsg := extractErrorMessage(string(out))
-		if errMsg != "" {
-			entry.Error = errMsg
-			s.addToHistory(entry)
-			return fmt.Errorf("%s", errMsg)
-		}
-		entry.Error = err.Error()
-		s.addToHistory(entry)
-		return fmt.Errorf("command failed: %w", err)
-	}
-
-	s.addToHistory(entry)
-	return nil
+	return s.runner().Run(ctx, RunOpts{Global: global}, args...)
 }
 
 // runJJOutputWithGlobal is like runJJOutput but prepends global jj flags.
 func (s *Service) runJJOutputWithGlobal(ctx context.Context, global []string, args ...string) (string, error) {
-	merged := jjMergeGlobalArgs(global, args)
-	cmdStr := "jj " + strings.Join(merged, " ")
-	startTime := time.Now()
-
-	cmd := exec.CommandContext(ctx, "jj", merged...)
-	cmd.Dir = s.RepoPath
-
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	err := cmd.Run()
-	duration := time.Since(startTime)
-
-	entry := CommandHistoryEntry{
-		Command:   cmdStr,
-		Timestamp: startTime,
-		Duration:  duration,
-		Success:   err == nil,
-	}
-
-	if err != nil {
-		errOutput := stderr.String()
-		if errOutput == "" {
-			errOutput = stdout.String()
-		}
-		entry.Error = extractErrorMessage(errOutput)
-		if entry.Error == "" {
-			entry.Error = err.Error()
-		}
-		s.addToHistory(entry)
-		return "", fmt.Errorf("jj command '%s' failed: %w\nOutput: %s",
-			cmdStr, err, errOutput)
-	}
-
-	s.addToHistory(entry)
-	return stdout.String(), nil
+	return s.runner().RunOutput(ctx, RunOpts{Global: global}, args...)
 }
 
 // runJJ executes a jj command and returns a clean error if it fails
 func (s *Service) runJJ(ctx context.Context, args ...string) error {
-	cmdStr := "jj " + strings.Join(args, " ")
-	startTime := time.Now()
-
-	cmd := exec.CommandContext(ctx, "jj", args...)
-	cmd.Dir = s.RepoPath
-	out, err := cmd.CombinedOutput()
-	duration := time.Since(startTime)
-
-	// Log the command to history
-	entry := CommandHistoryEntry{
-		Command:   cmdStr,
-		Timestamp: startTime,
-		Duration:  duration,
-		Success:   err == nil,
-	}
-	if err != nil {
-		// Extract just the main error message
-		errMsg := extractErrorMessage(string(out))
-		if errMsg != "" {
-			entry.Error = errMsg
-			s.addToHistory(entry)
-			return fmt.Errorf("%s", errMsg)
-		}
-		entry.Error = err.Error()
-		s.addToHistory(entry)
-		return fmt.Errorf("command failed: %w", err)
-	}
-
-	s.addToHistory(entry)
-	return nil
+	return s.runner().Run(ctx, RunOpts{}, args...)
 }
 
 // extractErrorMessage extracts the main error message from jj output.
@@ -2489,46 +2395,7 @@ func extractErrorMessage(output string) string {
 // runJJOutput executes a jj command and returns its stdout only
 // stderr is captured separately to avoid jj hints/warnings mixing into parsed output
 func (s *Service) runJJOutput(ctx context.Context, args ...string) (string, error) {
-	cmdStr := "jj " + strings.Join(args, " ")
-	startTime := time.Now()
-
-	cmd := exec.CommandContext(ctx, "jj", args...)
-	cmd.Dir = s.RepoPath
-
-	// Capture stdout and stderr separately
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	err := cmd.Run()
-	duration := time.Since(startTime)
-
-	// Log the command to history
-	entry := CommandHistoryEntry{
-		Command:   cmdStr,
-		Timestamp: startTime,
-		Duration:  duration,
-		Success:   err == nil,
-	}
-
-	if err != nil {
-		// Include stderr in error message for debugging
-		errOutput := stderr.String()
-		if errOutput == "" {
-			errOutput = stdout.String()
-		}
-		entry.Error = extractErrorMessage(errOutput)
-		if entry.Error == "" {
-			entry.Error = err.Error()
-		}
-		s.addToHistory(entry)
-		return "", fmt.Errorf("jj command '%s' failed: %w\nOutput: %s",
-			fmt.Sprintf("jj %s", strings.Join(args, " ")), err, errOutput)
-	}
-
-	s.addToHistory(entry)
-	// Return only stdout - hints/warnings go to stderr
-	return stdout.String(), nil
+	return s.runner().RunOutput(ctx, RunOpts{}, args...)
 }
 
 // listMineUntrackedRemoteBookmarks returns one Branch per (remote_bookmark, remote)

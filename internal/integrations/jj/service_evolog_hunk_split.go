@@ -5,11 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 )
 
 const evologHunkSplitDiffMaxBytes = 4 << 20
@@ -148,32 +146,7 @@ func (s *Service) directRevisionChildrenCommitIDs(ctx context.Context, rev strin
 }
 
 func (s *Service) runJJWithExtraEnv(ctx context.Context, extraEnv []string, args []string) error {
-	cmdStr := "jj " + strings.Join(args, " ")
-	startTime := time.Now()
-	cmd := exec.CommandContext(ctx, "jj", args...)
-	cmd.Dir = s.RepoPath
-	cmd.Env = append(append([]string{}, os.Environ()...), extraEnv...)
-	out, err := cmd.CombinedOutput()
-	duration := time.Since(startTime)
-	entry := CommandHistoryEntry{
-		Command:   cmdStr,
-		Timestamp: startTime,
-		Duration:  duration,
-		Success:   err == nil,
-	}
-	if err != nil {
-		errMsg := extractErrorMessage(string(out))
-		if errMsg != "" {
-			entry.Error = errMsg
-			s.addToHistory(entry)
-			return fmt.Errorf("%s", errMsg)
-		}
-		entry.Error = err.Error()
-		s.addToHistory(entry)
-		return fmt.Errorf("command failed: %w", err)
-	}
-	s.addToHistory(entry)
-	return nil
+	return s.runner().Run(ctx, RunOpts{Env: extraEnv}, args...)
 }
 
 func buildEvologHunkSplitMergeToolToml(exe string) string {
