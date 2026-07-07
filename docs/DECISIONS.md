@@ -128,3 +128,59 @@ boilerplate from both adapters. Response reading, 2xx handling, retry/backoff, a
 classification remain in the LLM-specific `withLLMHTTPRetry` because `httpapi`'s `EnsureOK`/`DoRead`
 treat only 200 as success and perform no retries. All existing AI tests pass unchanged; JSON
 request/response code remains in exactly one place per provider.
+
+---
+
+## P3.4 — `charmbracelet/huh` for `prform` / `ticketform` (evaluation only)
+
+**Decision: REJECT — keep the in-house forms built on `bubbles/textinput` + `textarea`, our
+`internal/tui/form` base, bubblezone, and the genmenu popover.**
+
+This item is explicitly evaluation-only. No huh migration was performed and huh was **not** added as
+a dependency; the assessment reasons from the current code (no half-migration left in the tree).
+
+### LOC accounting (why the >300-LOC-deletion bar is not met)
+
+`prform` + `ticketform` total ~1,457 LOC, but only a small slice is generic form-field plumbing that
+huh could replace:
+
+| Area | ~LOC | Replaceable by huh? |
+|---|---|---|
+| `prform/actions.go` + `ticketform/actions.go` (PR/ticket prepare, submit, GitHub create + retry, demo mode) | ~478 | No — business logic |
+| genmenu long-press AI-profile picker (`handleMouseForMenu`, `MenuOverlay`, `SetAIProfiles`, tick/hover/hit-test) | ~130/form | No — huh has no host for an anchored popover on a field |
+| bubblezone marking + click routing (`ZoneIDs`, `resolveClickedZone`, `handleZoneClick`) | ~70/form | No — huh emits no per-field `zone.Mark` |
+| accessors incl. `GetBodyInput()` used to stream AI tokens straight into the `textarea.Model` | ~150/form | No — huh hides its field internals |
+| messages + NavigateTarget wiring | ~70 total | No — stays regardless |
+| textinput/textarea construction + focus/blur cycling + field rendering | ~120–160 total | **Yes** |
+
+Best case, huh deletes ~120–160 LOC of plumbing while **adding** huh.Form construction, a
+`styles → huh.Theme` adapter, key-binding adaptation, and bridge code to preserve zones, the genmenu
+overlay, and AI token streaming. Realistic net delta is near-zero or negative — nowhere near the
+>300-LOC deletion the plan requires to justify adoption.
+
+### Compatibility findings (the hard "do not regress" constraints)
+
+- **Zone-based mouse support (bubblezone): REGRESSES.** Every control (title, body, draft, submit,
+  generate, cancel) is wrapped in `render.Mark(zoneManager, id, …)` and clicks are dispatched via
+  bubblezone's `AnyInBoundsAndUpdate` semantics (see `resolveClickedZone`'s comment). huh manages and
+  renders its fields internally and exposes no supported hook to wrap each field in a `zone.Mark`, so
+  full mouse click-to-focus / button clicks would be lost. This alone is disqualifying per the item.
+- **Overlay composition (madicen/bubble-overlay): REGRESSES / fights huh.** The parent
+  (`internal/tui/model/{modal_layer,overlay_helpers,loading_overlay}.go`) composes the form with a
+  genmenu popover anchored at mouse `(x, y)` and a loading overlay, with z-order pinned by
+  `chromed_slot_zorder_test.go` / `chrome_minimize_test.go`. huh owns its own full render loop and has
+  no anchored-popover slot, so hosting the long-press AI picker over a huh field would require
+  fighting huh's layout.
+- **Theming: extra surface, no gain.** Forms use the custom `styles` package (`ColorMuted`,
+  `AIGenerateChip`, `SpreadRow`, settings-style toggle). huh uses its own `huh.Theme`; matching would
+  mean building and maintaining a `styles → huh.Theme` adapter and custom huh fields for the AI chip
+  and draft toggle — more code, not less.
+- **AI streaming: incompatible.** The generate flow writes tokens directly into the body
+  `textarea.Model` via `GetBodyInput()`; huh does not expose the underlying field for external
+  mutation.
+
+### Verdict
+
+REJECT. huh does not clear the >300-LOC deletion bar and would regress bubblezone mouse support and
+overlay composition while adding theming/streaming bridge code. The existing `internal/tui/form` base
+(P1.2) already removes the duplication huh was meant to address.
