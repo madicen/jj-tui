@@ -184,3 +184,43 @@ overlay, and AI token streaming. Realistic net delta is near-zero or negative �
 REJECT. huh does not clear the >300-LOC deletion bar and would regress bubblezone mouse support and
 overlay composition while adding theming/streaming bridge code. The existing `internal/tui/form` base
 (P1.2) already removes the duplication huh was meant to address.
+
+---
+
+## P3.5 — self-update check: `creativeprojects/go-selfupdate`
+
+**Decision: SKIP implementation — keep the hand-rolled notify-only GitHub release check in
+`internal/version/version.go`. No `--self-update` flag, no library added.**
+
+### Distribution channel (the deciding factor)
+
+Homebrew is the primary channel: `.goreleaser.yml` publishes a `homebrew_casks` entry to
+`madicen/homebrew-tap` (`brew install --cask madicen/tap/jj-tui`), and the README leads with it.
+Secondary channels are `go install github.com/madicen/jj-tui@latest` and manual release tarballs.
+All three already have first-class upgrade paths (`brew upgrade`, re-running `go install`, or
+downloading a new release). An in-app self-updater that downloads and overwrites the binary would
+**fight the package manager**: for the common Homebrew user the binary is brew-managed, so replacing
+it in place desyncs brew's manifest and the next `brew upgrade` would conflict.
+
+### Signature verification adds little here
+
+go-selfupdate's headline feature is signature verification, but the project ships **unsigned,
+unnotarized** binaries today — the goreleaser Homebrew cask includes a post-install hook that runs
+`xattr -dr com.apple.quarantine` precisely because the binaries aren't notarized. So there is no
+signing key for go-selfupdate to verify against, and a self-downloaded replacement binary would be
+re-quarantined by macOS Gatekeeper (the primary desktop OS), producing a broken self-update. Wiring
+real signing + notarization is a prerequisite that is out of scope for this item.
+
+### Surface vs. value
+
+Adopting the library pulls in additional dependencies (GitHub API client, semver, archive
+extraction) and a self-replace code path to maintain, in exchange for a feature that duplicates
+`brew upgrade` / `go install` and would misbehave on the primary install path. That is "more surface
+than value," which the plan says to skip.
+
+### Outcome
+
+Notify-only check retained unchanged (async, cached, 5s timeout, `semver.Compare`, skipped in `dev`).
+`internal/version` has no tests, so there is nothing to regress; no code changed. If signing +
+notarization are added later and a non-Homebrew install path becomes primary, revisit adopting
+go-selfupdate behind an opt-in `--self-update` flag with the notify path kept as default.
