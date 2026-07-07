@@ -172,33 +172,12 @@ func (m *Model) renderPRs() string {
 		listHeight = 0
 	}
 	totalListLines := len(listLines)
-	maxListOffset := 0
-	if totalListLines > listHeight {
-		maxListOffset = totalListLines - listHeight
-	}
-	// Clamp listYOffset
-	if m.listYOffset > maxListOffset {
-		m.listYOffset = maxListOffset
-	}
-	if m.listYOffset < 0 {
-		m.listYOffset = 0
-	}
 	// Keep selection in view only when selection changed via key/click (so mouse scroll can move selection off screen)
 	if m.scrollToSelectedPR {
 		m.scrollToSelectedPR = false
-		if m.selectedPR >= 0 && m.selectedPR < totalListLines {
-			if m.selectedPR < m.listYOffset {
-				m.listYOffset = m.selectedPR
-			} else if m.selectedPR >= m.listYOffset+listHeight {
-				m.listYOffset = m.selectedPR - listHeight + 1
-			}
-		}
+		m.ScrollToSelected(m.selectedPR, totalListLines, listHeight)
 	}
-	start := m.listYOffset
-	end := start + listHeight
-	if end > totalListLines {
-		end = totalListLines
-	}
+	start, end := m.VisibleRange(totalListLines, listHeight)
 	var visibleList string
 	if start < end {
 		visibleList = strings.Join(listLines[start:end], "\n")

@@ -8,6 +8,7 @@ import (
 	zone "github.com/lrstanley/bubblezone"
 	overlay "github.com/madicen/bubble-overlay"
 	"github.com/madicen/jj-tui/internal"
+	"github.com/madicen/jj-tui/internal/tui/listnav"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/mousedouble"
 	"github.com/madicen/jj-tui/internal/tui/state"
@@ -15,22 +16,18 @@ import (
 
 // Model represents the state of the PRs tab
 type Model struct {
+	listnav.Model // shared list scroll + long-press state
+
 	zoneManager   *zone.Manager
 	repository    *internal.Repository
 	selectedPR    int // Index of selected PR in the PRs list
-	listYOffset   int // Scroll offset for list (details stay fixed)
 	width         int
 	height        int
 	githubService bool // whether GitHub is connected (for rendering)
 	// scrollToSelectedPR: when true, next render will adjust listYOffset to keep selection in view (key/click only; mouse scroll can move selection off screen)
 	scrollToSelectedPR bool
 
-	// Long-press context menu for PR rows.
-	longPressItemIndex int
-	longPressPressID   int
-	longPressMouseX    int
-	longPressMouseY    int
-	contextMenu        *ContextMenuState
+	contextMenu *ContextMenuState
 
 	rowDoubleClick mousedouble.DoubleClick
 }
@@ -39,11 +36,11 @@ type Model struct {
 // Default dimensions (80x24) ensure wheel scroll works before first View()/SetDimensions, same as Graph viewports.
 func NewModel(zoneManager *zone.Manager) Model {
 	return Model{
-		zoneManager:        zoneManager,
-		selectedPR:         -1,
-		width:              80,
-		height:             24,
-		longPressItemIndex: -1,
+		Model:       listnav.New(),
+		zoneManager: zoneManager,
+		selectedPR:  -1,
+		width:       80,
+		height:      24,
 	}
 }
 
@@ -71,15 +68,15 @@ func (m Model) UpdateWithApp(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) 
 func (m Model) update(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case LongPressTickMsg:
-		if msg.PressID == m.longPressPressID && m.longPressItemIndex >= 0 {
+		if msg.PressID == m.LongPressPressID && m.LongPressItemIndex >= 0 {
 			m.contextMenu = &ContextMenuState{
-				PRIndex:   m.longPressItemIndex,
-				MouseX:    m.longPressMouseX,
-				MouseY:    m.longPressMouseY,
+				PRIndex:   m.LongPressItemIndex,
+				MouseX:    m.LongPressMouseX,
+				MouseY:    m.LongPressMouseY,
 				PressID:   msg.PressID,
 				HoverItem: -1,
 			}
-			m.selectedPR = m.longPressItemIndex
+			m.selectedPR = m.LongPressItemIndex
 			m.scrollToSelectedPR = true
 		}
 		return m, nil
@@ -212,17 +209,7 @@ func (m Model) update(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
 		}
 		return updated, cmd
 	case tea.MouseMsg:
-		isWheel := tea.MouseEvent(msg).IsWheel() || msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown
-		if isWheel {
-			isUp := msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelLeft
-			if isUp {
-				m.listYOffset -= 3
-				if m.listYOffset < 0 {
-					m.listYOffset = 0
-				}
-			} else {
-				m.listYOffset += 3
-			}
+		if m.WheelScroll(msg) {
 			return m, nil
 		}
 		if cmd := m.handleLongPress(msg); cmd != nil {
@@ -284,19 +271,19 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, *Request, tea.Cmd) {
 		}
 		return m, nil, nil
 	case "pgup", "ctrl+u", "ctrl+b":
-		m.listYOffset -= 10
-		if m.listYOffset < 0 {
-			m.listYOffset = 0
+		m.YOffset -= 10
+		if m.YOffset < 0 {
+			m.YOffset = 0
 		}
 		return m, nil, nil
 	case "pgdown", "ctrl+d", "ctrl+f":
-		m.listYOffset += 10
+		m.YOffset += 10
 		return m, nil, nil
 	case "home":
-		m.listYOffset = 0
+		m.YOffset = 0
 		return m, nil, nil
 	case "end":
-		m.listYOffset = 99999
+		m.YOffset = 99999
 		return m, nil, nil
 	case "o", "enter", "e":
 		if m.repository != nil && m.selectedPR >= 0 && m.selectedPR < len(m.repository.PRs) {
@@ -386,7 +373,7 @@ func (m *Model) GetSelectedPR() int {
 
 // GetListYOffset returns the list scroll offset (for tests and accessors)
 func (m *Model) GetListYOffset() int {
-	return m.listYOffset
+	return m.YOffset
 }
 
 // SetSelectedPR sets the selected PR index
