@@ -1,5 +1,7 @@
 # Jujutsu TUI
 
+[![CI](https://github.com/madicen/jj-tui/actions/workflows/ci.yml/badge.svg)](https://github.com/madicen/jj-tui/actions/workflows/ci.yml)
+
 ![Demo](screenshots/demo.gif)
 
 A modern Terminal User Interface (TUI) for managing [Jujutsu (jj)](https://github.com/jj-vcs/jj) repositories. Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lip Gloss](https://github.com/charmbracelet/lipgloss) for an intuitive and beautiful command-line experience.
@@ -162,6 +164,7 @@ Settings. Full key-by-key and integration docs live in
 
 - **[Usage Guide](docs/USAGE.md)** — per-tab keys, workflows, integrations (GitHub / Jira / Codecks / GitHub Issues), and full configuration reference.
 - **[Development Guide](docs/DEVELOPMENT.md)** — project structure, building, screenshots (VHS + fixtures), and dependencies.
+- **[Testing Guide](docs/TESTING.md)** — unit vs integration boundary, fixtures, mocks, and running against a real `jj`.
 
 ## Contributing
 
@@ -171,7 +174,7 @@ Settings. Full key-by-key and integration docs live in
 4. Run integration tests
 5. Submit a pull request
 
-See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for setup and conventions.
+See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) and [docs/TESTING.md](docs/TESTING.md) for setup and conventions.
 
 ## License
 

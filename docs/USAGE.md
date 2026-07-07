@@ -3,7 +3,7 @@
 Per-tab keys, integrations, and configuration for [jj-tui](../README.md). For a
 feature overview, install instructions, and screenshots, see the
 [README](../README.md). For contributing and build/test details, see
-[DEVELOPMENT.md](DEVELOPMENT.md).
+[DEVELOPMENT.md](DEVELOPMENT.md) and [TESTING.md](TESTING.md).
 
 ## Table of Contents
 

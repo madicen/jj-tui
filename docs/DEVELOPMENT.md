@@ -1,7 +1,8 @@
 # jj-tui Development Guide
 
 How the codebase is laid out and how to build, test, and regenerate screenshots.
-For end-user docs see the [README](../README.md) and [USAGE.md](USAGE.md).
+For end-user docs see the [README](../README.md) and [USAGE.md](USAGE.md); for the
+testing philosophy, fixtures, and mocks see [TESTING.md](TESTING.md).
 
 ## Table of Contents
 
@@ -106,6 +107,9 @@ make cover         # go test ./... -coverprofile=coverage.out && go tool cover -
 # Integration tests only (requires jj installed)
 go test ./integration_tests/... -v
 ```
+
+See [TESTING.md](TESTING.md) for the unit-vs-integration boundary, fixture
+scripts, table-driven conventions, and where mocks live.
 
 ## Updating Screenshots
 
