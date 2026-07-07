@@ -9,6 +9,7 @@ import (
 	zone "github.com/lrstanley/bubblezone"
 	overlay "github.com/madicen/bubble-overlay"
 	"github.com/madicen/jj-tui/internal"
+	"github.com/madicen/jj-tui/internal/tui/listnav"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/util"
@@ -16,20 +17,16 @@ import (
 
 // Model represents the state of the Branches tab
 type Model struct {
+	listnav.Model // shared list scroll + long-press state
+
 	zoneManager    *zone.Manager
 	repository     *internal.Repository
 	branchList     []internal.Branch
 	selectedBranch int
-	listYOffset    int // Scroll offset for list (details stay fixed)
 	width          int
 	height         int
 
-	// Long-press context menu for branch rows.
-	longPressItemIndex int
-	longPressPressID   int
-	longPressMouseX    int
-	longPressMouseY    int
-	contextMenu        *ContextMenuState
+	contextMenu *ContextMenuState
 
 	// Inline "pull & track remote branch by name" input. When addingRemote is true the input
 	// captures all keystrokes; Enter submits a FetchAndTrack request, Esc cancels.
@@ -46,12 +43,12 @@ func NewModel(zoneManager *zone.Manager) Model {
 	remoteInput.Width = 40
 
 	return Model{
-		zoneManager:        zoneManager,
-		selectedBranch:     -1,
-		width:              80,
-		height:             24,
-		longPressItemIndex: -1,
-		remoteInput:        remoteInput,
+		Model:          listnav.New(),
+		zoneManager:    zoneManager,
+		selectedBranch: -1,
+		width:          80,
+		height:         24,
+		remoteInput:    remoteInput,
 	}
 }
 
@@ -79,15 +76,15 @@ func (m Model) UpdateWithApp(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) 
 func (m Model) update(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case LongPressTickMsg:
-		if msg.PressID == m.longPressPressID && m.longPressItemIndex >= 0 {
+		if msg.PressID == m.LongPressPressID && m.LongPressItemIndex >= 0 {
 			m.contextMenu = &ContextMenuState{
-				BranchIndex: m.longPressItemIndex,
-				MouseX:      m.longPressMouseX,
-				MouseY:      m.longPressMouseY,
+				BranchIndex: m.LongPressItemIndex,
+				MouseX:      m.LongPressMouseX,
+				MouseY:      m.LongPressMouseY,
 				PressID:     msg.PressID,
 				HoverItem:   -1,
 			}
-			m.selectedBranch = m.longPressItemIndex
+			m.selectedBranch = m.LongPressItemIndex
 		}
 		return m, nil
 
@@ -198,17 +195,7 @@ func (m Model) update(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
 		}
 		return updated, cmd
 	case tea.MouseMsg:
-		isWheel := tea.MouseEvent(msg).IsWheel() || msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown
-		if isWheel {
-			isUp := msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelLeft
-			if isUp {
-				m.listYOffset -= 3
-				if m.listYOffset < 0 {
-					m.listYOffset = 0
-				}
-			} else {
-				m.listYOffset += 3
-			}
+		if m.WheelScroll(msg) {
 			return m, nil
 		}
 		if cmd := m.handleLongPress(msg); cmd != nil {
@@ -375,7 +362,7 @@ func (m *Model) GetSelectedBranch() int {
 
 // GetListYOffset returns the list scroll offset (for tests and accessors)
 func (m *Model) GetListYOffset() int {
-	return m.listYOffset
+	return m.YOffset
 }
 
 // SetSelectedBranch sets the selected branch index

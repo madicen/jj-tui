@@ -139,21 +139,7 @@ func (m Model) renderBranches() string {
 		listHeight = 0
 	}
 	totalListLines := len(listLines)
-	maxListOffset := 0
-	if totalListLines > listHeight {
-		maxListOffset = totalListLines - listHeight
-	}
-	if m.listYOffset > maxListOffset {
-		m.listYOffset = maxListOffset
-	}
-	if m.listYOffset < 0 {
-		m.listYOffset = 0
-	}
-	start := m.listYOffset
-	end := start + listHeight
-	if end > totalListLines {
-		end = totalListLines
-	}
+	start, end := m.VisibleRange(totalListLines, listHeight)
 	var visibleList string
 	if start < end {
 		visibleList = strings.Join(listLines[start:end], "\n")
