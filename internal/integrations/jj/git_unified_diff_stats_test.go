@@ -46,8 +46,8 @@ index 0000000000..f92d5fc293 100644
 `
 	got := parseGitUnifiedDiffStats(sample)
 	want := map[string]gitLineCounts{
-		"README.md":     {added: 4, removed: 0},
-		"src/main.go":   {added: 8, removed: 0},
+		"README.md":       {added: 4, removed: 0},
+		"src/main.go":     {added: 8, removed: 0},
 		"src/settings.go": {added: 7, removed: 0},
 	}
 	if !reflect.DeepEqual(got, want) {
