@@ -7,7 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/madicen/jj-tui/internal/tui/longpress"
+	"github.com/madicen/jj-tui/internal/tui/listnav"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/render"
 	"github.com/madicen/jj-tui/internal/tui/styles"
@@ -155,42 +155,15 @@ func (m *Model) handleLongPress(msg tea.MouseMsg) tea.Cmd {
 		m.contextMenu.HoverItem = hit
 	}
 
-	switch msg.Action {
-	case tea.MouseActionMotion:
-		// Stay armed while the cursor remains over the ticket row or within
-		// the small slack box around the anchor. Doesn't apply once the
-		// context menu or status submenu is already shown — those have
-		// their own hover-tracking branches above.
-		if m.contextMenu == nil && m.statusSubmenu == nil && m.longPressItemIndex >= 0 {
-			origin := mouse.ZoneJiraTicket(m.longPressItemIndex)
-			if !longpress.StillArmed(m.zoneManager, origin, m.longPressMouseX, m.longPressMouseY, msg) {
-				m.longPressItemIndex = -1
-			}
-		}
-
-	case tea.MouseActionPress:
-		if msg.Button != tea.MouseButtonLeft {
-			return nil
-		}
-		if m.contextMenu != nil || m.statusSubmenu != nil {
-			return nil
-		}
-		for i := range m.ticketList {
-			z := m.zoneManager.Get(mouse.ZoneJiraTicket(i))
-			if z != nil && z.InBounds(msg) {
-				m.longPressPressID++
-				m.longPressItemIndex = i
-				m.longPressMouseX = msg.X
-				m.longPressMouseY = msg.Y
-				pressID := m.longPressPressID
-				return tea.Tick(longPressThreshold, func(time.Time) tea.Msg {
-					return LongPressTickMsg{PressID: pressID}
-				})
-			}
-		}
-
-	case tea.MouseActionRelease:
-		m.longPressItemIndex = -1
-	}
-	return nil
+	// Stay armed while the cursor remains over the ticket row or within the
+	// small slack box around the anchor. MenuOpen suppresses that (and a new
+	// press) once the context menu or status submenu is already shown — those
+	// have their own hover-tracking branches above.
+	return m.ArmLongPress(m.zoneManager, msg, listnav.LongPressConfig{
+		MenuOpen:  m.contextMenu != nil || m.statusSubmenu != nil,
+		ItemCount: len(m.ticketList),
+		RowZoneID: mouse.ZoneJiraTicket,
+		Threshold: longPressThreshold,
+		MakeTick:  func(pressID int) tea.Msg { return LongPressTickMsg{PressID: pressID} },
+	})
 }

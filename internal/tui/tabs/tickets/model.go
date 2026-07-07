@@ -10,6 +10,7 @@ import (
 	overlay "github.com/madicen/bubble-overlay"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/tickets"
+	"github.com/madicen/jj-tui/internal/tui/listnav"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/mousedouble"
 	"github.com/madicen/jj-tui/internal/tui/state"
@@ -17,10 +18,11 @@ import (
 
 // Model represents the state of the Tickets tab
 type Model struct {
+	listnav.Model // shared list scroll + long-press state
+
 	zoneManager          *zone.Manager
 	ticketList           []tickets.Ticket
 	selectedTicket       int
-	listYOffset          int // Scroll offset for list (details stay fixed)
 	availableTransitions []tickets.Transition
 	transitionInProgress bool
 	statusChangeMode     bool
@@ -33,13 +35,8 @@ type Model struct {
 	scrollToSelectedTicket bool
 	loadingTransitions     bool // true while loading available transitions for selected ticket
 
-	// Long-press context menu for ticket rows.
-	longPressItemIndex int
-	longPressPressID   int
-	longPressMouseX    int
-	longPressMouseY    int
-	contextMenu        *ContextMenuState
-	statusSubmenu      *StatusSubmenuState
+	contextMenu   *ContextMenuState
+	statusSubmenu *StatusSubmenuState
 
 	rowDoubleClick mousedouble.DoubleClick
 }
@@ -48,11 +45,11 @@ type Model struct {
 // Default dimensions (80x24) ensure wheel scroll works before first View()/SetDimensions, same as Graph viewports.
 func NewModel(zoneManager *zone.Manager) Model {
 	return Model{
-		zoneManager:        zoneManager,
-		selectedTicket:     -1,
-		width:              80,
-		height:             24,
-		longPressItemIndex: -1,
+		Model:          listnav.New(),
+		zoneManager:    zoneManager,
+		selectedTicket: -1,
+		width:          80,
+		height:         24,
 	}
 }
 
@@ -80,15 +77,15 @@ func (m Model) UpdateWithApp(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) 
 func (m Model) update(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case LongPressTickMsg:
-		if msg.PressID == m.longPressPressID && m.longPressItemIndex >= 0 {
+		if msg.PressID == m.LongPressPressID && m.LongPressItemIndex >= 0 {
 			m.contextMenu = &ContextMenuState{
-				TicketIndex: m.longPressItemIndex,
-				MouseX:      m.longPressMouseX,
-				MouseY:      m.longPressMouseY,
+				TicketIndex: m.LongPressItemIndex,
+				MouseX:      m.LongPressMouseX,
+				MouseY:      m.LongPressMouseY,
 				PressID:     msg.PressID,
 				HoverItem:   -1,
 			}
-			m.selectedTicket = m.longPressItemIndex
+			m.selectedTicket = m.LongPressItemIndex
 			m.scrollToSelectedTicket = true
 		}
 		return m, nil
@@ -214,17 +211,7 @@ func (m Model) update(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
 		}
 		return updated, cmd
 	case tea.MouseMsg:
-		isWheel := tea.MouseEvent(msg).IsWheel() || msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown
-		if isWheel {
-			isUp := msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelLeft
-			if isUp {
-				m.listYOffset -= 3
-				if m.listYOffset < 0 {
-					m.listYOffset = 0
-				}
-			} else {
-				m.listYOffset += 3
-			}
+		if m.WheelScroll(msg) {
 			return m, nil
 		}
 		if cmd := m.handleLongPress(msg); cmd != nil {
@@ -489,7 +476,7 @@ func (m *Model) GetSelectedTicket() int {
 
 // GetListYOffset returns the list scroll offset (for tests and accessors)
 func (m *Model) GetListYOffset() int {
-	return m.listYOffset
+	return m.YOffset
 }
 
 // SetSelectedTicket sets the selected ticket index

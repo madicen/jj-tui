@@ -34,10 +34,10 @@ func renderAndScan(m *Model) string {
 
 func TestLongPressTickMsg_CreatesContextMenu(t *testing.T) {
 	m := newTestModel()
-	m.longPressItemIndex = 0
-	m.longPressPressID = 1
-	m.longPressMouseX = 10
-	m.longPressMouseY = 5
+	m.LongPressItemIndex = 0
+	m.LongPressPressID = 1
+	m.LongPressMouseX = 10
+	m.LongPressMouseY = 5
 
 	updated, _ := m.Update(LongPressTickMsg{PressID: 1})
 	m = updated
@@ -184,12 +184,12 @@ func TestFullClickFlow_ChangeStatus(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("press on ticket should return a tick command")
 	}
-	if m.longPressItemIndex != 1 {
-		t.Fatalf("longPressItemIndex = %d, want 1", m.longPressItemIndex)
+	if m.LongPressItemIndex != 1 {
+		t.Fatalf("LongPressItemIndex = %d, want 1", m.LongPressItemIndex)
 	}
 
 	// 2. Long-press tick fires → creates context menu
-	updated, _ := m.Update(LongPressTickMsg{PressID: m.longPressPressID})
+	updated, _ := m.Update(LongPressTickMsg{PressID: m.LongPressPressID})
 	m = updated
 	if m.contextMenu == nil {
 		t.Fatal("context menu should be created after long-press tick")
