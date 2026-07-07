@@ -76,3 +76,55 @@ diff parsing, and is out of scope for any diff-parsing library regardless.
 Hand parser retained; `go-gitdiff` **not** added as a dependency. No production code or tests changed.
 Per the plan's global rule ("if the library can't reproduce current behavior exactly, keep ours and
 record why"), this is the intended successful outcome for P3.1.
+
+---
+
+## P3.2 — AI client cleanup: `sashabaranov/go-openai` and `google.golang.org/genai`
+
+**Decision: REJECT both libraries — keep the hand-rolled multi-provider adapters in
+`internal/integrations/llm`. Reuse the shared `internal/integrations/httpapi` base for request
+building + auth decoration (implemented).**
+
+### Current shape (already close to the target)
+
+`internal/integrations/llm` already provides what P3.2 asks for:
+
+- a single `Complete(ctx, systemPrompt, userPrompt) (string, error)` interface (`Provider`),
+- thin per-provider adapters (`OpenAICompatibleProvider` over `Client`; `GeminiProvider`),
+- JSON request/response code in exactly one place per provider (`chatRequest`/`chatResponse` +
+  `parseOpenAIChatCompletionBody` in `client.go`; `geminiGenerate*` + `parseGeminiGenerateBody` in
+  `gemini.go`),
+- shared retry/backoff with `Retry-After` honoring (`retry.go`) and shared error-hint
+  classification for throttle/overload/quota (`classify.go`),
+- a config-profile-driven factory preserving configurable base URL, timeout, and profiles
+  (`factory.go`).
+
+### Why `go-openai` is rejected
+
+1. **The contract tests must pass unchanged and are tightly coupled to our types.**
+   `factory_test.go` directly reads `op.client.Model`, `op.client.APIKey`, and `op.client.BaseURL`;
+   `client_test.go` marshals the internal `chatResponse` struct; `retry_test.go` asserts our exact
+   retry semantics (429 retried honoring `Retry-After`, 401 not retried, attempt counts). go-openai
+   has its own client types (no exported `Model`/`APIKey`/`BaseURL` fields to assert on) and performs
+   **no retries**, so adopting it would force rewriting these tests — violating the accept criterion.
+2. **We would still need our custom retry + failure-hint layer**, so go-openai removes little and
+   duplicates request/response modeling we already have in one place.
+3. **Binary cost.** Measured with a realistic `CreateChatCompletion` probe: go-openai adds
+   **~6.4 MB** over the empty-Go baseline (jj-tui is ~17 MB → roughly +37%). go-openai has zero
+   transitive deps, so this is the sole cost, but it buys nothing given (1) and (2).
+
+### Why `google.golang.org/genai` is rejected
+
+Measured with a realistic `GenerateContent` probe, genai adds **~16.7 MB** over baseline and pulls in
+100+ transitive modules (`google.golang.org/api`, protobuf, OAuth machinery). That is meaningful
+bloat for a single `generateContent` POST that the ~90-line hand-rolled adapter already covers. Keep
+the thin hand-rolled Gemini adapter.
+
+### What was implemented
+
+Routed OpenAI-compatible and Gemini request construction + auth decoration through the shared
+`httpapi.Client` (P1.6), removing the duplicated `http.NewRequestWithContext` + header-setting
+boilerplate from both adapters. Response reading, 2xx handling, retry/backoff, and error
+classification remain in the LLM-specific `withLLMHTTPRetry` because `httpapi`'s `EnsureOK`/`DoRead`
+treat only 200 as success and perform no retries. All existing AI tests pass unchanged; JSON
+request/response code remains in exactly one place per provider.

@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/madicen/jj-tui/internal/integrations/httpapi"
 )
 
 // Client calls POST {base}/chat/completions with Bearer auth.
@@ -82,18 +84,19 @@ func (c *Client) Complete(ctx context.Context, systemPrompt, userPrompt string) 
 		return "", err
 	}
 	url := c.BaseURL + "/chat/completions"
-	client := c.HTTPClient
-	if client == nil {
-		client = http.DefaultClient
+	// Request construction + auth decoration come from the shared httpapi base;
+	// retry/backoff and body/status handling stay in withLLMHTTPRetry because the
+	// LLM path needs Retry-After honoring and 2xx (not just 200) success.
+	hc := &httpapi.Client{
+		Provider: "LLM",
+		HTTP:     c.HTTPClient,
+		Decorate: func(req *http.Request) {
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", "Bearer "+c.APIKey)
+		},
 	}
 	respBody, err := withLLMHTTPRetry(ctx, "LLM", func(reqCtx context.Context) (*http.Response, error) {
-		req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, url, bytes.NewReader(raw))
-		if err != nil {
-			return nil, err
-		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer "+c.APIKey)
-		return client.Do(req)
+		return hc.Do(reqCtx, http.MethodPost, url, bytes.NewReader(raw))
 	})
 	if err != nil {
 		return "", err

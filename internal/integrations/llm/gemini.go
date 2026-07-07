@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/madicen/jj-tui/internal/integrations/httpapi"
 )
 
 const defaultGeminiBase = "https://generativelanguage.googleapis.com/v1beta"
@@ -100,18 +102,18 @@ func (p *GeminiProvider) Complete(ctx context.Context, systemPrompt, userPrompt 
 		return "", err
 	}
 
-	client := p.HTTPClient
-	if client == nil {
-		client = http.DefaultClient
-	}
 	targetURL := u.String()
+	// Reuse the shared httpapi base for request construction; Gemini authenticates
+	// via the ?key= query param set above, so no auth header decoration is needed.
+	hc := &httpapi.Client{
+		Provider: "gemini",
+		HTTP:     p.HTTPClient,
+		Decorate: func(req *http.Request) {
+			req.Header.Set("Content-Type", "application/json")
+		},
+	}
 	respBody, err := withLLMHTTPRetry(ctx, "gemini", func(reqCtx context.Context) (*http.Response, error) {
-		req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, targetURL, bytes.NewReader(raw))
-		if err != nil {
-			return nil, err
-		}
-		req.Header.Set("Content-Type", "application/json")
-		return client.Do(req)
+		return hc.Do(reqCtx, http.MethodPost, targetURL, bytes.NewReader(raw))
 	})
 	if err != nil {
 		return "", err
