@@ -7,15 +7,22 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/config"
+	"github.com/madicen/jj-tui/internal/tui/form"
 )
 
-// Model represents the Codecks settings sub-tab
+// Field indices into the shared form (also the parent's local focus order).
+const (
+	fieldSubdomain = iota
+	fieldToken
+	fieldProject
+	fieldExcluded
+)
+
+// Model represents the Codecks settings sub-tab. Focus/navigation/width plumbing
+// lives in the embedded form.Model; the getters/setters below map config fields
+// onto form field indices.
 type Model struct {
-	subdomainInput textinput.Model
-	tokenInput     textinput.Model
-	projectInput   textinput.Model
-	excludedInput  textinput.Model
-	focusedField   int
+	form form.Model
 }
 
 // NewModel creates a new Codecks settings model
@@ -24,7 +31,6 @@ func NewModel() Model {
 	subdomainInput.Placeholder = "your-team (from your-team.codecks.io)"
 	subdomainInput.CharLimit = 100
 	subdomainInput.Width = 50
-	subdomainInput.Focus()
 
 	tokenInput := textinput.New()
 	tokenInput.Placeholder = "Codecks API Token (from browser cookie 'at')"
@@ -44,22 +50,18 @@ func NewModel() Model {
 	excludedInput.Width = 50
 
 	return Model{
-		subdomainInput: subdomainInput,
-		tokenInput:     tokenInput,
-		projectInput:   projectInput,
-		excludedInput:  excludedInput,
-		focusedField:   0,
+		form: form.New(subdomainInput, tokenInput, projectInput, excludedInput),
 	}
 }
 
 // NewModelFromConfig creates a model initialized from config and env.
 func NewModelFromConfig(cfg *config.Config) Model {
 	m := NewModel()
-	m.subdomainInput.SetValue(os.Getenv("CODECKS_SUBDOMAIN"))
-	m.tokenInput.SetValue(os.Getenv("CODECKS_TOKEN"))
-	m.projectInput.SetValue(os.Getenv("CODECKS_PROJECT"))
+	m.SetSubdomain(os.Getenv("CODECKS_SUBDOMAIN"))
+	m.SetToken(os.Getenv("CODECKS_TOKEN"))
+	m.SetProject(os.Getenv("CODECKS_PROJECT"))
 	if cfg != nil {
-		m.excludedInput.SetValue(cfg.CodecksExcludedStatuses)
+		m.SetExcludedStatuses(cfg.CodecksExcludedStatuses)
 	}
 	return m
 }
@@ -69,29 +71,15 @@ func (m Model) Init() tea.Cmd {
 	return nil
 }
 
-// Update handles messages
+// Update handles messages: vertical navigation cycles focus; everything else is
+// routed to the focused input.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		// Only handle nav keys here; all other keys go to the focused input below
-		switch msg.String() {
-		case "j", "down", "k", "up":
-			return m.handleKeyMsg(msg)
+	if key, ok := msg.(tea.KeyMsg); ok {
+		if m.form.HandleNavKey(key.String()) {
+			return m, nil
 		}
 	}
-
-	var cmd tea.Cmd
-	switch m.focusedField {
-	case 0:
-		m.subdomainInput, cmd = m.subdomainInput.Update(msg)
-	case 1:
-		m.tokenInput, cmd = m.tokenInput.Update(msg)
-	case 2:
-		m.projectInput, cmd = m.projectInput.Update(msg)
-	case 3:
-		m.excludedInput, cmd = m.excludedInput.Update(msg)
-	}
-	return m, cmd
+	return m, m.form.Update(msg)
 }
 
 // View renders the model
@@ -99,134 +87,49 @@ func (m Model) View() string {
 	return "" // Rendered by parent
 }
 
-// handleKeyMsg handles keyboard input
-func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
-	switch msg.String() {
-	case "j", "down":
-		if m.focusedField < 3 {
-			m.unfocus()
-			m.focusedField++
-			m.focus()
-		}
-		return m, nil
-	case "k", "up":
-		if m.focusedField > 0 {
-			m.unfocus()
-			m.focusedField--
-			m.focus()
-		}
-		return m, nil
-	}
-	return m, nil
-}
-
-func (m *Model) focus() {
-	switch m.focusedField {
-	case 0:
-		m.subdomainInput.Focus()
-	case 1:
-		m.tokenInput.Focus()
-	case 2:
-		m.projectInput.Focus()
-	case 3:
-		m.excludedInput.Focus()
-	}
-}
-
-func (m *Model) unfocus() {
-	m.subdomainInput.Blur()
-	m.tokenInput.Blur()
-	m.projectInput.Blur()
-	m.excludedInput.Blur()
-}
-
 // Accessors
 
 // GetSubdomain returns the Codecks subdomain
-func (m *Model) GetSubdomain() string {
-	return m.subdomainInput.Value()
-}
+func (m *Model) GetSubdomain() string { return m.form.Value(fieldSubdomain) }
 
 // SetSubdomain sets the Codecks subdomain
-func (m *Model) SetSubdomain(s string) {
-	m.subdomainInput.SetValue(s)
-}
+func (m *Model) SetSubdomain(s string) { m.form.SetValue(fieldSubdomain, s) }
 
 // GetToken returns the Codecks token
-func (m *Model) GetToken() string {
-	return m.tokenInput.Value()
-}
+func (m *Model) GetToken() string { return m.form.Value(fieldToken) }
 
 // SetToken sets the Codecks token
-func (m *Model) SetToken(s string) {
-	m.tokenInput.SetValue(s)
-}
+func (m *Model) SetToken(s string) { m.form.SetValue(fieldToken, s) }
 
 // GetProject returns the Codecks project filter
-func (m *Model) GetProject() string {
-	return m.projectInput.Value()
-}
+func (m *Model) GetProject() string { return m.form.Value(fieldProject) }
 
 // SetProject sets the Codecks project filter
-func (m *Model) SetProject(s string) {
-	m.projectInput.SetValue(s)
-}
+func (m *Model) SetProject(s string) { m.form.SetValue(fieldProject, s) }
 
 // GetExcludedStatuses returns the Codecks excluded statuses
-func (m *Model) GetExcludedStatuses() string {
-	return m.excludedInput.Value()
-}
+func (m *Model) GetExcludedStatuses() string { return m.form.Value(fieldExcluded) }
 
 // SetExcludedStatuses sets the Codecks excluded statuses
-func (m *Model) SetExcludedStatuses(s string) {
-	m.excludedInput.SetValue(s)
-}
+func (m *Model) SetExcludedStatuses(s string) { m.form.SetValue(fieldExcluded, s) }
 
 // GetAPIKey returns the Codecks API key (alias for GetToken for compatibility)
-func (m *Model) GetAPIKey() string {
-	return m.tokenInput.Value()
-}
+func (m *Model) GetAPIKey() string { return m.form.Value(fieldToken) }
 
 // SetAPIKey sets the Codecks API key (alias for SetToken)
-func (m *Model) SetAPIKey(key string) {
-	m.tokenInput.SetValue(key)
-}
+func (m *Model) SetAPIKey(key string) { m.form.SetValue(fieldToken, key) }
 
 // GetInputViews returns the view strings for all 4 inputs
-func (m *Model) GetInputViews() []string {
-	return []string{
-		m.subdomainInput.View(),
-		m.tokenInput.View(),
-		m.projectInput.View(),
-		m.excludedInput.View(),
-	}
-}
+func (m *Model) GetInputViews() []string { return m.form.Views() }
 
 // GetFocusedField returns the focused input index (0-3)
-func (m *Model) GetFocusedField() int {
-	return m.focusedField
-}
+func (m *Model) GetFocusedField() int { return m.form.Focused() }
 
 // SetFocusedField sets the focused input index (0-3)
-func (m *Model) SetFocusedField(i int) {
-	if i < 0 {
-		i = 0
-	}
-	if i > 3 {
-		i = 3
-	}
-	m.focusedField = i
-	m.unfocus()
-	m.focus()
-}
+func (m *Model) SetFocusedField(i int) { m.form.SetFocused(i) }
 
 // SetInputWidth sets the width of all inputs
-func (m *Model) SetInputWidth(w int) {
-	m.subdomainInput.Width = w
-	m.tokenInput.Width = w
-	m.projectInput.Width = w
-	m.excludedInput.Width = w
-}
+func (m *Model) SetInputWidth(w int) { m.form.SetWidth(w) }
 
 // UpdateRepository updates the repository
 func (m *Model) UpdateRepository(repo *internal.Repository) {
