@@ -2006,11 +2006,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.errorModal.SetError(errInfo.Err, false, "")
 			return m, nil
 		}
-		// Reloaded config pointer; keep evolog split modal in sync if user returns to split (z) after saving AI settings.
-		m.evologSplitModal = m.evologSplitModal.WithSuggestConfig(m.appState.Config)
-		// Propagate the new AI profile list to any open generate-bearing modal so
-		// the long-press menu reflects edits made on the Settings → AI tab.
-		m.pushAIProfilesToFormModals()
 		if wasSettings {
 			m.settingsTabModel.SetViewOpts(m.buildSettingsViewOpts())
 		}
@@ -2020,7 +2015,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.appState.JJService.BookmarkListPreferTracked = m.appState.Config.BranchesFilterToTrackedAndMine()
 			cmd = tea.Batch(cmd, branchestab.LoadBranchesCmd(m.appState.JJService, m.settingsTabModel.GetSettingsBranchLimit()))
 		}
-		return m, cmd
+		// Broadcast the config change so config-dependent modals/tabs re-read the
+		// new snapshot (handled by the config.ChangedMsg case below).
+		cfg := m.appState.Config
+		return m, tea.Batch(cmd, func() tea.Msg { return config.ChangedMsg{Config: cfg} })
+
+	case config.ChangedMsg:
+		// Config changed (e.g. settings saved): re-sync config-dependent modals so
+		// they read the new values instead of a stale snapshot.
+		if msg.Config != nil {
+			// Keep the evolog split modal in sync (e.g. after saving AI settings).
+			m.evologSplitModal = m.evologSplitModal.WithSuggestConfig(msg.Config)
+		}
+		// Propagate the new AI profile list to any open generate-bearing modal.
+		m.pushAIProfilesToFormModals()
+		return m, nil
 
 	case settingstab.GitHubDeviceFlowStartedMsg:
 		m.beginModalUnderlay()

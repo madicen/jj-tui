@@ -93,7 +93,7 @@ func NewModelFromConfig(cfg *config.Config) Model {
 }
 
 func presetIndexFromConfig(s string) int {
-	n := config.NormalizeExternalFileEditor(&config.Config{ExternalFileEditor: s})
+	n := config.NormalizeExternalFileEditor(&config.Config{AdvancedConfig: config.AdvancedConfig{ExternalFileEditor: s}})
 	for i, v := range externalEditorPresetConfig {
 		if v == n {
 			return i

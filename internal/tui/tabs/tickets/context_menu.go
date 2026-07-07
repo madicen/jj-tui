@@ -37,11 +37,11 @@ type LongPressTickMsg struct {
 }
 
 type ticketContextMenuItem struct {
-	Label          string
-	Key            string
-	Request        Request
-	RequireCreate  bool // only shown when canCreateTicket
-	IsCascade      bool // true for "Change Status >" which opens a submenu instead of firing a request
+	Label         string
+	Key           string
+	Request       Request
+	RequireCreate bool // only shown when canCreateTicket
+	IsCascade     bool // true for "Change Status >" which opens a submenu instead of firing a request
 }
 
 func ticketContextMenuItems() []ticketContextMenuItem {

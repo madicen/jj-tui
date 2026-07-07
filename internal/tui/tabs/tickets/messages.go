@@ -29,11 +29,11 @@ type LoadErrorMsg struct {
 
 // Request is sent to the main model to run ticket actions (main has ticketService, jjService, etc.).
 type Request struct {
-	OpenInBrowser             bool
-	ToggleStatusChangeMode    bool
-	StartBookmarkFromTicket   bool
-	StartCreateTicket         bool // open Create Ticket modal when provider supports it
-	TransitionID               string
+	OpenInBrowser               bool
+	ToggleStatusChangeMode      bool
+	StartBookmarkFromTicket     bool
+	StartCreateTicket           bool // open Create Ticket modal when provider supports it
+	TransitionID                string
 	LoadTransitionsForSelection bool
 }
 
@@ -110,9 +110,9 @@ func ToggleModeEffectCmd(status string) tea.Cmd {
 
 // OpenCreateBookmarkFromTicketEffect tells main to open the bookmark modal to create a branch from main using the ticket key.
 type OpenCreateBookmarkFromTicketEffect struct {
-	TicketKey   string
-	Title       string
-	DisplayKey  string
+	TicketKey  string
+	Title      string
+	DisplayKey string
 }
 
 // Cmd returns a tea.Cmd that sends this effect to main.

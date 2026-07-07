@@ -20,9 +20,9 @@ type EvologOutcomePreviewRequestedMsg struct {
 
 // EvologOutcomePreviewLoadedMsg carries working-copy diff summary lines for the outcome preview overlay.
 type EvologOutcomePreviewLoadedMsg struct {
-	Seq    int
-	Lines  []string
-	Err    error
+	Seq   int
+	Lines []string
+	Err   error
 }
 
 // LoadEvologOutcomePreviewCmd runs jj diff --summary @- → @ (async).

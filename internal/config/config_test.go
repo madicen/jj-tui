@@ -11,21 +11,21 @@ import (
 func TestConfigMerge(t *testing.T) {
 	t.Run("MergeOverridesNonEmpty", func(t *testing.T) {
 		dest := &Config{
-			GitHubToken:      "original-token",
-			TicketProvider:   "jira",
-			JiraURL:          "https://original.atlassian.net",
-			CodecksSubdomain: "",
+			GitHubConfig:  GitHubConfig{GitHubToken: "original-token"},
+			TicketsConfig: TicketsConfig{TicketProvider: "jira"},
+			JiraConfig:    JiraConfig{JiraURL: "https://original.atlassian.net"},
+			CodecksConfig: CodecksConfig{CodecksSubdomain: ""},
 		}
-		
+
 		source := &Config{
-			GitHubToken:      "",  // Empty - should not override
-			TicketProvider:   "codecks",  // Non-empty - should override
-			JiraURL:          "",  // Empty - should not override
-			CodecksSubdomain: "newteam",  // Non-empty - should override
+			GitHubConfig:  GitHubConfig{GitHubToken: ""},              // Empty - should not override
+			TicketsConfig: TicketsConfig{TicketProvider: "codecks"},   // Non-empty - should override
+			JiraConfig:    JiraConfig{JiraURL: ""},                    // Empty - should not override
+			CodecksConfig: CodecksConfig{CodecksSubdomain: "newteam"}, // Non-empty - should override
 		}
-		
+
 		mergeConfig(dest, source)
-		
+
 		if dest.GitHubToken != "original-token" {
 			t.Errorf("GitHubToken should not be overwritten by empty value, got %s", dest.GitHubToken)
 		}
@@ -39,14 +39,14 @@ func TestConfigMerge(t *testing.T) {
 			t.Errorf("CodecksSubdomain should be overwritten, got %s", dest.CodecksSubdomain)
 		}
 	})
-	
+
 	t.Run("MergeWithNilSource", func(t *testing.T) {
 		dest := &Config{
-			GitHubToken: "token",
+			GitHubConfig: GitHubConfig{GitHubToken: "token"},
 		}
-		
+
 		mergeConfig(dest, nil)
-		
+
 		if dest.GitHubToken != "token" {
 			t.Error("Merging nil should not modify dest")
 		}
@@ -60,42 +60,42 @@ func TestConfigHasMethods(t *testing.T) {
 		if cfg.HasGitHub() {
 			t.Error("HasGitHub should return false for empty config")
 		}
-		
+
 		cfg.GitHubToken = "token"
 		if !cfg.HasGitHub() {
 			t.Error("HasGitHub should return true when token is set")
 		}
 	})
-	
+
 	t.Run("HasJira", func(t *testing.T) {
 		cfg := &Config{}
 		if cfg.HasJira() {
 			t.Error("HasJira should return false for empty config")
 		}
-		
+
 		cfg.JiraURL = "https://test.atlassian.net"
 		if cfg.HasJira() {
 			t.Error("HasJira should return false with only URL")
 		}
-		
+
 		cfg.JiraUser = "user@example.com"
 		cfg.JiraToken = "token"
 		if !cfg.HasJira() {
 			t.Error("HasJira should return true when all fields are set")
 		}
 	})
-	
+
 	t.Run("HasCodecks", func(t *testing.T) {
 		cfg := &Config{}
 		if cfg.HasCodecks() {
 			t.Error("HasCodecks should return false for empty config")
 		}
-		
+
 		cfg.CodecksSubdomain = "team"
 		if cfg.HasCodecks() {
 			t.Error("HasCodecks should return false with only subdomain")
 		}
-		
+
 		cfg.CodecksToken = "token"
 		if !cfg.HasCodecks() {
 			t.Error("HasCodecks should return true when subdomain and token are set")
@@ -107,47 +107,41 @@ func TestConfigHasMethods(t *testing.T) {
 func TestGetTicketProvider(t *testing.T) {
 	t.Run("ExplicitProvider", func(t *testing.T) {
 		cfg := &Config{
-			TicketProvider: "jira",
+			TicketsConfig: TicketsConfig{TicketProvider: "jira"},
 		}
 		if cfg.GetTicketProvider() != "jira" {
 			t.Error("Should return explicit provider")
 		}
 	})
-	
+
 	t.Run("AutoDetectCodecks", func(t *testing.T) {
 		cfg := &Config{
-			CodecksSubdomain: "team",
-			CodecksToken:     "token",
+			CodecksConfig: CodecksConfig{CodecksSubdomain: "team", CodecksToken: "token"},
 		}
 		if cfg.GetTicketProvider() != "codecks" {
 			t.Error("Should auto-detect Codecks when configured")
 		}
 	})
-	
+
 	t.Run("AutoDetectJira", func(t *testing.T) {
 		cfg := &Config{
-			JiraURL:   "https://test.atlassian.net",
-			JiraUser:  "user@example.com",
-			JiraToken: "token",
+			JiraConfig: JiraConfig{JiraURL: "https://test.atlassian.net", JiraUser: "user@example.com", JiraToken: "token"},
 		}
 		if cfg.GetTicketProvider() != "jira" {
 			t.Error("Should auto-detect Jira when configured")
 		}
 	})
-	
+
 	t.Run("CodecksPreferredOverJira", func(t *testing.T) {
 		cfg := &Config{
-			CodecksSubdomain: "team",
-			CodecksToken:     "token",
-			JiraURL:          "https://test.atlassian.net",
-			JiraUser:         "user@example.com",
-			JiraToken:        "token",
+			CodecksConfig: CodecksConfig{CodecksSubdomain: "team", CodecksToken: "token"},
+			JiraConfig:    JiraConfig{JiraURL: "https://test.atlassian.net", JiraUser: "user@example.com", JiraToken: "token"},
 		}
 		if cfg.GetTicketProvider() != "codecks" {
 			t.Error("Should prefer Codecks when both are configured")
 		}
 	})
-	
+
 	t.Run("EmptyWhenNothingConfigured", func(t *testing.T) {
 		cfg := &Config{}
 		if cfg.GetTicketProvider() != "" {
@@ -172,25 +166,25 @@ func TestHasLocalConfig(t *testing.T) {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
 	defer os.RemoveAll(tempDir)
-	
+
 	// Save current directory
 	origDir, _ := os.Getwd()
 	defer func() { _ = os.Chdir(origDir) }()
-	
+
 	// Change to temp directory
 	_ = os.Chdir(tempDir)
-	
+
 	// Initially should not have local config
 	if HasLocalConfig() {
 		t.Error("HasLocalConfig should return false when no local config exists")
 	}
-	
+
 	// Create a local config file
 	configPath := filepath.Join(tempDir, LocalConfigFileName)
 	if err := os.WriteFile(configPath, []byte(`{"ticket_provider": "codecks"}`), 0600); err != nil {
 		t.Fatalf("Failed to create test config: %v", err)
 	}
-	
+
 	// Now should have local config
 	if !HasLocalConfig() {
 		t.Error("HasLocalConfig should return true when local config exists")
@@ -205,29 +199,27 @@ func TestConfigSaveAndLoad(t *testing.T) {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
 	defer os.RemoveAll(tempDir)
-	
+
 	configPath := filepath.Join(tempDir, "config.json")
-	
+
 	// Create config
 	original := &Config{
-		GitHubToken:      "test-token",
-		TicketProvider:   "codecks",
-		CodecksSubdomain: "myteam",
-		CodecksToken:     "codecks-token",
-		CodecksProject:   "My Project",
+		GitHubConfig:  GitHubConfig{GitHubToken: "test-token"},
+		TicketsConfig: TicketsConfig{TicketProvider: "codecks"},
+		CodecksConfig: CodecksConfig{CodecksSubdomain: "myteam", CodecksToken: "codecks-token", CodecksProject: "My Project"},
 	}
-	
+
 	// Save to specific path
 	if err := original.SaveTo(configPath); err != nil {
 		t.Fatalf("Failed to save config: %v", err)
 	}
-	
+
 	// Load from file
 	loaded, err := loadFromFile(configPath)
 	if err != nil {
 		t.Fatalf("Failed to load config: %v", err)
 	}
-	
+
 	// Verify values
 	if loaded.GitHubToken != original.GitHubToken {
 		t.Errorf("GitHubToken mismatch: got %s, want %s", loaded.GitHubToken, original.GitHubToken)
@@ -256,13 +248,13 @@ func TestLoadFromNonExistentFile(t *testing.T) {
 
 func TestAIModelResolved(t *testing.T) {
 	t.Run("explicitModel", func(t *testing.T) {
-		cfg := &Config{AIModel: "custom", AIProvider: "gemini"}
+		cfg := &Config{AIConfig: AIConfig{AIModel: "custom", AIProvider: "gemini"}}
 		if got := cfg.AIModelResolved(); got != "custom" {
 			t.Fatalf("got %q", got)
 		}
 	})
 	t.Run("geminiDefault", func(t *testing.T) {
-		cfg := &Config{AIProvider: "gemini"}
+		cfg := &Config{AIConfig: AIConfig{AIProvider: "gemini"}}
 		if got := cfg.AIModelResolved(); got != "gemini-2.5-flash" {
 			t.Fatalf("got %q", got)
 		}
@@ -274,7 +266,7 @@ func TestAIModelResolved(t *testing.T) {
 		}
 	})
 	t.Run("ollamaDefault", func(t *testing.T) {
-		cfg := &Config{AIProvider: "ollama"}
+		cfg := &Config{AIConfig: AIConfig{AIProvider: "ollama"}}
 		if got := cfg.AIModelResolved(); got != OllamaDefaultModel {
 			t.Fatalf("got %q want %q", got, OllamaDefaultModel)
 		}
@@ -308,13 +300,13 @@ func TestIsOllamaOpenAICompatibleBaseURL(t *testing.T) {
 
 func TestAISupportsGenerationCredentials(t *testing.T) {
 	t.Run("keyInConfig", func(t *testing.T) {
-		cfg := &Config{AIAPIKey: "sk-test"}
+		cfg := &Config{AIConfig: AIConfig{AIAPIKey: "sk-test"}}
 		if !cfg.AISupportsGenerationCredentials() {
 			t.Fatal("expected true with API key")
 		}
 	})
 	t.Run("ollamaProviderNoKey", func(t *testing.T) {
-		cfg := &Config{AIProvider: "ollama"}
+		cfg := &Config{AIConfig: AIConfig{AIProvider: "ollama"}}
 		if !cfg.AISupportsGenerationCredentials() {
 			t.Fatal("expected true for ollama without key")
 		}
@@ -326,7 +318,7 @@ func TestAISupportsGenerationCredentials(t *testing.T) {
 		}
 	})
 	t.Run("localOllamaURLNoKey", func(t *testing.T) {
-		cfg := &Config{AIBaseURL: "http://127.0.0.1:11434/v1"}
+		cfg := &Config{AIConfig: AIConfig{AIBaseURL: "http://127.0.0.1:11434/v1"}}
 		if !cfg.AISupportsGenerationCredentials() {
 			t.Fatal("expected true with local Ollama base and no key")
 		}
@@ -335,28 +327,28 @@ func TestAISupportsGenerationCredentials(t *testing.T) {
 
 func TestResolveOpenAICompatibleBearerKey(t *testing.T) {
 	t.Run("usesConfigKey", func(t *testing.T) {
-		cfg := &Config{AIAPIKey: "real"}
+		cfg := &Config{AIConfig: AIConfig{AIAPIKey: "real"}}
 		k, err := cfg.ResolveOpenAICompatibleBearerKey()
 		if err != nil || k != "real" {
 			t.Fatalf("got %q %v", k, err)
 		}
 	})
 	t.Run("ollamaPlaceholder", func(t *testing.T) {
-		cfg := &Config{AIProvider: "ollama"}
+		cfg := &Config{AIConfig: AIConfig{AIProvider: "ollama"}}
 		k, err := cfg.ResolveOpenAICompatibleBearerKey()
 		if err != nil || k != OllamaOpenAICompatiblePlaceholderKey {
 			t.Fatalf("got %q %v", k, err)
 		}
 	})
 	t.Run("localURLPlaceholder", func(t *testing.T) {
-		cfg := &Config{AIBaseURL: "http://localhost:11434/v1"}
+		cfg := &Config{AIConfig: AIConfig{AIBaseURL: "http://localhost:11434/v1"}}
 		k, err := cfg.ResolveOpenAICompatibleBearerKey()
 		if err != nil || k != OllamaOpenAICompatiblePlaceholderKey {
 			t.Fatalf("got %q %v", k, err)
 		}
 	})
 	t.Run("openaiPublicMissing", func(t *testing.T) {
-		cfg := &Config{AIBaseURL: ""}
+		cfg := &Config{AIConfig: AIConfig{AIBaseURL: ""}}
 		_, err := cfg.ResolveOpenAICompatibleBearerKey()
 		if err == nil {
 			t.Fatal("expected error")
@@ -369,10 +361,12 @@ func TestResolveOpenAICompatibleBearerKey(t *testing.T) {
 func TestAIProfileMigration(t *testing.T) {
 	t.Run("legacyFlatWrappedAsDefault", func(t *testing.T) {
 		cfg := &Config{
-			AIProvider: "ollama",
-			AIBaseURL:  "http://127.0.0.1:11434/v1",
-			AIModel:    "qwen2.5:1.5b",
-			AIAPIKey:   "ignored",
+			AIConfig: AIConfig{
+				AIProvider: "ollama",
+				AIBaseURL:  "http://127.0.0.1:11434/v1",
+				AIModel:    "qwen2.5:1.5b",
+				AIAPIKey:   "ignored",
+			},
 		}
 		cfg.normalizeAIProfiles()
 		if len(cfg.AIProfiles) != 1 {
@@ -394,11 +388,13 @@ func TestAIProfileMigration(t *testing.T) {
 
 	t.Run("multiProfileActiveMirrorsToFlat", func(t *testing.T) {
 		cfg := &Config{
-			AIProfiles: []AIProfile{
-				{Name: "openai", Provider: "openai_compatible", Model: "gpt-4o-mini", APIKey: "sk-a"},
-				{Name: "local", Provider: "ollama", Model: "qwen2.5:1.5b", BaseURL: "http://127.0.0.1:11434/v1"},
+			AIConfig: AIConfig{
+				AIProfiles: []AIProfile{
+					{Name: "openai", Provider: "openai_compatible", Model: "gpt-4o-mini", APIKey: "sk-a"},
+					{Name: "local", Provider: "ollama", Model: "qwen2.5:1.5b", BaseURL: "http://127.0.0.1:11434/v1"},
+				},
+				AIActiveProfile: "local",
 			},
-			AIActiveProfile: "local",
 		}
 		cfg.normalizeAIProfiles()
 		if cfg.AIProvider != "ollama" {
@@ -414,11 +410,13 @@ func TestAIProfileMigration(t *testing.T) {
 
 	t.Run("invalidActiveFallsBackToFirst", func(t *testing.T) {
 		cfg := &Config{
-			AIProfiles: []AIProfile{
-				{Name: "openai", Provider: "openai_compatible", Model: "gpt-4o-mini"},
-				{Name: "local", Provider: "ollama", Model: "qwen2.5:1.5b"},
+			AIConfig: AIConfig{
+				AIProfiles: []AIProfile{
+					{Name: "openai", Provider: "openai_compatible", Model: "gpt-4o-mini"},
+					{Name: "local", Provider: "ollama", Model: "qwen2.5:1.5b"},
+				},
+				AIActiveProfile: "does-not-exist",
 			},
-			AIActiveProfile: "does-not-exist",
 		}
 		cfg.normalizeAIProfiles()
 		if cfg.AIActiveProfile != "openai" {
@@ -430,10 +428,12 @@ func TestAIProfileMigration(t *testing.T) {
 // TestAIProfileCRUD covers add/update/delete/cycle helpers.
 func TestAIProfileCRUD(t *testing.T) {
 	cfg := &Config{
-		AIProfiles: []AIProfile{
-			{Name: "a", Provider: "openai_compatible", Model: "gpt-4o-mini"},
+		AIConfig: AIConfig{
+			AIProfiles: []AIProfile{
+				{Name: "a", Provider: "openai_compatible", Model: "gpt-4o-mini"},
+			},
+			AIActiveProfile: "a",
 		},
-		AIActiveProfile: "a",
 	}
 	cfg.normalizeAIProfiles()
 
@@ -498,11 +498,13 @@ func TestAIProfileSaveLoadRoundTrip(t *testing.T) {
 
 	path := filepath.Join(dir, "config.json")
 	original := &Config{
-		AIProfiles: []AIProfile{
-			{Name: "fast", Provider: "openai_compatible", Model: "gpt-4o-mini", APIKey: "sk-fast"},
-			{Name: "smart", Provider: "openai_compatible", Model: "gpt-4o", APIKey: "sk-smart", TimeoutSeconds: 180},
+		AIConfig: AIConfig{
+			AIProfiles: []AIProfile{
+				{Name: "fast", Provider: "openai_compatible", Model: "gpt-4o-mini", APIKey: "sk-fast"},
+				{Name: "smart", Provider: "openai_compatible", Model: "gpt-4o", APIKey: "sk-smart", TimeoutSeconds: 180},
+			},
+			AIActiveProfile: "smart",
 		},
-		AIActiveProfile: "smart",
 	}
 	if err := original.SaveTo(path); err != nil {
 		t.Fatalf("SaveTo: %v", err)
@@ -529,7 +531,7 @@ func TestAIProfileSaveLoadRoundTrip(t *testing.T) {
 func TestGitHubTokenForAPI(t *testing.T) {
 	t.Run("savedIgnoresEnv", func(t *testing.T) {
 		t.Setenv("GITHUB_TOKEN", "env-token")
-		cfg := &Config{GitHubToken: "cfg-token", GitHubTokenSource: GitHubTokenSourceSaved}
+		cfg := &Config{GitHubConfig: GitHubConfig{GitHubToken: "cfg-token", GitHubTokenSource: GitHubTokenSourceSaved}}
 		cfg.loadedFrom = "/home/u/.config/jj-tui/config.json"
 		tok, src := GitHubTokenForAPI(cfg)
 		if tok != "cfg-token" {
@@ -542,7 +544,7 @@ func TestGitHubTokenForAPI(t *testing.T) {
 	})
 	t.Run("envIgnoresSaved", func(t *testing.T) {
 		t.Setenv("GITHUB_TOKEN", "env-only")
-		cfg := &Config{GitHubToken: "on-disk", GitHubTokenSource: GitHubTokenSourceEnv}
+		cfg := &Config{GitHubConfig: GitHubConfig{GitHubToken: "on-disk", GitHubTokenSource: GitHubTokenSourceEnv}}
 		tok, src := GitHubTokenForAPI(cfg)
 		if tok != "env-only" || src != "env:GITHUB_TOKEN" {
 			t.Fatalf("got %q %q", tok, src)
@@ -572,11 +574,10 @@ func TestGitHubTokenForAPI(t *testing.T) {
 		}
 		t.Setenv("GITHUB_TOKEN", "")
 		t.Setenv("PATH", "/nonexistent")
-		cfg := &Config{GitHubTokenSource: GitHubTokenSourceGhCLI}
+		cfg := &Config{GitHubConfig: GitHubConfig{GitHubTokenSource: GitHubTokenSourceGhCLI}}
 		tok, src := GitHubTokenForAPI(cfg)
 		if tok != "" || src != "" {
 			t.Fatalf("expected no gh token; got %q %q", tok, src)
 		}
 	})
 }
-

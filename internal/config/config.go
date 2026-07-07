@@ -65,8 +65,8 @@ const (
 
 // GitHub token source: where jj-tui reads the API token (explicit choice; no cross-source fallback).
 const (
-	GitHubTokenSourceSaved = "saved"   // github_token in jj-tui config (device flow or pasted)
-	GitHubTokenSourceEnv   = "env"     // GITHUB_TOKEN environment variable only
+	GitHubTokenSourceSaved = "saved"  // github_token in jj-tui config (device flow or pasted)
+	GitHubTokenSourceEnv   = "env"    // GITHUB_TOKEN environment variable only
 	GitHubTokenSourceGhCLI = "gh_cli" // `gh auth token` only
 )
 
@@ -84,8 +84,10 @@ func NormalizeGitHubTokenSource(s string) string {
 	}
 }
 
-// Config holds the persistent configuration
-type Config struct {
+// GitHubConfig groups GitHub authentication and PR-filter settings. It is
+// embedded (anonymously) into Config so its fields promote to Config and keep
+// their original flat JSON keys (github_token, …) for on-disk compatibility.
+type GitHubConfig struct {
 	GitHubToken       string           `json:"github_token,omitempty"`
 	GitHubTokenSource string           `json:"github_token_source,omitempty"` // saved | env | gh_cli (see constants)
 	GitHubAuthMethod  GitHubAuthMethod `json:"github_auth_method,omitempty"`  // How the saved token was obtained
@@ -97,10 +99,12 @@ type Config struct {
 	GitHubPRLimit         *int  `json:"github_pr_limit,omitempty"`         // nil = 100 (default limit)
 	GitHubRefreshInterval *int  `json:"github_refresh_interval,omitempty"` // nil = 120 seconds (2 min default), 0 = disabled
 
-	// Ticket provider selection: "jira" or "codecks"
-	TicketProvider string `json:"ticket_provider,omitempty"`
+	// GitHub Issues settings (uses existing GitHubToken for auth)
+	GitHubIssuesExcludedStatuses string `json:"github_issues_excluded_statuses,omitempty"` // Comma-separated statuses to hide (e.g., "closed")
+}
 
-	// Jira settings
+// JiraConfig groups Jira ticket-provider settings.
+type JiraConfig struct {
 	JiraURL              string `json:"jira_url,omitempty"`
 	JiraUser             string `json:"jira_user,omitempty"`
 	JiraToken            string `json:"jira_token,omitempty"`
@@ -109,19 +113,26 @@ type Config struct {
 	JiraIssueType        string `json:"jira_issue_type,omitempty"`        // Default issue type when creating issues (e.g., "Task", "Bug", "Story")
 	JiraJQL              string `json:"jira_jql,omitempty"`               // Optional: custom JQL to append to query (e.g., "sprint in openSprints()")
 	JiraExcludedStatuses string `json:"jira_excluded_statuses,omitempty"` // Comma-separated statuses to hide
+}
 
-	// Codecks settings
+// CodecksConfig groups Codecks ticket-provider settings.
+type CodecksConfig struct {
 	CodecksSubdomain        string `json:"codecks_subdomain,omitempty"`
 	CodecksToken            string `json:"codecks_token,omitempty"`
 	CodecksProject          string `json:"codecks_project,omitempty"`           // Optional: filter by project name
 	CodecksExcludedStatuses string `json:"codecks_excluded_statuses,omitempty"` // Comma-separated statuses to hide
+}
 
-	// GitHub Issues settings (uses existing GitHubToken for auth)
-	GitHubIssuesExcludedStatuses string `json:"github_issues_excluded_statuses,omitempty"` // Comma-separated statuses to hide (e.g., "closed")
-
+// TicketsConfig groups provider-agnostic ticket workflow settings.
+type TicketsConfig struct {
+	// Ticket provider selection: "jira" or "codecks"
+	TicketProvider string `json:"ticket_provider,omitempty"`
 	// Ticket workflow settings
 	TicketAutoInProgress *bool `json:"ticket_auto_in_progress,omitempty"` // nil = true (auto-set "In Progress" when creating branch)
+}
 
+// UIConfig groups branch/graph display preferences.
+type UIConfig struct {
 	// Branch settings
 	BranchStatsLimit      *int  `json:"branch_limit,omitempty"`            // nil = 50 (default limit for branch stats calculation)
 	SanitizeBookmarkNames *bool `json:"sanitize_bookmark_names,omitempty"` // nil = true (auto-fix invalid bookmark names)
@@ -142,19 +153,18 @@ type Config struct {
 	// view. Set true to disable the intersection and show every row the configured revset
 	// (or DefaultGraphRevset) matches.
 	GraphShowEveryonesCommits *bool `json:"graph_show_everyones_commits,omitempty"`
+}
 
-	// ExternalFileEditor opens the selected changed file from the graph (files pane, key O).
-	// Values: none, cursor, vscode, zed, neovim, emacs, sublime, idea, custom (case-insensitive; see NormalizeExternalFileEditor).
-	ExternalFileEditor string `json:"external_file_editor,omitempty"`
-	// ExternalFileEditorCustom: when ExternalFileEditor is "custom", a shell snippet run as `sh -c` with {path}
-	// replaced by a single-quoted absolute path, e.g. `cursor -g {path}` or `alacritty -e nvim {path}`.
-	ExternalFileEditorCustom string `json:"external_file_editor_custom,omitempty"`
-
+// ThemeConfig groups the user's theme color overrides.
+type ThemeConfig struct {
 	// Theme colors (hex, e.g. "#7E00AF"). Empty = use built-in defaults.
 	ThemePrimary   string `json:"theme_primary,omitempty"`
 	ThemeSecondary string `json:"theme_secondary,omitempty"`
 	ThemeMuted     string `json:"theme_muted,omitempty"`
+}
 
+// AIConfig groups optional generative-text (LLM) settings, including evolog split.
+type AIConfig struct {
 	// Optional generative text. API key: config ai_api_key and/or env JJ_TUI_AI_API_KEY (env wins).
 	AIEnabled        *bool  `json:"ai_enabled,omitempty"`         // nil/false = off
 	AIBaseURL        string `json:"ai_base_url,omitempty"`        // empty = https://api.openai.com/v1
@@ -177,10 +187,41 @@ type Config struct {
 	AIEvologHunkSplitEnabled          *bool  `json:"ai_evolog_hunk_split_enabled,omitempty"`           // nil/true = honor hunk_prefix_first_commit + hunk prompt; false = ignore
 	AIEvologMultiSplitMax             *int   `json:"ai_evolog_multi_split_max,omitempty"`              // nil = full cap; clamp 1–EvologAIMultiSplitHardMax
 	AIEvologMultiSplitMode            string `json:"ai_evolog_multi_split_mode,omitempty"`             // empty or "batch" = one cmd; "stepwise" = one base per confirm
+}
+
+// AdvancedConfig groups power-user settings that don't belong to a specific tab.
+type AdvancedConfig struct {
+	// ExternalFileEditor opens the selected changed file from the graph (files pane, key O).
+	// Values: none, cursor, vscode, zed, neovim, emacs, sublime, idea, custom (case-insensitive; see NormalizeExternalFileEditor).
+	ExternalFileEditor string `json:"external_file_editor,omitempty"`
+	// ExternalFileEditorCustom: when ExternalFileEditor is "custom", a shell snippet run as `sh -c` with {path}
+	// replaced by a single-quoted absolute path, e.g. `cursor -g {path}` or `alacritty -e nvim {path}`.
+	ExternalFileEditorCustom string `json:"external_file_editor_custom,omitempty"`
+}
+
+// Config holds the persistent configuration. Its settings are grouped into
+// embedded (anonymous) sub-structs; embedding keeps the flat JSON keys so
+// existing config files load byte-compatibly while organizing the ~50 fields.
+// Field access (cfg.GitHubToken, …) works unchanged via Go's field promotion;
+// only composite literals must name the sub-struct.
+type Config struct {
+	GitHubConfig
+	JiraConfig
+	CodecksConfig
+	TicketsConfig
+	UIConfig
+	ThemeConfig
+	AIConfig
+	AdvancedConfig
 
 	// Internal: tracks where the config was loaded from
 	loadedFrom string `json:"-"`
 }
+
+// ChangedMsg is broadcast after the configuration is saved so config-dependent
+// tabs and modals re-read it instead of holding a stale snapshot. It is a plain
+// message struct (satisfies tea.Msg) so the config package stays UI-agnostic.
+type ChangedMsg struct{ Config *Config }
 
 // EnvAIAPIKey is the environment variable for the LLM API key; when set, it overrides ai_api_key in config.
 //

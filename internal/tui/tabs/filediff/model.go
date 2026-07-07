@@ -66,9 +66,9 @@ type Model struct {
 	// computed by the most recent layoutViewport. naturalDimsSeq increments whenever
 	// they change so the parent can ask "did the modal's natural size shift since
 	// last frame?" without diffing the numbers itself — see DimensionsSeq().
-	naturalOuterW   int
-	naturalOuterH   int
-	naturalDimsSeq  int
+	naturalOuterW  int
+	naturalOuterH  int
+	naturalDimsSeq int
 }
 
 // NewModel creates a file diff modal. zoneManager may be nil (no close button zone).

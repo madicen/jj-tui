@@ -9,7 +9,7 @@ import (
 )
 
 func TestPerformSplitNavigateCmd_stepwiseSkippedWhenPlanPreviewOpen(t *testing.T) {
-	cfg := &config.Config{AIEvologMultiSplitMode: "stepwise"}
+	cfg := &config.Config{AIConfig: config.AIConfig{AIEvologMultiSplitMode: "stepwise"}}
 	entries := []jj.EvologEntry{
 		{CommitID: "tip", CommitIDShort: "tip"},
 		{CommitID: "mid", CommitIDShort: "mid"},
@@ -46,7 +46,7 @@ func TestPerformSplitNavigateCmd_stepwiseSkippedWhenPlanPreviewOpen(t *testing.T
 }
 
 func TestPerformSplitNavigateCmd_stepwiseWhenPreviewClosed(t *testing.T) {
-	cfg := &config.Config{AIEvologMultiSplitMode: "stepwise"}
+	cfg := &config.Config{AIConfig: config.AIConfig{AIEvologMultiSplitMode: "stepwise"}}
 	entries := []jj.EvologEntry{
 		{CommitID: "tip", CommitIDShort: "tip"},
 		{CommitID: "mid", CommitIDShort: "mid"},

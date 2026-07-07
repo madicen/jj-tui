@@ -6,6 +6,6 @@ import (
 )
 
 var (
-	helpTabStyle      = lipgloss.NewStyle().Padding(0, 2).Foreground(lipgloss.Color("#888888"))
+	helpTabStyle       = lipgloss.NewStyle().Padding(0, 2).Foreground(lipgloss.Color("#888888"))
 	helpTabActiveStyle = lipgloss.NewStyle().Padding(0, 2).Foreground(styles.ColorPrimary).Bold(true).Underline(true)
 )

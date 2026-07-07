@@ -45,10 +45,10 @@ type ChainCommitSummary struct {
 //
 // Format:
 //
-//	1. abc12345  Short subject of commit one
-//	   <indented full description>
-//	2. def67890  Subject of commit two
-//	   ...
+//  1. abc12345  Short subject of commit one
+//     <indented full description>
+//  2. def67890  Subject of commit two
+//     ...
 func FormatChainSummary(commits []ChainCommitSummary) string {
 	if len(commits) == 0 {
 		return ""

@@ -31,9 +31,9 @@ func TestSplitLines(t *testing.T) {
 
 func TestParseCommitInfo(t *testing.T) {
 	cases := []struct {
-		in              string
-		wantChange      string
-		wantShort       string
+		in         string
+		wantChange string
+		wantShort  string
 	}{
 		{"abc def rest of desc", "abc", "def"},
 		{"onlychange", "onlychange", "onlychange"},

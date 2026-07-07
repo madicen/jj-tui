@@ -94,9 +94,11 @@ func TestNewProviderForProfile_EnvKeyFallback(t *testing.T) {
 // are used even when the cfg's flat AI* fields point to a different setup.
 func TestNewProviderForProfile_IgnoresCfgFlatFields(t *testing.T) {
 	cfg := &config.Config{
-		AIProvider: "ollama",
-		AIBaseURL:  "http://127.0.0.1:11434/v1",
-		AIModel:    "qwen2.5:1.5b",
+		AIConfig: config.AIConfig{
+			AIProvider: "ollama",
+			AIBaseURL:  "http://127.0.0.1:11434/v1",
+			AIModel:    "qwen2.5:1.5b",
+		},
 	}
 	override := config.AIProfile{Name: "remote", Provider: "openai_compatible", Model: "gpt-4o", APIKey: "sk-x"}
 	provider, err := NewProviderForProfile(override, cfg)

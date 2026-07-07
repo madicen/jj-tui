@@ -465,7 +465,6 @@ func getInt(m map[string]any, key string) int {
 	return 0
 }
 
-
 // slugify converts a string to a URL-friendly slug
 // Example: "Add Codecks support to jj-tui" -> "add-codecks-support-to-jj-tui"
 func slugify(s string) string {
@@ -700,16 +699,16 @@ func (s *Service) CreateTicket(ctx context.Context, input *tickets.CreateTicketI
 		content = title + "\n\n" + desc
 	}
 	payload := map[string]any{
-		"assigneeId":   nil,
-		"content":      content,
-		"putOnHand":    true,
-		"deckId":       nil,
-		"milestoneId":  nil,
-		"masterTags":   []any{},
-		"attachments":  []any{},
-		"effort":       0,
-		"priority":     "c",
-		"childCards":   []any{},
+		"assigneeId":  nil,
+		"content":     content,
+		"putOnHand":   true,
+		"deckId":      nil,
+		"milestoneId": nil,
+		"masterTags":  []any{},
+		"attachments": []any{},
+		"effort":      0,
+		"priority":    "c",
+		"childCards":  []any{},
 	}
 	if s.currentUserID != "" {
 		payload["userId"] = s.currentUserID

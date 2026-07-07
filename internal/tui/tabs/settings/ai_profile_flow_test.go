@@ -13,11 +13,13 @@ import (
 // AI profile zone missing here is silently dropped on click.
 func TestZoneIDs_IncludesAIProfileManagement(t *testing.T) {
 	cfg := &config.Config{
-		AIProfiles: []config.AIProfile{
-			{Name: "a", Provider: "openai_compatible"},
-			{Name: "b", Provider: "openai_compatible"},
+		AIConfig: config.AIConfig{
+			AIProfiles: []config.AIProfile{
+				{Name: "a", Provider: "openai_compatible"},
+				{Name: "b", Provider: "openai_compatible"},
+			},
+			AIActiveProfile: "a",
 		},
-		AIActiveProfile: "a",
 	}
 	m := NewModelWithConfig(cfg)
 	ids := m.ZoneIDs()
@@ -47,14 +49,16 @@ func TestZoneIDs_IncludesAIProfileManagement(t *testing.T) {
 // rides alongside.
 func TestBuildSettingsParams_PropagatesProfiles(t *testing.T) {
 	cfg := &config.Config{
-		AIProfiles: []config.AIProfile{
-			{Name: "openai", Provider: "openai_compatible", Model: "gpt-4o-mini", APIKey: "sk-a"},
-			{Name: "local", Provider: "ollama", Model: "qwen2.5:1.5b", BaseURL: "http://127.0.0.1:11434/v1"},
+		AIConfig: config.AIConfig{
+			AIProfiles: []config.AIProfile{
+				{Name: "openai", Provider: "openai_compatible", Model: "gpt-4o-mini", APIKey: "sk-a"},
+				{Name: "local", Provider: "ollama", Model: "qwen2.5:1.5b", BaseURL: "http://127.0.0.1:11434/v1"},
+			},
+			AIActiveProfile: "local",
+			AIProvider:      "ollama",
+			AIBaseURL:       "http://127.0.0.1:11434/v1",
+			AIModel:         "qwen2.5:1.5b",
 		},
-		AIActiveProfile: "local",
-		AIProvider:      "ollama",
-		AIBaseURL:       "http://127.0.0.1:11434/v1",
-		AIModel:         "qwen2.5:1.5b",
 	}
 	m := NewModelWithConfig(cfg)
 	params := BuildSettingsParams(&m, "", "")
@@ -80,10 +84,12 @@ func TestBuildSettingsParams_PropagatesProfiles(t *testing.T) {
 // the AI sub-model and changing the active one propagates to params.
 func TestBuildSettingsParams_AddProfileThenSave(t *testing.T) {
 	cfg := &config.Config{
-		AIProfiles: []config.AIProfile{
-			{Name: "default", Provider: "openai_compatible", Model: "gpt-4o-mini"},
+		AIConfig: config.AIConfig{
+			AIProfiles: []config.AIProfile{
+				{Name: "default", Provider: "openai_compatible", Model: "gpt-4o-mini"},
+			},
+			AIActiveProfile: "default",
 		},
-		AIActiveProfile: "default",
 	}
 	m := NewModelWithConfig(cfg)
 	aim := m.GetAIModel()

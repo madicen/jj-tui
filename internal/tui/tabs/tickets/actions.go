@@ -168,9 +168,9 @@ func ExecuteRequest(r Request, ctx *RequestContext) (statusMsg string, cmd tea.C
 			return "", nil
 		}
 		return "", state.NavigateTarget{
-			Kind:            state.NavigateCreateBookmarkFromTicket,
-			TicketKey:       ticket.Key,
-			TicketTitle:     ticket.Summary,
+			Kind:             state.NavigateCreateBookmarkFromTicket,
+			TicketKey:        ticket.Key,
+			TicketTitle:      ticket.Summary,
 			TicketDisplayKey: ticket.DisplayKey,
 		}.Cmd()
 	}

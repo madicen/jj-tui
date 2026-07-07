@@ -34,10 +34,10 @@ func TestSetGetOriginURL_HappyPath(t *testing.T) {
 func TestSetOriginURL_MalformedInput(t *testing.T) {
 	t.Parallel()
 	cases := []string{
-		"",                      // empty: meaningful "user wants to clear" signal
+		"",                          // empty: meaningful "user wants to clear" signal
 		"   leading-and-trailing  ", // textinput preserves whitespace as typed
-		"not a url",             // jj surfaces this on Apply
-		"https://",              // syntactically valid scheme but no host
+		"not a url",                 // jj surfaces this on Apply
+		"https://",                  // syntactically valid scheme but no host
 	}
 	for _, in := range cases {
 		m := NewModel()

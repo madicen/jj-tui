@@ -24,7 +24,7 @@ func newTestModel() *Model {
 	ctx := context.Background()
 	m := New(ctx)
 	m.width = 100
-	m.height = 80     // Tall enough to show all content including help view
+	m.height = 80              // Tall enough to show all content including help view
 	m.appState.Loading = false // Skip loading state for tests
 	m.SetRepository(&internal.Repository{
 		Path: "/test/repo",
@@ -156,9 +156,9 @@ func TestMouseScrollGraphTabWithoutClicking(t *testing.T) {
 		}
 	}
 	m.SetRepository(&internal.Repository{
-		Path:   "/test/repo",
-		Graph:  internal.CommitGraph{Commits: commits},
-		PRs:    nil,
+		Path:  "/test/repo",
+		Graph: internal.CommitGraph{Commits: commits},
+		PRs:   nil,
 	})
 	m.graphTabModel.UpdateRepository(m.appState.Repository)
 	m.graphTabModel.SelectCommit(0)
@@ -1876,10 +1876,10 @@ func TestBookmarkConflictDialogNotHiddenByLoadingOverlay(t *testing.T) {
 	m.branchesTabModel.SetSelectedBranch(0)
 
 	newModel, _ := m.Update(branchestab.BookmarkConflictInfoMsg{
-		BookmarkName: "vhs/conflict-feature",
-		LocalID:      "aaa",
-		RemoteID:     "bbb",
-		LocalSummary: "local",
+		BookmarkName:  "vhs/conflict-feature",
+		LocalID:       "aaa",
+		RemoteID:      "bbb",
+		LocalSummary:  "local",
 		RemoteSummary: "remote",
 	})
 	m = newModel.(*Model)

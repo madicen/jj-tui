@@ -24,8 +24,10 @@ func TestResolveAIOverride(t *testing.T) {
 		m := newTestModel()
 		defer m.Close()
 		m.appState.Config = &config.Config{
-			AIProfiles:      []config.AIProfile{{Name: "fast", Provider: "openai_compatible"}},
-			AIActiveProfile: "fast",
+			AIConfig: config.AIConfig{
+				AIProfiles:      []config.AIProfile{{Name: "fast", Provider: "openai_compatible"}},
+				AIActiveProfile: "fast",
+			},
 		}
 		if got := m.resolveAIOverride(state.NavigateTarget{}); got != nil {
 			t.Fatalf("empty AIOverrideProfile should yield nil; got %+v", got)
@@ -36,11 +38,13 @@ func TestResolveAIOverride(t *testing.T) {
 		m := newTestModel()
 		defer m.Close()
 		m.appState.Config = &config.Config{
-			AIProfiles: []config.AIProfile{
-				{Name: "fast", Provider: "openai_compatible", Model: "gpt-4o-mini"},
-				{Name: "smart", Provider: "openai_compatible", Model: "gpt-4o"},
+			AIConfig: config.AIConfig{
+				AIProfiles: []config.AIProfile{
+					{Name: "fast", Provider: "openai_compatible", Model: "gpt-4o-mini"},
+					{Name: "smart", Provider: "openai_compatible", Model: "gpt-4o"},
+				},
+				AIActiveProfile: "fast",
 			},
-			AIActiveProfile: "fast",
 		}
 		got := m.resolveAIOverride(state.NavigateTarget{AIOverrideProfile: "smart"})
 		if got == nil || got.Model != "gpt-4o" {
@@ -52,8 +56,10 @@ func TestResolveAIOverride(t *testing.T) {
 		m := newTestModel()
 		defer m.Close()
 		m.appState.Config = &config.Config{
-			AIProfiles:      []config.AIProfile{{Name: "fast", Provider: "openai_compatible"}},
-			AIActiveProfile: "fast",
+			AIConfig: config.AIConfig{
+				AIProfiles:      []config.AIProfile{{Name: "fast", Provider: "openai_compatible"}},
+				AIActiveProfile: "fast",
+			},
 		}
 		if got := m.resolveAIOverride(state.NavigateTarget{AIOverrideProfile: "ghost"}); got != nil {
 			t.Fatalf("unknown profile should yield nil; got %+v", got)
@@ -68,11 +74,13 @@ func TestPushAIProfilesToFormModals(t *testing.T) {
 	m := newTestModel()
 	defer m.Close()
 	m.appState.Config = &config.Config{
-		AIProfiles: []config.AIProfile{
-			{Name: "a", Provider: "openai_compatible"},
-			{Name: "b", Provider: "openai_compatible", Model: "gpt-4o"},
+		AIConfig: config.AIConfig{
+			AIProfiles: []config.AIProfile{
+				{Name: "a", Provider: "openai_compatible"},
+				{Name: "b", Provider: "openai_compatible", Model: "gpt-4o"},
+			},
+			AIActiveProfile: "b",
 		},
-		AIActiveProfile: "b",
 	}
 	m.pushAIProfilesToFormModals()
 

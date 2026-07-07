@@ -14,13 +14,13 @@ import (
 	conflicttab "github.com/madicen/jj-tui/internal/tui/tabs/conflict"
 	descedittab "github.com/madicen/jj-tui/internal/tui/tabs/descedit"
 	divergenttab "github.com/madicen/jj-tui/internal/tui/tabs/divergent"
+	errortab "github.com/madicen/jj-tui/internal/tui/tabs/error"
 	evologsplittab "github.com/madicen/jj-tui/internal/tui/tabs/evologsplit"
 	filedifftab "github.com/madicen/jj-tui/internal/tui/tabs/filediff"
-	errortab "github.com/madicen/jj-tui/internal/tui/tabs/error"
-	graphtab "github.com/madicen/jj-tui/internal/tui/tabs/graph"
 	githublogintab "github.com/madicen/jj-tui/internal/tui/tabs/githublogin"
+	graphtab "github.com/madicen/jj-tui/internal/tui/tabs/graph"
 	helptab "github.com/madicen/jj-tui/internal/tui/tabs/help"
-	initrepotab 	"github.com/madicen/jj-tui/internal/tui/tabs/initrepo"
+	initrepotab "github.com/madicen/jj-tui/internal/tui/tabs/initrepo"
 	prformtab "github.com/madicen/jj-tui/internal/tui/tabs/prform"
 	prstab "github.com/madicen/jj-tui/internal/tui/tabs/prs"
 	settingstab "github.com/madicen/jj-tui/internal/tui/tabs/settings"
@@ -40,9 +40,9 @@ func New(ctx context.Context) *Model {
 	settingsTabModel := settingstab.NewModelWithConfig(cfg)
 
 	m := &Model{
-		ctx:              ctx,
-		zoneManager:      zm,
-		busySpinner:      newBusySpinner(),
+		ctx:         ctx,
+		zoneManager: zm,
+		busySpinner: newBusySpinner(),
 		appState: state.AppState{
 			ViewMode:      state.ViewCommitGraph,
 			StatusMessage: "Initializing...",

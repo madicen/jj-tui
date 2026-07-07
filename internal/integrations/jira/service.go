@@ -69,7 +69,7 @@ func NewService() (*Service, error) {
 // checkPermissions verifies the API token has necessary permissions
 func (s *Service) checkPermissions() error {
 	ctx := context.Background()
-	
+
 	// Check if we have BROWSE_PROJECTS permission
 	resp, err := s.doRequest(ctx, "GET", "/rest/api/3/mypermissions?permissions=BROWSE_PROJECTS", nil)
 	if err != nil {
@@ -409,8 +409,8 @@ type adfDocument struct {
 }
 
 type adfBlock struct {
-	Type    string     `json:"type"`
-	Content []adfText  `json:"content,omitempty"`
+	Type    string    `json:"type"`
+	Content []adfText `json:"content,omitempty"`
 }
 
 type adfText struct {
@@ -452,7 +452,7 @@ func (s *Service) CreateTicket(ctx context.Context, input *tickets.CreateTicketI
 			Type:    "doc",
 			Version: 1,
 			Content: []adfBlock{{
-				Type: "paragraph",
+				Type:    "paragraph",
 				Content: []adfText{{Type: "text", Text: strings.TrimSpace(input.Description)}},
 			}},
 		}

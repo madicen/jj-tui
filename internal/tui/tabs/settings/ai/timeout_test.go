@@ -76,7 +76,7 @@ func TestAITimeoutFromConfig_OutOfBoundsIsClamped(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			v := tc.stored
-			cfg := &config.Config{AITimeoutSeconds: &v}
+			cfg := &config.Config{AIConfig: config.AIConfig{AITimeoutSeconds: &v}}
 			m := NewModelFromConfig(cfg)
 			got := m.GetAITimeoutSeconds()
 			if tc.wantFloor > 0 && got != tc.wantFloor {

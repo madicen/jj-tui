@@ -90,10 +90,10 @@ func isDefaultBranch(branch string) bool {
 
 // GraphResult contains the split rendering for commit graph view
 type GraphResult struct {
-	GraphContent        string
-	ActionsBar          string
-	FilesContent        string
-	FullContent         string
+	GraphContent         string
+	ActionsBar           string
+	FilesContent         string
+	FullContent          string
 	FileIndexToLineIndex []int
 }
 

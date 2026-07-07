@@ -125,9 +125,9 @@ type Request struct {
 	DragRebaseFrom int
 	DragRebaseTo   int
 	// StartMergeMode begins selecting a source commit/bookmark to merge into the selected commit (e.g. merge main into current bookmark).
-	StartMergeMode   bool
-	PerformMerge     bool
-	MergeSourceIndex int
+	StartMergeMode       bool
+	PerformMerge         bool
+	MergeSourceIndex     int
 	ResolveDivergent     *string
 	CreateBookmark       bool
 	DeleteBookmark       bool
