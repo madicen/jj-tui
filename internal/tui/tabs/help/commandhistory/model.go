@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/render"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 	"github.com/madicen/jj-tui/internal/tui/util"
 	"github.com/mattn/go-runewidth"
@@ -228,10 +229,7 @@ func (m Model) ZoneIDs() []string {
 
 func (m Model) lines() []string {
 	mark := func(id, content string) string {
-		if m.zoneManager == nil {
-			return content
-		}
-		return m.zoneManager.Mark(id, content)
+		return render.Mark(m.zoneManager, id, content)
 	}
 	var lines []string
 	lines = append(lines, styles.TitleStyle.Render("Command History"))

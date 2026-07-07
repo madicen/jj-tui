@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/render"
 	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 	"github.com/madicen/jj-tui/internal/tui/util"
@@ -192,10 +193,7 @@ func (m Model) View() string {
 	mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#8B949E"))
 	pathStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#58A6FF"))
 	mark := func(id, s string) string {
-		if m.zoneManager == nil {
-			return s
-		}
-		return m.zoneManager.Mark(id, s)
+		return render.Mark(m.zoneManager, id, s)
 	}
 
 	repoName := filepath.Base(m.path)

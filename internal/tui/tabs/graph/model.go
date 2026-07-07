@@ -13,6 +13,7 @@ import (
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/mousedouble"
+	"github.com/madicen/jj-tui/internal/tui/render"
 	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/util"
 	"github.com/mattn/go-runewidth"
@@ -481,7 +482,7 @@ func (m *GraphModel) View() string {
 	// Simple separator line
 	separator := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#444444")).
-		Render(strings.Repeat("─", max(m.width-2, 0)))
+		Render(strings.Repeat("─", render.SafeWidth(m.width, 2)))
 
 	v := lipgloss.JoinVertical(
 		lipgloss.Left,

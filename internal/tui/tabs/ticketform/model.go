@@ -12,6 +12,7 @@ import (
 	"github.com/madicen/jj-tui/internal/tickets"
 	"github.com/madicen/jj-tui/internal/tui/genmenu"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/render"
 	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 )
@@ -168,10 +169,7 @@ func (m Model) renderForm() string {
 		Bold(true)
 
 	mark := func(id, s string) string {
-		if m.zoneManager == nil {
-			return s
-		}
-		return m.zoneManager.Mark(id, s)
+		return render.Mark(m.zoneManager, id, s)
 	}
 
 	providerLine := ""

@@ -9,6 +9,7 @@ import (
 	bubbledropdown "github.com/madicen/bubble-dropdown"
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/render"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 	"github.com/madicen/jj-tui/internal/tui/tabs/settings/theme"
 	"github.com/madicen/jj-tui/internal/version"
@@ -189,10 +190,7 @@ type ddBound struct {
 }
 
 func (r renderCtx) mark(id, content string) string {
-	if r.zm != nil {
-		return r.zm.Mark(id, content)
-	}
-	return content
+	return render.Mark(r.zm, id, content)
 }
 
 // recordDropdown notes a trigger's absolute line index and column for later SetBounds.

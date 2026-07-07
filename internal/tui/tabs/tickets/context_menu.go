@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/madicen/jj-tui/internal/tui/longpress"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/render"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 )
 
@@ -97,7 +98,7 @@ func (m *Model) renderContextMenu() string {
 		}
 		label := ls.Render(fmt.Sprintf("  %s", item.Label))
 		key := ks.Render(fmt.Sprintf("  %s", item.Key))
-		row := mark(m.zoneManager, mouse.ZoneTicketCtxMenuItem(i), label+key)
+		row := render.Mark(m.zoneManager, mouse.ZoneTicketCtxMenuItem(i), label+key)
 		rows = append(rows, row)
 	}
 
@@ -112,7 +113,7 @@ func (m *Model) renderContextMenu() string {
 			}
 			title := displayKey + " " + ticket.Summary
 			if len(title) > 40 {
-				title = title[:37] + "..."
+				title = render.TruncateEllipsis(title, 37)
 			}
 			header = lipgloss.NewStyle().
 				Foreground(styles.ColorSecondary).

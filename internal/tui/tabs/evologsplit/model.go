@@ -17,6 +17,7 @@ import (
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	aitab "github.com/madicen/jj-tui/internal/tui/ai"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/render"
 	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 	"github.com/mattn/go-runewidth"
@@ -224,10 +225,7 @@ func (m Model) WithSuggestPrepProgress(jjDone, jjTotal int, phase string) Model 
 }
 
 func (m Model) mark(id, s string) string {
-	if m.zoneManager == nil {
-		return s
-	}
-	return m.zoneManager.Mark(id, s)
+	return render.Mark(m.zoneManager, id, s)
 }
 
 func (m Model) syncListScroll() Model {

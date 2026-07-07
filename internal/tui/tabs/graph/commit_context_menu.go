@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/madicen/jj-tui/internal/tui/longpress"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/render"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 )
 
@@ -152,7 +153,7 @@ func (m *GraphModel) renderCommitContextMenu(isMutable bool, firstParentImmutabl
 		if ci >= 0 && ci < len(m.repository.Graph.Commits) {
 			desc := m.repository.Graph.Commits[ci].Description
 			if len(desc) > 40 {
-				desc = desc[:37] + "..."
+				desc = render.TruncateEllipsis(desc, 37)
 			}
 			header = lipgloss.NewStyle().
 				Foreground(styles.ColorSecondary).

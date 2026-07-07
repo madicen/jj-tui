@@ -8,6 +8,7 @@ import (
 	overlay "github.com/madicen/bubble-overlay"
 	"github.com/madicen/jj-tui/internal/tickets"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/render"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 )
 
@@ -61,7 +62,7 @@ func (m *Model) renderStatusPopoverPanel(hoverIdx int) string {
 				label = " " + btnStyle.Render(t.Name+shortcut)
 			}
 			zoneID := mouse.ZoneJiraTransition + fmt.Sprintf("%d", i)
-			lines = append(lines, mark(m.zoneManager, zoneID, label))
+			lines = append(lines, render.Mark(m.zoneManager, zoneID, label))
 			if i < len(m.availableTransitions)-1 {
 				lines = append(lines, "")
 			}
@@ -70,7 +71,7 @@ func (m *Model) renderStatusPopoverPanel(hoverIdx int) string {
 
 	lines = append(lines, "")
 	closeLabel := lipgloss.NewStyle().Foreground(styles.ColorMuted).Italic(true).Render(" ✕ Close ")
-	lines = append(lines, mark(m.zoneManager, mouse.ZoneStatusPopoverClose, closeLabel))
+	lines = append(lines, render.Mark(m.zoneManager, mouse.ZoneStatusPopoverClose, closeLabel))
 	inner := strings.Join(lines, "\n")
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).

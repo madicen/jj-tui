@@ -10,6 +10,7 @@ import (
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/tui/longpress"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/render"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 )
 
@@ -112,13 +113,13 @@ func (m *Model) renderContextMenu() string {
 		}
 		label := ls.Render(fmt.Sprintf("  %s", item.Label))
 		key := ks.Render(fmt.Sprintf("  %s", item.Key))
-		row := mark(m.zoneManager, mouse.ZoneBranchCtxMenuItem(i), label+key)
+		row := render.Mark(m.zoneManager, mouse.ZoneBranchCtxMenuItem(i), label+key)
 		rows = append(rows, row)
 	}
 
 	branchName := branch.Name
 	if len(branchName) > 40 {
-		branchName = branchName[:37] + "..."
+		branchName = render.TruncateEllipsis(branchName, 37)
 	}
 	header := lipgloss.NewStyle().
 		Foreground(styles.ColorSecondary).

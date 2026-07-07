@@ -11,6 +11,7 @@ import (
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/render"
 	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 	"github.com/mattn/go-runewidth"
@@ -105,10 +106,7 @@ func (m Model) View() string {
 
 // mark wraps content in a zone if zoneManager is set
 func (m *Model) mark(id, content string) string {
-	if m.zoneManager != nil {
-		return m.zoneManager.Mark(id, content)
-	}
-	return content
+	return render.Mark(m.zoneManager, id, content)
 }
 
 // renderDivergent draws the divergent-commit picker. The window title
