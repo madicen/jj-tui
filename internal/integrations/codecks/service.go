@@ -7,24 +7,24 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"regexp"
 	"sort"
 	"strings"
 
+	"github.com/madicen/jj-tui/internal/integrations/httpapi"
 	"github.com/madicen/jj-tui/internal/tickets"
 )
 
 // Service handles Codecks API interactions
 type Service struct {
-	subdomain      string
-	token          string
-	projectFilter  string            // Optional: filter cards by project name
-	projectIDs     map[string]string // Map of project name -> project ID
-	client         *http.Client
-	currentUserID  string            // Cached from account query for create-card API
+	subdomain     string
+	token         string
+	projectFilter string            // Optional: filter cards by project name
+	projectIDs    map[string]string // Map of project name -> project ID
+	api           *httpapi.Client
+	currentUserID string // Cached from account query for create-card API
 }
 
 // NewService creates a new Codecks service
@@ -47,7 +47,15 @@ func NewService() (*Service, error) {
 		token:         token,
 		projectFilter: projectFilter,
 		projectIDs:    make(map[string]string),
-		client:        &http.Client{},
+		api: &httpapi.Client{
+			Provider: "codecks",
+			HTTP:     &http.Client{},
+			Decorate: func(req *http.Request) {
+				req.Header.Set("X-Account", subdomain)
+				req.Header.Set("X-Auth-Token", token)
+				req.Header.Set("Content-Type", "application/json")
+			},
+		},
 	}
 
 	// Verify connection and load project list
@@ -227,38 +235,13 @@ func (s *Service) setCurrentUserFromCard(cardMap map[string]any) {
 	}
 }
 
-// doRequest performs an authenticated request to the Codecks API
+// doRequest performs an authenticated query request to the Codecks API
 func (s *Service) doRequest(ctx context.Context, body any) ([]byte, error) {
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.codecks.io/", bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("X-Account", s.subdomain)
-	req.Header.Set("X-Auth-Token", s.token)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := s.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("codecks API error (status %d): %s", resp.StatusCode, string(respBody))
-	}
-
-	return respBody, nil
+	return s.api.DoRead(ctx, "POST", "https://api.codecks.io/", bytes.NewBuffer(jsonBody))
 }
 
 // GetAssignedTickets fetches all cards from the account
@@ -815,33 +798,8 @@ func (s *Service) doDispatchRequest(ctx context.Context, action string, body any
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
-
 	url := fmt.Sprintf("https://api.codecks.io/dispatch/%s", action)
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("X-Account", s.subdomain)
-	req.Header.Set("X-Auth-Token", s.token)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := s.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("codecks API error (status %d): %s", resp.StatusCode, string(respBody))
-	}
-
-	return respBody, nil
+	return s.api.DoRead(ctx, "POST", url, bytes.NewBuffer(jsonBody))
 }
 
 // IsConfigured returns true if Codecks environment variables are set
