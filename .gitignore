@@ -1,11 +1,12 @@
 # OS / editor cruft
 .DS_Store
 
-# Local temp clutter and profiling output
+# Local temp clutter, coverage, and profiling output
 tmp.*
 .tmp-*
 fixtures/_tmp-*
 *.prof
+coverage.out
 
 # Binary
 jj-tui

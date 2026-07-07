@@ -8,7 +8,12 @@ on:
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-latest
+    name: build-and-test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -18,7 +23,8 @@ jobs:
         with:
           go-version: '1.25'
 
-      - name: Install jj (for integration tests)
+      - name: Install jj (Linux)
+        if: runner.os == 'Linux'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -35,21 +41,35 @@ jobs:
           rm /tmp/jj.tar.gz
           jj --version
 
+      - name: Install jj (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install jj
+          jj --version
+
+      - name: Configure git (required by jj integration tests)
+        run: |
+          git config --global user.name "CI Test"
+          git config --global user.email "ci@test.com"
+
       - name: Build
         run: |
           # Inject version info (short commit SHA for dev builds)
           VERSION="dev-${GITHUB_SHA::7}"
           go build -v -ldflags "-X github.com/madicen/jj-tui/internal/version.Version=${VERSION}" ./...
 
-      - name: Run unit tests
-        run: go test -v ./internal/tui/... ./internal/config/... ./internal/integrations/codecks/...
-
-      - name: Run integration tests
+      - name: Run tests with coverage
         run: |
-          # Configure git for jj
-          git config --global user.name "CI Test"
-          git config --global user.email "ci@test.com"
-          go test -v ./integration_tests/...
+          # Full-package suite (unit + integration); no package silently untested.
+          go test ./... -coverprofile=coverage.out -covermode=atomic
+          go tool cover -func=coverage.out | tail -n 1
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.os }}
+          path: coverage.out
+          if-no-files-found: warn
 
   lint:
     runs-on: ubuntu-latest
@@ -66,4 +86,3 @@ jobs:
         uses: golangci/golangci-lint-action@v8
         with:
           version: v2.12.0
-

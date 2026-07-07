@@ -1,6 +1,6 @@
 # jj-tui Makefile
 
-.PHONY: build test clean screenshots demo-repo after-origin-vhs-repo after-origin-gif evolog-split-vhs-repo evolog-split-gif divergent-vhs-repo divergent-gif bookmark-conflict-vhs-repo bookmark-conflict-gif screenshot-after-origin screenshot-evolog-split screenshot-divergent screenshot-bookmark-conflict help
+.PHONY: build test cover clean screenshots demo-repo after-origin-vhs-repo after-origin-gif evolog-split-vhs-repo evolog-split-gif divergent-vhs-repo divergent-gif bookmark-conflict-vhs-repo bookmark-conflict-gif screenshot-after-origin screenshot-evolog-split screenshot-divergent screenshot-bookmark-conflict help
 
 # Default target
 all: build
@@ -12,6 +12,11 @@ build:
 # Run tests
 test:
 	go test ./...
+
+# Run tests with coverage and print a per-function coverage summary
+cover:
+	go test ./... -coverprofile=coverage.out -covermode=atomic
+	go tool cover -func=coverage.out
 
 # Clean build artifacts
 clean:
@@ -147,6 +152,7 @@ help:
 	@echo "jj-tui Makefile targets:"
 	@echo "  build        - Build the application"
 	@echo "  test         - Run tests"
+	@echo "  cover        - Run tests with coverage and print a summary"
 	@echo "  clean        - Clean build artifacts"
 	@echo "  demo-repo    - Setup demo repository for screenshots"
 	@echo "  screenshots  - Generate PNG screenshots + after-origin.gif + evolog-split.gif (see also demo-gif)"
