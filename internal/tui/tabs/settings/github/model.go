@@ -7,7 +7,7 @@ import (
 	bubbledropdown "github.com/madicen/bubble-dropdown"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/config"
-	"github.com/madicen/jj-tui/internal/tui/styles"
+	"github.com/madicen/jj-tui/internal/tui/form/dropdown"
 )
 
 // tokenSourceValues maps the token-source dropdown indices to their config
@@ -69,7 +69,7 @@ type Model struct {
 	currentOrigin string
 
 	// tokenSourceDropdown replaces the old radio rows for the API token source.
-	tokenSourceDropdown *bubbledropdown.Dropdown
+	tokenSourceDropdown *dropdown.Field
 }
 
 // MaxFocusedField is the highest valid focusedField index for the GitHub tab. Used by parent
@@ -102,9 +102,8 @@ func NewModel() Model {
 		focusedField:      0,
 		originInput:       originInput,
 		ghPrivate:         true, // Match the welcome-screen default; users can flip with Ctrl+v.
-		tokenSourceDropdown: bubbledropdown.New(
+		tokenSourceDropdown: dropdown.New(
 			bubbledropdown.WithOptions(tokenSourceLabels),
-			bubbledropdown.WithAccentColor(string(styles.ColorPrimary)),
 		),
 	}
 }
@@ -239,10 +238,7 @@ func (m *Model) SetTokenSource(src string) {
 // TokenSourceDropdown returns the API-token-source dropdown (for rendering and
 // overlay). It syncs the accent so the panel tracks the live theme primary color.
 func (m *Model) TokenSourceDropdown() *bubbledropdown.Dropdown {
-	if accent := string(styles.ColorPrimary); m.tokenSourceDropdown.AccentColor() != accent {
-		m.tokenSourceDropdown.SetAccentColor(accent)
-	}
-	return m.tokenSourceDropdown
+	return m.tokenSourceDropdown.Dropdown()
 }
 
 // DropdownOpen reports whether the token-source dropdown panel is open.
@@ -257,28 +253,22 @@ func (m *Model) SetZoneManager(zm *zone.Manager) {
 // selection, applies the chosen source (loading or clearing the saved token to
 // match the prior radio behaviour). Returns any tea.Cmd the dropdown emits.
 func (m *Model) UpdateDropdown(msg tea.Msg) tea.Cmd {
-	if m.tokenSourceDropdown == nil {
-		return nil
-	}
-	wasOpen := m.tokenSourceDropdown.Open()
-	dd, cmd := m.tokenSourceDropdown.Update(msg)
-	m.tokenSourceDropdown = dd
-	if chosen, ok := msg.(bubbledropdown.ItemChosenMsg); ok && wasOpen {
-		if chosen.Index >= 0 && chosen.Index < len(tokenSourceValues) {
-			src := tokenSourceValues[chosen.Index]
-			m.SetTokenSource(src)
-			if src == config.GitHubTokenSourceSaved {
-				if cfg, _ := config.Load(); cfg != nil && cfg.GitHubToken != "" {
-					m.SetToken(cfg.GitHubToken)
-				}
-				m.focusedField = 0
-				m.refocus()
-			} else {
-				m.SetToken("")
-			}
+	return m.tokenSourceDropdown.Update(msg, func(i int) {
+		if i < 0 || i >= len(tokenSourceValues) {
+			return
 		}
-	}
-	return cmd
+		src := tokenSourceValues[i]
+		m.SetTokenSource(src)
+		if src == config.GitHubTokenSourceSaved {
+			if cfg, _ := config.Load(); cfg != nil && cfg.GitHubToken != "" {
+				m.SetToken(cfg.GitHubToken)
+			}
+			m.focusedField = 0
+			m.refocus()
+		} else {
+			m.SetToken("")
+		}
+	})
 }
 
 // GetShowMerged returns whether to show merged PRs

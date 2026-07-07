@@ -10,7 +10,7 @@ import (
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/tui/form"
-	"github.com/madicen/jj-tui/internal/tui/styles"
+	"github.com/madicen/jj-tui/internal/tui/form/dropdown"
 )
 
 // Field indices into the shared form (0 = graph revset, 1 = custom editor).
@@ -28,7 +28,7 @@ type Model struct {
 
 	// editorDropdown replaces the old radio rows for picking the external editor
 	// preset. The selected index maps 1:1 onto externalEditorPreset.
-	editorDropdown *bubbledropdown.Dropdown
+	editorDropdown *dropdown.Field
 }
 
 // ExternalEditorPresetLabels are UI labels for each editor preset (same order as config values below).
@@ -72,10 +72,9 @@ func NewModel() Model {
 		sanitizeBookmarks: true,
 		confirmingCleanup: "",
 		form:              form.New(revsetInput, customIn),
-		editorDropdown: bubbledropdown.New(
+		editorDropdown: dropdown.New(
 			bubbledropdown.WithOptions(ExternalEditorPresetLabels),
 			bubbledropdown.WithMaxVisible(len(ExternalEditorPresetLabels)),
-			bubbledropdown.WithAccentColor(string(styles.ColorPrimary)),
 		),
 	}
 }
@@ -194,10 +193,7 @@ func (m *Model) SetExternalEditorPreset(i int) {
 // EditorDropdown returns the external-editor preset dropdown (for rendering and
 // overlay). It syncs the accent so the panel tracks the live theme primary color.
 func (m *Model) EditorDropdown() *bubbledropdown.Dropdown {
-	if accent := string(styles.ColorPrimary); m.editorDropdown.AccentColor() != accent {
-		m.editorDropdown.SetAccentColor(accent)
-	}
-	return m.editorDropdown
+	return m.editorDropdown.Dropdown()
 }
 
 // DropdownOpen reports whether the editor preset dropdown panel is open.
@@ -211,16 +207,9 @@ func (m *Model) SetZoneManager(zm *zone.Manager) {
 // UpdateDropdown forwards a message to the editor dropdown and, on selection,
 // applies the chosen preset index. Returns any tea.Cmd the dropdown emits.
 func (m *Model) UpdateDropdown(msg tea.Msg) tea.Cmd {
-	if m.editorDropdown == nil {
-		return nil
-	}
-	wasOpen := m.editorDropdown.Open()
-	dd, cmd := m.editorDropdown.Update(msg)
-	m.editorDropdown = dd
-	if chosen, ok := msg.(bubbledropdown.ItemChosenMsg); ok && wasOpen {
-		m.SetExternalEditorPreset(chosen.Index)
-	}
-	return cmd
+	return m.editorDropdown.Update(msg, func(i int) {
+		m.SetExternalEditorPreset(i)
+	})
 }
 
 // SavedExternalEditor returns config strings to persist.

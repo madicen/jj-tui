@@ -9,7 +9,7 @@ import (
 	zone "github.com/lrstanley/bubblezone"
 	bubbledropdown "github.com/madicen/bubble-dropdown"
 	"github.com/madicen/jj-tui/internal/config"
-	"github.com/madicen/jj-tui/internal/tui/styles"
+	"github.com/madicen/jj-tui/internal/tui/form/dropdown"
 )
 
 // aiProviderValues maps the provider dropdown indices to their config values;
@@ -81,7 +81,7 @@ type Model struct {
 	activeName  string
 
 	// providerDropdown replaces the old radio rows for the LLM provider.
-	providerDropdown *bubbledropdown.Dropdown
+	providerDropdown *dropdown.Field
 }
 
 // NewModel creates an AI settings model with defaults.
@@ -125,9 +125,8 @@ func NewModel() Model {
 		},
 		selectedIdx: 0,
 		activeName:  config.DefaultAIProfileName,
-		providerDropdown: bubbledropdown.New(
+		providerDropdown: dropdown.New(
 			bubbledropdown.WithOptions(aiProviderLabels),
-			bubbledropdown.WithAccentColor(string(styles.ColorPrimary)),
 		),
 	}
 }
@@ -366,10 +365,7 @@ func (m *Model) SetAIProvider(s string) {
 // ProviderDropdown returns the LLM provider dropdown (for rendering and
 // overlay). It syncs the accent so the panel tracks the live theme primary color.
 func (m *Model) ProviderDropdown() *bubbledropdown.Dropdown {
-	if accent := string(styles.ColorPrimary); m.providerDropdown.AccentColor() != accent {
-		m.providerDropdown.SetAccentColor(accent)
-	}
-	return m.providerDropdown
+	return m.providerDropdown.Dropdown()
 }
 
 // DropdownOpen reports whether the provider dropdown panel is open.
@@ -383,18 +379,11 @@ func (m *Model) SetZoneManager(zm *zone.Manager) {
 // UpdateDropdown forwards a message to the provider dropdown and, on selection,
 // applies the chosen provider value. Returns any tea.Cmd the dropdown emits.
 func (m *Model) UpdateDropdown(msg tea.Msg) tea.Cmd {
-	if m.providerDropdown == nil {
-		return nil
-	}
-	wasOpen := m.providerDropdown.Open()
-	dd, cmd := m.providerDropdown.Update(msg)
-	m.providerDropdown = dd
-	if chosen, ok := msg.(bubbledropdown.ItemChosenMsg); ok && wasOpen {
-		if chosen.Index >= 0 && chosen.Index < len(aiProviderValues) {
-			m.SetAIProvider(aiProviderValues[chosen.Index])
+	return m.providerDropdown.Update(msg, func(i int) {
+		if i >= 0 && i < len(aiProviderValues) {
+			m.SetAIProvider(aiProviderValues[i])
 		}
-	}
-	return cmd
+	})
 }
 
 // GetAIBaseURL returns the configured API base URL field.
