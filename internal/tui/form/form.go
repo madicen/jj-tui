@@ -43,6 +43,25 @@ func (m *Model) SetFocused(i int) {
 	m.refocus()
 }
 
+// Focus moves focus to index i (clamped) like SetFocused, but returns the
+// focused input's cursor-blink command so callers that need the cursor to show
+// (e.g. sub-tabs whose SetFocusedField returns a tea.Cmd) can propagate it.
+func (m *Model) Focus(i int) tea.Cmd {
+	if len(m.inputs) == 0 {
+		return nil
+	}
+	m.focused = clamp(i, 0, len(m.inputs)-1)
+	var cmd tea.Cmd
+	for j := range m.inputs {
+		if j == m.focused {
+			cmd = m.inputs[j].Focus()
+		} else {
+			m.inputs[j].Blur()
+		}
+	}
+	return cmd
+}
+
 // HandleNavKey processes a vertical navigation key, moving focus one field up
 // or down within bounds. It reports whether key was a navigation key so callers
 // can decide whether to route the message onward to the focused input.

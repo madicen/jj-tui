@@ -128,6 +128,33 @@ func TestSetValueAndViews(t *testing.T) {
 	m.SetValue(5, "ignored")
 }
 
+func TestFocusReturnsCmdAndMovesFocus(t *testing.T) {
+	m := newTestForm(3)
+	cmd := m.Focus(2)
+	if m.Focused() != 2 {
+		t.Fatalf("Focus(2) -> Focused() = %d, want 2", m.Focused())
+	}
+	if !m.Input(2).Focused() {
+		t.Fatal("field 2 should be focused")
+	}
+	if m.Input(0).Focused() || m.Input(1).Focused() {
+		t.Fatal("only field 2 should be focused")
+	}
+	if cmd == nil {
+		t.Fatal("Focus should return a non-nil cursor command")
+	}
+	// Clamps like SetFocused.
+	m.Focus(99)
+	if m.Focused() != 2 {
+		t.Fatalf("Focus(99) should clamp to 2, got %d", m.Focused())
+	}
+
+	var empty Model
+	if empty.Focus(0) != nil {
+		t.Fatal("Focus on empty form should return nil")
+	}
+}
+
 func TestSetWidth(t *testing.T) {
 	m := newTestForm(3)
 	m.SetWidth(42)
