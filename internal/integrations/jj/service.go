@@ -16,6 +16,7 @@ import (
 	"unicode"
 
 	"github.com/madicen/jj-tui/internal"
+	"github.com/madicen/jj-tui/internal/integrations/jj/jjout"
 	"github.com/madicen/jj-tui/internal/tui/util"
 )
 
@@ -548,11 +549,7 @@ func (s *Service) getChangedFilesSummaryOnly(ctx context.Context, commitID strin
 		return nil, fmt.Errorf("failed to get changed files: %w", err)
 	}
 	var files []ChangedFile
-	for _, line := range strings.Split(out, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
+	for _, line := range jjout.SplitLines(out) {
 		parts := strings.SplitN(line, " ", 2)
 		if len(parts) >= 2 {
 			files = append(files, ChangedFile{
@@ -576,14 +573,7 @@ func (s *Service) DiffSummaryLinesFromTo(ctx context.Context, fromCommitID, toRe
 	if err != nil {
 		return nil, err
 	}
-	var lines []string
-	for _, line := range strings.Split(out, "\n") {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			lines = append(lines, line)
-		}
-	}
-	return lines, nil
+	return jjout.SplitLines(out), nil
 }
 
 // DiffNameOnlyLinesFromTo returns trimmed non-empty paths from `jj diff --from --to --name-only`
@@ -599,14 +589,7 @@ func (s *Service) DiffNameOnlyLinesFromTo(ctx context.Context, fromCommitID, toR
 	if err != nil {
 		return nil, err
 	}
-	var paths []string
-	for _, line := range strings.Split(out, "\n") {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			paths = append(paths, line)
-		}
-	}
-	return paths, nil
+	return jjout.SplitLines(out), nil
 }
 
 // DiffChangedFilesFromTo lists paths changed between two revisions (from..to), using jj diff --summary,
@@ -628,11 +611,7 @@ func (s *Service) diffChangedFilesFromToWithGit(ctx context.Context, fromCommitI
 		return nil, "", err
 	}
 	var files []ChangedFile
-	for _, line := range strings.Split(out, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
+	for _, line := range jjout.SplitLines(out) {
 		parts := strings.SplitN(line, " ", 2)
 		if len(parts) >= 2 {
 			files = append(files, ChangedFile{
@@ -837,12 +816,11 @@ func (s *Service) ResolveBookmarkConflictResetToRemote(ctx context.Context, book
 
 // joinConflictTabLog parses jj log lines as change_id\tsummary\ttimestamp (tab-separated).
 func joinConflictTabLog(out string) (idJoined, summaryJoined, whenJoined string) {
-	var ids, sums, whens []string
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
+	lines := jjout.SplitLines(out)
+	ids := make([]string, 0, len(lines))
+	sums := make([]string, 0, len(lines))
+	whens := make([]string, 0, len(lines))
+	for _, line := range lines {
 		parts := strings.Split(line, "\t")
 		ids = append(ids, strings.TrimSpace(parts[0]))
 		sum := ""
@@ -907,11 +885,7 @@ func (s *Service) GetDivergentCommitDetails(ctx context.Context, changeID string
 	}
 
 	var versions []DivergentVersion
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
+	for _, line := range jjout.SplitLines(out) {
 		parts := strings.Split(line, "\t")
 		if len(parts) < 5 {
 			continue
@@ -1322,11 +1296,7 @@ func (s *Service) listEvolog(ctx context.Context, rev string, noHistory bool) ([
 		return nil, err
 	}
 	var entries []EvologEntry
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
+	for _, line := range jjout.SplitLines(out) {
 		parts := strings.SplitN(line, "\t", 3)
 		if len(parts) < 2 {
 			continue
@@ -1444,13 +1414,7 @@ func (s *Service) evologSplitParentForNewCommit(ctx context.Context, baseCommitI
 	if err != nil {
 		return "", fmt.Errorf("log parents: %w", err)
 	}
-	var parents []string
-	for _, line := range strings.Split(parentsOut, "\n") {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			parents = append(parents, line)
-		}
-	}
+	parents := jjout.SplitLines(parentsOut)
 	if len(parents) == 1 {
 		return parents[0], nil
 	}
@@ -2517,23 +2481,9 @@ func (s *Service) runJJ(ctx context.Context, args ...string) error {
 	return nil
 }
 
-// extractErrorMessage extracts the main error message from jj output
+// extractErrorMessage extracts the main error message from jj output.
 func extractErrorMessage(output string) string {
-	lines := strings.Split(output, "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "Error:") {
-			return strings.TrimPrefix(line, "Error: ")
-		}
-	}
-	// Return first non-empty, non-warning line
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line != "" && !strings.HasPrefix(line, "Warning:") && !strings.HasPrefix(line, "Hint:") {
-			return line
-		}
-	}
-	return ""
+	return jjout.ExtractErrorMessage(output)
 }
 
 // runJJOutput executes a jj command and returns its stdout only
@@ -2832,11 +2782,7 @@ func (s *Service) ListBranches(ctx context.Context, statsLimit int) ([]internal.
 				if err == nil {
 					// Parse timestamps into a map keyed by branch@remote
 					timestamps := make(map[string]int64)
-					for _, line := range strings.Split(out, "\n") {
-						line = strings.TrimSpace(line)
-						if line == "" {
-							continue
-						}
+					for _, line := range jjout.SplitLines(out) {
 						parts := strings.Split(line, "|")
 						if len(parts) == 2 {
 							branchRef := strings.TrimSpace(parts[0])
@@ -3239,15 +3185,7 @@ func (s *Service) pruneSpuriousGraphConflictMarks(ctx context.Context, commits [
 // parseCommitInfo extracts change_id and short commit id from jj output
 // Format: "change_id commit_id description"
 func parseCommitInfo(info string) (changeID, shortID string) {
-	parts := strings.Fields(info)
-	if len(parts) >= 2 {
-		changeID = parts[0]
-		shortID = parts[1]
-	} else if len(parts) == 1 {
-		changeID = parts[0]
-		shortID = parts[0]
-	}
-	return
+	return jjout.ParseCommitInfo(info)
 }
 
 // countRevisions counts the number of revisions matching a revset
