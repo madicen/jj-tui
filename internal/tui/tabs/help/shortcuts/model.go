@@ -78,7 +78,7 @@ func (m *Model) SetDimensions(width, height int) {
 func (m Model) lines() []string {
 	// Single key column for every shortcut row so descriptions align (widest: ctrl+shift+u).
 	const helpKeyColW = 18
-	var lines []string
+	lines := make([]string, 0, 150)
 	lines = append(lines, styles.TitleStyle.Render("Commit Graph Shortcuts"))
 	lines = append(lines, "")
 	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("j/↓"), styles.HelpDescStyle.Render("Move down")))

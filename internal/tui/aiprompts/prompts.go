@@ -19,15 +19,15 @@ const maxChainCommitsInPrompt = 50
 // budget. The first-line subject is always included verbatim.
 const maxChainCommitDescRunes = 800
 
-func truncateRunes(s string, max int) string {
-	if max <= 0 || len(s) <= max {
+func truncateRunes(s string, maxRunes int) string {
+	if maxRunes <= 0 || len(s) <= maxRunes {
 		return s
 	}
 	r := []rune(s)
-	if len(r) <= max {
+	if len(r) <= maxRunes {
 		return s
 	}
-	return string(r[:max]) + "\n\n[truncated]\n"
+	return string(r[:maxRunes]) + "\n\n[truncated]\n"
 }
 
 // ChainCommitSummary is the per-commit context the prompt builders inline
@@ -61,7 +61,7 @@ func FormatChainSummary(commits []ChainCommitSummary) string {
 		limit = maxChainCommitsInPrompt
 	}
 	for i := 0; i < limit; i++ {
-		c := commits[i]
+		c := commits[i] //nolint:gosec // G602: false positive; i < limit <= len(commits).
 		subject := strings.TrimSpace(c.Subject)
 		if subject == "" {
 			subject = "(no description)"

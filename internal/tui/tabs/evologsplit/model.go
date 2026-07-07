@@ -1132,7 +1132,7 @@ func (m Model) View() string {
 	innerW := max(48, modalW-6)
 
 	if m.loading {
-		var lines []string
+		lines := make([]string, 0, 1)
 		lines = append(lines, muted.Render("Loading jj evolog…"))
 		box := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(styles.ColorMuted).Padding(1, 2).Width(modalW)
 		return box.Render(strings.Join(lines, "\n"))

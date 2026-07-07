@@ -153,7 +153,8 @@ func (m Model) View() string {
 
 // ZoneIDs returns the zone IDs this tab uses when rendering (same IDs passed to Mark). Used to resolve clicks.
 func (m Model) ZoneIDs() []string {
-	ids := []string{mouse.ZoneHelpTabShortcuts, mouse.ZoneHelpTabCommands}
+	ids := make([]string, 0, 2+len(m.commands.ZoneIDs()))
+	ids = append(ids, mouse.ZoneHelpTabShortcuts, mouse.ZoneHelpTabCommands)
 	ids = append(ids, m.commands.ZoneIDs()...)
 	return ids
 }

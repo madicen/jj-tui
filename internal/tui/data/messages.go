@@ -21,6 +21,7 @@ type InitErrorMsg struct {
 }
 
 // ServicesInitializedMsg is sent when jj, GitHub, and ticket services are initialized.
+//
 // Deprecated: initialization is now two-phase (RepoReadyMsg then AuxServicesReadyMsg).
 type ServicesInitializedMsg struct {
 	JJService     *jj.Service

@@ -19,6 +19,8 @@ import (
 
 // handleDataServicesInitializedMsg applies initialized services and repository; starts tick and PR load.
 // Kept for tests or code paths that still send the full message.
+//
+//nolint:staticcheck // SA1019: transitional handler intentionally still processes the deprecated one-shot message.
 func (m *Model) handleDataServicesInitializedMsg(msg data.ServicesInitializedMsg) (tea.Model, tea.Cmd) {
 	m.silentReloadInFlight = false
 	m.appState.JJService = msg.JJService

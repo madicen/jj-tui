@@ -231,7 +231,8 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 // ZoneIDs returns the zone IDs this modal uses when rendering (same IDs passed to Mark). Used to resolve clicks.
 func (m Model) ZoneIDs() []string {
-	ids := []string{mouse.ZoneBookmarkName, mouse.ZoneBookmarkSubmit, mouse.ZoneBookmarkGenerate, mouse.ZoneBookmarkCancel}
+	ids := make([]string, 0, 4+len(m.existingBookmarks))
+	ids = append(ids, mouse.ZoneBookmarkName, mouse.ZoneBookmarkSubmit, mouse.ZoneBookmarkGenerate, mouse.ZoneBookmarkCancel)
 	for i := range m.existingBookmarks {
 		ids = append(ids, mouse.ZoneExistingBookmark(i))
 	}

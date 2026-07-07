@@ -1867,7 +1867,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleRepoReadyMsg(msg)
 	case data.AuxServicesReadyMsg:
 		return m.handleAuxServicesReadyMsg(msg)
-	case data.ServicesInitializedMsg:
+	case data.ServicesInitializedMsg: //nolint:staticcheck // SA1019: transitional case still dispatches the deprecated one-shot message.
 		return m.handleDataServicesInitializedMsg(msg)
 	case data.RepositoryLoadedMsg:
 		return m.handleDataRepositoryLoadedMsg(msg)

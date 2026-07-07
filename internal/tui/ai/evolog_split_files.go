@@ -58,7 +58,7 @@ func matchAllowedPath(allowed map[string]struct{}, key string) (canonical string
 	return "", false
 }
 
-func formatSuggestedOriginalSample(suggested []string, max int) string {
+func formatSuggestedOriginalSample(suggested []string, maxSample int) string {
 	var parts []string
 	for _, f := range suggested {
 		f = strings.TrimSpace(f)
@@ -66,7 +66,7 @@ func formatSuggestedOriginalSample(suggested []string, max int) string {
 			continue
 		}
 		parts = append(parts, f)
-		if len(parts) >= max {
+		if len(parts) >= maxSample {
 			break
 		}
 	}
@@ -81,7 +81,7 @@ func formatSuggestedOriginalSample(suggested []string, max int) string {
 	return s
 }
 
-func formatPathSetSample(m map[string]struct{}, max int) string {
+func formatPathSetSample(m map[string]struct{}, maxSample int) string {
 	if len(m) == 0 {
 		return "(none)"
 	}
@@ -90,8 +90,8 @@ func formatPathSetSample(m map[string]struct{}, max int) string {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	if len(keys) > max {
-		return strings.Join(keys[:max], ", ") + fmt.Sprintf(" … +%d", len(keys)-max)
+	if len(keys) > maxSample {
+		return strings.Join(keys[:maxSample], ", ") + fmt.Sprintf(" … +%d", len(keys)-maxSample)
 	}
 	return strings.Join(keys, ", ")
 }

@@ -1,7 +1,29 @@
 version: "2"
 run:
   go: "1.25.0"
+issues:
+  # Report every finding (no per-linter / duplicate caps) so nothing is hidden.
+  max-issues-per-linter: 0
+  max-same-issues: 0
 linters:
+  default: standard
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - gosec
+    - gocritic
+    - revive
+    - misspell
+    - unconvert
+    - prealloc
+  settings:
+    gocritic:
+      disabled-checks:
+        # Opinionated rewrites of working control flow (if/else -> switch, etc.);
+        # out of scope for a behavior-preserving hygiene pass.
+        - ifElseChain
+        - singleCaseSwitch
   exclusions:
     generated: lax
     presets:
@@ -9,6 +31,26 @@ linters:
       - common-false-positives
       - legacy
       - std-error-handling
+    rules:
+      # revive's "stutter" naming warnings would require renaming exported types
+      # across packages (a public-API refactor); deferred to later refactor phases.
+      - linters:
+          - revive
+        text: "and that stutters"
+      # unused-parameter is pure noise here: most hits are no-op interface
+      # implementations (UpdateRepository, mock services) and HTTP-handler
+      # callbacks whose signatures are fixed by the interface they satisfy.
+      - linters:
+          - revive
+        text: "unused-parameter"
+      # gosec on test code and test helpers is noise (file perms on temp fixtures,
+      # tainted subprocess args from test paths, hardcoded test tokens).
+      - linters:
+          - gosec
+        path: _test\.go
+      - linters:
+          - gosec
+        path: internal/(mock|testutil)/
     paths:
       - third_party$
       - builtin$

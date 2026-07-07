@@ -53,11 +53,10 @@ func (m GraphModel) handleKeyMsg(msg tea.KeyMsg) (GraphModel, *Request, tea.Cmd)
 			var cmd tea.Cmd
 			m.viewport, cmd = m.viewport.Update(msg)
 			return m, nil, cmd
-		} else {
-			var cmd tea.Cmd
-			m.filesViewport, cmd = m.filesViewport.Update(msg)
-			return m, nil, cmd
 		}
+		var cmd tea.Cmd
+		m.filesViewport, cmd = m.filesViewport.Update(msg)
+		return m, nil, cmd
 
 	case "esc", "q":
 		if m.contextMenu != nil {

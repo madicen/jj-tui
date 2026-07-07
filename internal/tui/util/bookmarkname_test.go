@@ -38,8 +38,8 @@ func TestFirstOperableBookmarkName_stripsConflictMarker(t *testing.T) {
 }
 
 func TestBookmarkNameForRevset_stripsJJListLabel(t *testing.T) {
-	got := BookmarkNameForRevset("madicen/APP-429-svc-github-improvments (conflicted)")
-	want := "madicen/APP-429-svc-github-improvments"
+	got := BookmarkNameForRevset("madicen/APP-429-svc-github-improvements (conflicted)")
+	want := "madicen/APP-429-svc-github-improvements"
 	if got != want {
 		t.Fatalf("BookmarkNameForRevset = %q; want %q", got, want)
 	}

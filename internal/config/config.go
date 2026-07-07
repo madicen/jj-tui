@@ -183,6 +183,8 @@ type Config struct {
 }
 
 // EnvAIAPIKey is the environment variable for the LLM API key; when set, it overrides ai_api_key in config.
+//
+//nolint:gosec // G101: this is the name of an env var, not a hardcoded credential.
 const EnvAIAPIKey = "JJ_TUI_AI_API_KEY"
 
 // OllamaDefaultChatBaseURL is the default OpenAI-compatible API root for a local Ollama server (no trailing slash).
@@ -222,6 +224,7 @@ func localConfigPath() string {
 
 // loadFromFile loads config from a specific file path
 func loadFromFile(path string) (*Config, error) {
+	//nolint:gosec // G304/G703: path is an app-controlled config location, not attacker input.
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {

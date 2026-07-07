@@ -614,7 +614,7 @@ func (m *GraphModel) buildGraphData() GraphData {
 	}
 
 	// Convert changed files to view format
-	var changedFiles []ChangedFile
+	changedFiles := make([]ChangedFile, 0, len(m.changedFiles))
 	for _, f := range m.changedFiles {
 		changedFiles = append(changedFiles, ChangedFile{
 			Path:         f.Path,

@@ -218,8 +218,8 @@ func (m *Model) SetSelectedCommand(idx int) {
 
 // ZoneIDs returns zone IDs used by this sub-tab (for parent to resolve clicks).
 func (m Model) ZoneIDs() []string {
-	var ids []string
 	n := min(len(m.entries), 50)
+	ids := make([]string, 0, n)
 	for i := range n {
 		ids = append(ids, fmt.Sprintf("%s%d", mouse.ZoneHelpCommandCopy, i))
 	}

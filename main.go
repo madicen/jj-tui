@@ -5,7 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
-	_ "net/http/pprof"
+	_ "net/http/pprof" //nolint:gosec // G108: pprof endpoints are only reachable via the opt-in -pprof flag below.
 	"os"
 	"runtime/pprof"
 	"time"
@@ -48,6 +48,7 @@ func main() {
 		defer f.Close()
 		if err := pprof.StartCPUProfile(f); err != nil {
 			fmt.Fprintf(os.Stderr, "cpuprofile: %v\n", err)
+			//nolint:gocritic // exitAfterDefer: process is aborting on a fatal setup error; the OS reclaims the fd.
 			os.Exit(1)
 		}
 		defer pprof.StopCPUProfile()
@@ -56,6 +57,7 @@ func main() {
 	// Serve pprof HTTP for live profiling (e.g. go tool pprof http://localhost:6060/debug/pprof/heap)
 	if *pprofAddr != "" {
 		go func() {
+			//nolint:gosec // G114: opt-in local debug profiler; timeouts are unnecessary here.
 			if err := http.ListenAndServe(*pprofAddr, nil); err != nil {
 				fmt.Fprintf(os.Stderr, "pprof server: %v\n", err)
 			}

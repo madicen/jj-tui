@@ -131,7 +131,7 @@ func (m Model) View() string {
 }
 
 func (m Model) viewGhCLI() string {
-	var lines []string
+	lines := make([]string, 0, 9)
 	lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#8B949E")).Render("This will temporarily suspend jj-tui and run:"))
 	lines = append(lines, "")
 	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("   gh auth login"))

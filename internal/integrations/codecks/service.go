@@ -516,7 +516,7 @@ func encodeShortID(n int) string {
 
 	// Skip the 1-2 digit ID space (1-812 = "1" through "zz")
 	// All card IDs start at 3 digits ("111" = 813)
-	n = n + 812
+	n += 812
 
 	// Codecks alphabet: 28 characters (no 0, b, d, l, m, n, p, t)
 	alphabet := "123456789acefghijkoqrsuvwxyz"
@@ -531,7 +531,7 @@ func encodeShortID(n int) string {
 			remainder = base
 			n = n/base - 1
 		} else {
-			n = n / base
+			n /= base
 		}
 		result = append([]byte{alphabet[remainder-1]}, result...)
 	}

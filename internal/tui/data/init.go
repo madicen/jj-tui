@@ -231,10 +231,3 @@ func CreateTicketService(owner, repo string) (tickets.Service, error) {
 	}
 	return nil, nil
 }
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}

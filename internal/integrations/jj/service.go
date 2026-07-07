@@ -107,15 +107,15 @@ func TruncateBookmarkName(name string) string {
 //
 // Callers that want char-class normalization should pass through SanitizeBookmarkName
 // first; this function only enforces length.
-func TruncateBookmarkNameTo(name string, max int) string {
-	if max <= 0 {
+func TruncateBookmarkNameTo(name string, maxLen int) string {
+	if maxLen <= 0 {
 		return ""
 	}
 	runes := []rune(name)
-	if len(runes) <= max {
+	if len(runes) <= maxLen {
 		return name
 	}
-	return strings.TrimRight(string(runes[:max]), "-_/")
+	return strings.TrimRight(string(runes[:maxLen]), "-_/")
 }
 
 // NewService creates a new jj service
@@ -1970,13 +1970,9 @@ func (s *Service) getCommitGraph(ctx context.Context, revset string, recordGraph
 	}
 	out, err := s.jjLogWithGraphTemplate(ctx, recordGraphInHistory, revsetArg, template)
 	if err != nil {
-		if revset != "" {
-			// Custom revset failed; try a broad safe revset so the app still loads
-			out, err = s.jjLogWithGraphTemplate(ctx, recordGraphInHistory, "mutable() | bookmarks()", template)
-		} else {
-			// Default may fail if main@origin is missing; omit trunk tip from the revset
-			out, err = s.jjLogWithGraphTemplate(ctx, recordGraphInHistory, "mutable() | bookmarks()", template)
-		}
+		// Fall back to a broad, safe revset so the app still loads. This covers both a
+		// failing custom revset and the default failing when main@origin is missing.
+		out, err = s.jjLogWithGraphTemplate(ctx, recordGraphInHistory, "mutable() | bookmarks()", template)
 	}
 	bmWG.Wait()
 	if err != nil {
@@ -2872,7 +2868,8 @@ func (s *Service) ListBranches(ctx context.Context, statsLimit int) ([]internal.
 			remoteBranches = remoteBranches[:remoteLimit]
 		}
 
-		// Recombine: local + their remote counterparts + other recent remotes
+		// Recombine: local + their remote counterparts + other recent remotes.
+		//nolint:gocritic // appendAssign is intentional here: localBranches is not reused afterward.
 		branches = append(localBranches, remoteCounterparts...)
 		branches = append(branches, remoteBranches...)
 	}
@@ -2950,11 +2947,11 @@ func parseBookmarkListRemoteLine(trimmed string) (remote string, info string, ok
 	}
 	if paren := strings.Index(rest, " ("); paren >= 0 {
 		remote = strings.TrimSpace(rest[:paren])
-		close := strings.Index(rest, "):")
-		if close < 0 {
+		closeIdx := strings.Index(rest, "):")
+		if closeIdx < 0 {
 			return "", "", false
 		}
-		info = strings.TrimSpace(rest[close+2:])
+		info = strings.TrimSpace(rest[closeIdx+2:])
 		return remote, info, true
 	}
 	colon := strings.Index(rest, ":")
@@ -2979,11 +2976,11 @@ func jjOriginQualifierAheadBehind(originRemoteLine string) (ahead, behind int, o
 	if !strings.HasPrefix(after, "(") {
 		return 0, 0, false
 	}
-	close := strings.Index(after, "):")
-	if close < 0 {
+	closeIdx := strings.Index(after, "):")
+	if closeIdx < 0 {
 		return 0, 0, false
 	}
-	inner := after[1:close]
+	inner := after[1:closeIdx]
 	am := reAheadByJJ.FindStringSubmatch(inner)
 	bm := reBehindByJJ.FindStringSubmatch(inner)
 	if len(am) < 2 || len(bm) < 2 {

@@ -115,9 +115,9 @@ func parseOpenAIChatCompletionBody(respBody []byte) (string, error) {
 	return strings.TrimSpace(parsed.Choices[0].Message.Content), nil
 }
 
-func truncate(s string, max int) string {
-	if len(s) <= max {
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
 		return s
 	}
-	return s[:max] + "…"
+	return s[:maxLen] + "…"
 }

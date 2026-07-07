@@ -364,7 +364,7 @@ func (s *Service) getPullRequestsGraphQL(ctx context.Context, filterOpts PRFilte
 	// two was a large part of the multi-second tab load. The githubv4 client is safe for concurrent
 	// use and each goroutine fills its own result/error variables, so there's no shared state.
 	var (
-		openPRs, otherPRs []internal.GitHubPR
+		openPRs, otherPRs []internal.GitHubPR //nolint:prealloc // assigned wholesale by goroutines below, then combined once.
 		openErr, otherErr error
 		wg                sync.WaitGroup
 	)
@@ -410,7 +410,7 @@ func (s *Service) queryPullRequestsGraphQL(ctx context.Context, states []githubv
 					Number      int
 					Title       string
 					Body        string
-					Url         string
+					Url         string //nolint:revive // var-naming: maps to the GraphQL "url" field via githubv4 reflection; renaming breaks the query.
 					State       string
 					BaseRefName string
 					HeadRefName string
@@ -545,7 +545,7 @@ func (s *Service) getPullRequestsREST(ctx context.Context, filterOpts PRFilterOp
 	// paginated calls and running them in parallel cuts the fallback load time roughly in half.
 	showOthers := filterOpts.ShowMerged || filterOpts.ShowClosed
 	var (
-		openPRs, closedPRs []internal.GitHubPR
+		openPRs, closedPRs []internal.GitHubPR //nolint:prealloc // assigned wholesale by goroutines below, then combined once.
 		openErr, closedErr error
 		wg                 sync.WaitGroup
 	)
@@ -731,7 +731,7 @@ func (s *Service) getOpenPRForBranchGraphQL(ctx context.Context, branch string) 
 					Number      int
 					Title       string
 					Body        string
-					Url         string
+					Url         string //nolint:revive // var-naming: maps to the GraphQL "url" field via githubv4 reflection; renaming breaks the query.
 					State       string
 					BaseRefName string
 					HeadRefName string

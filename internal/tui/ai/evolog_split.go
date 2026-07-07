@@ -296,7 +296,7 @@ func runEvologSuggestLLM(reqID int, jjSvc *jj.Service, cfg *config.Config, entri
 		if len(clean) == 0 {
 			if nHunkRounds > 1 {
 				if strings.TrimSpace(note) != "" {
-					note = note + " (later hunk_peel_rounds dropped; first round empty after repair)"
+					note += " (later hunk_peel_rounds dropped; first round empty after repair)"
 				} else {
 					note = "later hunk_peel_rounds dropped; first round empty after repair"
 				}
@@ -314,7 +314,7 @@ func runEvologSuggestLLM(reqID int, jjSvc *jj.Service, cfg *config.Config, entri
 		}
 		if res.HunkPeelRoundsTruncated {
 			if strings.TrimSpace(msg.Rationale) != "" {
-				msg.Rationale = msg.Rationale + fmt.Sprintf(" — hunk_peel_rounds truncated to %d rounds", evologSplitMaxHunkPeelRounds)
+				msg.Rationale += fmt.Sprintf(" — hunk_peel_rounds truncated to %d rounds", evologSplitMaxHunkPeelRounds)
 			} else {
 				msg.Rationale = fmt.Sprintf("hunk_peel_rounds truncated to %d rounds", evologSplitMaxHunkPeelRounds)
 			}
@@ -352,22 +352,22 @@ func runEvologSuggestLLM(reqID int, jjSvc *jj.Service, cfg *config.Config, entri
 // for the full string (that can freeze the UI thread on multi-megabyte prompts).
 func TrimEvologUserPrompt(s string) string {
 	out := strings.TrimSpace(s)
-	const max = evologSplitMaxPromptRunes
+	const maxRunes = evologSplitMaxPromptRunes
 	n := 0
 	for range out {
 		n++
-		if n > max {
-			return truncateEvologUserPromptRunes(out, max)
+		if n > maxRunes {
+			return truncateEvologUserPromptRunes(out, maxRunes)
 		}
 	}
 	return out
 }
 
-func truncateEvologUserPromptRunes(s string, max int) string {
+func truncateEvologUserPromptRunes(s string, maxRunes int) string {
 	var b strings.Builder
 	n := 0
 	for _, r := range s {
-		if n >= max {
+		if n >= maxRunes {
 			b.WriteString("\n…(truncated for size)")
 			b.WriteString("\n(AI: early sections are preserved; tail may be missing. Use full ## Rows; prefer broad split_base_commit_ids + hunk_peel_rounds when the change is mixed.)\n")
 			return b.String()
