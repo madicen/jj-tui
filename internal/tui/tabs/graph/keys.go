@@ -70,6 +70,7 @@ func (m GraphModel) handleKeyMsg(msg tea.KeyMsg) (GraphModel, *Request, tea.Cmd)
 		if m.selectionMode == SelectionRebaseDestination {
 			m.selectionMode = SelectionNormal
 			m.rebaseSourceCommit = -1
+			m.duplicateMode = false
 		}
 		if m.selectionMode == SelectionMergeSource {
 			m.selectionMode = SelectionNormal
@@ -130,6 +131,10 @@ func (m GraphModel) handleKeyMsg(msg tea.KeyMsg) (GraphModel, *Request, tea.Cmd)
 		// the current graph selection — only on having a loaded repository.
 		if m.repository != nil {
 			return m, &Request{StartAbsorb: true}, nil
+		}
+	case "D":
+		if m.repository != nil && m.selectedCommit >= 0 && m.selectedCommit < len(m.repository.Graph.Commits) {
+			return m, &Request{Duplicate: true}, nil
 		}
 	case "m":
 		if m.repository != nil {

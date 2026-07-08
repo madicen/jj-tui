@@ -110,8 +110,11 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 	var fileLines []string
 
 	if data.InRebaseMode {
-		rebaseHeader := RebaseHeaderStyle.
-			Render("🔀 REBASE MODE - Select destination commit (Esc to cancel)")
+		headerText := "🔀 REBASE MODE - Select destination commit (Esc to cancel)"
+		if data.DuplicateMode {
+			headerText = "⧉ DUPLICATE MODE - Select destination commit (Esc to cancel)"
+		}
+		rebaseHeader := RebaseHeaderStyle.Render(headerText)
 		graphLines = append(graphLines, rebaseHeader)
 		graphLines = append(graphLines, "")
 	}

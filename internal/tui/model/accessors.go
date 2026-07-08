@@ -69,6 +69,11 @@ func (m *Model) GetRebaseSourceCommit() int {
 	return m.graphTabModel.GetRebaseSourceCommit()
 }
 
+// GetDuplicateMode reports whether the graph's destination picker is duplicating.
+func (m *Model) GetDuplicateMode() bool {
+	return m.graphTabModel.GetDuplicateMode()
+}
+
 // GetMergeTargetCommit returns the graph tab's merge target commit index.
 func (m *Model) GetMergeTargetCommit() int {
 	return m.graphTabModel.GetMergeTargetCommit()

@@ -13,6 +13,7 @@ type ContextProvider interface {
 	GetRepository() *internal.Repository
 	GetSelectedCommit() int
 	GetRebaseSourceCommit() int
+	GetDuplicateMode() bool
 	GetMergeTargetCommit() int
 	GetChangedFiles() []jj.ChangedFile
 	GetChangedFilesCommitID() string
@@ -34,6 +35,7 @@ func BuildRequestContextFrom(p ContextProvider) *RequestContext {
 		Repository:           p.GetRepository(),
 		SelectedCommit:       p.GetSelectedCommit(),
 		RebaseSourceCommit:   p.GetRebaseSourceCommit(),
+		DuplicateMode:        p.GetDuplicateMode(),
 		MergeTargetCommit:    p.GetMergeTargetCommit(),
 		ChangedFiles:         p.GetChangedFiles(),
 		ChangedFilesCommitID: p.GetChangedFilesCommitID(),
@@ -53,6 +55,7 @@ type RequestContext struct {
 	Repository           *internal.Repository
 	SelectedCommit       int
 	RebaseSourceCommit   int
+	DuplicateMode        bool
 	MergeTargetCommit    int
 	ChangedFiles         []jj.ChangedFile
 	ChangedFilesCommitID string
@@ -70,6 +73,7 @@ type ContextInput struct {
 	Repository           *internal.Repository
 	SelectedCommit       int
 	RebaseSourceCommit   int
+	DuplicateMode        bool
 	MergeTargetCommit    int
 	ChangedFiles         []jj.ChangedFile
 	ChangedFilesCommitID string
@@ -91,6 +95,7 @@ func BuildRequestContext(input *ContextInput) *RequestContext {
 		Repository:           input.Repository,
 		SelectedCommit:       input.SelectedCommit,
 		RebaseSourceCommit:   input.RebaseSourceCommit,
+		DuplicateMode:        input.DuplicateMode,
 		MergeTargetCommit:    input.MergeTargetCommit,
 		ChangedFiles:         input.ChangedFiles,
 		ChangedFilesCommitID: input.ChangedFilesCommitID,
@@ -123,6 +128,7 @@ func BuildRequestContextFromApp(app *state.AppState, m *GraphModel) *RequestCont
 		Repository:           app.Repository,
 		SelectedCommit:       m.GetSelectedCommit(),
 		RebaseSourceCommit:   m.GetRebaseSourceCommit(),
+		DuplicateMode:        m.GetDuplicateMode(),
 		MergeTargetCommit:    m.GetMergeTargetCommit(),
 		ChangedFiles:         m.GetChangedFiles(),
 		ChangedFilesCommitID: m.GetChangedFilesCommitID(),

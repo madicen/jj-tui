@@ -183,6 +183,12 @@ type Request struct {
 	ResolveBookmarkConflict bool
 	// StartAbsorb: preview `jj absorb` (dry run) then open a confirm modal in the main model.
 	StartAbsorb bool
+	// Duplicate: duplicate the selected revision in place (onto its existing parents).
+	Duplicate bool
+	// StartDuplicateOnto: begin the destination picker to duplicate the selected revision onto a chosen commit.
+	StartDuplicateOnto bool
+	// Backout: apply the reverse of the selected revision on top of the working copy (jj backout/revert).
+	Backout bool
 }
 
 // Cmd returns a tea.Cmd that sends this request to the program.
@@ -208,6 +214,7 @@ const (
 	FollowUpStartEvologSplit
 	FollowUpResolveBookmarkConflict
 	FollowUpViewFileDiff
+	FollowUpStartDuplicateMode
 )
 
 // Result is returned by HandleRequest. Main sets status from Status, runs Cmd if set, and performs the FollowUp action.
@@ -248,4 +255,10 @@ func RebaseModeStartMessage(shortID string) string {
 // MergeModeStartMessage returns the status message when entering merge mode.
 func MergeModeStartMessage(shortID string) string {
 	return fmt.Sprintf("Select source to merge into %s (Esc to cancel)", shortID)
+}
+
+// DuplicateModeStartMessage returns the status message when entering the
+// duplicate destination picker.
+func DuplicateModeStartMessage(shortID string) string {
+	return fmt.Sprintf("Select destination to duplicate %s onto (Esc to cancel)", shortID)
 }

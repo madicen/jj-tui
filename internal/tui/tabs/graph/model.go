@@ -44,6 +44,9 @@ type GraphModel struct {
 	// Rebase mode state
 	selectionMode      SelectionMode
 	rebaseSourceCommit int // Index of commit being rebased
+	// duplicateMode reuses the rebase destination picker to duplicate the source
+	// commit onto the chosen destination instead of rebasing it.
+	duplicateMode bool
 
 	// Merge mode state: index of the commit being merged into (the destination/target).
 	mergeTargetCommit int
@@ -96,6 +99,7 @@ type GraphData struct {
 	Repository         *internal.Repository
 	SelectedCommit     int
 	InRebaseMode       bool            // True when selecting rebase destination
+	DuplicateMode      bool            // True when the destination picker is duplicating (not rebasing)
 	RebaseSourceCommit int             // Index of commit being rebased
 	InMergeMode        bool            // True when selecting source to merge into the target
 	MergeTargetCommit  int             // Index of commit being merged into
@@ -630,6 +634,7 @@ func (m *GraphModel) buildGraphData() GraphData {
 		Repository:          m.repository,
 		SelectedCommit:      m.selectedCommit,
 		InRebaseMode:        m.selectionMode == SelectionRebaseDestination,
+		DuplicateMode:       m.duplicateMode && m.selectionMode == SelectionRebaseDestination,
 		RebaseSourceCommit:  m.rebaseSourceCommit,
 		InMergeMode:         m.selectionMode == SelectionMergeSource,
 		MergeTargetCommit:   m.mergeTargetCommit,
@@ -839,13 +844,27 @@ func (m *GraphModel) StartRebaseMode(sourceCommitIdx int) {
 	m.rebaseDragHoverDest = -1
 }
 
-// CancelRebaseMode cancels rebase mode.
+// CancelRebaseMode cancels rebase mode (and the duplicate variant that reuses it).
 func (m *GraphModel) CancelRebaseMode() {
 	m.selectionMode = SelectionNormal
 	m.rebaseSourceCommit = -1
+	m.duplicateMode = false
 	m.rebasePressAnchor = -1
 	m.rebaseDragSource = -1
 	m.rebaseDragHoverDest = -1
+}
+
+// StartDuplicateMode starts the destination picker in "duplicate" mode: it reuses
+// the rebase destination-selection UI/keys/mouse, but confirming duplicates the
+// source commit onto the chosen destination instead of rebasing it.
+func (m *GraphModel) StartDuplicateMode(sourceCommitIdx int) {
+	m.StartRebaseMode(sourceCommitIdx)
+	m.duplicateMode = true
+}
+
+// GetDuplicateMode reports whether the destination picker is in duplicate mode.
+func (m *GraphModel) GetDuplicateMode() bool {
+	return m.duplicateMode
 }
 
 // IsInRebaseMode returns whether the graph is in rebase mode.

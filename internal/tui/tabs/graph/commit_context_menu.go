@@ -45,6 +45,11 @@ func commitContextMenuItems() []commitContextMenuItem {
 		{Label: "Rebase", Key: "r", Request: Request{StartRebaseMode: true}, Mutable: true},
 		{Label: "Merge from", Key: "M", Request: Request{StartMergeMode: true}, Mutable: true},
 		{Label: "Abandon", Key: "a", Request: Request{Abandon: true}, Mutable: true},
+		// Duplicate and Backout can act on immutable commits too (the new commit is
+		// mutable), so they are not gated on Mutable.
+		{Label: "Duplicate", Key: "D", Request: Request{Duplicate: true}},
+		{Label: "Duplicate onto…", Key: "", Request: Request{StartDuplicateOnto: true}},
+		{Label: "Backout", Key: "", Request: Request{Backout: true}},
 		{Label: "Bookmark", Key: "m", Request: Request{CreateBookmark: true}, Mutable: true},
 	}
 }

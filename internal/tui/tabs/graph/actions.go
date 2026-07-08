@@ -69,16 +69,34 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 	if r.StartAbsorb {
 		return Result{Cmd: AbsorbDryRunCmd(ctx.JJService), SuccessStatus: "Previewing absorb…", Loading: true}
 	}
+	if r.Duplicate {
+		cmd, status := executeDuplicate(ctx)
+		return Result{Cmd: cmd, Status: status, SuccessStatus: "Duplicating commit…", Loading: true}
+	}
+	if r.StartDuplicateOnto {
+		if !ctx.IsSelectedCommitValid() {
+			return Result{}
+		}
+		return Result{FollowUp: FollowUpStartDuplicateMode}
+	}
+	if r.Backout {
+		cmd, status := executeBackout(ctx)
+		return Result{Cmd: cmd, Status: status, SuccessStatus: "Backing out commit…", Loading: true}
+	}
 	if r.PerformRebase {
 		cmd, status := executePerformRebase(r.RebaseDestIndex, ctx)
 		if status != "" {
 			return Result{Status: status}
 		}
+		verb := "Rebasing"
+		if ctx.DuplicateMode {
+			verb = "Duplicating"
+		}
 		if cmd != nil && ctx.RebaseSourceCommit >= 0 && ctx.RebaseSourceCommit < len(ctx.Repository.Graph.Commits) &&
 			r.RebaseDestIndex >= 0 && r.RebaseDestIndex < len(ctx.Repository.Graph.Commits) {
 			src := ctx.Repository.Graph.Commits[ctx.RebaseSourceCommit]
 			dst := ctx.Repository.Graph.Commits[r.RebaseDestIndex]
-			return Result{Cmd: cmd, SuccessStatus: fmt.Sprintf("Rebasing %s onto %s...", src.ShortID, dst.ShortID), PerformRebase: true, Loading: true}
+			return Result{Cmd: cmd, SuccessStatus: fmt.Sprintf("%s %s onto %s...", verb, src.ShortID, dst.ShortID), PerformRebase: true, Loading: true}
 		}
 		return Result{Cmd: cmd, PerformRebase: true, Loading: true}
 	}
@@ -372,17 +390,47 @@ func executeAbandon(ctx *RequestContext) (tea.Cmd, string) {
 	return Abandon(ctx.JJService, commit.ChangeID), ""
 }
 
+func executeDuplicate(ctx *RequestContext) (tea.Cmd, string) {
+	if !ctx.IsSelectedCommitValid() {
+		return nil, ""
+	}
+	if ctx.JJService == nil {
+		return nil, "Cannot duplicate: not in a jj repository"
+	}
+	commit := ctx.Repository.Graph.Commits[ctx.SelectedCommit]
+	return Duplicate(ctx.JJService, commit.ChangeID, ""), ""
+}
+
+func executeBackout(ctx *RequestContext) (tea.Cmd, string) {
+	if !ctx.IsSelectedCommitValid() {
+		return nil, ""
+	}
+	if ctx.JJService == nil {
+		return nil, "Cannot back out: not in a jj repository"
+	}
+	commit := ctx.Repository.Graph.Commits[ctx.SelectedCommit]
+	return Backout(ctx.JJService, commit.ChangeID), ""
+}
+
 func executePerformRebase(destIndex int, ctx *RequestContext) (tea.Cmd, string) {
 	if !ctx.IsSelectedCommitValid() || ctx.RebaseSourceCommit < 0 ||
 		ctx.RebaseSourceCommit >= len(ctx.Repository.Graph.Commits) ||
 		destIndex < 0 || destIndex >= len(ctx.Repository.Graph.Commits) {
 		return nil, ""
 	}
-	if ctx.RebaseSourceCommit == destIndex {
-		return nil, "Cannot rebase commit onto itself"
-	}
 	sourceCommit := ctx.Repository.Graph.Commits[ctx.RebaseSourceCommit]
 	destCommit := ctx.Repository.Graph.Commits[destIndex]
+	// The destination picker is shared with duplicate; duplicate onto the source's
+	// own position is meaningless, but so is rebasing onto itself.
+	if ctx.RebaseSourceCommit == destIndex {
+		if ctx.DuplicateMode {
+			return nil, "Cannot duplicate a commit onto itself"
+		}
+		return nil, "Cannot rebase commit onto itself"
+	}
+	if ctx.DuplicateMode {
+		return Duplicate(ctx.JJService, sourceCommit.ChangeID, destCommit.ChangeID), ""
+	}
 	return Rebase(ctx.JJService, sourceCommit.ChangeID, destCommit.ChangeID), ""
 }
 
@@ -618,6 +666,12 @@ func ApplyResult(res Result, graphModel *GraphModel, ctx *RequestContext, app *s
 			app.StatusMessage = MergeModeStartMessage(ctx.Repository.Graph.Commits[ctx.SelectedCommit].ShortID)
 		}
 		return nil
+	case FollowUpStartDuplicateMode:
+		if ctx != nil && ctx.Repository != nil && ctx.SelectedCommit >= 0 && ctx.SelectedCommit < len(ctx.Repository.Graph.Commits) {
+			graphModel.StartDuplicateMode(ctx.SelectedCommit)
+			app.StatusMessage = DuplicateModeStartMessage(ctx.Repository.Graph.Commits[ctx.SelectedCommit].ShortID)
+		}
+		return nil
 	case FollowUpCreateBookmark:
 		return state.NavigateTarget{Kind: state.NavigateCreateBookmark}.Cmd()
 	case FollowUpShowEmptyDescWarning:
@@ -764,6 +818,34 @@ func Rebase(svc *jj.Service, sourceChangeID, destChangeID string) tea.Cmd {
 	return func() tea.Msg {
 		if err := svc.RebaseCommit(context.Background(), sourceChangeID, destChangeID); err != nil {
 			return util.ErrorMsg{Err: fmt.Errorf("failed to rebase: %w", err)}
+		}
+		repo, err := svc.GetRepository(context.Background(), "")
+		if err != nil {
+			return util.ErrorMsg{Err: err}
+		}
+		return RepositoryLoadedMsg{Repository: repo}
+	}
+}
+
+// Duplicate copies the source revision, optionally onto a destination commit.
+func Duplicate(svc *jj.Service, sourceChangeID, destChangeID string) tea.Cmd {
+	return func() tea.Msg {
+		if err := svc.DuplicateCommit(context.Background(), sourceChangeID, destChangeID); err != nil {
+			return util.ErrorMsg{Err: fmt.Errorf("failed to duplicate: %w", err)}
+		}
+		repo, err := svc.GetRepository(context.Background(), "")
+		if err != nil {
+			return util.ErrorMsg{Err: err}
+		}
+		return RepositoryLoadedMsg{Repository: repo}
+	}
+}
+
+// Backout applies the reverse of the source revision on top of the working copy.
+func Backout(svc *jj.Service, sourceChangeID string) tea.Cmd {
+	return func() tea.Msg {
+		if err := svc.BackoutCommit(context.Background(), sourceChangeID); err != nil {
+			return util.ErrorMsg{Err: fmt.Errorf("failed to back out: %w", err)}
 		}
 		repo, err := svc.GetRepository(context.Background(), "")
 		if err != nil {
