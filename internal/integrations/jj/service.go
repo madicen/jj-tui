@@ -45,6 +45,11 @@ type Service struct {
 	// inject a fake via NewServiceWithRunner. Hand-constructed Services (e.g.
 	// &Service{RepoPath: …} in tests) fall back to a lazily-built execRunner.
 	cmdRunner Runner
+
+	// backoutVerb* cache the reverse-revision subcommand for this jj build
+	// (`backout` on older jj, renamed to `revert` in newer jj); see caps.go.
+	backoutVerbOnce sync.Once
+	backoutVerbVal  string
 }
 
 // runner returns the installed Runner, lazily building a default execRunner for

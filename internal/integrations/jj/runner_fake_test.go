@@ -3,6 +3,7 @@ package jj_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -74,6 +75,89 @@ feature/x: zzzzzzzz def67890 wip
 	}
 	if !haveMainLocal || !haveMainOrigin || !haveFeature {
 		t.Fatalf("parsed branches missing entries: %+v", branches)
+	}
+}
+
+// TestBackoutVerbDetection verifies BackoutCommit probes `jj backout --help`
+// and picks the right subcommand + argv: legacy jj keeps `backout` (defaults
+// onto @), while newer jj that renamed it uses `revert -r X --onto @`.
+func TestBackoutVerbDetection(t *testing.T) {
+	cases := []struct {
+		name           string
+		backoutHelpErr error
+		wantArgs       []string
+	}{
+		{
+			name:           "old jj has backout",
+			backoutHelpErr: nil,
+			wantArgs:       []string{"backout", "-r", "abc"},
+		},
+		{
+			name:           "new jj renamed to revert",
+			backoutHelpErr: errors.New("error: unrecognized subcommand 'backout'"),
+			wantArgs:       []string{"revert", "-r", "abc", "--onto", "@"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var ranArgs []string
+			helpProbes := 0
+			fake := &mock.FakeRunner{
+				RunOutputFn: func(_ context.Context, _ jj.RunOpts, args ...string) (string, error) {
+					if len(args) >= 2 && args[0] == "backout" && args[1] == "--help" {
+						helpProbes++
+						return "", tc.backoutHelpErr
+					}
+					return "", nil
+				},
+				RunFn: func(_ context.Context, _ jj.RunOpts, args ...string) error {
+					ranArgs = append([]string(nil), args...)
+					return nil
+				},
+			}
+			svc := jj.NewServiceWithRunner("/fake/repo", fake)
+
+			if err := svc.BackoutCommit(context.Background(), "abc"); err != nil {
+				t.Fatalf("BackoutCommit: %v", err)
+			}
+			if !reflect.DeepEqual(ranArgs, tc.wantArgs) {
+				t.Fatalf("ran args = %v, want %v", ranArgs, tc.wantArgs)
+			}
+
+			// A second call must reuse the cached verb rather than probing again.
+			if err := svc.BackoutCommit(context.Background(), "abc"); err != nil {
+				t.Fatalf("BackoutCommit (second): %v", err)
+			}
+			if helpProbes != 1 {
+				t.Fatalf("expected the backout capability to be probed once, got %d", helpProbes)
+			}
+		})
+	}
+}
+
+// TestDuplicateArgs verifies DuplicateCommit passes -r, and -d only when a
+// destination is supplied.
+func TestDuplicateArgs(t *testing.T) {
+	run := func(dest string) []string {
+		var ranArgs []string
+		fake := &mock.FakeRunner{
+			RunFn: func(_ context.Context, _ jj.RunOpts, args ...string) error {
+				ranArgs = append([]string(nil), args...)
+				return nil
+			},
+		}
+		svc := jj.NewServiceWithRunner("/fake/repo", fake)
+		if err := svc.DuplicateCommit(context.Background(), "abc", dest); err != nil {
+			t.Fatalf("DuplicateCommit(dest=%q): %v", dest, err)
+		}
+		return ranArgs
+	}
+
+	if got, want := run(""), []string{"duplicate", "-r", "abc"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("no-dest args = %v, want %v", got, want)
+	}
+	if got, want := run("main"), []string{"duplicate", "-r", "abc", "-d", "main"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("with-dest args = %v, want %v", got, want)
 	}
 }
 

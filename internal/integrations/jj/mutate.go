@@ -300,6 +300,24 @@ func (s *Service) MoveFileToChild(ctx context.Context, commitID, filePath string
 	return nil
 }
 
+// DuplicateCommit creates a copy of the given revision. When dest is non-empty
+// the duplicate is placed onto that destination (jj duplicate -r X -d DEST);
+// otherwise it is duplicated in place onto the revision's existing parents.
+func (s *Service) DuplicateCommit(ctx context.Context, rev, dest string) error {
+	args := []string{"duplicate", "-r", rev}
+	if strings.TrimSpace(dest) != "" {
+		args = append(args, "-d", dest)
+	}
+	return s.runJJ(ctx, args...)
+}
+
+// BackoutCommit applies the reverse of the given revision on top of the working
+// copy, creating a new commit that undoes it. The underlying jj subcommand is
+// `backout` or `revert` depending on the installed jj version (see backoutVerb).
+func (s *Service) BackoutCommit(ctx context.Context, rev string) error {
+	return s.runJJ(ctx, backoutOrRevertArgs(s.backoutVerb(ctx), rev)...)
+}
+
 // RevisionImmutable reports whether the given revision is immutable in jj's config.
 func (s *Service) RevisionImmutable(ctx context.Context, revision string) (bool, error) {
 	out, err := s.runJJOutputNoHistory(ctx, "log", "-r", revision, "--no-graph", "-T", `if(immutable, "true", "false")`, "--limit", "1")
