@@ -33,6 +33,12 @@ type Runner interface {
 	// RunOutput executes jj and returns its stdout only; stderr is captured
 	// separately so jj hints/warnings do not contaminate parsed output.
 	RunOutput(ctx context.Context, opts RunOpts, args ...string) (string, error)
+	// RunCombined executes jj and returns merged stdout+stderr on both success
+	// and failure. PLAN(P4.2): needed by absorb, whose human-readable summary
+	// ("Absorbed changes into N revisions: …") is written to stderr; RunOutput
+	// would drop it. Kept as a distinct method so RunOutput's stdout-only
+	// contract (relied on by parsers) is unaffected.
+	RunCombined(ctx context.Context, opts RunOpts, args ...string) (string, error)
 }
 
 // execRunner is the production Runner: it shells out to the jj binary and
@@ -143,6 +149,41 @@ func (r *execRunner) RunOutput(ctx context.Context, opts RunOpts, args ...string
 		Success:   true,
 	})
 	return stdout.String(), nil
+}
+
+// RunCombined executes jj and returns merged stdout+stderr regardless of exit
+// status, so callers can display or parse jj's status output (which mostly goes
+// to stderr). History logging matches Run's behavior.
+func (r *execRunner) RunCombined(ctx context.Context, opts RunOpts, args ...string) (string, error) {
+	merged := jjMergeGlobalArgs(opts.Global, args)
+	cmdStr := "jj " + strings.Join(merged, " ")
+	startTime := time.Now()
+
+	cmd := exec.CommandContext(ctx, "jj", merged...)
+	cmd.Dir = r.repoPath
+	if len(opts.Env) > 0 {
+		cmd.Env = append(append([]string{}, os.Environ()...), opts.Env...)
+	}
+	out, err := cmd.CombinedOutput()
+	duration := time.Since(startTime)
+
+	entry := CommandHistoryEntry{
+		Command:   cmdStr,
+		Timestamp: startTime,
+		Duration:  duration,
+		Success:   err == nil,
+	}
+	if err != nil {
+		errMsg := extractErrorMessage(string(out))
+		if errMsg == "" {
+			errMsg = err.Error()
+		}
+		entry.Error = errMsg
+		r.log(opts, entry)
+		return string(out), fmt.Errorf("%s", errMsg)
+	}
+	r.log(opts, entry)
+	return string(out), nil
 }
 
 // jjMergeGlobalArgs prepends global jj flags (placed before the subcommand)

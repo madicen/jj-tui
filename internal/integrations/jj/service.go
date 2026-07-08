@@ -166,6 +166,12 @@ func (s *Service) runJJOutput(ctx context.Context, args ...string) (string, erro
 	return s.runner().RunOutput(ctx, RunOpts{}, args...)
 }
 
+// runJJCombined executes a jj command and returns merged stdout+stderr. Used for
+// commands whose useful summary is written to stderr (e.g. absorb).
+func (s *Service) runJJCombined(ctx context.Context, args ...string) (string, error) {
+	return s.runner().RunCombined(ctx, RunOpts{}, args...)
+}
+
 // isJJRepo checks if a directory is a jj repository
 func isJJRepo(path string) bool {
 	jjDir := filepath.Join(path, ".jj")

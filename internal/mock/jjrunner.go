@@ -25,6 +25,8 @@ type FakeRunner struct {
 	RunOutputFn func(ctx context.Context, opts jj.RunOpts, args ...string) (string, error)
 	// RunFn handles Run calls. If nil, Run returns nil.
 	RunFn func(ctx context.Context, opts jj.RunOpts, args ...string) error
+	// RunCombinedFn handles RunCombined calls. If nil, RunCombined returns "" and nil.
+	RunCombinedFn func(ctx context.Context, opts jj.RunOpts, args ...string) (string, error)
 
 	Calls []FakeRunnerCall
 }
@@ -45,6 +47,15 @@ func (f *FakeRunner) RunOutput(ctx context.Context, opts jj.RunOpts, args ...str
 	f.Calls = append(f.Calls, FakeRunnerCall{Opts: opts, Args: append([]string(nil), args...), Output: true})
 	if f.RunOutputFn != nil {
 		return f.RunOutputFn(ctx, opts, args...)
+	}
+	return "", nil
+}
+
+// RunCombined implements jj.Runner.
+func (f *FakeRunner) RunCombined(ctx context.Context, opts jj.RunOpts, args ...string) (string, error) {
+	f.Calls = append(f.Calls, FakeRunnerCall{Opts: opts, Args: append([]string(nil), args...), Output: true})
+	if f.RunCombinedFn != nil {
+		return f.RunCombinedFn(ctx, opts, args...)
 	}
 	return "", nil
 }
