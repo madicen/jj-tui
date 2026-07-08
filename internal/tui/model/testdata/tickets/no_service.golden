@@ -1,0 +1,40 @@
+[48;2;31;40;55m [0m[38;2;249;250;251;48;2;31;40;55m[1;38;2;126;0;175m jj-tui  [0m        [38;2;156;163;175mGraph (g)[0m    [38;2;156;163;175mPRs (p)[0m  [48;2;126;0;175m  [0m[38;2;249;250;251;48;2;126;0;175mTickets (t)[0m[48;2;126;0;175m  [0m  [38;2;156;163;175mBranches (b)[0m    [38;2;156;163;175mSettings (,)[0m    [38;2;156;163;175mHelp (h)[0m  [0m 
+                                                                                                    
+[1;38;2;126;0;175mTicket Integration[0m                                                                                  
+                                                                                                    
+No ticket service is connected. Configure either Jira or Codecks in Settings (,):                   
+                                                                                                    
+Jira Setup:                                                                                         
+   export JIRA_URL=https://your-domain.atlassian.net                                                
+   export JIRA_USER=your-email@example.com                                                          
+   export JIRA_TOKEN=your_api_token                                                                 
+                                                                                                    
+Codecks Setup:                                                                                      
+   export CODECKS_SUBDOMAIN=your-team                                                               
+   export CODECKS_TOKEN=your_token  # (from browser 'at' cookie)                                    
+                                                                                                    
+Press ',' to open Settings, or 'g' to return to the commit graph.                                   
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+[48;2;31;40;55m [0m[38;2;97;113;163;48;2;31;40;55mReady                                                                         ^r refresh │ ^q quit[0m[48;2;31;40;55m [0m

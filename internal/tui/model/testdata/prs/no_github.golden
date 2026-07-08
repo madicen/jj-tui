@@ -1,0 +1,40 @@
+[48;2;31;40;55m [0m[38;2;249;250;251;48;2;31;40;55m[1;38;2;126;0;175m jj-tui  [0m        [38;2;156;163;175mGraph (g)[0m  [48;2;126;0;175m  [0m[38;2;249;250;251;48;2;126;0;175mPRs (p)[0m[48;2;126;0;175m  [0m  [38;2;156;163;175mTickets (t)[0m    [38;2;156;163;175mBranches (b)[0m    [38;2;156;163;175mSettings (,)[0m    [38;2;156;163;175mHelp (h)[0m  [0m 
+                                                                                                    
+[1;38;2;126;0;175mGitHub Integration[0m                                                                                  
+                                                                                                    
+GitHub is not connected. To enable PR functionality:                                                
+                                                                                                    
+1. Open Settings (,) → GitHub and pick an API token source (saved, GITHUB_TOKEN, or GitHub CLI).    
+   Save settings; only that source is used (no automatic fallback).                                 
+                                                                                                    
+2. Make sure your repository has a GitHub remote                                                    
+                                                                                                    
+Press 'g' to return to the commit graph.                                                            
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+[48;2;31;40;55m [0m[38;2;97;113;163;48;2;31;40;55mReady                                                                         ^r refresh │ ^q quit[0m[48;2;31;40;55m [0m
