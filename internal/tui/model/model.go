@@ -405,6 +405,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.divergentModal = m.divergentModal.SetDimensions(m.width, m.height)
 		m.conflictModal = m.conflictModal.SetDimensions(m.width, m.height)
 		m.workspacesModal = m.workspacesModal.SetDimensions(m.width, m.height)
+		m.operationsModal = m.operationsModal.SetDimensions(m.width, m.height)
 		if len(cmds) > 0 {
 			return m, tea.Batch(cmds...)
 		}
@@ -472,7 +473,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleKeyMsg(msg)
 		}
 		// View-specific modals (divergent, bookmark conflict): route keys to handleKeyMsg so the modal gets them.
-		if m.appState.ViewMode == state.ViewDivergentCommit || m.appState.ViewMode == state.ViewBookmarkConflict || m.appState.ViewMode == state.ViewEvologSplit || m.appState.ViewMode == state.ViewFileDiff || m.appState.ViewMode == state.ViewWorkspaces {
+		if m.appState.ViewMode == state.ViewDivergentCommit || m.appState.ViewMode == state.ViewBookmarkConflict || m.appState.ViewMode == state.ViewEvologSplit || m.appState.ViewMode == state.ViewFileDiff || m.appState.ViewMode == state.ViewWorkspaces || m.appState.ViewMode == state.ViewOperations {
 			return m.handleKeyMsg(msg)
 		}
 		// Esc in Settings: close in-tab overlays (theme picker, cleanup confirm) first; otherwise leave settings.

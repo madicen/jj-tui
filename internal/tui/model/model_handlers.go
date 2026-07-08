@@ -15,6 +15,7 @@ import (
 	descedittab "github.com/madicen/jj-tui/internal/tui/tabs/descedit"
 	graphtab "github.com/madicen/jj-tui/internal/tui/tabs/graph"
 	"github.com/madicen/jj-tui/internal/tui/tabs/help/commandhistory"
+	operationstab "github.com/madicen/jj-tui/internal/tui/tabs/operations"
 	prformtab "github.com/madicen/jj-tui/internal/tui/tabs/prform"
 	prstab "github.com/madicen/jj-tui/internal/tui/tabs/prs"
 	settingstab "github.com/madicen/jj-tui/internal/tui/tabs/settings"
@@ -191,6 +192,14 @@ func (m *Model) handleNavigateToWorkspaces() (tea.Model, tea.Cmd) {
 	m.appState.Loading = true
 	m.appState.StatusMessage = "Loading workspaces…"
 	return m, workspacestab.LoadWorkspacesCmd(m.appState.JJService)
+}
+func (m *Model) handleNavigateToOperations() (tea.Model, tea.Cmd) {
+	if m.appState.JJService == nil {
+		return m, nil
+	}
+	m.appState.Loading = true
+	m.appState.StatusMessage = "Loading operations…"
+	return m, operationstab.LoadOperationsCmd(m.appState.JJService)
 }
 func (m *Model) handleNavigateToBranchesTab() (tea.Model, tea.Cmd) {
 	m.appState.ViewMode = state.ViewBranches

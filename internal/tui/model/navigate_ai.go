@@ -6,8 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen/jj-tui/internal/config"
-	"github.com/madicen/jj-tui/internal/tui/state"
 	aitab "github.com/madicen/jj-tui/internal/tui/ai"
+	"github.com/madicen/jj-tui/internal/tui/state"
 )
 
 // navigate_ai.go holds the AI-generation NavigateKind handler (commit

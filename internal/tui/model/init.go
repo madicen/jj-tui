@@ -23,6 +23,7 @@ import (
 	graphtab "github.com/madicen/jj-tui/internal/tui/tabs/graph"
 	helptab "github.com/madicen/jj-tui/internal/tui/tabs/help"
 	initrepotab "github.com/madicen/jj-tui/internal/tui/tabs/initrepo"
+	operationstab "github.com/madicen/jj-tui/internal/tui/tabs/operations"
 	prformtab "github.com/madicen/jj-tui/internal/tui/tabs/prform"
 	prstab "github.com/madicen/jj-tui/internal/tui/tabs/prs"
 	settingstab "github.com/madicen/jj-tui/internal/tui/tabs/settings"
@@ -71,6 +72,7 @@ func New(ctx context.Context) *Model {
 		desceditModal:    descedittab.NewModel(zm),
 		githubLoginModel: githublogintab.NewModel(zm),
 		workspacesModal:  workspacestab.NewModel(),
+		operationsModal:  operationstab.NewModel(),
 	}
 	m.errorModal.SetZoneManager(zm)
 	m.initRepoModel.SetZoneManager(zm)

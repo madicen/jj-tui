@@ -66,6 +66,10 @@ const (
 	NavigateAddWorkspace
 	NavigateForgetWorkspace
 	NavigateCloseWorkspaces
+	// Operation-log browser (P4.1): RestoreOperation runs `jj op restore <id>`
+	// and refreshes the graph; CloseOperations dismisses the modal.
+	NavigateRestoreOperation
+	NavigateCloseOperations
 	// Graph-originated cross-tab actions routed through main (P2.5) so the graph
 	// tab no longer imports sibling tabs directly. Main owns the sibling command
 	// construction; the graph tab only emits the intent + payload.
@@ -154,6 +158,10 @@ type NavigateTarget struct {
 	// Workspaces payload: WorkspacePath for NavigateAddWorkspace, WorkspaceName for NavigateForgetWorkspace.
 	WorkspacePath string
 	WorkspaceName string
+
+	// Operation-log payload: OperationID names the operation to restore for
+	// NavigateRestoreOperation.
+	OperationID string
 
 	// Graph-originated cross-tab payloads (P2.5). DeleteBookmarkName names the
 	// bookmark for NavigateDeleteBookmark. UpdatePR* carry the branch/commit and

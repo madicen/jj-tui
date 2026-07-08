@@ -29,6 +29,7 @@ import (
 	graphtab "github.com/madicen/jj-tui/internal/tui/tabs/graph"
 	helptab "github.com/madicen/jj-tui/internal/tui/tabs/help"
 	initrepotab "github.com/madicen/jj-tui/internal/tui/tabs/initrepo"
+	operationstab "github.com/madicen/jj-tui/internal/tui/tabs/operations"
 	prformtab "github.com/madicen/jj-tui/internal/tui/tabs/prform"
 	prstab "github.com/madicen/jj-tui/internal/tui/tabs/prs"
 	settingstab "github.com/madicen/jj-tui/internal/tui/tabs/settings"
@@ -105,6 +106,7 @@ type Model struct {
 	conflictModal    conflicttab.Model
 	divergentModal   divergenttab.Model
 	workspacesModal  workspacestab.Model
+	operationsModal  operationstab.Model
 	evologSplitModal evologsplittab.Model
 	// evologPostSplitDescribe is set when the user confirms split with “AI describe after split”; cleared after describe runs or on graph return.
 	evologPostSplitDescribe bool

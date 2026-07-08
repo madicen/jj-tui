@@ -26,6 +26,7 @@ import (
 	branchestab "github.com/madicen/jj-tui/internal/tui/tabs/branches"
 	prformtab "github.com/madicen/jj-tui/internal/tui/tabs/prform"
 	prstab "github.com/madicen/jj-tui/internal/tui/tabs/prs"
+	operationstab "github.com/madicen/jj-tui/internal/tui/tabs/operations"
 	ticketformtab "github.com/madicen/jj-tui/internal/tui/tabs/ticketform"
 	workspacestab "github.com/madicen/jj-tui/internal/tui/tabs/workspaces"
 )
@@ -114,6 +115,20 @@ func TestGoldenModalWorkspaces(t *testing.T) {
 	})
 	m = newModel.(*Model)
 	testutil.AssertGolden(t, "modal/workspaces", m.View())
+}
+
+func TestGoldenModalOperations(t *testing.T) {
+	m := newGoldenModel(t)
+	defer m.Close()
+	newModel, _ := m.Update(operationstab.OperationsLoadedMsg{
+		Operations: []jj.Operation{
+			{ID: "aaaa11112222", Description: "describe commit abcd1234", Time: "2026-07-07 22:56:26", User: "alice@host", IsCurrent: true},
+			{ID: "bbbb33334444", Description: "new empty commit", Time: "2026-07-07 22:56:15", User: "alice@host"},
+			{ID: "cccc55556666", Description: "snapshot working copy", Time: "2026-07-07 22:56:00", User: "alice@host"},
+		},
+	})
+	m = newModel.(*Model)
+	testutil.AssertGolden(t, "modal/operations", m.View())
 }
 
 func TestGoldenModalDescribe(t *testing.T) {

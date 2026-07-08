@@ -27,6 +27,7 @@ import (
 	graphtab "github.com/madicen/jj-tui/internal/tui/tabs/graph"
 	"github.com/madicen/jj-tui/internal/tui/tabs/help/commandhistory"
 	initrepotab "github.com/madicen/jj-tui/internal/tui/tabs/initrepo"
+	operationstab "github.com/madicen/jj-tui/internal/tui/tabs/operations"
 	prformtab "github.com/madicen/jj-tui/internal/tui/tabs/prform"
 	prstab "github.com/madicen/jj-tui/internal/tui/tabs/prs"
 	settingstab "github.com/madicen/jj-tui/internal/tui/tabs/settings"
@@ -665,6 +666,31 @@ func (m *Model) dispatchAsyncMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Reload the list so the modal reflects the change.
 		return m, workspacestab.LoadWorkspacesCmd(m.appState.JJService)
+	case operationstab.OperationsLoadedMsg:
+		m.appState.Loading = false
+		if msg.Err != nil {
+			return m, m.applyEffects(effShowError{msg.Err})
+		}
+		if m.appState.ViewMode == state.ViewOperations && m.operationsModal.IsShown() {
+			// Refresh in place without re-opening (preserves selection/scroll).
+			m.operationsModal.SetOperations(msg.Operations)
+		} else {
+			m.operationsModal = m.operationsModal.SetDimensions(m.width, m.height)
+			m.operationsModal.Show(msg.Operations)
+			m.appState.ViewMode = state.ViewOperations
+		}
+		m.appState.StatusMessage = "Operation log"
+		return m, nil
+	case operationstab.OperationRestoredMsg:
+		m.appState.Loading = false
+		if msg.Err != nil {
+			return m, m.applyEffects(effShowError{msg.Err})
+		}
+		if msg.StatusMessage != "" {
+			m.appState.StatusMessage = msg.StatusMessage
+		}
+		// Reload the graph so it reflects the restored operation.
+		return m, m.applyEffects(effReloadRepository{})
 	case graphtab.AbsorbPreviewReadyMsg:
 		m.appState.Loading = false
 		if msg.Err != nil {

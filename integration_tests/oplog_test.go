@@ -8,8 +8,12 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
+	"github.com/madicen/jj-tui/internal/tui"
+	"github.com/madicen/jj-tui/internal/tui/data"
+	"github.com/madicen/jj-tui/internal/tui/state"
 )
 
 // TestOperationLog_ListAndRestore performs three mutating operations, verifies
@@ -129,6 +133,63 @@ func TestOperationLog_ListAndRestore(t *testing.T) {
 		repoHasSummary(repoAfter.Graph.Commits, "op-three describe") {
 		t.Fatalf("restore to op-one should have removed op-two/op-three commits; got %s",
 			commitSummaries(repoAfter.Graph.Commits))
+	}
+}
+
+// TestOperationLog_ViewRendersInFixtureRepo opens the operation-log browser
+// (Ctrl+o) against a real jj repo and asserts the list renders with operation
+// content.
+func TestOperationLog_ViewRendersInFixtureRepo(t *testing.T) {
+	if _, err := exec.LookPath("jj"); err != nil {
+		t.Skip("jj not in PATH")
+	}
+	ctx := context.Background()
+
+	repo := NewTestRepository(t)
+	defer repo.Cleanup()
+
+	// Produce a couple of easily-identifiable operations.
+	if err := repo.writeFile("a.txt", "hello\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.runCommand("jj", "describe", "-m", "seed commit"); err != nil {
+		t.Fatalf("jj describe: %v", err)
+	}
+	if err := repo.runCommand("jj", "new", "-m", "second"); err != nil {
+		t.Fatalf("jj new: %v", err)
+	}
+
+	jjSvc, err := jj.NewService(repo.Path)
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	m := tui.NewWithServices(ctx, jjSvc, nil)
+	defer m.Close()
+	m.SetDimensions(100, 40)
+	m.SetLoading(false)
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+
+	if loadCmd := data.LoadRepository(jjSvc); loadCmd != nil {
+		m = updateModel(m, loadCmd())
+	}
+
+	// Ctrl+o opens the operation-log browser: run the load cmd it returns.
+	m = runPendingCmds(m, tea.KeyMsg{Type: tea.KeyCtrlO}, 5)
+	if m.GetViewMode() != state.ViewOperations {
+		t.Fatalf("expected ViewOperations after Ctrl+o, got %v (status %q)", m.GetViewMode(), m.GetStatusMessage())
+	}
+
+	view := m.View()
+	if !containsString(view, "Operation log") {
+		t.Errorf("operation-log view should show the 'Operation log' title; snippet: %s", truncateView(view, 400))
+	}
+	if !containsString(view, "current") {
+		t.Errorf("operation-log view should flag the current operation; snippet: %s", truncateView(view, 600))
+	}
+	// The op-log descriptions jj generates for our mutations should be visible.
+	if !containsString(view, "describe commit") && !containsString(view, "new empty commit") {
+		t.Errorf("operation-log view should list operation descriptions; snippet: %s", truncateView(view, 800))
 	}
 }
 

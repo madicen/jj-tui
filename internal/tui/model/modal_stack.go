@@ -47,6 +47,7 @@ const (
 	ModalBookmarkConflict
 	ModalDivergent
 	ModalWorkspaces
+	ModalOperations
 	ModalEvologSplit
 	ModalFileDiff
 )
@@ -118,6 +119,8 @@ func viewModeModalKind(vm state.ViewMode) ModalKind {
 		return ModalDivergent
 	case state.ViewWorkspaces:
 		return ModalWorkspaces
+	case state.ViewOperations:
+		return ModalOperations
 	case state.ViewEvologSplit:
 		return ModalEvologSplit
 	case state.ViewFileDiff:

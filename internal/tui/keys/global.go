@@ -15,6 +15,7 @@ type GlobalKeyMap struct {
 	NavSettings   key.Binding
 	NavHelp       key.Binding
 	NavWorkspaces key.Binding
+	NavOperations key.Binding
 	Refresh       key.Binding
 	Undo          key.Binding
 	Redo          key.Binding
@@ -32,6 +33,7 @@ func DefaultGlobalKeyMap(overrides map[string]string) GlobalKeyMap {
 		NavSettings:   bind(overrides, "global.settings", ",", "Open settings", ","),
 		NavHelp:       bind(overrides, "global.help", "h/?", "Show this help", "h", "?"),
 		NavWorkspaces: bind(overrides, "global.workspaces", "w", "Manage workspaces", "w"),
+		NavOperations: bind(overrides, "global.operations", "^o", "Browse operation log", "ctrl+o"),
 		Refresh:       bind(overrides, "global.refresh", "^r", "Refresh", "ctrl+r"),
 		Undo:          bind(overrides, "global.undo", "^z", "Undo last jj operation", "ctrl+z"),
 		Redo:          bind(overrides, "global.redo", "^y", "Redo jj operation", "ctrl+y"),
@@ -49,6 +51,7 @@ func (k GlobalKeyMap) entries() []entry {
 		{"global.settings", k.NavSettings},
 		{"global.help", k.NavHelp},
 		{"global.workspaces", k.NavWorkspaces},
+		{"global.operations", k.NavOperations},
 		{"global.refresh", k.Refresh},
 		{"global.undo", k.Undo},
 		{"global.redo", k.Redo},

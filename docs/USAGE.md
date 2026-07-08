@@ -38,6 +38,7 @@ feature overview, install instructions, and screenshots, see the
 - `Ctrl+r`: Refresh current view
 - `Ctrl+z`: Undo last jj operation
 - `Ctrl+y`: Redo (undo the undo)
+- `Ctrl+o`: Browse the operation log (time-travel: restore to any past operation)
 - `g`: Switch to commit graph view
 - `p`: Switch to pull requests view
 - `t`: Switch to tickets view
@@ -440,6 +441,7 @@ keys include `enter`, `tab`, `esc`, `up`, `down`, `pgup`, `pgdown`, `home`,
 | global | `global.settings` | `,` | Open settings |
 | global | `global.help` | `h` / `?` | Show help |
 | global | `global.workspaces` | `w` | Manage workspaces |
+| global | `global.operations` | `ctrl+o` | Browse operation log |
 | global | `global.refresh` | `ctrl+r` | Refresh |
 | global | `global.undo` | `ctrl+z` | Undo last jj operation |
 | global | `global.redo` | `ctrl+y` | Redo jj operation |

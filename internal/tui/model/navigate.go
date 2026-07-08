@@ -30,7 +30,8 @@ func isRedoResettingNavigate(k state.NavigateKind) bool {
 		state.NavigateResolveConflict,
 		state.NavigateResolveDivergent,
 		state.NavigateRunInit,
-		state.NavigatePerformEvologSplit:
+		state.NavigatePerformEvologSplit,
+		state.NavigateRestoreOperation:
 		return true
 	default:
 		return false
@@ -53,6 +54,7 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		m.handleNavigateFileDiff,
 		m.handleNavigateConflictDivergent,
 		m.handleNavigateWorkspaces,
+		m.handleNavigateOperations,
 		m.handleNavigateInit,
 		m.handleNavigateRemote,
 		m.handleNavigateError,

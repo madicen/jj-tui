@@ -11,6 +11,7 @@ import (
 	evologsplittab "github.com/madicen/jj-tui/internal/tui/tabs/evologsplit"
 	filedifftab "github.com/madicen/jj-tui/internal/tui/tabs/filediff"
 	graphtab "github.com/madicen/jj-tui/internal/tui/tabs/graph"
+	operationstab "github.com/madicen/jj-tui/internal/tui/tabs/operations"
 	workspacestab "github.com/madicen/jj-tui/internal/tui/tabs/workspaces"
 )
 
@@ -152,6 +153,30 @@ func (m *Model) handleNavigateWorkspaces(t state.NavigateTarget) (tea.Model, tea
 		return m, workspacestab.ForgetWorkspaceCmd(m.appState.JJService, t.WorkspaceName), true
 	case state.NavigateCloseWorkspaces:
 		m.workspacesModal.Hide()
+		m.appState.ViewMode = state.ViewCommitGraph
+		if t.StatusMessage != "" {
+			m.appState.StatusMessage = t.StatusMessage
+		}
+		return m, nil, true
+	default:
+		return m, nil, false
+	}
+}
+
+// handleNavigateOperations covers the operation-log browser restore/close.
+func (m *Model) handleNavigateOperations(t state.NavigateTarget) (tea.Model, tea.Cmd, bool) {
+	switch t.Kind {
+	case state.NavigateRestoreOperation:
+		m.operationsModal.Hide()
+		m.appState.ViewMode = state.ViewCommitGraph
+		m.appState.Loading = true
+		m.appState.StatusMessage = "Restoring operation…"
+		return m, tea.Batch(
+			operationstab.RestoreOperationCmd(m.appState.JJService, t.OperationID),
+			m.startBusySpinnerCmd(),
+		), true
+	case state.NavigateCloseOperations:
+		m.operationsModal.Hide()
 		m.appState.ViewMode = state.ViewCommitGraph
 		if t.StatusMessage != "" {
 			m.appState.StatusMessage = t.StatusMessage

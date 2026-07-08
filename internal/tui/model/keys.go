@@ -67,6 +67,10 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		updated, cmd := m.workspacesModal.Update(msg)
 		m.workspacesModal = updated
 		return m, cmd
+	case state.ViewOperations:
+		updated, cmd := m.operationsModal.Update(msg)
+		m.operationsModal = updated
+		return m, cmd
 	case state.ViewEvologSplit:
 		updated, cmd := m.evologSplitModal.Update(msg)
 		m.evologSplitModal = updated
@@ -100,6 +104,8 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleNavigateToHelpTab()
 	case key.Matches(msg, m.keys.NavWorkspaces):
 		return m.handleNavigateToWorkspaces()
+	case key.Matches(msg, m.keys.NavOperations):
+		return m.handleNavigateToOperations()
 	case key.Matches(msg, m.keys.Refresh):
 		return m, m.refreshRepository()
 	case key.Matches(msg, m.keys.Undo):

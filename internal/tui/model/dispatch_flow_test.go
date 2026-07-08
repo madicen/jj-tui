@@ -217,8 +217,11 @@ func TestChromedSlotZOrderAdditionalCombos(t *testing.T) {
 		wantKey string
 	}{
 		{
-			name:    "error_alone_on_graph",
-			apply:   func(m *Model) { m.appState.ViewMode = state.ViewCommitGraph; m.errorModal.SetError(fmt.Errorf("x"), false, "") },
+			name: "error_alone_on_graph",
+			apply: func(m *Model) {
+				m.appState.ViewMode = state.ViewCommitGraph
+				m.errorModal.SetError(fmt.Errorf("x"), false, "")
+			},
 			wantKey: "error",
 		},
 		{
