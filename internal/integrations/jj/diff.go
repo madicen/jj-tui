@@ -53,6 +53,7 @@ type ChangedFile struct {
 	LinesAdded   int    // meaningful when StatsOK
 	LinesRemoved int    // meaningful when StatsOK
 	StatsOK      bool   // true when counts came from jj log template (single rev) or parsed git diff (from–to)
+	Conflicted   bool   // true when jj resolve --list reports this path at the revision
 }
 
 // Template for one revision: per-file path, status char, lines added, lines removed (tab-separated lines).
@@ -61,14 +62,21 @@ const changedFilesStatLogTemplate = `self.diff().stat().files().map(|f| f.path()
 
 // GetChangedFiles gets changed files for a revision vs its parents, with per-file line stats when supported.
 func (s *Service) GetChangedFiles(ctx context.Context, commitID string) ([]ChangedFile, error) {
+	var files []ChangedFile
 	out, err := s.runJJOutput(ctx, "log", "-r", commitID, "--no-graph", "-T", changedFilesStatLogTemplate)
 	if err == nil && strings.TrimSpace(out) != "" {
-		if files, perr := parseChangedFilesStatLogOutput(out); perr == nil && len(files) > 0 {
-			return files, nil
+		if parsed, perr := parseChangedFilesStatLogOutput(out); perr == nil && len(parsed) > 0 {
+			files = parsed
 		}
 	}
-	// Older jj or template parse issues: fall back to summary only (no line counts).
-	return s.getChangedFilesSummaryOnly(ctx, commitID)
+	if len(files) == 0 {
+		var ferr error
+		files, ferr = s.getChangedFilesSummaryOnly(ctx, commitID)
+		if ferr != nil {
+			return nil, ferr
+		}
+	}
+	return s.MarkConflictedChangedFiles(ctx, commitID, files)
 }
 
 func parseChangedFilesStatLogOutput(out string) ([]ChangedFile, error) {
