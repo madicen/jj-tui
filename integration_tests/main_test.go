@@ -1059,7 +1059,7 @@ func TestPRTitleFromTicketDisplayKey(t *testing.T) {
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 80})
 
 	// Load real repo from jj
-	loadCmd := data.LoadRepository(jjSvc)
+	loadCmd := data.LoadRepository(jjSvc, "")
 	if loadCmd != nil {
 		m = updateModel(m, loadCmd())
 	}
@@ -1102,7 +1102,7 @@ func TestPRTitleFromTicketDisplayKey(t *testing.T) {
 
 	// Force a fresh LoadRepository so the graph includes the new bookmark.
 	// The LoadRepository returned from HandleBookmarkCreatedMsg may use a config revset that omits it; reloading here ensures we see it.
-	if loadCmd := data.LoadRepository(jjSvc); loadCmd != nil {
+	if loadCmd := data.LoadRepository(jjSvc, ""); loadCmd != nil {
 		m = updateModel(m, loadCmd())
 	}
 	repoAfter := m.GetRepository()

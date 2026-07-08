@@ -170,7 +170,7 @@ func TestOperationLog_ViewRendersInFixtureRepo(t *testing.T) {
 	m.SetLoading(false)
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 
-	if loadCmd := data.LoadRepository(jjSvc); loadCmd != nil {
+	if loadCmd := data.LoadRepository(jjSvc, ""); loadCmd != nil {
 		m = updateModel(m, loadCmd())
 	}
 

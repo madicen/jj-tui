@@ -43,7 +43,7 @@ func TestAutoRefresh_ExternalChangeAppearsViaSilentReload(t *testing.T) {
 	m.SetLoading(false)
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 
-	if loadCmd := data.LoadRepository(jjSvc); loadCmd != nil {
+	if loadCmd := data.LoadRepository(jjSvc, ""); loadCmd != nil {
 		m = updateModel(m, loadCmd())
 	}
 	before := m.GetRepository()

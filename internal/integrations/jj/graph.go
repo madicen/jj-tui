@@ -26,7 +26,18 @@ func (s *Service) GetRepositoryQuiet(ctx context.Context, revset string) (*inter
 }
 
 func (s *Service) getRepository(ctx context.Context, revset string, recordGraphInHistory bool) (*internal.Repository, error) {
-	graph, err := s.getCommitGraph(ctx, revset, recordGraphInHistory)
+	return s.getRepositoryMode(ctx, revset, recordGraphInHistory, false)
+}
+
+// GetRepositoryStrict loads the graph for an explicit revset without the broad fallback
+// used for startup/config revsets. User-supplied search filters use this so invalid
+// revsets surface jj's error text instead of silently widening the graph.
+func (s *Service) GetRepositoryStrict(ctx context.Context, revset string) (*internal.Repository, error) {
+	return s.getRepositoryMode(ctx, revset, true, true)
+}
+
+func (s *Service) getRepositoryMode(ctx context.Context, revset string, recordGraphInHistory, strict bool) (*internal.Repository, error) {
+	graph, err := s.getCommitGraph(ctx, revset, recordGraphInHistory, strict)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get commit graph: %w", err)
 	}
@@ -111,7 +122,7 @@ func (s *Service) jjLogWithGraphTemplate(ctx context.Context, recordInHistory bo
 // getCommitGraph retrieves the commit graph with real jj data.
 // revset: if non-empty, used as the -r revset; if empty, a default is used.
 // recordGraphInHistory: when false, the primary (and fallback) jj log calls are not added to command history.
-func (s *Service) getCommitGraph(ctx context.Context, revset string, recordGraphInHistory bool) (*internal.CommitGraph, error) {
+func (s *Service) getCommitGraph(ctx context.Context, revset string, recordGraphInHistory bool, strict bool) (*internal.CommitGraph, error) {
 	// Use a custom template with a unique marker to separate graph prefix from data
 	// The marker "<<<COMMIT>>>" lets us identify where the graph ends and data begins
 	// Format after marker: change_id|commit_id|author|date|description|parents|bookmarks|is_working|has_conflict|immutable|divergent
@@ -153,12 +164,19 @@ func (s *Service) getCommitGraph(ctx context.Context, revset string, recordGraph
 	}
 	out, err := s.jjLogWithGraphTemplate(ctx, recordGraphInHistory, revsetArg, template)
 	if err != nil {
+		if strict {
+			bmWG.Wait()
+			return nil, err
+		}
 		// Fall back to a broad, safe revset so the app still loads. This covers both a
 		// failing custom revset and the default failing when main@origin is missing.
 		out, err = s.jjLogWithGraphTemplate(ctx, recordGraphInHistory, "mutable() | bookmarks()", template)
 	}
 	bmWG.Wait()
 	if err != nil {
+		if strict {
+			return nil, err
+		}
 		return s.getCommitGraphSimple(ctx, revset, recordGraphInHistory)
 	}
 
