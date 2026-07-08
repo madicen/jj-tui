@@ -14,13 +14,14 @@ import (
 // error: the init screen is dismissed, services are reloaded, and the error modal surfaces the
 // follow-up failure so the user can address it without losing the (already-applied) jj init.
 type InitErrorMsg struct {
-	Err            error
-	NotJJRepo      bool
-	CurrentPath    string
-	JJInitialized  bool
+	Err           error
+	NotJJRepo     bool
+	CurrentPath   string
+	JJInitialized bool
 }
 
 // ServicesInitializedMsg is sent when jj, GitHub, and ticket services are initialized.
+//
 // Deprecated: initialization is now two-phase (RepoReadyMsg then AuxServicesReadyMsg).
 type ServicesInitializedMsg struct {
 	JJService     *jj.Service

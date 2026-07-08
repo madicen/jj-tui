@@ -8,8 +8,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/madicen/jj-tui/internal"
-	"github.com/madicen/jj-tui/internal/tui/longpress"
+	"github.com/madicen/jj-tui/internal/tui/listnav"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/render"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 )
 
@@ -112,13 +113,13 @@ func (m *Model) renderContextMenu() string {
 		}
 		label := ls.Render(fmt.Sprintf("  %s", item.Label))
 		key := ks.Render(fmt.Sprintf("  %s", item.Key))
-		row := mark(m.zoneManager, mouse.ZoneBranchCtxMenuItem(i), label+key)
+		row := render.Mark(m.zoneManager, mouse.ZoneBranchCtxMenuItem(i), label+key)
 		rows = append(rows, row)
 	}
 
 	branchName := branch.Name
 	if len(branchName) > 40 {
-		branchName = branchName[:37] + "..."
+		branchName = render.TruncateEllipsis(branchName, 37)
 	}
 	header := lipgloss.NewStyle().
 		Foreground(styles.ColorSecondary).
@@ -146,40 +147,11 @@ func (m *Model) handleLongPress(msg tea.MouseMsg) tea.Cmd {
 		}
 	}
 
-	switch msg.Action {
-	case tea.MouseActionMotion:
-		// Keep the press armed while the cursor stays over the branch row
-		// (or drifts only a couple of cells from the anchor).
-		if m.contextMenu == nil && m.longPressItemIndex >= 0 {
-			origin := mouse.ZoneBranch(m.longPressItemIndex)
-			if !longpress.StillArmed(m.zoneManager, origin, m.longPressMouseX, m.longPressMouseY, msg) {
-				m.longPressItemIndex = -1
-			}
-		}
-
-	case tea.MouseActionPress:
-		if msg.Button != tea.MouseButtonLeft {
-			return nil
-		}
-		if m.contextMenu != nil {
-			return nil
-		}
-		for i := range m.branchList {
-			z := m.zoneManager.Get(mouse.ZoneBranch(i))
-			if z != nil && z.InBounds(msg) {
-				m.longPressPressID++
-				m.longPressItemIndex = i
-				m.longPressMouseX = msg.X
-				m.longPressMouseY = msg.Y
-				pressID := m.longPressPressID
-				return tea.Tick(longPressThreshold, func(time.Time) tea.Msg {
-					return LongPressTickMsg{PressID: pressID}
-				})
-			}
-		}
-
-	case tea.MouseActionRelease:
-		m.longPressItemIndex = -1
-	}
-	return nil
+	return m.ArmLongPress(m.zoneManager, msg, listnav.LongPressConfig{
+		MenuOpen:  m.contextMenu != nil,
+		ItemCount: len(m.branchList),
+		RowZoneID: mouse.ZoneBranch,
+		Threshold: longPressThreshold,
+		MakeTick:  func(pressID int) tea.Msg { return LongPressTickMsg{PressID: pressID} },
+	})
 }

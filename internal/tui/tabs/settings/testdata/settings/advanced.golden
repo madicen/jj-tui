@@ -1,0 +1,55 @@
+[3;38;2;97;113;163mConfig: ~/.config/jj-tui/config.json[0m
+[3;38;2;97;113;163m^j/^k: switch tabs  Tab: next field[0m
+
+[1149z  [38;2;97;113;163mGitHub[0m  [1149z │ [1150z  [38;2;97;113;163mJira[0m  [1150z │ [1151z  [38;2;97;113;163mCodecks[0m  [1151z │ [1152z  [38;2;97;113;163mTickets[0m  [1152z │ [1153z  [38;2;97;113;163mBranches[0m  [1153z │ [1154z  [38;2;97;113;163mTheme[0m  [1154z │ [1155z  [38;2;97;113;163mAI[0m  [1155z │ [1156z  [1;4;38;2;126;0;175;4mA[0m[1;4;38;2;126;0;175;4md[0m[1;4;38;2;126;0;175;4mv[0m[1;4;38;2;126;0;175;4ma[0m[1;4;38;2;126;0;175;4mn[0m[1;4;38;2;126;0;175;4mc[0m[1;4;38;2;126;0;175;4me[0m[1;4;38;2;126;0;175;4md[0m  [1156z
+
+[1;38;2;126;0;175mOpen in external editor[0m
+
+[38;2;97;113;163m    Graph files pane: O opens the selected file. Install the editor CLI on your PATH (e.g. Cursor “Install cursor command”).[0m
+
+[1m  Editor:[0m
+
+    [1157z[ Cursor                ▼ ][1157z
+
+  Custom command (when preset is Custom, run via sh -c):
+[38;2;97;113;163m    Use {path} for the absolute file path, e.g. cursor -g {path}[0m
+
+  [1158z> [38;5;240me[0m[38;5;240m.g. cursor -g {path}  or  alacritty -e nvim {path}[0m       [1158z
+
+
+[1;38;2;126;0;175mGraph View[0m
+
+[1;38;2;126;0;175m  Default revset (jj):[0m
+[38;2;97;113;163m    Which commits to show in the commit graph. Empty = built-in default (fork parents + closest immutable per mutable stack; see README).[0m
+
+  [1159z> trunk() | ancestors(@)[7m [0m                                      [1159z [1160z[1;38;2;248;81;73m[Clear][0m[1160z
+[38;2;97;113;163m    e.g. trunk() | (ancestors(@) - ancestors(trunk())) for main + your branch only[0m
+
+
+[1;38;2;126;0;175mBookmark Settings[0m
+
+  [1161z[1;38;2;126;0;175m[✓] Auto-fix bookmark names[0m[1161z
+[38;2;97;113;163m    Replace spaces and invalid characters with hyphens[0m
+
+
+[1;38;2;126;0;175mAdvanced Maintenance[0m
+
+[1;38;2;248;81;73mWARNING: Destructive operations. Use caution![0m
+
+[1;38;2;97;113;163mAvailable Operations:[0m
+
+  [1162z[48;2;68;71;89m [0m[38;2;248;248;242;48;2;68;71;89mDelete All Bookmarks[0m[48;2;68;71;89m [0m [1162z
+[38;2;97;113;163m    Delete all bookmarks in this repository[0m
+
+  [1163z[48;2;68;71;89m [0m[38;2;248;248;242;48;2;68;71;89mAbandon Old Commits[0m[48;2;68;71;89m [0m [1163z
+[38;2;97;113;163m    Abandon commits before origin/main[0m
+
+[1mConnection Status:[0m
+[38;2;80;250;123m  ✓ GitHub connected[0m
+[38;2;80;250;123m  ✓ Tickets connected[0m
+
+[1mVersion:[0m
+[38;2;97;113;163m  dev[0m
+
+
+[1164z[48;2;68;71;89m [0m[38;2;248;248;242;48;2;68;71;89mSave Global (^s)[0m[48;2;68;71;89m [0m [1164z [1165z[48;2;68;71;89m [0m[38;2;248;248;242;48;2;68;71;89mSave Local (^l)[0m[48;2;68;71;89m [0m [1165z [1166z[48;2;68;71;89m [0m[38;2;248;248;242;48;2;68;71;89mCancel (Esc)[0m[48;2;68;71;89m [0m [1166z

@@ -255,4 +255,3 @@ func (s *IssuesService) issueToTicket(issue *github.Issue) tickets.Ticket {
 
 // Ensure IssuesService implements tickets.Service
 var _ tickets.Service = (*IssuesService)(nil)
-

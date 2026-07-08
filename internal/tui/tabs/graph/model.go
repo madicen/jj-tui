@@ -4,6 +4,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -11,9 +12,12 @@ import (
 	overlay "github.com/madicen/bubble-overlay"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
+	"github.com/madicen/jj-tui/internal/tui/keys"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/mousedouble"
+	"github.com/madicen/jj-tui/internal/tui/render"
 	"github.com/madicen/jj-tui/internal/tui/state"
+	"github.com/madicen/jj-tui/internal/tui/styles"
 	"github.com/madicen/jj-tui/internal/tui/util"
 	"github.com/mattn/go-runewidth"
 )
@@ -22,6 +26,8 @@ import (
 type GraphModel struct {
 	zoneManager *zone.Manager
 	repository  *internal.Repository
+
+	keys keys.GraphKeyMap
 
 	width          int
 	height         int
@@ -43,6 +49,9 @@ type GraphModel struct {
 	// Rebase mode state
 	selectionMode      SelectionMode
 	rebaseSourceCommit int // Index of commit being rebased
+	// duplicateMode reuses the rebase destination picker to duplicate the source
+	// commit onto the chosen destination instead of rebasing it.
+	duplicateMode bool
 
 	// Merge mode state: index of the commit being merged into (the destination/target).
 	mergeTargetCommit int
@@ -70,6 +79,27 @@ type GraphModel struct {
 	mousePressGen  uint64
 	zoneOverlap    mousedouble.OverlapRelease
 	rowDoubleClick mousedouble.DoubleClick
+
+	// confirm holds a pending destructive-op confirmation (abandon / backout) when the
+	// ui.confirm_destructive toggle is on. While set, the graph shows a y/n prompt and
+	// swallows other keys until the user confirms (y) or cancels (n/Esc). See confirm.go.
+	confirm *destructiveConfirm
+
+	// annotate holds the scrollable blame overlay (`B` on a changed file). While
+	// shown it owns navigation keys (j/k/Enter/Esc) — see annotate.go.
+	annotate *annotateView
+
+	// filterInput is the `/` revset search overlay (P4.4).
+	filterInput revsetFilterInput
+
+	// filterQuery / filterError mirror app state for header rendering in View().
+	filterQuery string
+	filterError string
+
+	// multiSelect tracks Space-toggled commits for batch abandon/rebase (P4.7).
+	multiSelect multiSelect
+	// batchRebaseSources lists commit indices being rebased together (non-empty = batch mode).
+	batchRebaseSources []int
 }
 
 // SelectionMode indicates what the user is selecting commits for
@@ -88,6 +118,7 @@ type ChangedFile struct {
 	LinesAdded   int
 	LinesRemoved int
 	StatsOK      bool
+	Conflicted   bool
 }
 
 // GraphData contains data needed for commit graph rendering
@@ -95,6 +126,7 @@ type GraphData struct {
 	Repository         *internal.Repository
 	SelectedCommit     int
 	InRebaseMode       bool            // True when selecting rebase destination
+	DuplicateMode      bool            // True when the destination picker is duplicating (not rebasing)
 	RebaseSourceCommit int             // Index of commit being rebased
 	InMergeMode        bool            // True when selecting source to merge into the target
 	MergeTargetCommit  int             // Index of commit being merged into
@@ -104,6 +136,10 @@ type GraphData struct {
 	ChangedFiles       []ChangedFile   // Changed files for the selected commit
 	GraphFocused       bool            // True if graph pane has focus
 	SelectedFile       int             // Index of selected file in changed files list
+	FilterQuery        string          // Active revset search display text (empty = none)
+	FilterError        string          // Inline jj revset error for the active filter attempt
+	MultiSelect        map[int]bool    // Batch-selected commit indices (Space toggled)
+	BatchRebaseSources []int           // Source indices during batch rebase destination pick
 	// RebaseDragSource / RebaseDragHoverDest: mouse drag rebase (-1 = none)
 	RebaseDragSource    int
 	RebaseDragHoverDest int
@@ -118,6 +154,7 @@ func NewGraphModel(zoneManager *zone.Manager) GraphModel {
 	filesVp.MouseWheelEnabled = true
 	return GraphModel{
 		zoneManager:          zoneManager,
+		keys:                 keys.DefaultGraphKeyMap(nil),
 		graphFocused:         true, // default to graph pane focused so j/k navigate commits and wheel scrolls graph
 		viewport:             vp,
 		filesViewport:        filesVp,
@@ -127,6 +164,8 @@ func NewGraphModel(zoneManager *zone.Manager) GraphModel {
 		mergeTargetCommit:    -1,
 		longPressFileIndex:   -1,
 		longPressCommitIndex: -1,
+		filterInput:          newRevsetFilterInput(),
+		multiSelect:          newMultiSelect(),
 	}
 }
 
@@ -135,11 +174,20 @@ func (m GraphModel) Init() tea.Cmd {
 	return nil
 }
 
+// SetKeyMap replaces the graph keybindings (PLAN(P5.1): config overrides).
+func (m *GraphModel) SetKeyMap(km keys.GraphKeyMap) {
+	m.keys = km
+}
+
 // Update uses a pointer receiver so scroll state is modified in place on the main model's graphTabModel.
 func (m *GraphModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case ChangedFilesLoadedMsg:
 		m.SetChangedFiles(msg.Files, msg.CommitID)
+		return m, nil
+
+	case AnnotateLoadedMsg:
+		m.SetAnnotateResult(msg.Seq, msg.Lines, msg.Err)
 		return m, nil
 
 	case tea.WindowSizeMsg:
@@ -289,9 +337,43 @@ func (m *GraphModel) UpdateWithApp(msg tea.Msg, app *state.AppState) (GraphModel
 		return *m, nil
 
 	case tea.KeyMsg:
+		// The search overlay owns the keyboard while open.
+		if m.filterInput.open {
+			updated, cmd := m.handleFilterInputKey(msg, app)
+			*m = updated
+			return *m, cmd
+		}
+		// A pending destructive confirmation owns the keyboard until resolved.
+		if m.confirm != nil {
+			if req, run := m.resolveConfirm(msg, app); run {
+				ctx := BuildRequestContextFromApp(app, m)
+				res := HandleRequest(req, ctx)
+				return *m, ApplyResult(res, m, ctx, app)
+			}
+			return *m, nil
+		}
+		if key.Matches(msg, m.keys.SearchFilter) && m.graphFocused {
+			return *m, m.beginFilterInput(app)
+		}
+		if key.Matches(msg, m.keys.CancelSelection) && m.contextMenu == nil && m.commitContextMenu == nil &&
+			m.selectionMode == SelectionNormal && m.multiSelect.count() > 0 {
+			m.ClearMultiSelect()
+			if app != nil {
+				app.StatusMessage = "Selection cleared"
+			}
+			return *m, nil
+		}
+		if key.Matches(msg, m.keys.CancelSelection) && m.contextMenu == nil && m.commitContextMenu == nil &&
+			m.selectionMode == SelectionNormal && app != nil && strings.TrimSpace(app.GraphFilterRevset) != "" {
+			m.ClearFilterDisplay()
+			return *m, clearGraphFilter(app)
+		}
 		updated, req, directCmd := m.handleKeyMsg(msg)
 		*m = updated
 		if req != nil {
+			if m.maybeConfirmDestructive(*req, app) {
+				return *m, nil
+			}
 			ctx := BuildRequestContextFromApp(app, m)
 			res := HandleRequest(*req, ctx)
 			return *m, ApplyResult(res, m, ctx, app)
@@ -299,9 +381,16 @@ func (m *GraphModel) UpdateWithApp(msg tea.Msg, app *state.AppState) (GraphModel
 		return *m, directCmd
 
 	case zone.MsgZoneInBounds:
+		// Ignore stray clicks while a destructive confirmation is pending (it is keyboard-only).
+		if m.confirm != nil {
+			return *m, nil
+		}
 		updated, req, directCmd := m.handleZoneClick(msg)
 		*m = updated
 		if req != nil {
+			if m.maybeConfirmDestructive(*req, app) {
+				return *m, nil
+			}
 			ctx := BuildRequestContextFromApp(app, m)
 			res := HandleRequest(*req, ctx)
 			return *m, ApplyResult(res, m, ctx, app)
@@ -481,7 +570,7 @@ func (m *GraphModel) View() string {
 	// Simple separator line
 	separator := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#444444")).
-		Render(strings.Repeat("─", max(m.width-2, 0)))
+		Render(strings.Repeat("─", render.SafeWidth(m.width, 2)))
 
 	v := lipgloss.JoinVertical(
 		lipgloss.Left,
@@ -508,7 +597,35 @@ func (m *GraphModel) View() string {
 		v = overlay.OverlayViewAtPoint(v, menuView, m.width, m.height, m.commitContextMenu.MouseY, m.commitContextMenu.MouseX)
 	}
 
+	if m.confirm != nil {
+		box := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(styles.ColorPrimary).
+			Padding(0, 1).
+			Render(m.confirm.prompt)
+		v = overlay.OverlayViewInCenterWithOffset(v, box, m.width, m.height, 0, 0)
+	}
+
+	if m.AnnotateShown() {
+		box := m.renderAnnotateOverlay()
+		v = overlay.OverlayViewInCenterWithOffset(v, box, m.width, m.height, 0, 0)
+	}
+
+	v = m.overlayFilterInput(v)
+
 	return v
+}
+
+// SetFilterDisplay updates the active-filter header state (mirrors app.GraphFilter*).
+func (m *GraphModel) SetFilterDisplay(query, errMsg string) {
+	m.filterQuery = query
+	m.filterError = errMsg
+}
+
+// ClearFilterDisplay clears the filter header.
+func (m *GraphModel) ClearFilterDisplay() {
+	m.filterQuery = ""
+	m.filterError = ""
 }
 
 // getGraphResult returns the GraphResult for the commit graph view
@@ -614,7 +731,7 @@ func (m *GraphModel) buildGraphData() GraphData {
 	}
 
 	// Convert changed files to view format
-	var changedFiles []ChangedFile
+	changedFiles := make([]ChangedFile, 0, len(m.changedFiles))
 	for _, f := range m.changedFiles {
 		changedFiles = append(changedFiles, ChangedFile{
 			Path:         f.Path,
@@ -622,6 +739,7 @@ func (m *GraphModel) buildGraphData() GraphData {
 			LinesAdded:   f.LinesAdded,
 			LinesRemoved: f.LinesRemoved,
 			StatsOK:      f.StatsOK,
+			Conflicted:   f.Conflicted,
 		})
 	}
 
@@ -629,6 +747,7 @@ func (m *GraphModel) buildGraphData() GraphData {
 		Repository:          m.repository,
 		SelectedCommit:      m.selectedCommit,
 		InRebaseMode:        m.selectionMode == SelectionRebaseDestination,
+		DuplicateMode:       m.duplicateMode && m.selectionMode == SelectionRebaseDestination,
 		RebaseSourceCommit:  m.rebaseSourceCommit,
 		InMergeMode:         m.selectionMode == SelectionMergeSource,
 		MergeTargetCommit:   m.mergeTargetCommit,
@@ -638,6 +757,10 @@ func (m *GraphModel) buildGraphData() GraphData {
 		ChangedFiles:        changedFiles,
 		GraphFocused:        m.graphFocused,
 		SelectedFile:        m.selectedFile,
+		FilterQuery:         m.filterQuery,
+		FilterError:         m.filterError,
+		MultiSelect:         m.multiSelectMap(),
+		BatchRebaseSources:  append([]int(nil), m.batchRebaseSources...),
 		RebaseDragSource:    m.rebaseDragSource,
 		RebaseDragHoverDest: m.rebaseDragHoverDest,
 	}
@@ -650,8 +773,11 @@ func (m *GraphModel) GetCreatePRBranch() string {
 	return data.CommitBookmark[m.selectedCommit]
 }
 
-// UpdateRepository updates the graph model with new repository data.
-func (m *GraphModel) UpdateRepository(repo *internal.Repository) {
+// OnRepositoryLoaded recomputes graph-derived state (selection, rebase drag) from
+// the newly-loaded repository. It implements tab.RepositoryAware (P2.8): the root
+// no longer fans a cached copy out to every tab; it invokes this hook only on tabs
+// that need to recompute on load.
+func (m *GraphModel) OnRepositoryLoaded(repo *internal.Repository) {
 	if repo == nil {
 		return
 	}
@@ -833,18 +959,49 @@ func (m *GraphModel) GetFilesViewport() viewport.Model {
 func (m *GraphModel) StartRebaseMode(sourceCommitIdx int) {
 	m.selectionMode = SelectionRebaseDestination
 	m.rebaseSourceCommit = sourceCommitIdx
+	m.batchRebaseSources = nil
 	m.rebasePressAnchor = -1
 	m.rebaseDragSource = -1
 	m.rebaseDragHoverDest = -1
 }
 
-// CancelRebaseMode cancels rebase mode.
-func (m *GraphModel) CancelRebaseMode() {
-	m.selectionMode = SelectionNormal
-	m.rebaseSourceCommit = -1
+// StartBatchRebaseMode starts destination picking for a multi-selected rebase.
+func (m *GraphModel) StartBatchRebaseMode(sourceIndices []int) {
+	m.selectionMode = SelectionRebaseDestination
+	m.batchRebaseSources = append([]int(nil), sourceIndices...)
+	if len(m.batchRebaseSources) > 0 {
+		m.rebaseSourceCommit = m.batchRebaseSources[0]
+	} else {
+		m.rebaseSourceCommit = -1
+	}
+	m.duplicateMode = false
 	m.rebasePressAnchor = -1
 	m.rebaseDragSource = -1
 	m.rebaseDragHoverDest = -1
+}
+
+// CancelRebaseMode cancels rebase mode (and the duplicate variant that reuses it).
+func (m *GraphModel) CancelRebaseMode() {
+	m.selectionMode = SelectionNormal
+	m.rebaseSourceCommit = -1
+	m.batchRebaseSources = nil
+	m.duplicateMode = false
+	m.rebasePressAnchor = -1
+	m.rebaseDragSource = -1
+	m.rebaseDragHoverDest = -1
+}
+
+// StartDuplicateMode starts the destination picker in "duplicate" mode: it reuses
+// the rebase destination-selection UI/keys/mouse, but confirming duplicates the
+// source commit onto the chosen destination instead of rebasing it.
+func (m *GraphModel) StartDuplicateMode(sourceCommitIdx int) {
+	m.StartRebaseMode(sourceCommitIdx)
+	m.duplicateMode = true
+}
+
+// GetDuplicateMode reports whether the destination picker is in duplicate mode.
+func (m *GraphModel) GetDuplicateMode() bool {
+	return m.duplicateMode
 }
 
 // IsInRebaseMode returns whether the graph is in rebase mode.

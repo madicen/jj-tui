@@ -90,10 +90,10 @@ func isDefaultBranch(branch string) bool {
 
 // GraphResult contains the split rendering for commit graph view
 type GraphResult struct {
-	GraphContent        string
-	ActionsBar          string
-	FilesContent        string
-	FullContent         string
+	GraphContent         string
+	ActionsBar           string
+	FilesContent         string
+	FullContent          string
 	FileIndexToLineIndex []int
 }
 
@@ -110,8 +110,14 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 	var fileLines []string
 
 	if data.InRebaseMode {
-		rebaseHeader := RebaseHeaderStyle.
-			Render("🔀 REBASE MODE - Select destination commit (Esc to cancel)")
+		headerText := "🔀 REBASE MODE - Select destination commit (Esc to cancel)"
+		if len(data.BatchRebaseSources) > 0 {
+			headerText = fmt.Sprintf("🔀 BATCH REBASE - Select destination for %d commits (Esc to cancel)", len(data.BatchRebaseSources))
+		}
+		if data.DuplicateMode {
+			headerText = "⧉ DUPLICATE MODE - Select destination commit (Esc to cancel)"
+		}
+		rebaseHeader := RebaseHeaderStyle.Render(headerText)
 		graphLines = append(graphLines, rebaseHeader)
 		graphLines = append(graphLines, "")
 	}
@@ -120,6 +126,17 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 		mergeHeader := MergeHeaderStyle.
 			Render("🔗 MERGE MODE - Select source commit to merge from (Esc to cancel)")
 		graphLines = append(graphLines, mergeHeader)
+		graphLines = append(graphLines, "")
+	}
+
+	if data.FilterQuery != "" || data.FilterError != "" {
+		header := FilterHeaderStyle.Render("🔍 FILTER: " + data.FilterQuery)
+		if data.FilterError != "" {
+			header += "  " + FilterErrorStyle.Render(data.FilterError)
+		} else {
+			header += FilterHeaderStyle.Render("  (Esc to clear)")
+		}
+		graphLines = append(graphLines, header)
 		graphLines = append(graphLines, "")
 	}
 
@@ -134,9 +151,11 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 			}
 		} else if data.InRebaseMode {
 			switch {
-			case data.RebaseSourceCommit > -1:
+			case containsInt(data.BatchRebaseSources, i):
 				style = RebaseSourceStyle
-			case data.SelectedCommit > -1:
+			case data.RebaseSourceCommit == i:
+				style = RebaseSourceStyle
+			case data.SelectedCommit == i:
 				style = RebaseDestStyle
 			}
 		} else if data.InMergeMode {
@@ -178,6 +197,8 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 			}
 		} else if data.InRebaseMode {
 			switch {
+			case containsInt(data.BatchRebaseSources, i):
+				selectionPrefix = "⚡ "
 			case data.RebaseSourceCommit == i:
 				selectionPrefix = "⚡ "
 			case data.SelectedCommit == i:
@@ -190,6 +211,8 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 			case data.SelectedCommit:
 				selectionPrefix = "⚡ "
 			}
+		} else if data.MultiSelect[i] {
+			selectionPrefix = "☑ "
 		} else if i == data.SelectedCommit {
 			selectionPrefix = "► "
 		}
@@ -489,6 +512,9 @@ func (m *GraphModel) renderTreeNodeWithLineIndex(node *fileTreeNode, indent stri
 			if node.fileIndex >= 0 && node.fileIndex < len(data.ChangedFiles) {
 				cf := data.ChangedFiles[node.fileIndex]
 				statSuffix = styles.DiffStatsSuffix(cf.LinesAdded, cf.LinesRemoved, cf.StatsOK)
+				if cf.Conflicted {
+					statSuffix += lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555")).Render(" ⚠conflict")
+				}
 			}
 			var fileLine string
 			if isSelected {
@@ -524,4 +550,13 @@ func (m *GraphModel) renderTreeNodeWithLineIndex(node *fileTreeNode, indent stri
 	for _, name := range fileNodes {
 		m.renderTreeNodeWithLineIndex(node.children[name], newIndent, lines, false, data, lineIdx, fileIndexToLineIndex)
 	}
+}
+
+func containsInt(list []int, v int) bool {
+	for _, x := range list {
+		if x == v {
+			return true
+		}
+	}
+	return false
 }

@@ -3,10 +3,12 @@ package graph
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
+	"github.com/madicen/jj-tui/internal/tui/util"
 )
 
 // RepositoryLoadedMsg indicates the repository was loaded.
@@ -52,12 +54,88 @@ type DivergentCommitInfoMsg struct {
 	Err      error
 }
 
+// AbsorbPreviewReadyMsg carries the result of a non-mutating absorb dry run so the
+// main model can show a preview + confirm before running the real absorb.
+type AbsorbPreviewReadyMsg struct {
+	Preview *jj.AbsorbPreview
+	Err     error
+}
+
+// AbsorbDryRunCmd previews `jj absorb` without mutating the repo and sends AbsorbPreviewReadyMsg.
+func AbsorbDryRunCmd(svc *jj.Service) tea.Cmd {
+	if svc == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		preview, err := svc.AbsorbDryRun(context.Background())
+		return AbsorbPreviewReadyMsg{Preview: preview, Err: err}
+	}
+}
+
+// AbsorbApplyCmd runs the real `jj absorb`, then reloads the repository so the
+// graph reflects the absorbed changes.
+func AbsorbApplyCmd(svc *jj.Service) tea.Cmd {
+	if svc == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		if _, err := svc.Absorb(context.Background()); err != nil {
+			return util.ErrorMsg{Err: fmt.Errorf("failed to absorb: %w", err)}
+		}
+		repo, err := svc.GetRepository(context.Background(), "")
+		if err != nil {
+			return util.ErrorMsg{Err: err}
+		}
+		return RepositoryLoadedMsg{Repository: repo}
+	}
+}
+
+// AnnotateLoadedMsg carries `jj file annotate` output for the blame overlay.
+type AnnotateLoadedMsg struct {
+	Seq   int
+	Lines []jj.AnnotationLine
+	Err   error
+}
+
+// AnnotateFileCmd runs `jj file annotate` for one file at a revision and sends AnnotateLoadedMsg.
+func AnnotateFileCmd(svc *jj.Service, seq int, changeID, path string) tea.Cmd {
+	if svc == nil || seq <= 0 {
+		return nil
+	}
+	ch := strings.TrimSpace(changeID)
+	p := strings.TrimSpace(path)
+	if p == "" {
+		return nil
+	}
+	return func() tea.Msg {
+		lines, err := svc.AnnotateFile(context.Background(), ch, p)
+		return AnnotateLoadedMsg{Seq: seq, Lines: lines, Err: err}
+	}
+}
+
 // LoadChangedFilesCmd returns a command that loads changed files for the commit and sends ChangedFilesLoadedMsg.
 func LoadChangedFilesCmd(svc *jj.Service, commitID string) tea.Cmd {
 	if svc == nil || commitID == "" {
 		return nil
 	}
 	return func() tea.Msg {
+		files, err := svc.GetChangedFiles(context.Background(), commitID)
+		if err != nil {
+			return ChangedFilesLoadedMsg{Files: nil, CommitID: commitID}
+		}
+		return ChangedFilesLoadedMsg{Files: files, CommitID: commitID}
+	}
+}
+
+// ResolveFileConflictCmd runs `jj resolve` for one conflicted file and reloads changed files.
+func ResolveFileConflictCmd(svc *jj.Service, commitID, path, tool string) tea.Cmd {
+	if svc == nil || commitID == "" || strings.TrimSpace(path) == "" {
+		return nil
+	}
+	return func() tea.Msg {
+		if err := svc.ResolveFileWithTool(context.Background(), commitID, path, tool); err != nil {
+			return util.ErrorMsg{Err: fmt.Errorf("failed to resolve %s: %w", path, err)}
+		}
 		files, err := svc.GetChangedFiles(context.Background(), commitID)
 		if err != nil {
 			return ChangedFilesLoadedMsg{Files: nil, CommitID: commitID}
@@ -115,9 +193,11 @@ type Request struct {
 	Checkout             bool
 	Squash               bool
 	Abandon              bool
+	BatchAbandon         bool
 	StartEditDescription bool
 	NewCommit            bool
 	StartRebaseMode      bool
+	StartBatchRebaseMode bool
 	PerformRebase        bool
 	RebaseDestIndex      int
 	// DragRebase: mouse drag from DragRebaseFrom onto DragRebaseTo (same semantics as r + pick destination).
@@ -125,9 +205,9 @@ type Request struct {
 	DragRebaseFrom int
 	DragRebaseTo   int
 	// StartMergeMode begins selecting a source commit/bookmark to merge into the selected commit (e.g. merge main into current bookmark).
-	StartMergeMode   bool
-	PerformMerge     bool
-	MergeSourceIndex int
+	StartMergeMode       bool
+	PerformMerge         bool
+	MergeSourceIndex     int
 	ResolveDivergent     *string
 	CreateBookmark       bool
 	DeleteBookmark       bool
@@ -138,12 +218,24 @@ type Request struct {
 	RevertFile           bool
 	ViewFileDiff         bool
 	OpenInExternalEditor bool
+	// Annotate: open the blame overlay for the selected changed file (jj file annotate).
+	Annotate bool
 	// MoveDeltaOntoOrigin: new commit on bookmark@origin with same tree as selection; avoids force-push after amending a pushed branch.
 	MoveDeltaOntoOrigin bool
 	// StartEvologSplit: experimental FAQ-style split using jj evolog to pick parent revision.
 	StartEvologSplit bool
 	// ResolveBookmarkConflict: open diverged-bookmark dialog (local vs remote) for selected commit.
 	ResolveBookmarkConflict bool
+	// StartAbsorb: preview `jj absorb` (dry run) then open a confirm modal in the main model.
+	StartAbsorb bool
+	// Duplicate: duplicate the selected revision in place (onto its existing parents).
+	Duplicate bool
+	// StartDuplicateOnto: begin the destination picker to duplicate the selected revision onto a chosen commit.
+	StartDuplicateOnto bool
+	// Backout: apply the reverse of the selected revision on top of the working copy (jj backout/revert).
+	Backout bool
+	// ResolveFileConflict: run jj resolve on the selected conflicted changed file.
+	ResolveFileConflict bool
 }
 
 // Cmd returns a tea.Cmd that sends this request to the program.
@@ -159,6 +251,7 @@ const (
 	FollowUpResolveDivergent
 	FollowUpStartEditDescription
 	FollowUpStartRebaseMode
+	FollowUpStartBatchRebaseMode
 	FollowUpStartMergeMode
 	FollowUpCreateBookmark
 	FollowUpCreatePR
@@ -169,6 +262,9 @@ const (
 	FollowUpStartEvologSplit
 	FollowUpResolveBookmarkConflict
 	FollowUpViewFileDiff
+	FollowUpStartDuplicateMode
+	FollowUpDeleteBookmark
+	FollowUpAnnotate
 )
 
 // Result is returned by HandleRequest. Main sets status from Status, runs Cmd if set, and performs the FollowUp action.
@@ -206,7 +302,17 @@ func RebaseModeStartMessage(shortID string) string {
 	return fmt.Sprintf("Select destination for rebasing %s (Esc to cancel)", shortID)
 }
 
+func BatchRebaseModeStartMessage(count int) string {
+	return fmt.Sprintf("Select destination to rebase %d selected commits onto (Esc to cancel)", count)
+}
+
 // MergeModeStartMessage returns the status message when entering merge mode.
 func MergeModeStartMessage(shortID string) string {
 	return fmt.Sprintf("Select source to merge into %s (Esc to cancel)", shortID)
+}
+
+// DuplicateModeStartMessage returns the status message when entering the
+// duplicate destination picker.
+func DuplicateModeStartMessage(shortID string) string {
+	return fmt.Sprintf("Select destination to duplicate %s onto (Esc to cancel)", shortID)
 }

@@ -8,7 +8,6 @@ import (
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tui/data"
 	"github.com/madicen/jj-tui/internal/tui/state"
-	graphtab "github.com/madicen/jj-tui/internal/tui/tabs/graph"
 )
 
 // ResolveDivergentCommitCmd runs jj resolve for the divergent commit and sends DivergentCommitResolvedMsg.
@@ -58,23 +57,32 @@ func viableDivergentKeepIndices(v []jj.DivergentVersion) []int {
 	return out
 }
 
+// DivergentCommitInfoInput carries the loaded divergent-commit info from main
+// (P2.5): the graph tab's DivergentCommitInfoMsg is destructured by the root so
+// this package no longer imports the graph tab for the message type.
+type DivergentCommitInfoInput struct {
+	ChangeID string
+	Versions []jj.DivergentVersion
+	Err      error
+}
+
 // HandleDivergentCommitInfoMsg mutates app when err; otherwise returns info for main to show the modal,
 // or a resolve command when exactly one head can be discarded (no pointless two-button choice).
-func HandleDivergentCommitInfoMsg(msg graphtab.DivergentCommitInfoMsg, app *state.AppState) (tea.Cmd, *ShowDivergentInfo) {
-	if msg.Err != nil {
-		app.StatusMessage = fmt.Sprintf("Error loading divergent info: %v", msg.Err)
+func HandleDivergentCommitInfoMsg(in DivergentCommitInfoInput, app *state.AppState) (tea.Cmd, *ShowDivergentInfo) {
+	if in.Err != nil {
+		app.StatusMessage = fmt.Sprintf("Error loading divergent info: %v", in.Err)
 		app.ViewMode = state.ViewCommitGraph
 		return nil, nil
 	}
 	if app.JJService != nil {
-		if viable := viableDivergentKeepIndices(msg.Versions); len(viable) == 1 {
+		if viable := viableDivergentKeepIndices(in.Versions); len(viable) == 1 {
 			app.StatusMessage = "Resolving divergent change (only one side can be discarded)…"
-			return ResolveDivergentCommitCmd(app.JJService, msg.ChangeID, msg.Versions[viable[0]].CommitID), nil
+			return ResolveDivergentCommitCmd(app.JJService, in.ChangeID, in.Versions[viable[0]].CommitID), nil
 		}
 	}
 	return nil, &ShowDivergentInfo{
-		ChangeID: msg.ChangeID,
-		Versions: msg.Versions,
+		ChangeID: in.ChangeID,
+		Versions: in.Versions,
 	}
 }
 
@@ -91,5 +99,5 @@ func HandleDivergentCommitResolvedMsg(msg DivergentCommitResolvedMsg, app *state
 	}
 	app.StatusMessage = fmt.Sprintf("Divergent commit resolved (kept %s)", kept)
 	app.ViewMode = state.ViewCommitGraph
-	return data.LoadRepository(app.JJService)
+	return data.LoadRepository(app.JJService, app.GraphFilterRevset)
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/render"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 	"github.com/madicen/jj-tui/internal/tui/util"
 	"github.com/mattn/go-runewidth"
@@ -218,8 +219,8 @@ func (m *Model) SetSelectedCommand(idx int) {
 
 // ZoneIDs returns zone IDs used by this sub-tab (for parent to resolve clicks).
 func (m Model) ZoneIDs() []string {
-	var ids []string
 	n := min(len(m.entries), 50)
+	ids := make([]string, 0, n)
 	for i := range n {
 		ids = append(ids, fmt.Sprintf("%s%d", mouse.ZoneHelpCommandCopy, i))
 	}
@@ -228,10 +229,7 @@ func (m Model) ZoneIDs() []string {
 
 func (m Model) lines() []string {
 	mark := func(id, content string) string {
-		if m.zoneManager == nil {
-			return content
-		}
-		return m.zoneManager.Mark(id, content)
+		return render.Mark(m.zoneManager, id, content)
 	}
 	var lines []string
 	lines = append(lines, styles.TitleStyle.Render("Command History"))

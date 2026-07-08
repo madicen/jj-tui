@@ -61,6 +61,21 @@ const (
 	// flow so users can retry pushes after configuration changes without re-creating the
 	// GitHub repo.
 	NavigatePushBookmarks
+	// Workspaces (view-only MVP): AddWorkspace / ForgetWorkspace run the jj command
+	// and reload the list; CloseWorkspaces dismisses the modal.
+	NavigateAddWorkspace
+	NavigateForgetWorkspace
+	NavigateCloseWorkspaces
+	// Operation-log browser (P4.1): RestoreOperation runs `jj op restore <id>`
+	// and refreshes the graph; CloseOperations dismisses the modal.
+	NavigateRestoreOperation
+	NavigateCloseOperations
+	// Graph-originated cross-tab actions routed through main (P2.5) so the graph
+	// tab no longer imports sibling tabs directly. Main owns the sibling command
+	// construction; the graph tab only emits the intent + payload.
+	NavigateDeleteBookmark          // delete the resolved bookmark on the selected commit
+	NavigateLoadBookmarkConflictInfo // load diverged-bookmark info before opening the conflict modal
+	NavigateUpdatePR                 // push the selected commit's branch to its open PR
 )
 
 // NavigateTarget describes a navigation request. Only main can perform these
@@ -129,17 +144,33 @@ type NavigateTarget struct {
 
 	// Init-repo screen options: forwarded to data.RunJJInit when the user accepts the welcome
 	// screen. Defaults (zero values) reproduce today's behavior of plain `jj git init`.
-	InitColocate     bool   // run `jj git init --colocate` instead of plain `jj git init`
-	InitRemoteURL    string // when non-empty, add as `origin` after init and run `jj git fetch`
-	InitGhCreateRepo bool   // run `gh repo create` after init (requires gh CLI in PATH)
-	InitGhRepoName   string // name passed to `gh repo create`; empty -> filepath.Base(cwd)
-	InitGhRepoPrivate bool  // visibility for `gh repo create`: true => --private, else --public
+	InitColocate      bool   // run `jj git init --colocate` instead of plain `jj git init`
+	InitRemoteURL     string // when non-empty, add as `origin` after init and run `jj git fetch`
+	InitGhCreateRepo  bool   // run `gh repo create` after init (requires gh CLI in PATH)
+	InitGhRepoName    string // name passed to `gh repo create`; empty -> filepath.Base(cwd)
+	InitGhRepoPrivate bool   // visibility for `gh repo create`: true => --private, else --public
 	// File diff modal (graph): path relative to repo; Commit holds change id / short id.
 	FileDiffPath string
 	// When non-empty, NavigateOpenFileDiff shows this git unified diff immediately (no jj call). Used by evolog split.
 	FileDiffRawGit          string
 	FileDiffOverlayTitle    string // e.g. "Evolog step"; empty => default "File diff"
 	FileDiffOverlaySubtitle string // e.g. "abc… → def…"; empty => path @ change id
+	// Workspaces payload: WorkspacePath for NavigateAddWorkspace, WorkspaceName for NavigateForgetWorkspace.
+	WorkspacePath string
+	WorkspaceName string
+
+	// Operation-log payload: OperationID names the operation to restore for
+	// NavigateRestoreOperation.
+	OperationID string
+
+	// Graph-originated cross-tab payloads (P2.5). DeleteBookmarkName names the
+	// bookmark for NavigateDeleteBookmark. UpdatePR* carry the branch/commit and
+	// whether the bookmark must move first for NavigateUpdatePR.
+	// NavigateLoadBookmarkConflictInfo reuses ConflictBookmarkName above.
+	DeleteBookmarkName        string
+	UpdatePRBranch            string
+	UpdatePRCommitID          string
+	UpdatePRNeedsMoveBookmark bool
 }
 
 // NavigateMsg is the only callback from submodels to main: they request a view change or

@@ -4,14 +4,18 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
+	"github.com/madicen/jj-tui/internal/tui/keys"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 )
 
-// Model is the Shortcuts sub-tab state. It owns scroll and renders the static shortcuts content.
+// Model is the Shortcuts sub-tab state. It owns scroll and renders the shortcuts
+// content generated from the KeyMaps (PLAN(P3.3)).
 type Model struct {
 	zoneManager *zone.Manager
+	keys        keys.KeyMaps
 	width       int
 	height      int
 	yOffset     int
@@ -19,7 +23,13 @@ type Model struct {
 
 // NewModel creates a new Shortcuts sub-tab model.
 func NewModel(zoneManager *zone.Manager) Model {
-	return Model{zoneManager: zoneManager}
+	return Model{zoneManager: zoneManager, keys: keys.DefaultKeyMaps(nil)}
+}
+
+// SetKeyMaps replaces the KeyMaps used to generate the shortcuts list so config
+// rebindings (PLAN(P5.1)) show the effective keys.
+func (m *Model) SetKeyMaps(km keys.KeyMaps) {
+	m.keys = km
 }
 
 // Update handles messages for the Shortcuts sub-tab (dimensions, mouse wheel).
@@ -75,119 +85,140 @@ func (m *Model) SetDimensions(width, height int) {
 	m.height = height
 }
 
+// helpKeyColW is the shared key-column width so descriptions align (widest: ctrl+shift+u).
+const helpKeyColW = 18
+
+// row renders a "  <key>  <desc>" help line from a bubbles/key Binding, using the
+// binding's help Key (display) and Desc. Feeding these from the KeyMaps means the
+// help tab stays in sync with the handlers and reflects any config rebinding.
+func row(b key.Binding) string {
+	h := b.Help()
+	return fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render(h.Key), styles.HelpDescStyle.Render(h.Desc))
+}
+
+// staticRow renders a documentation-only line whose key isn't a rebindable
+// action (mouse gestures, modal-local keys, AI chips).
+func staticRow(keyDisp, desc string) string {
+	return fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render(keyDisp), styles.HelpDescStyle.Render(desc))
+}
+
 func (m Model) lines() []string {
-	// Single key column for every shortcut row so descriptions align (widest: ctrl+shift+u).
-	const helpKeyColW = 18
-	var lines []string
+	g := m.keys.Graph
+	pr := m.keys.PRs
+	tk := m.keys.Tickets
+	br := m.keys.Branches
+	hp := m.keys.Help
+	gl := m.keys.Global
+	lines := make([]string, 0, 150)
 	lines = append(lines, styles.TitleStyle.Render("Commit Graph Shortcuts"))
 	lines = append(lines, "")
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("j/↓"), styles.HelpDescStyle.Render("Move down")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("k/↑"), styles.HelpDescStyle.Render("Move up")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("Tab"), styles.HelpDescStyle.Render("Switch focus: graph ↔ files")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("o"), styles.HelpDescStyle.Render("View full jj diff for selected changed file (files pane)")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("O"), styles.HelpDescStyle.Render("Open selected file in external editor (files pane; set editor in Settings → Advanced)")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("Enter/e"), styles.HelpDescStyle.Render("Edit selected commit (jj edit)")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("s"), styles.HelpDescStyle.Render("Squash commit into parent")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("r"), styles.HelpDescStyle.Render("Rebase commit (with descendants)")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("M"), styles.HelpDescStyle.Render("Merge from: pick a source to merge into the selected commit (e.g. merge main into current bookmark)")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("mouse"), styles.HelpDescStyle.Render("Drag a commit row onto another to rebase (same as r, then pick destination)")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("dbl-click"), styles.HelpDescStyle.Render("Commit row: edit (jj edit); changed-file row: open in external editor")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("d"), styles.HelpDescStyle.Render("Edit description; or resolve divergent when commit is divergent")))
+	lines = append(lines, row(g.MoveDown))
+	lines = append(lines, row(g.MoveUp))
+	lines = append(lines, row(g.ToggleFocus))
+	lines = append(lines, row(g.ViewFileDiff))
+	lines = append(lines, row(g.OpenExternal))
+	lines = append(lines, row(g.Checkout))
+	lines = append(lines, row(g.Squash))
+	lines = append(lines, row(g.Rebase))
+	lines = append(lines, row(g.Merge))
+	lines = append(lines, staticRow("mouse", "Drag a commit row onto another to rebase (same as r, then pick destination)"))
+	lines = append(lines, staticRow("dbl-click", "Commit row: edit (jj edit); changed-file row: open in external editor"))
+	lines = append(lines, row(g.EditDescription))
 	lines = append(lines, "")
 	lines = append(lines, styles.TitleStyle.Render("Commit description editor"))
 	lines = append(lines, "")
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("^s"), styles.HelpDescStyle.Render("Save description")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("Esc"), styles.HelpDescStyle.Render("Cancel")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("ctrl+shift+u"), styles.HelpDescStyle.Render("Clear description text")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("✧^g"), styles.HelpDescStyle.Render("Same as the purple ✧ ^g chip beside the title (optional AI; Settings → AI + API key)")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("a"), styles.HelpDescStyle.Render("Abandon commit")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("n"), styles.HelpDescStyle.Render("Create new commit from selected")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("m"), styles.HelpDescStyle.Render("Create/move bookmark on commit")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("x"), styles.HelpDescStyle.Render("Delete bookmark from commit")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("c"), styles.HelpDescStyle.Render("Create new PR from commit chain")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("u"), styles.HelpDescStyle.Render("Update existing PR with new commits")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("f"), styles.HelpDescStyle.Render("Forgot new commit? Stack on bookmark@origin (avoid force-push)")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("z"), styles.HelpDescStyle.Render("split (experimental, when shown): jj evolog parent + step file list; o patch; p plan overlay (Enter runs split from overlay); s / ✧^g AI suggest; Graph (g) vs preview after split; FAQ bases on evolog row you pick, not main unless you choose that row; if AI says no split, Enter twice (or j/k); d optional AI describe; moves change (and feature bookmark if present)")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("C"), styles.HelpDescStyle.Render("Resolve diverged bookmark (when shown): graph pane focused; same flow as Branches (c)")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("^z"), styles.HelpDescStyle.Render("Undo last jj operation")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("^y"), styles.HelpDescStyle.Render("Redo jj operation")))
+	lines = append(lines, staticRow("^s", "Save description"))
+	lines = append(lines, staticRow("Esc", "Cancel"))
+	lines = append(lines, staticRow("ctrl+shift+u", "Clear description text"))
+	lines = append(lines, staticRow("✧^g", "Same as the purple ✧ ^g chip beside the title (optional AI; Settings → AI + API key)"))
+	lines = append(lines, row(g.Abandon))
+	lines = append(lines, row(g.NewCommit))
+	lines = append(lines, row(g.CreateBookmark))
+	lines = append(lines, row(g.DeleteBookmark))
+	lines = append(lines, row(g.CreatePR))
+	lines = append(lines, row(g.UpdatePR))
+	lines = append(lines, row(g.MoveDelta))
+	lines = append(lines, row(g.EvologSplit))
+	lines = append(lines, row(g.ResolveConflict))
+	lines = append(lines, row(gl.Undo))
+	lines = append(lines, row(gl.Redo))
 	lines = append(lines, "")
 	lines = append(lines, styles.TitleStyle.Render("Bookmark Screen"))
 	lines = append(lines, "")
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("j/↓"), styles.HelpDescStyle.Render("Select next existing bookmark")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("k/↑"), styles.HelpDescStyle.Render("Select previous / new input")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("Tab"), styles.HelpDescStyle.Render("Toggle new/existing bookmark")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("Enter"), styles.HelpDescStyle.Render("Create new or move selected")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("✧^g"), styles.HelpDescStyle.Render("Same as the ✧ ^g chip by the name field (new bookmark only; optional AI)")))
+	lines = append(lines, staticRow("j/↓", "Select next existing bookmark"))
+	lines = append(lines, staticRow("k/↑", "Select previous / new input"))
+	lines = append(lines, staticRow("Tab", "Toggle new/existing bookmark"))
+	lines = append(lines, staticRow("Enter", "Create new or move selected"))
+	lines = append(lines, staticRow("✧^g", "Same as the ✧ ^g chip by the name field (new bookmark only; optional AI)"))
 	lines = append(lines, "")
 	lines = append(lines, styles.TitleStyle.Render("Create PR modal"))
 	lines = append(lines, "")
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("^s"), styles.HelpDescStyle.Render("Create pull request")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("✧^g"), styles.HelpDescStyle.Render("Same as the ✧ ^g chip beside the modal title")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("Esc"), styles.HelpDescStyle.Render("Cancel")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("Tab"), styles.HelpDescStyle.Render("Switch title / body")))
+	lines = append(lines, staticRow("^s", "Create pull request"))
+	lines = append(lines, staticRow("✧^g", "Same as the ✧ ^g chip beside the modal title"))
+	lines = append(lines, staticRow("Esc", "Cancel"))
+	lines = append(lines, staticRow("Tab", "Switch title / body"))
 	lines = append(lines, "")
 	lines = append(lines, styles.TitleStyle.Render("Create Ticket modal"))
 	lines = append(lines, "")
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("^s"), styles.HelpDescStyle.Render("Create ticket")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("✧^g"), styles.HelpDescStyle.Render("Same as the ✧ ^g chip beside the title (uses graph revision or @)")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("Esc"), styles.HelpDescStyle.Render("Cancel")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("Tab"), styles.HelpDescStyle.Render("Switch title / description")))
+	lines = append(lines, staticRow("^s", "Create ticket"))
+	lines = append(lines, staticRow("✧^g", "Same as the ✧ ^g chip beside the title (uses graph revision or @)"))
+	lines = append(lines, staticRow("Esc", "Cancel"))
+	lines = append(lines, staticRow("Tab", "Switch title / description"))
 	lines = append(lines, "")
 	lines = append(lines, styles.TitleStyle.Render("Pull Request Shortcuts"))
 	lines = append(lines, "")
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("j/↓"), styles.HelpDescStyle.Render("Move down")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("k/↑"), styles.HelpDescStyle.Render("Move up")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("Enter/o"), styles.HelpDescStyle.Render("Open PR in browser")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("dbl-click"), styles.HelpDescStyle.Render("PR row: open in browser")))
+	lines = append(lines, row(pr.MoveDown))
+	lines = append(lines, row(pr.MoveUp))
+	lines = append(lines, row(pr.Open))
+	lines = append(lines, staticRow("dbl-click", "PR row: open in browser"))
 	lines = append(lines, "")
 	lines = append(lines, styles.TitleStyle.Render("Tickets Shortcuts"))
 	lines = append(lines, "")
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("j/↓"), styles.HelpDescStyle.Render("Move down")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("k/↑"), styles.HelpDescStyle.Render("Move up")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("Enter"), styles.HelpDescStyle.Render("Create branch from ticket")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("o"), styles.HelpDescStyle.Render("Open ticket in browser")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("dbl-click"), styles.HelpDescStyle.Render("Ticket row: open in browser (single click loads transitions)")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("c"), styles.HelpDescStyle.Render("Change ticket status")))
+	lines = append(lines, row(tk.MoveDown))
+	lines = append(lines, row(tk.MoveUp))
+	lines = append(lines, row(tk.CreateBranch))
+	lines = append(lines, row(tk.Open))
+	lines = append(lines, staticRow("dbl-click", "Ticket row: open in browser (single click loads transitions)"))
+	lines = append(lines, row(tk.ChangeStatus))
 	lines = append(lines, "")
 	lines = append(lines, styles.TitleStyle.Render("Branches Shortcuts"))
 	lines = append(lines, "")
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("j/↓"), styles.HelpDescStyle.Render("Move down")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("k/↑"), styles.HelpDescStyle.Render("Move up")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("T"), styles.HelpDescStyle.Render("Track remote branch")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("t"), styles.HelpDescStyle.Render("Pull & track remote branch by name")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("U"), styles.HelpDescStyle.Render("Untrack remote branch")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("L"), styles.HelpDescStyle.Render("Restore deleted local branch")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("x"), styles.HelpDescStyle.Render("Delete local bookmark")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("P"), styles.HelpDescStyle.Render("Push local branch to remote")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("F"), styles.HelpDescStyle.Render("Fetch from all remotes")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("c"), styles.HelpDescStyle.Render("Resolve conflicted bookmark")))
+	lines = append(lines, row(br.MoveDown))
+	lines = append(lines, row(br.MoveUp))
+	lines = append(lines, row(br.Track))
+	lines = append(lines, row(br.TrackByName))
+	lines = append(lines, row(br.Untrack))
+	lines = append(lines, row(br.Restore))
+	lines = append(lines, row(br.Delete))
+	lines = append(lines, row(br.Push))
+	lines = append(lines, row(br.Fetch))
+	lines = append(lines, row(br.ResolveConflict))
 	lines = append(lines, "")
 	lines = append(lines, styles.TitleStyle.Render("Settings Shortcuts"))
 	lines = append(lines, "")
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("^j"), styles.HelpDescStyle.Render("Previous settings tab")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("^k"), styles.HelpDescStyle.Render("Next settings tab")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("Tab"), styles.HelpDescStyle.Render("Next input field")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("^s"), styles.HelpDescStyle.Render("Save settings (global)")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("^l"), styles.HelpDescStyle.Render("Save settings (local to repo)")))
+	lines = append(lines, staticRow("^j", "Previous settings tab"))
+	lines = append(lines, staticRow("^k", "Next settings tab"))
+	lines = append(lines, staticRow("Tab", "Next input field"))
+	lines = append(lines, staticRow("^s", "Save settings (global)"))
+	lines = append(lines, staticRow("^l", "Save settings (local to repo)"))
 	lines = append(lines, "")
 	lines = append(lines, styles.TitleStyle.Render("Help Tab"))
 	lines = append(lines, "")
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("^j"), styles.HelpDescStyle.Render("Previous sub-tab (Shortcuts ↔ History)")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("^k"), styles.HelpDescStyle.Render("Next sub-tab")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("Tab"), styles.HelpDescStyle.Render("Next sub-tab")))
+	lines = append(lines, row(hp.PrevTab))
+	lines = append(lines, row(hp.NextTab))
+	lines = append(lines, row(hp.SwitchTab))
 	lines = append(lines, "")
 	lines = append(lines, styles.TitleStyle.Render("Navigation"))
 	lines = append(lines, "")
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("g"), styles.HelpDescStyle.Render("Go to commit graph")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("p"), styles.HelpDescStyle.Render("Go to pull requests")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("t"), styles.HelpDescStyle.Render("Go to Tickets")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("b"), styles.HelpDescStyle.Render("Go to Branches")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render(","), styles.HelpDescStyle.Render("Open settings")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("h/?"), styles.HelpDescStyle.Render("Show this help")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("^r"), styles.HelpDescStyle.Render("Refresh")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("Esc"), styles.HelpDescStyle.Render("Back to graph")))
-	lines = append(lines, fmt.Sprintf("  %s  %s", styles.HelpKeyStyle.Width(helpKeyColW).Render("^q"), styles.HelpDescStyle.Render("Quit")))
+	lines = append(lines, row(gl.NavGraph))
+	lines = append(lines, row(gl.NavPRs))
+	lines = append(lines, row(gl.NavTickets))
+	lines = append(lines, row(gl.NavBranches))
+	lines = append(lines, row(gl.NavSettings))
+	lines = append(lines, row(gl.NavHelp))
+	lines = append(lines, row(gl.Refresh))
+	lines = append(lines, row(gl.Back))
+	lines = append(lines, row(gl.Quit))
 	lines = append(lines, "")
 	lines = append(lines, styles.TitleStyle.Render("Graph Symbols"))
 	lines = append(lines, "")

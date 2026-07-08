@@ -75,4 +75,3 @@ const (
 	TransitionInProgress = "in_progress"
 	TransitionDone       = "done"
 )
-

@@ -5,19 +5,11 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/render"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 )
-
-// mark wraps zone.Mark; if zoneManager is nil returns content unchanged
-func mark(z *zone.Manager, id, content string) string {
-	if z == nil {
-		return content
-	}
-	return z.Mark(id, content)
-}
 
 // renderPRs renders the PR list view (list-only scroll; details fixed)
 func (m *Model) renderPRs() string {
@@ -93,9 +85,7 @@ func (m *Model) renderPRs() string {
 		if pr.Body != "" {
 			desc := strings.ReplaceAll(pr.Body, "\n", " ")
 			desc = strings.ReplaceAll(desc, "\r", "")
-			if len(desc) > 150 {
-				desc = desc[:150] + "..."
-			}
+			desc = render.TruncateEllipsis(desc, 150)
 			detailLines = append(detailLines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render(desc))
 		} else {
 			detailLines = append(detailLines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Italic(true).Render("(No description)"))
@@ -109,20 +99,16 @@ func (m *Model) renderPRs() string {
 		headerLines = append(headerLines, detailsBox)
 
 		separatorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#444444"))
-		separatorWidth := m.width - 4
-		if separatorWidth < 20 {
-			separatorWidth = 80
-		}
-		separator := separatorStyle.Render(strings.Repeat("─", separatorWidth))
+		separator := separatorStyle.Render(render.Separator(m.width))
 		headerLines = append(headerLines, separator)
 		headerLines = append(headerLines, "Actions:")
 
 		var actionButtons []string
-		actionButtons = append(actionButtons, mark(m.zoneManager, mouse.ZonePROpenBrowser, styles.ButtonStyle.Render("Open in Browser (o)")))
+		actionButtons = append(actionButtons, render.Mark(m.zoneManager, mouse.ZonePROpenBrowser, styles.ButtonStyle.Render("Open in Browser (o)")))
 		if pr.State == "open" {
 			actionButtons = append(actionButtons,
-				mark(m.zoneManager, mouse.ZonePRMerge, styles.ButtonStyle.Render("Merge (M)")),
-				mark(m.zoneManager, mouse.ZonePRClose, styles.ButtonStyle.Render("Close (X)")),
+				render.Mark(m.zoneManager, mouse.ZonePRMerge, styles.ButtonStyle.Render("Merge (M)")),
+				render.Mark(m.zoneManager, mouse.ZonePRClose, styles.ButtonStyle.Render("Close (X)")),
 			)
 		}
 		headerLines = append(headerLines, strings.Join(actionButtons, " "))
@@ -176,7 +162,7 @@ func (m *Model) renderPRs() string {
 		}
 		prLine := fmt.Sprintf("%s%s %s%s #%d %s",
 			prefix, stateIndicator, checkIndicator, reviewIndicator, pr.Number, pr.Title)
-		listLines = append(listLines, mark(m.zoneManager, mouse.ZonePR(i), style.Render(prLine)))
+		listLines = append(listLines, render.Mark(m.zoneManager, mouse.ZonePR(i), style.Render(prLine)))
 	}
 
 	fixedHeader := strings.Join(headerLines, "\n")
@@ -186,33 +172,12 @@ func (m *Model) renderPRs() string {
 		listHeight = 0
 	}
 	totalListLines := len(listLines)
-	maxListOffset := 0
-	if totalListLines > listHeight {
-		maxListOffset = totalListLines - listHeight
-	}
-	// Clamp listYOffset
-	if m.listYOffset > maxListOffset {
-		m.listYOffset = maxListOffset
-	}
-	if m.listYOffset < 0 {
-		m.listYOffset = 0
-	}
 	// Keep selection in view only when selection changed via key/click (so mouse scroll can move selection off screen)
 	if m.scrollToSelectedPR {
 		m.scrollToSelectedPR = false
-		if m.selectedPR >= 0 && m.selectedPR < totalListLines {
-			if m.selectedPR < m.listYOffset {
-				m.listYOffset = m.selectedPR
-			} else if m.selectedPR >= m.listYOffset+listHeight {
-				m.listYOffset = m.selectedPR - listHeight + 1
-			}
-		}
+		m.ScrollToSelected(m.selectedPR, totalListLines, listHeight)
 	}
-	start := m.listYOffset
-	end := start + listHeight
-	if end > totalListLines {
-		end = totalListLines
-	}
+	start, end := m.VisibleRange(totalListLines, listHeight)
 	var visibleList string
 	if start < end {
 		visibleList = strings.Join(listLines[start:end], "\n")

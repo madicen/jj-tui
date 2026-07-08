@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
-	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/render"
 	"github.com/madicen/jj-tui/internal/tui/tabs/help/commandhistory"
 )
 
@@ -21,17 +21,9 @@ func (m Model) renderTabBar() string {
 	} else {
 		commandsStyle = helpTabActiveStyle
 	}
-	shortcutsTab := mark(m.zoneManager, mouse.ZoneHelpTabShortcuts, shortcutsStyle.Render("Shortcuts"))
-	commandsTab := mark(m.zoneManager, mouse.ZoneHelpTabCommands, commandsStyle.Render("History"))
+	shortcutsTab := render.Mark(m.zoneManager, mouse.ZoneHelpTabShortcuts, shortcutsStyle.Render("Shortcuts"))
+	commandsTab := render.Mark(m.zoneManager, mouse.ZoneHelpTabCommands, commandsStyle.Render("History"))
 	return lipgloss.JoinHorizontal(lipgloss.Left, shortcutsTab, " │ ", commandsTab)
-}
-
-// mark wraps content in a zone for click detection. Returns content unchanged if zoneManager is nil.
-func mark(z *zone.Manager, id, content string) string {
-	if z == nil {
-		return content
-	}
-	return z.Mark(id, content)
 }
 
 // isAutoRefreshCommand returns true if the command is part of auto-refresh (filtered from history).

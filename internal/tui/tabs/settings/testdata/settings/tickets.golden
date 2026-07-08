@@ -1,0 +1,31 @@
+[3;38;2;97;113;163mConfig: ~/.config/jj-tui/config.json[0m
+[3;38;2;97;113;163m^j/^k: switch tabs  Tab: next field[0m
+
+[1075z  [38;2;97;113;163mGitHub[0m  [1075z │ [1076z  [38;2;97;113;163mJira[0m  [1076z │ [1077z  [38;2;97;113;163mCodecks[0m  [1077z │ [1078z  [1;4;38;2;126;0;175;4mT[0m[1;4;38;2;126;0;175;4mi[0m[1;4;38;2;126;0;175;4mc[0m[1;4;38;2;126;0;175;4mk[0m[1;4;38;2;126;0;175;4me[0m[1;4;38;2;126;0;175;4mt[0m[1;4;38;2;126;0;175;4ms[0m  [1078z │ [1079z  [38;2;97;113;163mBranches[0m  [1079z │ [1080z  [38;2;97;113;163mTheme[0m  [1080z │ [1081z  [38;2;97;113;163mAI[0m  [1081z │ [1082z  [38;2;97;113;163mAdvanced[0m  [1082z
+
+[1;38;2;126;0;175mTicket Provider[0m
+
+[38;2;97;113;163mChoose which ticket service to use for the Tickets tab.[0m
+
+[1m  Active Provider:[0m
+
+    [1083z[ Jira            ▼ ][1083z
+
+[38;2;80;250;123m  ✓ Connected to Jira[0m
+
+
+[1;38;2;126;0;175mTicket Workflow[0m
+
+  [1084z[1;38;2;126;0;175m[✓] Auto-set 'In Progress' on branch creation[0m[1084z
+[38;2;97;113;163m    Automatically transition ticket when creating a branch from it[0m
+
+
+[1mConnection Status:[0m
+[38;2;80;250;123m  ✓ GitHub connected[0m
+[38;2;80;250;123m  ✓ Tickets connected[0m
+
+[1mVersion:[0m
+[38;2;97;113;163m  dev[0m
+
+
+[1085z[48;2;68;71;89m [0m[38;2;248;248;242;48;2;68;71;89mSave Global (^s)[0m[48;2;68;71;89m [0m [1085z [1086z[48;2;68;71;89m [0m[38;2;248;248;242;48;2;68;71;89mSave Local (^l)[0m[48;2;68;71;89m [0m [1086z [1087z[48;2;68;71;89m [0m[38;2;248;248;242;48;2;68;71;89mCancel (Esc)[0m[48;2;68;71;89m [0m [1087z

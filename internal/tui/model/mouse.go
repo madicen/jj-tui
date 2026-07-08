@@ -51,12 +51,12 @@ func (m *Model) routeMouseToUnderlay(msg tea.Msg) (tea.Cmd, bool) {
 	case state.ViewPullRequests:
 		updated, cmd := m.prsTabModel.UpdateWithApp(msg, &m.appState)
 		m.prsTabModel = updated
-		return cmd, true
+		return m.wrapSpinnerStart(cmd), true
 	case state.ViewBranches:
 		updated, cmd := m.branchesTabModel.UpdateWithApp(msg, &m.appState)
 		m.branchesTabModel = updated
 		if cmd != nil {
-			return m.wrapBranchFetchCmd(cmd), true
+			return m.wrapSpinnerStart(cmd), true
 		}
 		return nil, true
 	case state.ViewTickets:

@@ -14,9 +14,9 @@ func TestEncodeShortID(t *testing.T) {
 		// accountSeq=1 becomes 813 internally, which encodes to "111"
 		{1, "111"},
 		{2, "112"},
-		{28, "11z"},   // End of first group
-		{29, "121"},   // Start of second group
-		
+		{28, "11z"}, // End of first group
+		{29, "121"}, // Start of second group
+
 		// Test zero
 		{0, ""},
 	}
@@ -35,13 +35,13 @@ func TestEncodeShortID(t *testing.T) {
 func TestEncodeShortIDSequence(t *testing.T) {
 	// The implementation adds 812 offset, so sequence should be:
 	// 1 -> "111", 2 -> "112", ..., 28 -> "11z", 29 -> "121"
-	
+
 	// Verify first ID
 	first := encodeShortID(1)
 	if first != "111" {
 		t.Errorf("First ID should be 111, got %s", first)
 	}
-	
+
 	// Verify sequential IDs are increasing
 	prev := ""
 	for i := 1; i <= 100; i++ {
@@ -61,7 +61,7 @@ func TestEncodeShortIDRollover(t *testing.T) {
 	// After seq 28 (last digit z), should increment second digit
 	seq28 := encodeShortID(28)
 	seq29 := encodeShortID(29)
-	
+
 	// seq28 should end in 'z', seq29 should have incremented
 	if seq28[len(seq28)-1] != 'z' {
 		t.Errorf("seq 28 should end in z, got %s", seq28)
@@ -79,8 +79,8 @@ func TestSlugify(t *testing.T) {
 	}{
 		{"Hello World", "hello-world"},
 		{"Add Codecks Support", "add-codecks-support"},
-		{"Fix: Bug #123", "fix-bug-123"},       // : and # removed, spaces become hyphens
-		{"Multiple   Spaces", "multiple-spaces"}, // multiple spaces -> single hyphen
+		{"Fix: Bug #123", "fix-bug-123"},              // : and # removed, spaces become hyphens
+		{"Multiple   Spaces", "multiple-spaces"},      // multiple spaces -> single hyphen
 		{"Special!@#Characters", "specialcharacters"}, // special chars just removed
 		{"UPPERCASE", "uppercase"},
 		{"", ""},
@@ -100,10 +100,9 @@ func TestSlugify(t *testing.T) {
 func TestIsConfigured(t *testing.T) {
 	// Save original env vars
 	// Note: This test modifies environment, should be run in isolation
-	
+
 	t.Run("NotConfigured", func(t *testing.T) {
 		// When env vars are not set, should return false
 		// (depends on actual env state during test)
 	})
 }
-

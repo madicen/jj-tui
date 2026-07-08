@@ -5,21 +5,27 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/config"
+	"github.com/madicen/jj-tui/internal/tui/form"
 )
 
-// Model represents the Jira settings sub-tab
+// Field indices into the shared form (also the parent's local focus order).
+const (
+	fieldURL = iota
+	fieldUser
+	fieldToken
+	fieldProject
+	fieldProjectFilter
+	fieldIssueType
+	fieldJQL
+	fieldExcluded
+)
+
+// Model represents the Jira settings sub-tab. Focus/navigation/width plumbing
+// lives in the embedded form.Model; the getters/setters below map config fields
+// onto form field indices.
 type Model struct {
-	urlInput         textinput.Model
-	userInput        textinput.Model
-	tokenInput       textinput.Model
-	projectInput     textinput.Model   // project for creating new issues
-	projectFilterInput textinput.Model // project(s) for filtering ticket list
-	issueTypeInput   textinput.Model
-	jqlInput         textinput.Model
-	excludedInput    textinput.Model
-	focusedField     int
+	form form.Model
 }
 
 // NewModel creates a new Jira settings model
@@ -28,7 +34,6 @@ func NewModel() Model {
 	urlInput.Placeholder = "https://your-domain.atlassian.net"
 	urlInput.CharLimit = 100
 	urlInput.Width = 50
-	urlInput.Focus()
 
 	userInput := textinput.New()
 	userInput.Placeholder = "your-email@example.com"
@@ -68,46 +73,39 @@ func NewModel() Model {
 	excludedInput.Width = 50
 
 	return Model{
-		urlInput:          urlInput,
-		userInput:         userInput,
-		tokenInput:        tokenInput,
-		projectInput:      projectInput,
-		projectFilterInput: projectFilterInput,
-		issueTypeInput:    issueTypeInput,
-		jqlInput:          jqlInput,
-		excludedInput:     excludedInput,
-		focusedField:      0,
+		form: form.New(urlInput, userInput, tokenInput, projectInput,
+			projectFilterInput, issueTypeInput, jqlInput, excludedInput),
 	}
 }
 
 // NewModelFromConfig creates a model initialized from config and env.
 func NewModelFromConfig(cfg *config.Config) Model {
 	m := NewModel()
-	m.urlInput.SetValue(os.Getenv("JIRA_URL"))
-	m.userInput.SetValue(os.Getenv("JIRA_USER"))
-	m.tokenInput.SetValue(os.Getenv("JIRA_TOKEN"))
+	m.SetURL(os.Getenv("JIRA_URL"))
+	m.SetUser(os.Getenv("JIRA_USER"))
+	m.SetToken(os.Getenv("JIRA_TOKEN"))
 	jiraProject := os.Getenv("JIRA_PROJECT")
 	if jiraProject == "" && cfg != nil {
 		jiraProject = cfg.JiraProject
 	}
-	m.projectInput.SetValue(jiraProject)
+	m.SetProject(jiraProject)
 	jiraProjectFilter := os.Getenv("JIRA_PROJECT_FILTER")
 	if jiraProjectFilter == "" && cfg != nil {
 		jiraProjectFilter = cfg.JiraProjectFilter
 	}
-	m.projectFilterInput.SetValue(jiraProjectFilter)
+	m.SetProjectFilter(jiraProjectFilter)
 	jiraIssueType := os.Getenv("JIRA_ISSUE_TYPE")
 	if jiraIssueType == "" && cfg != nil && cfg.JiraIssueType != "" {
 		jiraIssueType = cfg.JiraIssueType
 	}
-	m.issueTypeInput.SetValue(jiraIssueType)
+	m.SetIssueType(jiraIssueType)
 	jiraJQL := os.Getenv("JIRA_JQL")
 	if jiraJQL == "" && cfg != nil {
 		jiraJQL = cfg.JiraJQL
 	}
-	m.jqlInput.SetValue(jiraJQL)
+	m.SetJQL(jiraJQL)
 	if cfg != nil {
-		m.excludedInput.SetValue(cfg.JiraExcludedStatuses)
+		m.SetExcludedStatuses(cfg.JiraExcludedStatuses)
 	}
 	return m
 }
@@ -117,37 +115,15 @@ func (m Model) Init() tea.Cmd {
 	return nil
 }
 
-// Update handles messages
+// Update handles messages: vertical navigation cycles focus; everything else is
+// routed to the focused input.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		// Only handle nav keys here; all other keys go to the focused input below
-		switch msg.String() {
-		case "j", "down", "k", "up":
-			return m.handleKeyMsg(msg)
+	if key, ok := msg.(tea.KeyMsg); ok {
+		if m.form.HandleNavKey(key.String()) {
+			return m, nil
 		}
 	}
-
-	var cmd tea.Cmd
-	switch m.focusedField {
-	case 0:
-		m.urlInput, cmd = m.urlInput.Update(msg)
-	case 1:
-		m.userInput, cmd = m.userInput.Update(msg)
-	case 2:
-		m.tokenInput, cmd = m.tokenInput.Update(msg)
-	case 3:
-		m.projectInput, cmd = m.projectInput.Update(msg)
-	case 4:
-		m.projectFilterInput, cmd = m.projectFilterInput.Update(msg)
-	case 5:
-		m.issueTypeInput, cmd = m.issueTypeInput.Update(msg)
-	case 6:
-		m.jqlInput, cmd = m.jqlInput.Update(msg)
-	case 7:
-		m.excludedInput, cmd = m.excludedInput.Update(msg)
-	}
-	return m, cmd
+	return m, m.form.Update(msg)
 }
 
 // View renders the model
@@ -155,186 +131,66 @@ func (m Model) View() string {
 	return "" // Rendered by parent
 }
 
-// handleKeyMsg handles keyboard input
-func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
-	switch msg.String() {
-	case "j", "down":
-		if m.focusedField < 7 {
-			m.unfocus()
-			m.focusedField++
-			m.focus()
-		}
-		return m, nil
-	case "k", "up":
-		if m.focusedField > 0 {
-			m.unfocus()
-			m.focusedField--
-			m.focus()
-		}
-		return m, nil
-	}
-	return m, nil
-}
-
-func (m *Model) focus() {
-	switch m.focusedField {
-	case 0:
-		m.urlInput.Focus()
-	case 1:
-		m.userInput.Focus()
-	case 2:
-		m.tokenInput.Focus()
-	case 3:
-		m.projectInput.Focus()
-	case 4:
-		m.projectFilterInput.Focus()
-	case 5:
-		m.issueTypeInput.Focus()
-	case 6:
-		m.jqlInput.Focus()
-	case 7:
-		m.excludedInput.Focus()
-	}
-}
-
-func (m *Model) unfocus() {
-	m.urlInput.Blur()
-	m.userInput.Blur()
-	m.tokenInput.Blur()
-	m.projectInput.Blur()
-	m.projectFilterInput.Blur()
-	m.issueTypeInput.Blur()
-	m.jqlInput.Blur()
-	m.excludedInput.Blur()
-}
-
 // Accessors
 
 // GetURL returns the Jira URL
-func (m *Model) GetURL() string {
-	return m.urlInput.Value()
-}
+func (m *Model) GetURL() string { return m.form.Value(fieldURL) }
 
 // SetURL sets the Jira URL
-func (m *Model) SetURL(url string) {
-	m.urlInput.SetValue(url)
-}
+func (m *Model) SetURL(url string) { m.form.SetValue(fieldURL, url) }
 
 // GetUser returns the Jira user
-func (m *Model) GetUser() string {
-	return m.userInput.Value()
-}
+func (m *Model) GetUser() string { return m.form.Value(fieldUser) }
 
 // SetUser sets the Jira user
-func (m *Model) SetUser(user string) {
-	m.userInput.SetValue(user)
-}
+func (m *Model) SetUser(user string) { m.form.SetValue(fieldUser, user) }
 
 // GetToken returns the Jira token
-func (m *Model) GetToken() string {
-	return m.tokenInput.Value()
-}
+func (m *Model) GetToken() string { return m.form.Value(fieldToken) }
 
 // SetToken sets the Jira token
-func (m *Model) SetToken(token string) {
-	m.tokenInput.SetValue(token)
-}
+func (m *Model) SetToken(token string) { m.form.SetValue(fieldToken, token) }
 
 // GetProject returns the Jira project for creating new issues
-func (m *Model) GetProject() string {
-	return m.projectInput.Value()
-}
+func (m *Model) GetProject() string { return m.form.Value(fieldProject) }
 
 // SetProject sets the Jira project for creating new issues
-func (m *Model) SetProject(s string) {
-	m.projectInput.SetValue(s)
-}
+func (m *Model) SetProject(s string) { m.form.SetValue(fieldProject, s) }
 
 // GetProjectFilter returns the Jira project filter for the ticket list
-func (m *Model) GetProjectFilter() string {
-	return m.projectFilterInput.Value()
-}
+func (m *Model) GetProjectFilter() string { return m.form.Value(fieldProjectFilter) }
 
 // SetProjectFilter sets the Jira project filter
-func (m *Model) SetProjectFilter(s string) {
-	m.projectFilterInput.SetValue(s)
-}
+func (m *Model) SetProjectFilter(s string) { m.form.SetValue(fieldProjectFilter, s) }
 
 // GetIssueType returns the default Jira issue type when creating issues
-func (m *Model) GetIssueType() string {
-	return m.issueTypeInput.Value()
-}
+func (m *Model) GetIssueType() string { return m.form.Value(fieldIssueType) }
 
 // SetIssueType sets the default Jira issue type
-func (m *Model) SetIssueType(s string) {
-	m.issueTypeInput.SetValue(s)
-}
+func (m *Model) SetIssueType(s string) { m.form.SetValue(fieldIssueType, s) }
 
 // GetJQL returns the Jira JQL filter
-func (m *Model) GetJQL() string {
-	return m.jqlInput.Value()
-}
+func (m *Model) GetJQL() string { return m.form.Value(fieldJQL) }
 
 // SetJQL sets the Jira JQL filter
-func (m *Model) SetJQL(s string) {
-	m.jqlInput.SetValue(s)
-}
+func (m *Model) SetJQL(s string) { m.form.SetValue(fieldJQL, s) }
 
 // GetExcludedStatuses returns the Jira excluded statuses
-func (m *Model) GetExcludedStatuses() string {
-	return m.excludedInput.Value()
-}
+func (m *Model) GetExcludedStatuses() string { return m.form.Value(fieldExcluded) }
 
 // SetExcludedStatuses sets the Jira excluded statuses
-func (m *Model) SetExcludedStatuses(s string) {
-	m.excludedInput.SetValue(s)
-}
+func (m *Model) SetExcludedStatuses(s string) { m.form.SetValue(fieldExcluded, s) }
 
 // GetInputViews returns the view strings for all 8 inputs
-func (m *Model) GetInputViews() []string {
-	return []string{
-		m.urlInput.View(),
-		m.userInput.View(),
-		m.tokenInput.View(),
-		m.projectInput.View(),
-		m.projectFilterInput.View(),
-		m.issueTypeInput.View(),
-		m.jqlInput.View(),
-		m.excludedInput.View(),
-	}
-}
+func (m *Model) GetInputViews() []string { return m.form.Views() }
 
 // GetFocusedField returns the focused input index (0-7)
-func (m *Model) GetFocusedField() int {
-	return m.focusedField
-}
+func (m *Model) GetFocusedField() int { return m.form.Focused() }
 
 // SetFocusedField sets the focused input index (0-7)
-func (m *Model) SetFocusedField(i int) {
-	if i < 0 {
-		i = 0
-	}
-	if i > 7 {
-		i = 7
-	}
-	m.focusedField = i
-	m.unfocus()
-	m.focus()
-}
+func (m *Model) SetFocusedField(i int) { m.form.SetFocused(i) }
 
 // SetInputWidth sets the width of all inputs
-func (m *Model) SetInputWidth(w int) {
-	m.urlInput.Width = w
-	m.userInput.Width = w
-	m.tokenInput.Width = w
-	m.projectInput.Width = w
-	m.projectFilterInput.Width = w
-	m.issueTypeInput.Width = w
-	m.jqlInput.Width = w
-	m.excludedInput.Width = w
-}
+func (m *Model) SetInputWidth(w int) { m.form.SetWidth(w) }
 
-// UpdateRepository updates the repository
-func (m *Model) UpdateRepository(repo *internal.Repository) {
-	// Jira settings don't depend on repository
-}
+// P2.8: Jira settings don't depend on the repository; no-op hook removed.

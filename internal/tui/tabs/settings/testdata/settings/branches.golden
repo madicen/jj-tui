@@ -1,0 +1,26 @@
+[3;38;2;97;113;163mConfig: ~/.config/jj-tui/config.json[0m
+[3;38;2;97;113;163m^j/^k: switch tabs  Tab: next field[0m
+
+[1088z  [38;2;97;113;163mGitHub[0m  [1088z │ [1089z  [38;2;97;113;163mJira[0m  [1089z │ [1090z  [38;2;97;113;163mCodecks[0m  [1090z │ [1091z  [38;2;97;113;163mTickets[0m  [1091z │ [1092z  [1;4;38;2;126;0;175;4mB[0m[1;4;38;2;126;0;175;4mr[0m[1;4;38;2;126;0;175;4ma[0m[1;4;38;2;126;0;175;4mn[0m[1;4;38;2;126;0;175;4mc[0m[1;4;38;2;126;0;175;4mh[0m[1;4;38;2;126;0;175;4me[0m[1;4;38;2;126;0;175;4ms[0m  [1092z │ [1093z  [38;2;97;113;163mTheme[0m  [1093z │ [1094z  [38;2;97;113;163mAI[0m  [1094z │ [1095z  [38;2;97;113;163mAdvanced[0m  [1095z
+
+[1;38;2;126;0;175mBranch Settings[0m
+
+[38;2;97;113;163mConfigure how branches are loaded and displayed.[0m
+
+[1m  Branch Limit:[0m
+    [1096z[38;2;126;0;175m[-][0m[1096z [1m20[0m [1097z[38;2;126;0;175m[+][0m[1097z
+[38;2;97;113;163m    Total branches to show (0 = all)[0m
+[38;2;97;113;163m    Local always included, remote filtered by recency[0m
+
+  [1098z[38;2;97;113;163m[ ][0m [38;2;97;113;163mShow all remote branches[0m[1098z
+[38;2;97;113;163m    Off: only tracked + your own branches. On: includes coworkers' untracked branches[0m
+
+[1mConnection Status:[0m
+[38;2;80;250;123m  ✓ GitHub connected[0m
+[38;2;80;250;123m  ✓ Tickets connected[0m
+
+[1mVersion:[0m
+[38;2;97;113;163m  dev[0m
+
+
+[1099z[48;2;68;71;89m [0m[38;2;248;248;242;48;2;68;71;89mSave Global (^s)[0m[48;2;68;71;89m [0m [1099z [1100z[48;2;68;71;89m [0m[38;2;248;248;242;48;2;68;71;89mSave Local (^l)[0m[48;2;68;71;89m [0m [1100z [1101z[48;2;68;71;89m [0m[38;2;248;248;242;48;2;68;71;89mCancel (Esc)[0m[48;2;68;71;89m [0m [1101z

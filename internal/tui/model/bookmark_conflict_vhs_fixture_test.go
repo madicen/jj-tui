@@ -94,7 +94,7 @@ func TestVHSTapeBookmarkConflictFixture_ModalAppears(t *testing.T) {
 		}
 	}
 	if idx < 0 {
-		var names []string
+		names := make([]string, 0, len(branches))
 		for _, b := range branches {
 			names = append(names, b.Name+"(local="+boolStr(b.IsLocal)+",conflict="+boolStr(b.HasConflict)+")")
 		}

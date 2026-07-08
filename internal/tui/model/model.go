@@ -3,152 +3,20 @@ package model
 import (
 	"context"
 	"fmt"
-	"os"
-	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
-	"github.com/madicen/bubble-color-picker"
 	bubbledropdown "github.com/madicen/bubble-dropdown"
-	overlay "github.com/madicen/bubble-overlay"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/config"
-	"github.com/madicen/jj-tui/internal/integrations/jj"
-	aitab "github.com/madicen/jj-tui/internal/tui/ai"
 	"github.com/madicen/jj-tui/internal/tui/data"
 	"github.com/madicen/jj-tui/internal/tui/genmenu"
 	"github.com/madicen/jj-tui/internal/tui/state"
-	bookmarktab "github.com/madicen/jj-tui/internal/tui/tabs/bookmark"
-	branchestab "github.com/madicen/jj-tui/internal/tui/tabs/branches"
-	conflicttab "github.com/madicen/jj-tui/internal/tui/tabs/conflict"
-	descedittab "github.com/madicen/jj-tui/internal/tui/tabs/descedit"
-	divergenttab "github.com/madicen/jj-tui/internal/tui/tabs/divergent"
-	errortab "github.com/madicen/jj-tui/internal/tui/tabs/error"
-	evologsplittab "github.com/madicen/jj-tui/internal/tui/tabs/evologsplit"
-	filedifftab "github.com/madicen/jj-tui/internal/tui/tabs/filediff"
-	githublogintab "github.com/madicen/jj-tui/internal/tui/tabs/githublogin"
-	graphtab "github.com/madicen/jj-tui/internal/tui/tabs/graph"
-	helptab "github.com/madicen/jj-tui/internal/tui/tabs/help"
-	"github.com/madicen/jj-tui/internal/tui/tabs/help/commandhistory"
-	initrepotab "github.com/madicen/jj-tui/internal/tui/tabs/initrepo"
-	prformtab "github.com/madicen/jj-tui/internal/tui/tabs/prform"
-	prstab "github.com/madicen/jj-tui/internal/tui/tabs/prs"
-	settingstab "github.com/madicen/jj-tui/internal/tui/tabs/settings"
-	ticketformtab "github.com/madicen/jj-tui/internal/tui/tabs/ticketform"
-	ticketstab "github.com/madicen/jj-tui/internal/tui/tabs/tickets"
-	warningtab "github.com/madicen/jj-tui/internal/tui/tabs/warning"
 	"github.com/madicen/jj-tui/internal/tui/util"
 )
-
-// Model is the main TUI model using bubblezone for mouse handling.
-// All clickable elements are wrapped with zone.Mark() in the View.
-// Mouse events are handled via zone.MsgZoneInBounds messages.
-type Model struct {
-	ctx         context.Context
-	zoneManager *zone.Manager
-	appState    state.AppState // Shared state and services; submodels receive &appState
-
-	// Dimensions (main only)
-	width  int
-	height int
-	// When ViewBookmarkConflict is open: tab to show under the overlay and restore on close/resolve.
-	bookmarkConflictReturnValid bool
-	bookmarkConflictReturnView  state.ViewMode
-	// When a centered form modal is open (edit description, PR/ticket forms, bookmark, GitHub login): tab
-	// content and tab bar highlight use this; ViewMode stays the modal for input routing.
-	modalUnderlayValid bool
-	modalUnderlayView  state.ViewMode
-	// Selection state lives in tab models: graph (commit/file), prs, tickets, branches
-	redoOperationID string
-	// Silent background graph refresh (handleTickMsg) runs concurrently per Bubble Tea Batch;
-	// without this guard, overlapping GetRepository calls can retain multi-copy graphs and spike RSS.
-	silentReloadInFlight bool
-	// Monotonic id for optional LLM requests; stale responses are ignored.
-	aiGenReqID int
-	// aiGenOverlayActive shows the centered spinner while Generate*Cmd runs (form modals + description editor).
-	aiGenOverlayActive bool
-	// pendingAIRetryKind is the most recently dispatched AI generation kind (NavigateGenerateCommitDescription,
-	// NavigateGeneratePRForm, NavigateGenerateBookmarkName, NavigateGenerateTicketForm). When the cmd reports an
-	// error, the error modal shows Retry (^r) and clicking it replays this kind via handleNavigate so the user
-	// keeps the open form modal and any text they had typed. Cleared on success or dismiss.
-	pendingAIRetryKind   state.NavigateKind
-	pendingAIRetryActive bool
-	// pendingAIRetryOverrideProfile preserves the long-press menu's one-shot profile selection so a retry
-	// after a transient error uses the same model the user picked. Empty = retry with active profile.
-	pendingAIRetryOverrideProfile string
-
-	// Tab-specific models (own all tab/modal state; main model does not duplicate)
-	graphTabModel    graphtab.GraphModel
-	prsTabModel      prstab.Model
-	branchesTabModel branchestab.Model
-	ticketsTabModel  ticketstab.Model
-	settingsTabModel settingstab.Model
-	helpTabModel     helptab.Model
-
-	// Modal models (dialogs and modals)
-	initRepoModel    initrepotab.Model
-	errorModal       errortab.Model
-	warningModal     warningtab.Model
-	conflictModal    conflicttab.Model
-	divergentModal   divergenttab.Model
-	evologSplitModal evologsplittab.Model
-	// evologPostSplitDescribe is set when the user confirms split with “AI describe after split”; cleared after describe runs or on graph return.
-	evologPostSplitDescribe bool
-	// evologStepwiseRemainderAfterSplit: after an intermediate stepwise FAQ split, reload evolog without closing the modal.
-	evologStepwiseRemainderAfterSplit []string
-	evologStepwiseBookmarkName        string
-	// Post-split AI describe preview (y apply / n discard).
-	evologDescribePreviewActive   bool
-	evologDescribePreviewFromPlan bool // true when text came from suggest-phase chain preview (not post-split LLM)
-	evologDescribeSkipParent      bool // @- immutable: apply only describes @
-	evologDescribeParent          string
-	evologDescribeChild           string
-	// evologPrecomputedDescribe* come from AI suggest (chain preview); used when describe-after-split runs without a second LLM.
-	evologPrecomputedDescribeParent string
-	evologPrecomputedDescribeChild  string
-	fileDiffModal                   filedifftab.Model
-	bookmarkModal                   bookmarktab.Model
-	prFormModal                     prformtab.Model
-	ticketFormModal                 ticketformtab.Model
-	desceditModal                   descedittab.Model
-	githubLoginModel                githublogintab.Model
-
-	busySpinner spinner.Model
-
-	// chrome routes draggable window chrome for the active modal (see window_chrome.go).
-	chrome overlay.Window
-	// chromeConsumedPress is set when window chrome consumed a mouse press (e.g. the
-	// [x] close button, the title-bar drag handle, or a resize edge). The MouseMsg
-	// handler uses it to swallow the matching release when chrome doesn't claim it
-	// itself — without this, a [x] click closes the modal on press, then the release
-	// leaks through to the underlay zones (e.g. the graph tab's "split" button) and
-	// fires whatever happens to sit beneath the close button. Drag/resize releases
-	// stay handled by chrome.Update, so the flag only kicks in when chrome's release
-	// path didn't engage (i.e. the press triggered a Pop/close).
-	chromeConsumedPress bool
-	// lastFileDiffDimsSeq snapshots filediff.Model.DimensionsSeq() from the last
-	// frame. The file diff modal auto-sizes to its current patch, but bubble-
-	// overlay's chrome locks ContentWidth/ContentHeight after the first frame
-	// (see InitLayerContentSize). Comparing the sequence per frame lets View()
-	// nudge the chrome to re-seed only when our natural size actually changed
-	// (load complete, terminal resize), so user drag/resize/minimize state on
-	// quiet frames isn't clobbered by an unconditional reset.
-	lastFileDiffDimsSeq int
-	// lastEvologContentSig is the "WxH" signature of the evolog split modal's
-	// rendered content on the last frame. The modal opens on a tiny "Loading
-	// jj evolog…" placeholder and only grows to full size once the evolog
-	// loads (and again when an AI plan adds lines), but chrome locks its
-	// content size on the first frame — so without re-seeding it stays stuck
-	// at the placeholder's height ("mostly minimized"). Comparing the signature
-	// per frame lets View() re-seed only when the natural size actually changed.
-	lastEvologContentSig string
-}
-
-// doPollMsg is a message used to trigger a GitHub token poll.
-type doPollMsg struct{}
 
 // estimatedContentHeight returns height available for tab content (excluding header/status).
 // Used in Update() when delegating to tabs so viewport/list dimensions are correct for scroll handling.
@@ -314,26 +182,6 @@ func (m *Model) activeFormModalGenMenuOverlay() (string, int, int) {
 }
 
 // buildSettingsViewOpts builds ViewOpts for the settings tab (used when entering settings or on resize).
-func (m *Model) buildSettingsViewOpts() settingstab.ViewOpts {
-	ticketName := ""
-	if m.appState.TicketService != nil {
-		ticketName = m.appState.TicketService.GetProviderName()
-	}
-	_, ghLookErr := exec.LookPath("gh")
-	return settingstab.ViewOpts{
-		GitHubAvailable:   m.isGitHubAvailable(),
-		TicketServiceName: ticketName,
-		Config:            m.appState.Config,
-		ContentHeight:     m.estimatedContentHeight(),
-		GhAvailable:       ghLookErr == nil,
-	}
-}
-
-// Auto-refresh interval for the repository view.
-// Kept at 5s to limit CPU and allocation churn from repeated jj log + parse.
-const autoRefreshInterval = 5 * time.Second
-
-// tickCmd returns a command that sends a tick after the refresh interval.
 func (m *Model) tickCmd() tea.Cmd {
 	return tea.Tick(autoRefreshInterval, func(t time.Time) tea.Msg {
 		return tickMsg(t)
@@ -353,51 +201,6 @@ func (m *Model) isSelectedCommitValid() bool {
 }
 
 // applyRepositoryLoaded applies a loaded repository from data or actions package (shared logic).
-func (m *Model) applyRepositoryLoaded(repo *internal.Repository) (*Model, tea.Cmd) {
-	m.silentReloadInFlight = false
-	var oldPRs []internal.GitHubPR
-	if m.appState.Repository != nil {
-		oldPRs = m.appState.Repository.PRs
-	}
-	m.appState.Repository = repo
-	m.appState.Repository.PRs = oldPRs
-	m.appState.Loading = false
-	if m.appState.JJService == nil {
-		jjSvc, _ := jj.NewService("")
-		m.appState.JJService = jjSvc
-	}
-	m.appState.StatusMessage = fmt.Sprintf("Loaded %d commits", len(repo.Graph.Commits))
-	m.graphTabModel.UpdateRepository(m.appState.Repository)
-	m.prsTabModel.UpdateRepository(m.appState.Repository)
-	m.prsTabModel.SetGithubService(m.isGitHubAvailable())
-	m.branchesTabModel.UpdateRepository(m.appState.Repository)
-	m.ticketsTabModel.UpdateRepository(m.appState.Repository)
-	m.settingsTabModel.UpdateRepository(m.appState.Repository)
-	m.helpTabModel.UpdateRepository(m.appState.Repository)
-	var cmds []tea.Cmd
-	cmds = append(cmds, m.tickCmd())
-	if m.appState.GitHubService != nil {
-		existing := 0
-		if m.appState.Repository != nil {
-			existing = len(m.appState.Repository.PRs)
-		}
-		cmds = append(cmds, m.wrapFirstPRLoadCmd(prstab.LoadPRsCmd(m.appState.GitHubService, m.appState.GithubInfo, m.appState.DemoMode, existing)))
-	}
-	commits := repo.Graph.Commits
-	if len(commits) > 0 {
-		idx := m.graphTabModel.GetSelectedCommit()
-		if idx < 0 {
-			idx = 0
-		}
-		m.graphTabModel.SelectCommit(idx)
-		cmds = append(cmds, graphtab.LoadChangedFilesCmd(m.appState.JJService, commits[idx].ChangeID))
-	}
-	return m, tea.Batch(cmds...)
-}
-
-// bookmarksNeedingPRLookup collects local bookmark names in the graph that should be resolved to an
-// open PR via a targeted query. It skips the default branch and bookmarks already matched to an open
-// PR in the current list, and caps the count so a graph with many bookmarks can't fan out unboundedly.
 func (m *Model) bookmarksNeedingPRLookup() []string {
 	if m.appState.Repository == nil {
 		return nil
@@ -437,32 +240,6 @@ func (m *Model) bookmarksNeedingPRLookup() []string {
 }
 
 // refreshRepository starts a refresh of the repository data.
-func (m *Model) refreshRepository() tea.Cmd {
-	m.appState.StatusMessage = "Refreshing..."
-	var cmds []tea.Cmd
-	if m.appState.JJService == nil {
-		cmds = append(cmds, data.InitializeServices(m.appState.DemoMode))
-	} else {
-		cmds = append(cmds, data.LoadRepository(m.appState.JJService))
-		// Branches tab keeps its own list (trunk graph, HasConflict); ^r must reload it too or diverged
-		// bookmarks look stale after resolve until the user switches tabs or something else loads branches.
-		cmds = append(cmds, branchestab.LoadBranchesCmd(m.appState.JJService, m.settingsTabModel.GetSettingsBranchLimit()))
-	}
-	if m.isGitHubAvailable() {
-		existing := 0
-		if m.appState.Repository != nil {
-			existing = len(m.appState.Repository.PRs)
-		}
-		cmds = append(cmds, m.wrapFirstPRLoadCmd(prstab.LoadPRsCmd(m.appState.GitHubService, m.appState.GithubInfo, m.appState.DemoMode, existing)))
-	}
-	svc := m.appState.TicketService
-	if svc != nil && !util.IsNilInterface(svc) {
-		cmds = append(cmds, ticketstab.LoadTicketsCmd(svc, m.appState.DemoMode))
-	}
-	return tea.Batch(cmds...)
-}
-
-// createIsZoneClickedFuncWithEvent returns a function that checks if the given zone ID contains the mouse event.
 func (m *Model) createIsZoneClickedFuncWithEvent(event tea.MouseMsg) func(string) bool {
 	return func(zoneID string) bool {
 		z := m.zoneManager.Get(zoneID)
@@ -473,58 +250,10 @@ func (m *Model) createIsZoneClickedFuncWithEvent(event tea.MouseMsg) func(string
 // --- Handlers: main routes to tabs; tabs own context (BuildRequestContextFrom) and execution (ExecuteRequest / EnterTab). ---
 
 // processGraphRequest runs a graph request via the graph tab; ApplyResult mutates app and returns cmd.
-func (m *Model) processGraphRequest(r graphtab.Request) (tea.Model, tea.Cmd) {
-	if r.Checkout || r.Squash || r.Abandon || r.NewCommit || r.PerformRebase || r.DragRebase || r.ResolveDivergent != nil || r.CreateBookmark || r.DeleteBookmark || r.CreatePR || r.UpdatePR || r.MoveFileUp || r.MoveFileDown || r.RevertFile || r.MoveDeltaOntoOrigin || r.StartEvologSplit || r.ResolveBookmarkConflict {
-		m.redoOperationID = ""
-	}
-	ctx := graphtab.BuildRequestContextFrom(m)
-	res := graphtab.HandleRequest(r, ctx)
-	cmd := graphtab.ApplyResult(res, &m.graphTabModel, ctx, &m.appState)
-	return m, m.wrapGraphTabCmd(cmd)
-}
-
-func (m *Model) handleHelpRequest(r commandhistory.Request) (tea.Model, tea.Cmd) {
-	statusMsg, cmd := commandhistory.ExecuteRequest(r)
-	if statusMsg != "" {
-		m.appState.StatusMessage = statusMsg
-	}
-	return m, cmd
-}
-
-func (m *Model) handleSettingsRequest(r settingstab.Request) (tea.Model, tea.Cmd) {
-	statusMsg, cmd := settingstab.ExecuteRequest(r)
-	if statusMsg != "" {
-		m.appState.StatusMessage = statusMsg
-	}
-	return m, cmd
-}
-
 func (m *Model) handleNavigateToGraphTab() (tea.Model, tea.Cmd) {
 	m.appState.ViewMode = state.ViewCommitGraph
 	m.appState.StatusMessage = "Loading commit graph"
 	return m, m.refreshRepository()
-}
-
-func (m *Model) handleNavigateToPRTab() (tea.Model, tea.Cmd) {
-	m.appState.ViewMode = state.ViewPullRequests
-	status, cmd := prstab.EnterTab(m)
-	m.appState.StatusMessage = status
-	if cmd != nil {
-		cmd = m.wrapFirstPRLoadCmd(cmd)
-	}
-	return m, cmd
-}
-
-func (m *Model) handleNavigateToTicketsTab() (tea.Model, tea.Cmd) {
-	m.appState.ViewMode = state.ViewTickets
-	status, cmd := ticketstab.EnterTab(m)
-	m.appState.StatusMessage = status
-	if cmd != nil && !m.appState.TicketsLoadedOnce {
-		m.appState.Loading = true
-		m.appState.StatusMessage = "Loading tickets…"
-		return m, tea.Batch(cmd, m.startBusySpinnerCmd())
-	}
-	return m, cmd
 }
 
 func (m *Model) handleNavigateToSettingsTab() (tea.Model, tea.Cmd) {
@@ -559,573 +288,12 @@ func (m *Model) refreshSettingsOriginURL() {
 
 func (m *Model) handleNavigateToHelpTab() (tea.Model, tea.Cmd) {
 	m.appState.ViewMode = state.ViewHelp
-	m.helpTabModel.SetCommandHistoryEntries(helptab.BuildCommandHistoryEntries(m.appState.JJService))
+	m.refreshHelpCommandHistory()
 	m.helpTabModel.SetSelectedCommand(0)
 	m.appState.StatusMessage = "Loaded Help"
 	return m, nil
 }
 
-func (m *Model) handleNavigateToBranchesTab() (tea.Model, tea.Cmd) {
-	m.appState.ViewMode = state.ViewBranches
-	status, cmd := branchestab.EnterTab(m)
-	m.appState.StatusMessage = status
-	return m, cmd
-}
-
-// handleNavigate performs view changes that only main can do (it owns modals and cross-tab state).
-func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
-	if t.Kind == state.NavigateSaveDescription || t.Kind == state.NavigateSubmitBookmark || t.Kind == state.NavigateSubmitPR || t.Kind == state.NavigateSubmitTicket || t.Kind == state.NavigateResolveConflict || t.Kind == state.NavigateResolveDivergent || t.Kind == state.NavigateRunInit || t.Kind == state.NavigatePerformEvologSplit {
-		m.redoOperationID = ""
-	}
-	switch t.Kind {
-	case state.NavigateEditDescription:
-		// If we're entering edit-description from the empty-description warning, ensure the warning is closed.
-		m.warningModal.Hide()
-		if m.appState.Repository != nil {
-			for i, c := range m.appState.Repository.Graph.Commits {
-				if c.ChangeID == t.Commit.ChangeID {
-					m.graphTabModel.SelectCommit(i)
-					break
-				}
-			}
-		}
-		return m.startEditingDescription(t.Commit)
-	case state.NavigateCreateBookmark:
-		m.startCreateBookmark()
-		return m, branchestab.LoadBranchesCmd(m.appState.JJService, m.settingsTabModel.GetSettingsBranchLimit())
-	case state.NavigateCreateBookmarkFromTicket:
-		m.beginModalUnderlay()
-		m.appState.ViewMode = state.ViewCreateBookmark
-		m.appState.StatusMessage = bookmarktab.OpenCreateBookmarkFromTicket(&m.bookmarkModal, m.appState.Repository, t.TicketKey, t.TicketTitle, t.TicketDisplayKey, m.branchesTabModel.BuildBookmarkNameConflictSources(), m.appState.Config != nil && m.appState.Config.ShouldSanitizeBookmarkNames(), ModalInnerWidth(m.width))
-		m.pushAIProfilesToFormModals()
-		return m, nil
-	case state.NavigateWarning:
-		m.warningModal.Show(t.WarningTitle, t.WarningMessage, t.WarningCommits)
-		return m, nil
-	case state.NavigateCreatePR:
-		m.startCreatePR()
-		return m, nil
-	case state.NavigateBackToGraph:
-		m.clearAIGenOverlay()
-		m.clearPendingAIRetry()
-		m.evologSplitModal.Hide()
-		m.evologStepwiseRemainderAfterSplit = nil
-		m.evologStepwiseBookmarkName = ""
-		m.fileDiffModal.Hide()
-		m.restoreModalUnderlayOrGraph()
-		m.appState.Loading = false
-		if t.StatusMessage != "" {
-			m.appState.StatusMessage = t.StatusMessage
-		}
-		return m, nil
-	case state.NavigateOpenEvologSplit:
-		m.evologPostSplitDescribe = false
-		m.evologStepwiseRemainderAfterSplit = nil
-		m.evologStepwiseBookmarkName = ""
-		m.evologDescribePreviewActive = false
-		m.evologDescribePreviewFromPlan = false
-		m.evologDescribeSkipParent = false
-		m.evologDescribeParent = ""
-		m.evologDescribeChild = ""
-		m.evologPrecomputedDescribeParent = ""
-		m.evologPrecomputedDescribeChild = ""
-		bn := graphtab.FeatureBookmarkForSplit(t.Commit.Branches)
-		m.evologSplitModal = m.evologSplitModal.SetDimensions(m.width, m.height).WithSuggestConfig(m.appState.Config)
-		descDef := m.appState.Config != nil && m.appState.Config.DefaultEvologPostSplitDescribe()
-		m.evologSplitModal.Show(t.Commit, bn, descDef)
-		m.appState.ViewMode = state.ViewEvologSplit
-		m.appState.StatusMessage = "Loading jj evolog…"
-		return m, evologsplittab.LoadEvologCmd(m.appState.JJService, bn, t.Commit)
-	case state.NavigateCloseFileDiff:
-		m.fileDiffModal.Hide()
-		if isStaleFileDiffGlobalStatus(m.appState.StatusMessage) {
-			m.appState.StatusMessage = ""
-		}
-		if m.evologSplitModal.IsShown() {
-			m.appState.ViewMode = state.ViewEvologSplit
-		} else {
-			m.restoreModalUnderlayOrGraph()
-		}
-		return m, nil
-	case state.NavigateOpenFileDiff:
-		if raw := strings.TrimSpace(t.FileDiffRawGit); raw != "" {
-			m.fileDiffModal = m.fileDiffModal.SetDimensions(m.width, m.height)
-			m.fileDiffModal = m.fileDiffModal.ShowPreloadedStyledDiff(
-				strings.TrimSpace(t.FileDiffOverlayTitle),
-				strings.TrimSpace(t.FileDiffOverlaySubtitle),
-				raw,
-			)
-			m.appState.ViewMode = state.ViewFileDiff
-			m.appState.StatusMessage = ""
-			return m, nil
-		}
-		path := strings.TrimSpace(t.FileDiffPath)
-		if path == "" || m.appState.JJService == nil {
-			m.appState.StatusMessage = "Cannot open file diff"
-			return m, nil
-		}
-		m.fileDiffModal = m.fileDiffModal.SetDimensions(m.width, m.height)
-		seq := m.fileDiffModal.BeginLoad(t.Commit, path)
-		m.appState.ViewMode = state.ViewFileDiff
-		m.appState.StatusMessage = "Loading file diff…"
-		return m, filedifftab.LoadFileDiffCmd(m.appState.JJService, seq, t.Commit.ChangeID, path)
-	case state.NavigatePerformEvologSplit:
-		m.evologSplitModal.ResetOutcomePreviewForPerformSplit()
-		m.evologPostSplitDescribe = t.EvologDescribeAfterSplit
-		m.evologPrecomputedDescribeParent = strings.TrimSpace(t.EvologPrecomputedDescribeParent)
-		m.evologPrecomputedDescribeChild = strings.TrimSpace(t.EvologPrecomputedDescribeChild)
-		m.evologStepwiseRemainderAfterSplit = append([]string(nil), t.EvologStepwiseRemainder...)
-		m.evologStepwiseBookmarkName = t.EvologBookmarkName
-		m.appState.StatusMessage = "Splitting change…"
-		m.appState.Loading = true
-		return m, tea.Batch(
-			evologsplittab.PerformEvologSplitCmd(
-				m.appState.JJService,
-				t.EvologBookmarkName,
-				t.EvologTipChangeID,
-				t.EvologTipCommitHint,
-				t.EvologBaseCommitID,
-				t.EvologMultiBaseCommitIDs,
-				t.EvologFilesetsFirst,
-				t.EvologHunkPeelRounds,
-			),
-			m.startBusySpinnerCmd(),
-		)
-	case state.NavigateBackToBranches:
-		m.appState.ViewMode = state.ViewBranches
-		if t.StatusMessage != "" {
-			m.appState.StatusMessage = t.StatusMessage
-		}
-		return m, nil
-	case state.NavigateCloseBookmarkConflict:
-		m.conflictModal.Hide()
-		if m.bookmarkConflictReturnValid {
-			m.appState.ViewMode = m.bookmarkConflictReturnView
-		} else {
-			m.appState.ViewMode = state.ViewBranches
-		}
-		m.bookmarkConflictReturnValid = false
-		if t.StatusMessage != "" {
-			m.appState.StatusMessage = t.StatusMessage
-		}
-		return m, nil
-	case state.NavigateBackToSettings:
-		m.appState.ViewMode = state.ViewSettings
-		if t.StatusMessage != "" {
-			m.appState.StatusMessage = t.StatusMessage
-		}
-		return m, nil
-	case state.NavigateDismissError:
-		m.errorModal.ClearError()
-		m.clearPendingAIRetry()
-		// If a form modal (Edit Description, PR/Ticket/Bookmark, GitHub login) is open, keep it
-		// open after dismissing the error. Previously we forced ViewMode back to the graph,
-		// which silently discarded whatever the user had typed. Errors triggered from these
-		// views are typically AI/network failures the user wants to recover from inline.
-		if !m.isFormModalView() {
-			m.appState.ViewMode = state.ViewCommitGraph
-		}
-		if t.StatusMessage != "" {
-			m.appState.StatusMessage = t.StatusMessage
-		}
-		if t.RefreshAfterDismiss {
-			return m, m.refreshRepository()
-		}
-		return m, m.tickCmd()
-	case state.NavigateDismissInit:
-		m.initRepoModel.SetPath("")
-		m.appState.ViewMode = state.ViewCommitGraph
-		if t.StatusMessage != "" {
-			m.appState.StatusMessage = t.StatusMessage
-		}
-		return m, m.tickCmd()
-	case state.NavigateGitHubLoginCancel:
-		m.githubLoginModel.ClearFlow()
-		m.clearModalUnderlay()
-		m.appState.ViewMode = state.ViewSettings
-		if t.StatusMessage != "" {
-			m.appState.StatusMessage = t.StatusMessage
-		}
-		return m, nil
-	case state.NavigateSaveDescription:
-		// A second save while the first describe is still running causes parallel jj operations on the
-		// same revision → divergent commits (same message, sibling children of one parent).
-		if m.appState.Loading || m.aiGenOverlayActive {
-			return m, nil
-		}
-		if t.SaveCommitID != "" && m.appState.JJService != nil {
-			m.appState.Loading = true
-			m.appState.StatusMessage = "Saving description…"
-			cmd := graphtab.SaveDescriptionCmd(m.appState.JJService, t.SaveCommitID, t.SaveDescription)
-			return m, tea.Batch(cmd, m.startBusySpinnerCmd())
-		}
-		return m, nil
-	case state.NavigateSubmitBookmark:
-		if m.appState.JJService != nil {
-			cmd, status := bookmarktab.SubmitBookmark(&m.bookmarkModal, m.appState.Repository, m.appState.Config, m.appState.JJService)
-			m.appState.StatusMessage = status
-			if cmd == nil {
-				return m, nil
-			}
-			m.appState.Loading = true
-			// Batch the spinner tick so the busy overlay animates while jj creates the bookmark
-			// and the repo reloads (cleared by applyRepositoryLoaded). Test harnesses that drain
-			// cmds one message per step must expand the resulting tea.BatchMsg.
-			return m, tea.Batch(cmd, m.startBusySpinnerCmd())
-		}
-		return m, nil
-	case state.NavigateSubmitPR:
-		if m.isGitHubAvailable() && m.appState.JJService != nil {
-			return m, m.submitPR()
-		}
-		return m, nil
-	case state.NavigateResolveConflict:
-		m.appState.StatusMessage = "Resolving bookmark conflict..."
-		return m, conflicttab.ResolveBookmarkConflictCmd(m.appState.JJService, t.ConflictBookmarkName, t.ConflictResolution)
-	case state.NavigateResolveDivergent:
-		m.appState.StatusMessage = "Resolving divergent commit..."
-		return m, divergenttab.ResolveDivergentCommitCmd(m.appState.JJService, t.DivergentChangeID, t.DivergentKeepCommitID)
-	case state.NavigateWarningCancel:
-		if t.StatusMessage != "" {
-			m.appState.StatusMessage = t.StatusMessage
-		}
-		return m, nil
-	case state.NavigateRunInit:
-		m.appState.Loading = true
-		switch {
-		case t.InitGhCreateRepo:
-			m.appState.StatusMessage = "Initializing repository and creating GitHub repo…"
-		case strings.TrimSpace(t.InitRemoteURL) != "":
-			m.appState.StatusMessage = "Initializing repository and adding remote…"
-		default:
-			m.appState.StatusMessage = "Initializing repository…"
-		}
-		opts := data.InitOptions{
-			Colocate:      t.InitColocate,
-			RemoteURL:     t.InitRemoteURL,
-			GhCreateRepo:  t.InitGhCreateRepo,
-			GhRepoName:    t.InitGhRepoName,
-			GhRepoPrivate: t.InitGhRepoPrivate,
-		}
-		return m, tea.Batch(data.RunJJInit(opts), m.startBusySpinnerCmd())
-	case state.NavigateRemoteApply:
-		url := strings.TrimSpace(t.RemoteURL)
-		if url == "" {
-			// Empty URL on a tab where origin is already configured is a "I cleared the field
-			// to remove origin" intent; route to remove instead so the user doesn't have to
-			// remember the Ctrl+x shortcut.
-			gh := m.settingsTabModel.GetGitHubModel()
-			if gh.GetCurrentOrigin() != "" {
-				return m, data.RemoveOriginCmd(m.appState.JJService)
-			}
-			m.appState.StatusMessage = "Enter a remote URL first"
-			return m, nil
-		}
-		m.appState.Loading = true
-		m.appState.StatusMessage = "Configuring origin remote…"
-		return m, tea.Batch(data.ApplyOriginCmd(m.appState.JJService, url), m.startBusySpinnerCmd())
-	case state.NavigateRemoteCreateGh:
-		m.appState.Loading = true
-		m.appState.StatusMessage = "Creating GitHub repository…"
-		// Repo name is implicitly the current working directory; the data layer derives it from
-		// filepath.Base when name is empty so we don't need to plumb it through here.
-		return m, tea.Batch(data.CreateGhRepoCmd(m.appState.JJService, "", t.RemoteRepoPrivate), m.startBusySpinnerCmd())
-	case state.NavigateRemoteRemove:
-		m.appState.Loading = true
-		m.appState.StatusMessage = "Removing origin remote…"
-		return m, tea.Batch(data.RemoveOriginCmd(m.appState.JJService), m.startBusySpinnerCmd())
-	case state.NavigatePushBookmarks:
-		m.appState.Loading = true
-		if t.PushAll {
-			m.appState.StatusMessage = "Pushing all bookmarks to origin…"
-		} else {
-			m.appState.StatusMessage = "Pushing current bookmark to origin…"
-		}
-		return m, tea.Batch(data.PushBookmarksCmd(m.appState.JJService, t.PushAll), m.startBusySpinnerCmd())
-	case state.NavigateRetryError:
-		// If we have a saved AI replay target, clear the modal and re-dispatch the same
-		// NavigateGenerate* request via handleNavigate. The form modal underneath stays open
-		// so the user keeps any text they typed, and the spinner overlay flips back on.
-		if m.pendingAIRetryActive {
-			m.errorModal.ClearError()
-			retryKind := m.pendingAIRetryKind
-			retryOverride := m.pendingAIRetryOverrideProfile
-			// pendingAIRetryActive will be set again by the NavigateGenerate* handler.
-			m.pendingAIRetryActive = false
-			return m.handleNavigate(state.NavigateTarget{Kind: retryKind, AIOverrideProfile: retryOverride})
-		}
-		// No replayable action: fall back to the legacy behavior of dismissing and refreshing
-		// the repository. Today the Retry button is hidden in this case (errortab.HasRetry is
-		// false), so this branch is only reached if the user binds ctrl+r elsewhere.
-		m.errorModal.ClearError()
-		if !m.isFormModalView() {
-			m.appState.ViewMode = state.ViewCommitGraph
-		}
-		return m, m.refreshRepository()
-	case state.NavigateBackFromPRForm:
-		m.clearAIGenOverlay()
-		m.clearPendingAIRetry()
-		m.prFormModal.Hide()
-		m.restoreModalUnderlayOrGraph()
-		if t.StatusMessage != "" {
-			m.appState.StatusMessage = t.StatusMessage
-		}
-		return m, nil
-	case state.NavigateCreateTicket:
-		m.startCreateTicket()
-		return m, nil
-	case state.NavigateBackFromTicketForm:
-		m.clearAIGenOverlay()
-		m.clearPendingAIRetry()
-		m.ticketFormModal.Hide()
-		if m.modalUnderlayValid {
-			m.appState.ViewMode = m.modalUnderlayView
-			m.modalUnderlayValid = false
-		} else {
-			m.appState.ViewMode = state.ViewTickets
-		}
-		if t.StatusMessage != "" {
-			m.appState.StatusMessage = t.StatusMessage
-		}
-		return m, nil
-	case state.NavigateSubmitTicket:
-		return m, m.submitTicket()
-	case state.NavigateGenerateCommitDescription:
-		if m.appState.Config == nil || !m.appState.Config.AIConfiguredForGeneration() {
-			m.appState.StatusMessage = fmt.Sprintf("Enable AI in Settings → AI and set an API key (or %s)", config.EnvAIAPIKey)
-			return m, nil
-		}
-		changeID := m.desceditModal.GetEditingCommitID()
-		if changeID == "" {
-			return m, nil
-		}
-		override := m.resolveAIOverride(t)
-		m.aiGenReqID++
-		rid := m.aiGenReqID
-		m.appState.StatusMessage = aiGenStatusMessage("Generating description…", override)
-		m.aiGenOverlayActive = true
-		m.pendingAIRetryKind = state.NavigateGenerateCommitDescription
-		m.pendingAIRetryActive = true
-		m.pendingAIRetryOverrideProfile = t.AIOverrideProfile
-		return m, tea.Batch(
-			aitab.GenerateCommitDescriptionCmd(rid, m.appState.JJService, m.appState.Config, changeID, m.desceditModal.GetCommitShortID(), m.desceditModal.GetDescriptionValue(), override),
-			m.startBusySpinnerCmd(),
-		)
-	case state.NavigateGeneratePRForm:
-		if m.appState.Config == nil || !m.appState.Config.AIConfiguredForGeneration() {
-			m.appState.StatusMessage = fmt.Sprintf("Enable AI in Settings → AI and set an API key (or %s)", config.EnvAIAPIKey)
-			return m, nil
-		}
-		repo := m.appState.Repository
-		idx := m.prFormModal.GetCommitIndex()
-		if repo == nil || idx < 0 || idx >= len(repo.Graph.Commits) {
-			return m, nil
-		}
-		changeID := repo.Graph.Commits[idx].ChangeID
-		override := m.resolveAIOverride(t)
-		m.aiGenReqID++
-		rid := m.aiGenReqID
-		m.appState.StatusMessage = aiGenStatusMessage("Generating PR title and body…", override)
-		m.aiGenOverlayActive = true
-		m.pendingAIRetryKind = state.NavigateGeneratePRForm
-		m.pendingAIRetryActive = true
-		m.pendingAIRetryOverrideProfile = t.AIOverrideProfile
-		return m, tea.Batch(
-			aitab.GeneratePRFormCmd(rid, m.appState.JJService, m.appState.Config, changeID, m.prFormModal.GetBaseBranch(), m.prFormModal.GetHeadBranch(), m.prFormModal.GetTitle(), override),
-			m.startBusySpinnerCmd(),
-		)
-	case state.NavigateGenerateBookmarkName:
-		if m.appState.Config == nil || !m.appState.Config.AIConfiguredForGeneration() {
-			m.appState.StatusMessage = fmt.Sprintf("Enable AI in Settings → AI and set an API key (or %s)", config.EnvAIAPIKey)
-			return m, nil
-		}
-		repo := m.appState.Repository
-		idx := m.bookmarkModal.GetCommitIdx()
-		rev := "@"
-		if repo != nil && idx >= 0 && idx < len(repo.Graph.Commits) {
-			rev = repo.Graph.Commits[idx].ChangeID
-		}
-		hint := ""
-		if m.bookmarkModal.IsFromJira() {
-			hint = strings.TrimSpace(m.bookmarkModal.GetJiraKey() + " " + m.bookmarkModal.GetJiraTicketTitle())
-		}
-		override := m.resolveAIOverride(t)
-		m.aiGenReqID++
-		rid := m.aiGenReqID
-		m.appState.StatusMessage = aiGenStatusMessage("Generating bookmark name…", override)
-		m.aiGenOverlayActive = true
-		m.pendingAIRetryKind = state.NavigateGenerateBookmarkName
-		m.pendingAIRetryActive = true
-		m.pendingAIRetryOverrideProfile = t.AIOverrideProfile
-		return m, tea.Batch(
-			aitab.GenerateBookmarkNameCmd(rid, m.appState.JJService, m.appState.Config, rev, hint, override),
-			m.startBusySpinnerCmd(),
-		)
-	case state.NavigateGenerateTicketForm:
-		if m.appState.Config == nil || !m.appState.Config.AIConfiguredForGeneration() {
-			m.appState.StatusMessage = fmt.Sprintf("Enable AI in Settings → AI and set an API key (or %s)", config.EnvAIAPIKey)
-			return m, nil
-		}
-		repo := m.appState.Repository
-		idx := m.GetSelectedCommit()
-		changeID := "@"
-		changeShort := "@"
-		if repo != nil && idx >= 0 && idx < len(repo.Graph.Commits) {
-			c := repo.Graph.Commits[idx]
-			changeID = c.ChangeID
-			if strings.TrimSpace(c.ShortID) != "" {
-				changeShort = strings.TrimSpace(c.ShortID)
-			} else {
-				changeShort = changeID
-			}
-		}
-		override := m.resolveAIOverride(t)
-		m.aiGenReqID++
-		rid := m.aiGenReqID
-		m.appState.StatusMessage = aiGenStatusMessage("Generating ticket title and description…", override)
-		m.aiGenOverlayActive = true
-		m.pendingAIRetryKind = state.NavigateGenerateTicketForm
-		m.pendingAIRetryActive = true
-		m.pendingAIRetryOverrideProfile = t.AIOverrideProfile
-		return m, tea.Batch(
-			aitab.GenerateTicketFormCmd(rid, m.appState.JJService, m.appState.Config, changeID, changeShort, m.ticketFormModal.GetSummary(), m.ticketFormModal.GetDescription(), override),
-			m.startBusySpinnerCmd(),
-		)
-	default:
-		return m, nil
-	}
-}
-
-func (m *Model) handleUndo() (tea.Model, tea.Cmd) {
-	if m.appState.JJService != nil {
-		m.appState.Loading = true
-		m.appState.StatusMessage = "Undoing..."
-		return m, tea.Batch(graphtab.UndoCmd(m.appState.JJService), m.startBusySpinnerCmd())
-	}
-	return m, nil
-}
-
-func (m *Model) handleRedo() (tea.Model, tea.Cmd) {
-	if m.appState.JJService != nil && m.redoOperationID != "" {
-		m.appState.Loading = true
-		m.appState.StatusMessage = "Redoing..."
-		return m, tea.Batch(graphtab.RedoCmd(m.appState.JJService, m.redoOperationID), m.startBusySpinnerCmd())
-	}
-	return m, nil
-}
-
-func (m *Model) handleSelectCommit(index int) (tea.Model, tea.Cmd) {
-	return m.processGraphRequest(graphtab.Request{SelectCommit: &index})
-}
-
-// startEditingDescription switches to description edit view and starts loading the description.
-func (m *Model) startEditingDescription(commit internal.Commit) (tea.Model, tea.Cmd) {
-	m.beginModalUnderlay()
-	m.appState.ViewMode = state.ViewEditDescription
-	m.desceditModal, m.appState.StatusMessage = descedittab.StartEditing(m.desceditModal, commit, ModalInnerWidth(m.width), max(m.height-24, 3))
-	m.pushAIProfilesToFormModals()
-	return m, descedittab.LoadDescriptionCmd(m.appState.JJService, commit.ChangeID)
-}
-
-// startCreateBookmark opens the bookmark creation dialog for the selected commit.
-func (m *Model) startCreateBookmark() {
-	if !m.isSelectedCommitValid() {
-		m.appState.StatusMessage = "No commit selected"
-		return
-	}
-	m.beginModalUnderlay()
-	idx := m.GetSelectedCommit()
-	m.appState.ViewMode = state.ViewCreateBookmark
-	m.appState.StatusMessage = bookmarktab.OpenCreateBookmark(&m.bookmarkModal, m.appState.Repository, idx, m.branchesTabModel.BuildBookmarkNameConflictSources(), m.appState.Config != nil && m.appState.Config.ShouldSanitizeBookmarkNames(), ModalInnerWidth(m.width))
-	m.pushAIProfilesToFormModals()
-}
-
-// startCreatePR opens the PR creation dialog for the selected commit's bookmark.
-func (m *Model) startCreatePR() {
-	if !m.isSelectedCommitValid() {
-		m.appState.StatusMessage = "No commit selected"
-		return
-	}
-	idx := m.GetSelectedCommit()
-	contentHeight := m.estimatedContentHeight()
-	res := prformtab.OpenCreatePR(&m.prFormModal, m.appState.Repository, idx, m.bookmarkModal.GetJiraBookmarkTitles(), m.appState.DefaultBranch, ModalInnerWidth(m.width), contentHeight)
-	if !res.Ok {
-		m.appState.StatusMessage = res.StatusMessage
-		return
-	}
-	m.beginModalUnderlay()
-	m.appState.ViewMode = state.ViewCreatePR
-	m.appState.StatusMessage = res.StatusMessage
-	m.pushAIProfilesToFormModals()
-}
-
-// submitPR runs the PR creation command.
-func (m *Model) submitPR() tea.Cmd {
-	// Avoid duplicate CreatePRCmd (e.g. double mouse release or overlapping zone deliveries)
-	// while a create is already in flight.
-	if m.appState.ViewMode == state.ViewCreatePR && m.appState.Loading {
-		return nil
-	}
-	res := prformtab.SubmitPR(&m.prFormModal, m.appState.Repository, m.appState.JJService, m.appState.GitHubService, m.appState.DemoMode)
-	m.appState.StatusMessage = res.StatusMessage
-	if res.Cmd == nil {
-		return nil
-	}
-	m.appState.Loading = true
-	return tea.Batch(res.Cmd, m.startBusySpinnerCmd())
-}
-
-// startCreateTicket opens the Create Ticket dialog when the provider supports it.
-func (m *Model) startCreateTicket() {
-	contentHeight := m.estimatedContentHeight()
-	res := ticketformtab.OpenCreateTicket(&m.ticketFormModal, m.appState.TicketService, ModalInnerWidth(m.width), contentHeight)
-	if !res.Ok {
-		m.appState.StatusMessage = res.StatusMessage
-		return
-	}
-	m.beginModalUnderlay()
-	m.appState.ViewMode = state.ViewCreateTicket
-	m.appState.StatusMessage = res.StatusMessage
-	m.pushAIProfilesToFormModals()
-}
-
-// submitTicket runs the create-ticket command and closes the modal on success.
-func (m *Model) submitTicket() tea.Cmd {
-	res := ticketformtab.SubmitTicket(&m.ticketFormModal, m.appState.TicketService, m.appState.DemoMode)
-	m.appState.StatusMessage = res.StatusMessage
-	if res.Cmd == nil {
-		return nil
-	}
-	m.appState.Loading = true
-	return tea.Batch(res.Cmd, m.startBusySpinnerCmd())
-}
-
-// saveSettings builds params from settings tab and runs global save.
-func (m *Model) saveSettings() tea.Cmd {
-	ghOwner, ghRepo := "", ""
-	if m.appState.GitHubService != nil {
-		ghOwner = m.appState.GitHubService.GetOwner()
-		ghRepo = m.appState.GitHubService.GetRepo()
-	}
-	return settingstab.SaveSettings(&m.settingsTabModel, ghOwner, ghRepo)
-}
-
-// saveSettingsLocal builds params and runs local save.
-func (m *Model) saveSettingsLocal() tea.Cmd {
-	ghOwner, ghRepo := "", ""
-	if m.appState.GitHubService != nil {
-		ghOwner = m.appState.GitHubService.GetOwner()
-		ghRepo = m.appState.GitHubService.GetRepo()
-	}
-	return settingstab.SaveSettingsLocal(&m.settingsTabModel, ghOwner, ghRepo)
-}
-
-// confirmCleanup runs the cleanup command for the current confirming type.
-func (m *Model) confirmCleanup() tea.Cmd {
-	return settingstab.ConfirmCleanup(&m.settingsTabModel, m.appState.JJService, m.appState.Repository)
-}
-
-// handleClipboardCopiedMsg sets status (or error modal copied flag) from copy result; kept in main (generic).
 func (m *Model) handleClipboardCopiedMsg(msg util.ClipboardCopiedMsg) (tea.Model, tea.Cmd) {
 	if msg.Success {
 		if m.appState.ViewMode == state.ViewGitHubLogin {
@@ -1144,14 +312,9 @@ func (m *Model) handleClipboardCopiedMsg(msg util.ClipboardCopiedMsg) (tea.Model
 
 // SetRepository sets the repository data and syncs to tab models (e.g. for tests)
 func (m *Model) SetRepository(repo *internal.Repository) {
-	m.appState.Repository = repo
-	m.graphTabModel.UpdateRepository(repo)
-	m.prsTabModel.UpdateRepository(repo)
+	m.appState.UpdateRepository(repo)
+	m.propagateRepository()
 	m.prsTabModel.SetGithubService(m.isGitHubAvailable())
-	m.branchesTabModel.UpdateRepository(repo)
-	m.ticketsTabModel.UpdateRepository(repo)
-	m.settingsTabModel.UpdateRepository(repo)
-	m.helpTabModel.UpdateRepository(repo)
 }
 
 // Init implements tea.Model
@@ -1234,16 +397,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Propagate dimensions to tab models so they can render
 		cmds := util.PropagateUpdate(msg, &m.graphTabModel, &m.prsTabModel, &m.branchesTabModel, &m.ticketsTabModel, &m.settingsTabModel, &m.helpTabModel)
 		// Set content-area height on tabs so graph/files split fills the content area (not full window)
-		m.graphTabModel.SetDimensions(m.width, contentHeight)
-		m.prsTabModel.SetDimensions(m.width, contentHeight)
-		m.branchesTabModel.SetDimensions(m.width, contentHeight)
-		m.ticketsTabModel.SetDimensions(m.width, contentHeight)
-		m.settingsTabModel.SetDimensions(m.width, contentHeight)
-		m.helpTabModel.SetDimensions(m.width, contentHeight)
+		for _, vm := range m.tabOrder {
+			m.tabRegistry[vm].SetDimensions(m.width, contentHeight)
+		}
 		m.evologSplitModal = m.evologSplitModal.SetDimensions(m.width, m.height).WithSuggestConfig(m.appState.Config)
 		m.fileDiffModal = m.fileDiffModal.SetDimensions(m.width, m.height)
 		m.divergentModal = m.divergentModal.SetDimensions(m.width, m.height)
 		m.conflictModal = m.conflictModal.SetDimensions(m.width, m.height)
+		m.workspacesModal = m.workspacesModal.SetDimensions(m.width, m.height)
+		m.operationsModal = m.operationsModal.SetDimensions(m.width, m.height)
 		if len(cmds) > 0 {
 			return m, tea.Batch(cmds...)
 		}
@@ -1271,7 +433,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.appState.Loading = true
 				m.appState.StatusMessage = "Applying descriptions…"
 				return m, tea.Batch(
-					aitab.ApplyEvologSplitDescriptionsCmd(0, m.appState.JJService, m.appState.Config, pd, cd, skipP),
+					m.applyEvologSplitDescriptionsCmd(pd, cd, skipP),
 					m.startBusySpinnerCmd(),
 				)
 			case "n", "N", "esc":
@@ -1285,65 +447,77 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		}
+		if m.absorbPreviewActive {
+			switch msg.String() {
+			case "y", "Y":
+				m.absorbPreviewActive = false
+				m.absorbPreviewSummary = ""
+				m.redoOperationID = ""
+				m.pendingUndoHint = true
+				m.appState.Loading = true
+				m.appState.StatusMessage = "Absorbing…"
+				return m, tea.Batch(
+					m.absorbApplyCmd(),
+					m.startBusySpinnerCmd(),
+				)
+			case "n", "N", "esc":
+				m.absorbPreviewActive = false
+				m.absorbPreviewSummary = ""
+				m.appState.StatusMessage = "Absorb cancelled"
+				return m, nil
+			default:
+				return m, nil
+			}
+		}
 		// When an overlay or blocking modal is showing, route keys to handleKeyMsg (init, error, warning) or view modals.
 		if m.initRepoModel.Path() != "" || m.errorModal.GetError() != nil || m.warningModal.IsShown() {
 			return m.handleKeyMsg(msg)
 		}
 		// View-specific modals (divergent, bookmark conflict): route keys to handleKeyMsg so the modal gets them.
-		if m.appState.ViewMode == state.ViewDivergentCommit || m.appState.ViewMode == state.ViewBookmarkConflict || m.appState.ViewMode == state.ViewEvologSplit || m.appState.ViewMode == state.ViewFileDiff {
+		if m.appState.ViewMode == state.ViewDivergentCommit || m.appState.ViewMode == state.ViewBookmarkConflict || m.appState.ViewMode == state.ViewEvologSplit || m.appState.ViewMode == state.ViewFileDiff || m.appState.ViewMode == state.ViewWorkspaces || m.appState.ViewMode == state.ViewOperations {
 			return m.handleKeyMsg(msg)
 		}
 		// Esc in Settings: close in-tab overlays (theme picker, cleanup confirm) first; otherwise leave settings.
 		if m.appState.ViewMode == state.ViewSettings && msg.String() == "esc" {
-			if !m.settingsTabModel.EscHandledInsideSettings() {
+			if !m.escHandledInsideSettings() {
 				return m.handleNavigate(state.NavigateTarget{Kind: state.NavigateBackToGraph, StatusMessage: "Settings cancelled"})
 			}
 		}
-		// Delegate to tab models for their specific views (tabs own selection state)
-		switch m.appState.ViewMode {
-		case state.ViewCommitGraph:
-			updated, cmd := m.graphTabModel.UpdateWithApp(msg, &m.appState)
-			m.graphTabModel = updated
-			if cmd != nil {
-				return m, m.wrapGraphTabCmd(cmd)
-			}
-		case state.ViewPullRequests:
-			updated, cmd := m.prsTabModel.UpdateWithApp(msg, &m.appState)
-			m.prsTabModel = updated
-			if cmd != nil {
-				return m, cmd
-			}
-			// Fall through to handleKeyMsg for non-delegated keys
-		case state.ViewBranches:
-			updated, cmd := m.branchesTabModel.UpdateWithApp(msg, &m.appState)
-			m.branchesTabModel = updated
-			if cmd != nil {
-				return m, m.wrapBranchFetchCmd(cmd)
-			}
-		case state.ViewTickets:
-			wasStatusChange := m.ticketsTabModel.IsStatusChangeMode()
-			updated, cmd := m.ticketsTabModel.UpdateWithApp(msg, &m.appState)
-			m.ticketsTabModel = updated
-			if cmd != nil {
-				return m, cmd
-			}
-			if msg.String() == "esc" && wasStatusChange && !m.ticketsTabModel.IsStatusChangeMode() {
+		// Delegate to the active tab behind the registry (tabs own selection
+		// state). The adapters apply the per-tab command wrapper the inline
+		// paths used (graph → wrapGraphTabCmd; prs/branches → wrapSpinnerStart)
+		// so the returned cmd is already wrapped. Per-view control flow (Settings
+		// always consumes; Help swallows tab/shift+tab; Tickets swallows the
+		// esc that closed status-change mode) is preserved below; every other
+		// view falls through to handleKeyMsg when the tab didn't consume the key.
+		if t, ok := m.tabRegistry[m.appState.ViewMode]; ok {
+			switch m.appState.ViewMode {
+			case state.ViewTickets:
+				wasStatusChange := m.isTicketsStatusChangeMode()
+				if _, cmd := t.Update(msg, &m.appState); cmd != nil {
+					return m, cmd
+				}
+				if msg.String() == "esc" && wasStatusChange && !m.isTicketsStatusChangeMode() {
+					return m, nil
+				}
+			case state.ViewSettings:
+				_, cmd := t.Update(msg, &m.appState)
+				if cmd != nil {
+					return m, cmd
+				}
 				return m, nil
-			}
-		case state.ViewSettings:
-			cmds := util.PropagateUpdate(msg, &m.settingsTabModel)
-			if len(cmds) > 0 && cmds[0] != nil {
-				return m, cmds[0]
-			}
-			return m, nil
-		case state.ViewHelp:
-			cmds := util.PropagateUpdate(msg, &m.helpTabModel)
-			if len(cmds) > 0 && cmds[0] != nil {
-				return m, cmds[0]
-			}
-			// Tab/shift+tab switch help sub-tab; don't fall through to handleKeyMsg (which would switch to graph)
-			if msg.String() == "tab" || msg.String() == "shift+tab" {
-				return m, nil
+			case state.ViewHelp:
+				if _, cmd := t.Update(msg, &m.appState); cmd != nil {
+					return m, cmd
+				}
+				// Tab/shift+tab switch help sub-tab; don't fall through to handleKeyMsg (which would switch to graph)
+				if msg.String() == "tab" || msg.String() == "shift+tab" {
+					return m, nil
+				}
+			default: // graph, prs, branches
+				if _, cmd := t.Update(msg, &m.appState); cmd != nil {
+					return m, cmd
+				}
 			}
 		}
 		return m.handleKeyMsg(msg)
@@ -1438,90 +612,30 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.fileDiffModal = updated
 				return m, cmd
 			}
+			// Wheel over a primary tab: every view sized its tab before
+			// delegating, so do that generically through the registry (the
+			// adapters apply the same command wrappers the inline paths used).
 			contentHeight := m.estimatedContentHeight()
-			switch m.appState.ViewMode {
-			case state.ViewCommitGraph:
-				m.graphTabModel.SetDimensions(m.width, contentHeight)
-				updated, cmd := m.graphTabModel.UpdateWithApp(msg, &m.appState)
-				m.graphTabModel = updated
-				if cmd != nil {
-					return m, m.wrapGraphTabCmd(cmd)
-				}
-			case state.ViewPullRequests:
-				m.prsTabModel.SetDimensions(m.width, contentHeight)
-				updated, cmd := m.prsTabModel.UpdateWithApp(msg, &m.appState)
-				m.prsTabModel = updated
-				if cmd != nil {
+			if t, ok := m.tabRegistry[m.appState.ViewMode]; ok {
+				t.SetDimensions(m.width, contentHeight)
+				if _, cmd := t.Update(msg, &m.appState); cmd != nil {
 					return m, cmd
-				}
-			case state.ViewBranches:
-				m.branchesTabModel.SetDimensions(m.width, contentHeight)
-				cmds := util.PropagateUpdate(msg, &m.branchesTabModel)
-				if len(cmds) > 0 && cmds[0] != nil {
-					return m, cmds[0]
-				}
-			case state.ViewTickets:
-				m.ticketsTabModel.SetDimensions(m.width, contentHeight)
-				updated, cmd := m.ticketsTabModel.UpdateWithApp(msg, &m.appState)
-				m.ticketsTabModel = updated
-				if cmd != nil {
-					return m, cmd
-				}
-			case state.ViewSettings:
-				m.settingsTabModel.SetDimensions(m.width, contentHeight)
-				cmds := util.PropagateUpdate(msg, &m.settingsTabModel)
-				if len(cmds) > 0 && cmds[0] != nil {
-					return m, cmds[0]
-				}
-			case state.ViewHelp:
-				m.helpTabModel.SetDimensions(m.width, contentHeight)
-				cmds := util.PropagateUpdate(msg, &m.helpTabModel)
-				if len(cmds) > 0 && cmds[0] != nil {
-					return m, cmds[0]
 				}
 			}
 			return m, nil
 		}
-		// Delegate other mouse to active tab (same as KeyMsg) for any other scroll/click handling
-		// Set dimensions for list tabs so wheel/scroll works even when isWheel wasn't true (e.g. terminal encoding)
+		// Delegate other mouse to active tab (same as KeyMsg) for any other scroll/click handling.
+		// The list tabs (prs/branches/tickets) size themselves first so scroll works even when the
+		// wheel encoding wasn't recognized above; graph/settings/help delegate without a resize,
+		// matching the pre-registry behavior exactly.
 		contentHeight := m.estimatedContentHeight()
-		switch m.appState.ViewMode {
-		case state.ViewCommitGraph:
-			updated, cmd := m.graphTabModel.UpdateWithApp(msg, &m.appState)
-			m.graphTabModel = updated
-			if cmd != nil {
-				return m, m.wrapGraphTabCmd(cmd)
+		if t, ok := m.tabRegistry[m.appState.ViewMode]; ok {
+			switch m.appState.ViewMode {
+			case state.ViewPullRequests, state.ViewBranches, state.ViewTickets:
+				t.SetDimensions(m.width, contentHeight)
 			}
-		case state.ViewPullRequests:
-			m.prsTabModel.SetDimensions(m.width, contentHeight)
-			updated, cmd := m.prsTabModel.UpdateWithApp(msg, &m.appState)
-			m.prsTabModel = updated
-			if cmd != nil {
+			if _, cmd := t.Update(msg, &m.appState); cmd != nil {
 				return m, cmd
-			}
-		case state.ViewBranches:
-			m.branchesTabModel.SetDimensions(m.width, contentHeight)
-			updated, cmd := m.branchesTabModel.UpdateWithApp(msg, &m.appState)
-			m.branchesTabModel = updated
-			if cmd != nil {
-				return m, m.wrapBranchFetchCmd(cmd)
-			}
-		case state.ViewTickets:
-			m.ticketsTabModel.SetDimensions(m.width, contentHeight)
-			updated, cmd := m.ticketsTabModel.UpdateWithApp(msg, &m.appState)
-			m.ticketsTabModel = updated
-			if cmd != nil {
-				return m, cmd
-			}
-		case state.ViewSettings:
-			cmds := util.PropagateUpdate(msg, &m.settingsTabModel)
-			if len(cmds) > 0 && cmds[0] != nil {
-				return m, cmds[0]
-			}
-		case state.ViewHelp:
-			cmds := util.PropagateUpdate(msg, &m.helpTabModel)
-			if len(cmds) > 0 && cmds[0] != nil {
-				return m, cmds[0]
 			}
 		}
 		if msg.Action == tea.MouseActionRelease {
@@ -1576,33 +690,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.fileDiffModal = updated
 			return m, cmd
 		}
-		// Delegate to tab when in that view so it can return requests
-		if m.appState.ViewMode == state.ViewCommitGraph {
-			updated, cmd := m.graphTabModel.UpdateWithApp(msg, &m.appState)
-			m.graphTabModel = updated
-			if cmd != nil {
-				return m, m.wrapGraphTabCmd(cmd)
-			}
-		}
-		if m.appState.ViewMode == state.ViewPullRequests {
-			updated, cmd := m.prsTabModel.UpdateWithApp(msg, &m.appState)
-			m.prsTabModel = updated
-			if cmd != nil {
-				return m, cmd
-			}
-		}
-		if m.appState.ViewMode == state.ViewBranches {
-			updated, cmd := m.branchesTabModel.UpdateWithApp(msg, &m.appState)
-			m.branchesTabModel = updated
-			if cmd != nil {
-				return m, m.wrapBranchFetchCmd(cmd)
-			}
-		}
-		if m.appState.ViewMode == state.ViewTickets {
-			updated, cmd := m.ticketsTabModel.UpdateWithApp(msg, &m.appState)
-			m.ticketsTabModel = updated
-			if cmd != nil {
-				return m, cmd
+		// Delegate to the active content tab (graph/prs/branches/tickets) so it
+		// can return requests; settings/help are handled inside handleZoneClick.
+		// Graph, PRs, Branches, and Tickets already receive zone.MsgZoneInBounds
+		// here before handleZoneClick runs, so handleZoneClick must not re-Update
+		// them (double-processing the release).
+		switch m.appState.ViewMode {
+		case state.ViewCommitGraph, state.ViewPullRequests, state.ViewBranches, state.ViewTickets:
+			if t, ok := m.tabRegistry[m.appState.ViewMode]; ok {
+				if _, cmd := t.Update(msg, &m.appState); cmd != nil {
+					return m, cmd
+				}
 			}
 		}
 		return m.handleZoneClick(msg)
@@ -1620,949 +718,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case state.NavigateMsg:
 		return m.handleNavigate(msg.Target)
 
-	case aitab.TextGeneratedMsg:
-		if msg.ReqID != m.aiGenReqID {
-			return m, nil
-		}
-		m.clearAIGenOverlay()
-		if msg.Err != nil {
-			var label string
-			switch msg.Kind {
-			case aitab.KindCommitDescription:
-				label = "Commit description (AI)"
-			case aitab.KindPR:
-				label = "Pull request (AI)"
-			case aitab.KindBookmark:
-				label = "Bookmark name (AI)"
-			case aitab.KindTicket:
-				label = "Create ticket (AI)"
-			default:
-				label = "AI"
-			}
-			nm, cmd := m.Update(errorMsg{Err: fmt.Errorf("%s: %w", label, msg.Err)})
-			// errorMsg path resets hasRetry to false; turn it back on so the user sees the
-			// Retry button. The pending replay target is whatever NavigateGenerate* last set
-			// (still valid here because we only got here from one of those code paths).
-			m.errorModal.SetHasRetry(m.pendingAIRetryActive)
-			return nm, cmd
-		}
-		// Success: forget the saved retry target so a later non-AI failure doesn't accidentally
-		// offer Retry that replays a stale generation.
-		m.clearPendingAIRetry()
-		switch msg.Kind {
-		case aitab.KindCommitDescription:
-			if m.appState.ViewMode != state.ViewEditDescription || m.desceditModal.GetEditingCommitID() != msg.CommitID {
-				return m, nil
-			}
-			cur := strings.TrimSpace(m.desceditModal.GetDescriptionValue())
-			next := strings.TrimSpace(msg.Text)
-			if next == "" {
-				return m, nil
-			}
-			if cur == "" {
-				m.desceditModal.SetDescription(next)
-			} else {
-				m.desceditModal.SetDescription(cur + "\n\n" + next)
-			}
-			m.appState.StatusMessage = "Description generated (review, then save)"
-		case aitab.KindPR:
-			if m.appState.ViewMode != state.ViewCreatePR {
-				return m, nil
-			}
-			if t := strings.TrimSpace(msg.Title); t != "" {
-				m.prFormModal.SetTitle(t)
-			}
-			if b := strings.TrimSpace(msg.Body); b != "" {
-				m.prFormModal.SetBody(b)
-			}
-			m.appState.StatusMessage = "PR fields generated (review, then create)"
-		case aitab.KindBookmark:
-			if m.appState.ViewMode != state.ViewCreateBookmark {
-				return m, nil
-			}
-			name := strings.TrimSpace(msg.Text)
-			if m.appState.Config != nil && m.appState.Config.ShouldSanitizeBookmarkNames() {
-				name = jj.SanitizeBookmarkName(name)
-			}
-			name = jj.TruncateBookmarkName(name)
-			m.bookmarkModal.SetBookmarkName(name)
-			m.bookmarkModal.UpdateNameExistsFromInput(m.appState.Config != nil && m.appState.Config.ShouldSanitizeBookmarkNames())
-			m.appState.StatusMessage = "Bookmark name suggested (edit if needed)"
-		case aitab.KindTicket:
-			if m.appState.ViewMode != state.ViewCreateTicket {
-				return m, nil
-			}
-			if t := strings.TrimSpace(msg.Title); t != "" {
-				m.ticketFormModal.SetSummary(t)
-			}
-			if b := strings.TrimSpace(msg.Body); b != "" {
-				m.ticketFormModal.SetDescription(b)
-			}
-			m.appState.StatusMessage = "Ticket fields generated from graph revision (review, then create)"
-		}
-		return m, nil
-
-	case commandhistory.Request:
-		return m.handleHelpRequest(msg)
-
-	case settingstab.Request:
-		return m.handleSettingsRequest(msg)
-	case settingstab.SaveSettingsEffect:
-		return m, m.saveSettings()
-	case settingstab.SaveSettingsLocalEffect:
-		return m, m.saveSettingsLocal()
-	case settingstab.PerformCancelMsg:
-		return m.handleNavigate(state.NavigateTarget{Kind: state.NavigateBackToGraph, StatusMessage: "Settings cancelled"})
-
-	case ticketstab.OpenURLEffect:
-		return m, util.OpenURL(msg.URL)
-	case ticketstab.ToggleModeEffect:
-		mode := !m.ticketsTabModel.IsStatusChangeMode()
-		m.ticketsTabModel.SetStatusChangeMode(mode)
-		m.appState.StatusMessage = msg.Status
-		return m, nil
-	case ticketstab.OpenCreateBookmarkFromTicketEffect:
-		return m.handleNavigate(state.NavigateTarget{
-			Kind:             state.NavigateCreateBookmarkFromTicket,
-			TicketKey:        msg.TicketKey,
-			TicketTitle:      msg.Title,
-			TicketDisplayKey: msg.DisplayKey,
-		})
-
-	case descedittab.SaveRequestedMsg, descedittab.CancelRequestedMsg:
-		updated, cmd := m.desceditModal.Update(msg)
-		m.desceditModal = updated
-		return m, cmd
-
-	case bookmarktab.CancelRequestedMsg, bookmarktab.SubmitRequestedMsg:
-		updated, cmd := m.bookmarkModal.Update(msg)
-		m.bookmarkModal = updated
-		m.bookmarkModal.UpdateNameExistsFromInput(m.appState.Config != nil && m.appState.Config.ShouldSanitizeBookmarkNames())
-		return m, cmd
-
-	case prformtab.CancelRequestedMsg, prformtab.SubmitRequestedMsg:
-		updated, cmd := m.prFormModal.Update(msg)
-		m.prFormModal = updated
-		return m, cmd
-
-	case ticketformtab.CancelRequestedMsg, ticketformtab.SubmitRequestedMsg:
-		updated, cmd := m.ticketFormModal.Update(msg)
-		m.ticketFormModal = updated
-		return m, cmd
-
-	case settingstab.RequestConfirmCleanupMsg:
-		return m, m.confirmCleanup()
-	case settingstab.RequestCancelCleanupMsg:
-		m.appState.StatusMessage = settingstab.CancelCleanupStatus
-		return m, nil
-	case settingstab.RequestSetStatusMsg:
-		m.appState.StatusMessage = msg.Status
-		return m, nil
-
-	case errortab.RequestCopyMsg:
-		if m.errorModal.GetError() != nil {
-			m.errorModal.SetCopied(true)
-			return m, util.CopyToClipboard(m.errorModal.GetError().Error())
-		}
-		return m, nil
-
-	case warningtab.EditCommitRequestedMsg:
-		updated, cmd := m.warningModal.Update(msg)
-		m.warningModal = updated
-		return m, cmd
-
-	case graphtab.EditCompletedMsg:
-		// Preserve PRs from previous repository
-		var oldPRs []internal.GitHubPR
-		if m.appState.Repository != nil {
-			oldPRs = m.appState.Repository.PRs
-		}
-		m.appState.Repository = msg.Repository
-		m.appState.Repository.PRs = oldPRs // Restore PRs temporarily
-		// Push fresh graph into tab models before clearing loading so the overlay stays up until
-		// the UI can render the new @ / tree (appState alone does not update GraphModel).
-		m.graphTabModel.UpdateRepository(m.appState.Repository)
-		m.prsTabModel.UpdateRepository(m.appState.Repository)
-		m.prsTabModel.SetGithubService(m.isGitHubAvailable())
-		m.branchesTabModel.UpdateRepository(m.appState.Repository)
-		m.ticketsTabModel.UpdateRepository(m.appState.Repository)
-		m.settingsTabModel.UpdateRepository(m.appState.Repository)
-		m.helpTabModel.UpdateRepository(m.appState.Repository)
-		// Don't clear error modal here - let errors persist until dismissed
-		var workingChangeID string
-		for i, commit := range msg.Repository.Graph.Commits {
-			if commit.IsWorking {
-				m.graphTabModel.SelectCommit(i)
-				workingChangeID = commit.ChangeID
-				break
-			}
-		}
-		m.appState.Loading = false
-		m.appState.StatusMessage = "Now editing working copy"
-
-		var cmds []tea.Cmd
-		cmds = append(cmds, m.tickCmd())
-		if workingChangeID != "" && m.appState.JJService != nil {
-			cmds = append(cmds, graphtab.LoadChangedFilesCmd(m.appState.JJService, workingChangeID))
-		}
-
-		// Also refresh PRs when GitHub is connected (needed for Update PR button)
-		if m.appState.GitHubService != nil {
-			existingPRs := 0
-			if m.appState.Repository != nil {
-				existingPRs = len(m.appState.Repository.PRs)
-			}
-			cmds = append(cmds, m.wrapFirstPRLoadCmd(prstab.LoadPRsCmd(m.appState.GitHubService, m.appState.GithubInfo, m.appState.DemoMode, existingPRs)))
-		}
-
-		return m, tea.Batch(cmds...)
-
-	case errorMsg:
-		m.evologDescribePreviewActive = false
-		m.evologDescribePreviewFromPlan = false
-		m.evologDescribeSkipParent = false
-		m.evologDescribeParent = ""
-		m.evologDescribeChild = ""
-		if m.appState.ViewMode == state.ViewEvologSplit || m.appState.ViewMode == state.ViewFileDiff || m.appState.ViewMode == state.ViewEditDescription {
-			m.appState.Loading = false
-		}
-		cmd, info := errortab.HandleError(errortab.ErrorInput{NotJJRepo: msg.NotJJRepo, CurrentPath: msg.CurrentPath, Err: msg.Err}, &m.appState)
-		if info != nil {
-			if info.NotJJRepo {
-				m.initRepoModel.SetPath(info.CurrentPath)
-			} else {
-				m.errorModal.SetError(info.Err, false, "")
-			}
-		}
-		return m, cmd
-	case data.InitErrorMsg:
-		// Soft-failure path: jj init succeeded but a follow-up step (gh repo create / git remote
-		// add) failed. The directory is now a valid jj repo, so dismiss the init screen and load
-		// services as if init had fully succeeded. The follow-up error is still surfaced via the
-		// error modal so the user knows to set up the remote manually.
-		if msg.JJInitialized {
-			m.initRepoModel.SetPath("")
-			m.errorModal.SetError(msg.Err, false, "")
-			m.appState.StatusMessage = "Repository initialized; remote setup failed"
-			return m, data.InitializeServices(m.appState.DemoMode)
-		}
-		cmd, info := initrepotab.HandleInitError(msg, &m.appState)
-		if info != nil {
-			if info.NotJJRepo {
-				m.initRepoModel.SetPath(info.CurrentPath)
-			} else {
-				m.errorModal.SetError(info.Err, false, "")
-			}
-		}
-		return m, cmd
-	case data.JJInitSuccessMsg:
-		m.initRepoModel.SetPath("")
-		m.errorModal.SetError(nil, false, "")
-		return m, initrepotab.HandleJJInitSuccess(msg, &m.appState)
-	case data.RemoteOpResultMsg:
-		return m.handleRemoteOpResultMsg(msg)
-	case data.PushResultMsg:
-		return m.handlePushResultMsg(msg)
-	case data.RepoReadyMsg:
-		return m.handleRepoReadyMsg(msg)
-	case data.AuxServicesReadyMsg:
-		return m.handleAuxServicesReadyMsg(msg)
-	case data.ServicesInitializedMsg:
-		return m.handleDataServicesInitializedMsg(msg)
-	case data.RepositoryLoadedMsg:
-		return m.handleDataRepositoryLoadedMsg(msg)
-	case graphtab.RepositoryLoadedMsg:
-		return m.handleActionsRepositoryLoadedMsg(msg)
-	case data.SilentRepositoryLoadedMsg:
-		return m.handleDataSilentRepositoryLoadedMsg(msg)
-
-	case prstab.PrsLoadedMsg:
-		m.appState.PRsLoadedOnce = true
-		m.appState.Loading = false
-		updated, cmd := m.prsTabModel.UpdateWithApp(msg, &m.appState)
-		m.prsTabModel = updated
-		m.prsTabModel.UpdateRepository(m.appState.Repository)
-		// The bulk list just replaced Repository.PRs; resolve any still-unmatched local bookmarks to
-		// their open PR via targeted lookups so the graph can offer "Update PR" for branches the
-		// limited bulk fetch omitted. Run after the bulk load so PrsLoadedMsg can't clobber the result.
-		if resolveCmd := prstab.ResolveOpenPRsForBookmarksCmd(m.appState.GitHubService, m.bookmarksNeedingPRLookup(), m.appState.DemoMode); resolveCmd != nil {
-			cmd = tea.Batch(cmd, resolveCmd)
-		}
-		return m, cmd
-	case prstab.OpenPRsResolvedMsg:
-		return m.handleOpenPRsResolvedMsg(msg)
-	case prstab.PrMergedMsg, prstab.PrClosedMsg:
-		updated, cmd := m.prsTabModel.UpdateWithApp(msg, &m.appState)
-		m.prsTabModel = updated
-		var err error
-		switch mmsg := msg.(type) {
-		case prstab.PrMergedMsg:
-			err = mmsg.Err
-		case prstab.PrClosedMsg:
-			err = mmsg.Err
-		}
-		if err != nil {
-			m.errorModal.SetError(err, false, "")
-			return m, nil
-		}
-		return m, cmd
-	case prstab.LoadErrorMsg:
-		m.appState.PRsLoadedOnce = true
-		m.appState.Loading = false
-		updated, _ := m.prsTabModel.UpdateWithApp(msg, &m.appState)
-		m.prsTabModel = updated
-		m.errorModal.SetError(msg.Err, false, "")
-		return m, nil
-	case prstab.ReauthNeededMsg:
-		updated, _ := m.prsTabModel.UpdateWithApp(msg, &m.appState)
-		m.prsTabModel = updated
-		return m.handleReauthNeededEffect(prstab.ApplyReauthNeededEffect(msg))
-	case prstab.PrTickMsg:
-		prInput := prstab.PrTickInput{
-			IsPRView:      m.appState.ViewMode == state.ViewPullRequests,
-			Loading:       m.appState.Loading,
-			HasError:      m.errorModal.GetError() != nil,
-			GitHubService: m.appState.GitHubService,
-			GithubInfo:    m.appState.GithubInfo,
-			DemoMode:      m.appState.DemoMode,
-			ExistingCount: 0,
-		}
-		if m.appState.Repository != nil {
-			prInput.ExistingCount = len(m.appState.Repository.PRs)
-		}
-		updated, cmd := m.prsTabModel.UpdateWithApp(prInput, &m.appState)
-		m.prsTabModel = updated
-		return m, cmd
-
-	case ticketstab.TicketsLoadedMsg:
-		m.appState.TicketsLoadedOnce = true
-		m.appState.Loading = false
-		input := ticketstab.TicketsLoadedInput{
-			Tickets:      msg.Tickets,
-			ProviderName: "",
-			HasService:   m.appState.TicketService != nil,
-			CanCreate:    m.appState.TicketService != nil && m.appState.TicketService.CanCreateTicket(),
-		}
-		if m.appState.TicketService != nil {
-			input.ProviderName = m.appState.TicketService.GetProviderName()
-		}
-		updated, cmd := m.ticketsTabModel.UpdateWithApp(input, &m.appState)
-		m.ticketsTabModel = updated
-		return m, cmd
-	case ticketstab.TransitionsLoadedMsg:
-		updated, cmd := m.ticketsTabModel.UpdateWithApp(msg, &m.appState)
-		m.ticketsTabModel = updated
-		return m, cmd
-	case ticketstab.TransitionCompletedMsg:
-		updated, cmd := m.ticketsTabModel.UpdateWithApp(msg, &m.appState)
-		m.ticketsTabModel = updated
-		if msg.Err != nil {
-			m.errorModal.SetError(msg.Err, false, "")
-			return m, nil
-		}
-		return m, cmd
-	case ticketstab.LoadErrorMsg:
-		m.appState.TicketsLoadedOnce = true
-		m.appState.Loading = false
-		updated, _ := m.ticketsTabModel.UpdateWithApp(msg, &m.appState)
-		m.ticketsTabModel = updated
-		m.errorModal.SetError(msg.Err, false, "")
-		m.appState.StatusMessage = fmt.Sprintf("Error: %v", msg.Err)
-		return m, nil
-
-	case branchestab.BranchesLoadedMsg:
-		input := branchestab.BranchesLoadedInput{
-			BranchesLoadedMsg:    msg,
-			InCreateBookmarkView: m.appState.ViewMode == state.ViewCreateBookmark,
-			HasError:             m.errorModal.GetError() != nil,
-		}
-		updated, cmd := m.branchesTabModel.UpdateWithApp(input, &m.appState)
-		m.branchesTabModel = updated
-		if input.InCreateBookmarkView {
-			m.bookmarkModal.SetNameConflictSources(m.branchesTabModel.BuildBookmarkNameConflictSources())
-			m.bookmarkModal.UpdateNameExistsFromInput(m.appState.Config != nil && m.appState.Config.ShouldSanitizeBookmarkNames())
-		}
-		return m, cmd
-	case branchestab.BranchActionMsg:
-		updated, _ := m.branchesTabModel.UpdateWithApp(msg, &m.appState)
-		m.branchesTabModel = updated
-		if msg.Action == "fetch" {
-			m.appState.BranchRemoteFetchPending = false
-		}
-		if msg.Err != nil {
-			// Branches tab already set StatusMessage (e.g. "Failed to push branch: ...").
-			m.appState.Loading = false
-			return m, nil
-		}
-		return m, tea.Batch(
-			branchestab.LoadBranchesCmd(m.appState.JJService, m.settingsTabModel.GetSettingsBranchLimit()),
-			data.LoadRepository(m.appState.JJService),
-		)
-
-	case settingstab.SettingsSavedMsg:
-		wasSettings := m.appState.ViewMode == state.ViewSettings
-		cmd, errInfo := settingstab.HandleSettingsSavedMsg(msg, &m.appState)
-		if errInfo != nil {
-			m.errorModal.SetError(errInfo.Err, false, "")
-			return m, nil
-		}
-		// Reloaded config pointer; keep evolog split modal in sync if user returns to split (z) after saving AI settings.
-		m.evologSplitModal = m.evologSplitModal.WithSuggestConfig(m.appState.Config)
-		// Propagate the new AI profile list to any open generate-bearing modal so
-		// the long-press menu reflects edits made on the Settings → AI tab.
-		m.pushAIProfilesToFormModals()
-		if wasSettings {
-			m.settingsTabModel.SetViewOpts(m.buildSettingsViewOpts())
-		}
-		// The "show all remote branches" toggle changes how bookmarks are listed; re-apply it
-		// to the live service and reload the branch list so the change is reflected immediately.
-		if m.appState.JJService != nil && m.appState.Config != nil {
-			m.appState.JJService.BookmarkListPreferTracked = m.appState.Config.BranchesFilterToTrackedAndMine()
-			cmd = tea.Batch(cmd, branchestab.LoadBranchesCmd(m.appState.JJService, m.settingsTabModel.GetSettingsBranchLimit()))
-		}
-		return m, cmd
-
-	case settingstab.GitHubDeviceFlowStartedMsg:
-		m.beginModalUnderlay()
-		m.githubLoginModel.SetDeviceFlow(msg.DeviceCode, msg.UserCode, msg.VerificationURL, msg.Interval)
-		m.appState.ViewMode = state.ViewGitHubLogin
-		m.appState.StatusMessage = "Waiting for GitHub authorization..."
-		// Do not auto-open the browser; user can press Enter or click "Copy Code & Open Browser" on the login screen.
-		return m, settingstab.PollGitHubTokenCmd(m.githubLoginModel.GetDeviceCode())
-
-	case settingstab.GitHubCLILoginShowMsg:
-		m.beginModalUnderlay()
-		m.githubLoginModel.SetGhCLILoginMode()
-		m.appState.ViewMode = state.ViewGitHubLogin
-		m.appState.StatusMessage = "GitHub CLI: press Enter or click Run to start gh auth login."
-		return m, nil
-
-	case githublogintab.GhCLIAuthFinishedMsg:
-		if m.appState.ViewMode != state.ViewGitHubLogin {
-			return m, nil
-		}
-		m.githubLoginModel.ClearFlow()
-		m.clearModalUnderlay()
-		m.appState.ViewMode = state.ViewSettings
-		m.settingsTabModel.SetViewOpts(m.buildSettingsViewOpts())
-		if msg.Err != nil {
-			m.appState.StatusMessage = fmt.Sprintf("gh auth login: %v", msg.Err)
-			m.errorModal.SetError(msg.Err, false, "")
-			return m, nil
-		}
-		tok, ok := config.TryGitHubCLIToken()
-		if !ok || strings.TrimSpace(tok) == "" {
-			err := fmt.Errorf("gh finished but no token was available from gh auth token; try gh auth login again or gh auth status")
-			m.appState.StatusMessage = err.Error()
-			m.errorModal.SetError(err, false, "")
-			return m, nil
-		}
-		cfg, err := config.Load()
-		if err != nil || cfg == nil {
-			err := fmt.Errorf("could not load config after gh login: %v", err)
-			m.appState.StatusMessage = err.Error()
-			m.errorModal.SetError(err, false, "")
-			return m, nil
-		}
-		cfg.GitHubToken = ""
-		cfg.GitHubTokenSource = config.GitHubTokenSourceGhCLI
-		cfg.GitHubAuthMethod = config.GitHubAuthGhCLI
-		if err := cfg.Save(); err != nil {
-			m.appState.StatusMessage = fmt.Sprintf("could not save config: %v", err)
-			m.errorModal.SetError(err, false, "")
-			return m, nil
-		}
-		_ = os.Unsetenv("GITHUB_TOKEN")
-		m.settingsTabModel.GetGitHubModel().SetTokenSource(config.GitHubTokenSourceGhCLI)
-		m.settingsTabModel.GetGitHubModel().SetToken("")
-		m.settingsTabModel.SetSettingInputValue(0, "")
-		m.appState.StatusMessage = "GitHub CLI login successful!"
-		return m, data.InitializeServices(m.appState.DemoMode)
-
-	case settingstab.GitHubLoginPollMsg:
-		if m.githubLoginModel.GetPolling() {
-			if msg.Interval > 0 {
-				m.githubLoginModel.SetPollInterval(m.githubLoginModel.GetPollInterval() + msg.Interval)
-			}
-			return m, tea.Tick(time.Duration(m.githubLoginModel.GetPollInterval())*time.Second, func(t time.Time) tea.Msg {
-				return doPollMsg{}
-			})
-		}
-		return m, nil
-
-	case doPollMsg:
-		if m.githubLoginModel.GetPolling() {
-			return m, settingstab.PollGitHubTokenCmd(m.githubLoginModel.GetDeviceCode())
-		}
-		return m, nil
-
-	case settingstab.GitHubLoginSuccessMsg:
-		m.githubLoginModel.ClearFlow()
-		m.clearModalUnderlay()
-		m.appState.ViewMode = state.ViewSettings
-		m.settingsTabModel.SetViewOpts(m.buildSettingsViewOpts())
-		m.appState.StatusMessage = "GitHub login successful!"
-		cfg, _ := config.Load()
-		cfg.SetGitHubToken(msg.Token, config.GitHubAuthDeviceFlow)
-		_ = cfg.Save()
-		_ = os.Setenv("GITHUB_TOKEN", msg.Token)
-		m.settingsTabModel.SetSettingInputValue(0, msg.Token)
-		return m, data.InitializeServices(m.appState.DemoMode)
-
-	case settingstab.GitHubLoginErrorMsg:
-		m.githubLoginModel.ClearFlow()
-		m.clearModalUnderlay()
-		m.appState.ViewMode = state.ViewSettings
-		m.appState.StatusMessage = fmt.Sprintf("GitHub login error: %v", msg.Err)
-		m.errorModal.SetError(msg.Err, false, "")
-		return m, nil
-
-	case prformtab.PRCreatedMsg:
-		m.clearAIGenOverlay()
-		m.prFormModal.Hide()
-		m.clearModalUnderlay()
-		return m, prformtab.HandlePRCreatedMsg(prformtab.PRCreatedInput{PRCreatedMsg: msg, DemoMode: m.appState.DemoMode}, &m.appState)
-	case ticketformtab.TicketCreatedMsg:
-		m.clearAIGenOverlay()
-		m.ticketFormModal.Hide()
-		m.clearModalUnderlay()
-		m.appState.Loading = false
-		m.appState.ViewMode = state.ViewTickets
-		if msg.Ticket != nil {
-			m.appState.StatusMessage = fmt.Sprintf("Created %s: %s", msg.Ticket.DisplayKey, msg.Ticket.Summary)
-			cmd := ticketformtab.HandleTicketCreatedMsg(msg.Ticket, m.appState.TicketService, m.appState.DemoMode)
-			if cmd != nil {
-				return m, tea.Batch(cmd, ticketstab.LoadTicketsCmd(m.appState.TicketService, m.appState.DemoMode))
-			}
-			return m, ticketstab.LoadTicketsCmd(m.appState.TicketService, m.appState.DemoMode)
-		}
-		return m, ticketstab.LoadTicketsCmd(m.appState.TicketService, m.appState.DemoMode)
-	case prstab.BranchPushedMsg:
-		return m, branchestab.HandleBranchPushedMsg(msg, &m.appState)
-	case bookmarktab.BookmarkCreatedMsg:
-		m.clearAIGenOverlay()
-		m.bookmarkModal.Hide()
-		m.clearModalUnderlay()
-		m.appState.Loading = false
-		return m, bookmarktab.HandleBookmarkCreatedMsg(msg, &m.appState)
-	case bookmarktab.BookmarkDeletedMsg:
-		return m, branchestab.HandleBookmarkDeletedMsg(msg, &m.appState)
-	case branchestab.BookmarkConflictInfoMsg:
-		cmd, info := conflicttab.HandleBookmarkConflictInfoMsg(msg, &m.appState)
-		if msg.Err != nil {
-			m.errorModal.SetError(msg.Err, false, "")
-		} else {
-			m.errorModal.SetError(nil, false, "")
-		}
-		if info != nil {
-			m.bookmarkConflictReturnView = m.appState.ViewMode
-			m.bookmarkConflictReturnValid = true
-			m.conflictModal = m.conflictModal.SetDimensions(m.width, m.height)
-			m.conflictModal.Show(info.BookmarkName, info.LocalID, info.RemoteID, info.LocalSummary, info.RemoteSummary, info.LocalWhen, info.RemoteWhen)
-			m.appState.ViewMode = state.ViewBookmarkConflict
-		}
-		return m, cmd
-	case conflicttab.BookmarkConflictResolvedMsg:
-		m.conflictModal.Hide()
-		restore := state.ViewBranches
-		if m.bookmarkConflictReturnValid {
-			restore = m.bookmarkConflictReturnView
-		}
-		m.bookmarkConflictReturnValid = false
-		m.appState.ViewMode = restore
-		if msg.Err != nil {
-			m.errorModal.SetError(msg.Err, false, "")
-		}
-		return m, conflicttab.HandleBookmarkConflictResolvedMsg(msg, &m.appState, m.settingsTabModel.GetSettingsBranchLimit())
-	case graphtab.DivergentCommitInfoMsg:
-		cmd, info := divergenttab.HandleDivergentCommitInfoMsg(msg, &m.appState)
-		if info != nil {
-			m.divergentModal = m.divergentModal.SetDimensions(m.width, m.height)
-			m.divergentModal.Show(info.ChangeID, info.Versions)
-			m.appState.ViewMode = state.ViewDivergentCommit
-		}
-		return m, cmd
-	case divergenttab.DivergentCommitResolvedMsg:
-		m.divergentModal.Hide()
-		return m, divergenttab.HandleDivergentCommitResolvedMsg(msg, &m.appState)
-	case evologsplittab.EvologLoadedMsg:
-		updated, cmd := m.evologSplitModal.Update(msg)
-		m.evologSplitModal = updated
-		if msg.Err == nil {
-			m.appState.StatusMessage = "Pick parent (j/k, Enter); o step diff; s AI suggest; p plan preview (opens after suggest)"
-		} else {
-			m.appState.StatusMessage = "Evolog load failed"
-		}
-		return m, cmd
-	case evologsplittab.EvologDiffLoadRequestedMsg:
-		seq, from, to, prevFrom, prevTo, ok := m.evologSplitModal.DiffSnapshotForLoad()
-		if !ok {
-			return m, nil
-		}
-		return m, evologsplittab.LoadEvologSplitDiffCmd(m.appState.JJService, seq, from, to, prevFrom, prevTo)
-	case evologsplittab.OverlaySpinTickMsg:
-		if m.appState.ViewMode != state.ViewEvologSplit || !m.evologSplitModal.IsShown() {
-			return m, nil
-		}
-		updated, cmd := m.evologSplitModal.Update(msg)
-		m.evologSplitModal = updated
-		return m, cmd
-	case evologsplittab.EvologSplitSuggestRequestedMsg:
-		if m.appState.JJService == nil {
-			return m, func() tea.Msg {
-				return aitab.EvologSplitSuggestMsg{ReqID: msg.ReqID, Err: fmt.Errorf("jj service not available")}
-			}
-		}
-		if m.appState.Config == nil || !m.appState.Config.AIConfiguredForGeneration() {
-			return m, func() tea.Msg {
-				return aitab.EvologSplitSuggestMsg{ReqID: msg.ReqID, Err: fmt.Errorf("AI is disabled or no API key (Settings → AI, or %s)", config.EnvAIAPIKey)}
-			}
-		}
-		return m, aitab.EvologSuggestPrepChainStartCmd(msg.ReqID, m.appState.JJService, m.appState.Config, m.evologSplitModal.EvologEntries())
-
-	case aitab.EvologSuggestPrepProgressMsg:
-		if !m.evologSplitModal.IsShown() || msg.ReqID != m.evologSplitModal.SuggestReqID() {
-			return m, nil
-		}
-		m.evologSplitModal = m.evologSplitModal.WithSuggestPrepProgress(msg.JJDone, msg.JJTotal, "jj")
-		return m, nil
-
-	case aitab.EvologSuggestPrepDoneMsg:
-		if !m.evologSplitModal.IsShown() || msg.ReqID != m.evologSplitModal.SuggestReqID() {
-			return m, nil
-		}
-		if msg.Err != nil {
-			return m, func() tea.Msg {
-				return aitab.EvologSplitSuggestMsg{ReqID: msg.ReqID, Err: msg.Err}
-			}
-		}
-		m.evologSplitModal = m.evologSplitModal.WithSuggestPrepProgress(msg.JJTotal, msg.JJTotal, "llm")
-		return m, aitab.EvologSuggestLLMCmd(msg.ReqID, m.appState.JJService, m.appState.Config, m.evologSplitModal.EvologEntries(), msg.UserPrompt)
-	case evologsplittab.EvologSplitDiffLoadedMsg:
-		updated, cmd := m.evologSplitModal.Update(msg)
-		m.evologSplitModal = updated
-		return m, cmd
-	case evologsplittab.EvologOutcomePreviewRequestedMsg:
-		if m.appState.JJService == nil {
-			return m, nil
-		}
-		if m.appState.ViewMode != state.ViewEvologSplit || !m.evologSplitModal.IsShown() {
-			return m, nil
-		}
-		return m, evologsplittab.LoadEvologOutcomePreviewCmd(m.appState.JJService, msg.Seq)
-	case evologsplittab.EvologOutcomePreviewLoadedMsg:
-		if m.appState.ViewMode != state.ViewEvologSplit || !m.evologSplitModal.IsShown() {
-			return m, nil
-		}
-		updated, cmd := m.evologSplitModal.Update(msg)
-		m.evologSplitModal = updated
-		return m, cmd
-	case aitab.EvologSplitSuggestMsg:
-		if !m.evologSplitModal.IsShown() {
-			return m, nil
-		}
-		var warnCmd tea.Cmd
-		if msg.Err != nil {
-			msgText := strings.TrimSpace(msg.Err.Error())
-			if r := []rune(msgText); len(r) > 900 {
-				msgText = string(r[:900]) + "…"
-			}
-			warnCmd = state.NavigateTarget{
-				Kind:           state.NavigateWarning,
-				WarningTitle:   "AI suggest split failed",
-				WarningMessage: msgText + "\n\nPress Esc to dismiss.",
-				WarningCommits: nil,
-			}.Cmd()
-		}
-		updated, sub := m.evologSplitModal.Update(msg)
-		m.evologSplitModal = updated
-		if msg.Err == nil && !msg.NoSplit && msg.PickIndex > 0 {
-			m.appState.StatusMessage = "AI plan: preview opened — Esc closes overlay, then Enter to split or adjust row"
-		}
-		if msg.Err == nil && msg.NoSplit {
-			m.appState.StatusMessage = "AI: no split — use p for WC files or pick another row"
-		}
-		if warnCmd != nil && sub != nil {
-			return m, tea.Batch(sub, warnCmd)
-		}
-		if warnCmd != nil {
-			return m, warnCmd
-		}
-		return m, sub
-	case evologsplittab.EvologSplitCompletedMsg:
-		if len(m.evologStepwiseRemainderAfterSplit) > 0 {
-			rem := m.evologStepwiseRemainderAfterSplit
-			m.evologStepwiseRemainderAfterSplit = nil
-			m.evologSplitModal.SetPendingMultiSplitIDs(rem)
-			m2, cmd := m.applyRepositoryLoaded(msg.Repository)
-			m2.appState.ViewMode = state.ViewEvologSplit
-			m2.appState.StatusMessage = fmt.Sprintf("Stepwise split: %d base(s) left — review evolog, then Enter", len(rem))
-			wc := msg.Repository.WorkingCopy
-			bn := m2.evologStepwiseBookmarkName
-			loadCmd := evologsplittab.LoadEvologCmd(m2.appState.JJService, bn, wc)
-			if cmd != nil {
-				return m2, tea.Batch(cmd, loadCmd)
-			}
-			return m2, loadCmd
-		}
-		m.evologStepwiseBookmarkName = ""
-		m.evologSplitModal.Hide()
-		m.appState.ViewMode = state.ViewCommitGraph
-		m2, cmd := m.applyRepositoryLoaded(msg.Repository)
-		m2.appState.StatusMessage = "Split complete — Graph (g) shows what jj did; compare to the plan you saw in Preview (p) before split"
-		if m2.evologPostSplitDescribe && m2.appState.JJService != nil && m2.appState.Config != nil && m2.appState.Config.AIConfiguredForGeneration() {
-			m2.evologPostSplitDescribe = false
-			preChild := strings.TrimSpace(m2.evologPrecomputedDescribeChild)
-			preParent := strings.TrimSpace(m2.evologPrecomputedDescribeParent)
-			m2.evologPrecomputedDescribeParent = ""
-			m2.evologPrecomputedDescribeChild = ""
-			if preChild != "" {
-				descCtx, descCancel := context.WithTimeout(context.Background(), m2.appState.Config.AITimeout())
-				parentOK, perr := aitab.DescribeSplitParentWritable(descCtx, m2.appState.JJService)
-				descCancel()
-				skipParent := perr != nil || !parentOK
-				m2.evologDescribePreviewActive = true
-				m2.evologDescribePreviewFromPlan = true
-				m2.evologDescribeSkipParent = skipParent
-				m2.evologDescribeParent = preParent
-				m2.evologDescribeChild = preChild
-				m2.appState.StatusMessage = "Split complete — Graph (g) vs plan preview; review AI descriptions (y apply, n discard)"
-				if cmd != nil {
-					return m2, cmd
-				}
-				return m2, nil
-			}
-			m2.appState.StatusMessage = "Split complete — Graph (g) vs plan preview; generating descriptions with AI…"
-			m2.appState.Loading = true
-			if cmd != nil {
-				return m2, tea.Batch(cmd, aitab.SuggestEvologSplitDescriptionsCmd(0, m2.appState.JJService, m2.appState.Config), m2.startBusySpinnerCmd())
-			}
-			return m2, tea.Batch(aitab.SuggestEvologSplitDescriptionsCmd(0, m2.appState.JJService, m2.appState.Config), m2.startBusySpinnerCmd())
-		}
-		m2.evologPostSplitDescribe = false
-		m2.evologPrecomputedDescribeParent = ""
-		m2.evologPrecomputedDescribeChild = ""
-		return m2, cmd
-	case aitab.EvologDescribeSplitPreviewMsg:
-		m.appState.Loading = false
-		if msg.Err != nil {
-			return m.Update(errorMsg{Err: fmt.Errorf("post-split describe preview: %w", msg.Err)})
-		}
-		m.evologDescribePreviewActive = true
-		m.evologDescribePreviewFromPlan = false
-		m.evologDescribeSkipParent = msg.SkipParentDescribe
-		m.evologDescribeParent = msg.ParentDescription
-		m.evologDescribeChild = msg.ChildDescription
-		m.appState.StatusMessage = "AI descriptions ready — y apply, n discard, Esc cancel"
-		return m, nil
-	case aitab.EvologDescribeSplitDoneMsg:
-		m.appState.Loading = false
-		m.evologDescribePreviewActive = false
-		m.evologDescribePreviewFromPlan = false
-		if msg.Err != nil {
-			return m.Update(errorMsg{Err: fmt.Errorf("post-split describe: %w", msg.Err)})
-		}
-		m2, cmd := m.applyRepositoryLoaded(msg.Repository)
-		if msg.OnlyChild {
-			m2.appState.StatusMessage = "Description updated for @ (parent @- is immutable)"
-		} else {
-			m2.appState.StatusMessage = "Descriptions updated for @- and @"
-		}
-		return m2, cmd
-	case graphtab.FileMoveCompletedMsg:
-		graphtab.HandleFileMoveCompletedMsg(graphtab.FileMoveInput{
-			FileMoveCompletedMsg: msg,
-			ChangedFilesCommitID: m.graphTabModel.GetChangedFilesCommitID(),
-		}, &m.appState)
-		m.graphTabModel.UpdateRepository(m.appState.Repository)
-		if m.appState.Repository != nil {
-			for i, commit := range m.appState.Repository.Graph.Commits {
-				if commit.ChangeID == m.graphTabModel.GetChangedFilesCommitID() {
-					m.graphTabModel.SelectCommit(i)
-					break
-				}
-			}
-			// Load changed files for the currently selected commit so the files pane updates.
-			idx := m.graphTabModel.GetSelectedCommit()
-			commits := m.appState.Repository.Graph.Commits
-			if idx >= 0 && idx < len(commits) && m.appState.JJService != nil {
-				return m, graphtab.LoadChangedFilesCmd(m.appState.JJService, commits[idx].ChangeID)
-			}
-		}
-		return m, nil
-	case graphtab.FileRevertedMsg:
-		graphtab.HandleFileRevertedMsg(graphtab.FileRevertedInput{
-			FileRevertedMsg:      msg,
-			ChangedFilesCommitID: m.graphTabModel.GetChangedFilesCommitID(),
-		}, &m.appState)
-		m.graphTabModel.UpdateRepository(m.appState.Repository)
-		if m.appState.Repository != nil {
-			for i, commit := range m.appState.Repository.Graph.Commits {
-				if commit.ChangeID == m.graphTabModel.GetChangedFilesCommitID() {
-					m.graphTabModel.SelectCommit(i)
-					break
-				}
-			}
-			idx := m.graphTabModel.GetSelectedCommit()
-			commits := m.appState.Repository.Graph.Commits
-			if idx >= 0 && idx < len(commits) && m.appState.JJService != nil {
-				return m, graphtab.LoadChangedFilesCmd(m.appState.JJService, commits[idx].ChangeID)
-			}
-		}
-		return m, nil
-	case graphtab.LongPressTickMsg:
-		updated, cmd := m.graphTabModel.UpdateWithApp(msg, &m.appState)
-		m.graphTabModel = updated
-		return m, cmd
-	case graphtab.CommitLongPressTickMsg:
-		updated, cmd := m.graphTabModel.UpdateWithApp(msg, &m.appState)
-		m.graphTabModel = updated
-		return m, cmd
-	case prstab.LongPressTickMsg:
-		updated, cmd := m.prsTabModel.UpdateWithApp(msg, &m.appState)
-		m.prsTabModel = updated
-		return m, cmd
-	case ticketstab.LongPressTickMsg:
-		updated, cmd := m.ticketsTabModel.UpdateWithApp(msg, &m.appState)
-		m.ticketsTabModel = updated
-		return m, cmd
-	case branchestab.LongPressTickMsg:
-		updated, cmd := m.branchesTabModel.UpdateWithApp(msg, &m.appState)
-		m.branchesTabModel = updated
-		return m, cmd
-
-	case descedittab.DescriptionSavedMsg:
-		cmd := descedittab.HandleDescriptionSavedMsg(msg, &m.appState)
-		m.clearAIGenOverlay()
-		m.desceditModal.Hide()
-		m.clearModalUnderlay()
-		// Keep Loading true through the LoadRepository reload returned above so the busy
-		// overlay stays up (now over the graph) until applyRepositoryLoaded renders the
-		// updated description. Re-batch a spinner tick in case clearAIGenOverlay stopped it.
-		return m, tea.Batch(cmd, m.startBusySpinnerCmd())
-	case descedittab.DescriptionLoadedMsg:
-		if m.appState.ViewMode != state.ViewEditDescription || m.desceditModal.GetEditingCommitID() != msg.CommitID {
-			return m, nil
-		}
-		finalDesc := descedittab.SuggestDescriptionForLoad(descedittab.DescriptionLoadedInput{
-			CommitID:       msg.CommitID,
-			Description:    msg.Description,
-			Repository:     m.appState.Repository,
-			CommitIdx:      commitIdxForChangeID(m.appState.Repository, msg.CommitID),
-			TicketKeys:     m.bookmarkModal.GetTicketBookmarkDisplayKeys(),
-			FindBookmarkFn: bookmarktab.FindBookmarkForCommit,
-		})
-		if finalDesc == "" {
-			finalDesc = msg.Description
-			if finalDesc == "(no description)" {
-				finalDesc = ""
-			}
-		}
-		m.desceditModal.SetDescription(finalDesc)
-		m.appState.StatusMessage = "Editing description (Ctrl+S to save, Esc to cancel)"
-		return m, nil
-	case util.ClipboardCopiedMsg:
-		return m.handleClipboardCopiedMsg(msg)
-	case settingstab.CleanupCompletedMsg:
-		return m, settingstab.HandleCleanupCompletedMsg(msg, &m.appState)
-
-	case graphtab.ChangedFilesLoadedMsg:
-		updated, cmd := m.graphTabModel.Update(msg)
-		if g, ok := updated.(*graphtab.GraphModel); ok {
-			m.graphTabModel = *g
-		}
-		return m, cmd
-	case filedifftab.FileDiffLoadedMsg:
-		updated, cmd := m.fileDiffModal.Update(msg)
-		m.fileDiffModal = updated
-		// Modal header/footer already explain Esc/scroll. Do not set StatusMessage when Loading:
-		// another op may own StatusMessage, and the centered overlay would show misleading text after
-		// this modal closes (see shouldShowLoadingOverlay / NavigateCloseFileDiff).
-		if msg.Err != nil {
-			if !m.appState.Loading {
-				m.appState.StatusMessage = "File diff failed"
-			}
-		} else if !m.appState.Loading {
-			m.appState.StatusMessage = ""
-		}
-		return m, cmd
-	case loadChangedFilesTriggerMsg:
-		if m.appState.JJService != nil && m.appState.Repository != nil {
-			commits := m.appState.Repository.Graph.Commits
-			idx := m.graphTabModel.GetSelectedCommit()
-			if idx >= 0 && idx < len(commits) {
-				return m, graphtab.LoadChangedFilesCmd(m.appState.JJService, commits[idx].ChangeID)
-			}
-		}
-		return m, nil
-	case tickMsg:
-		return m.handleTickMsg()
-	case graphtab.UndoCompletedMsg:
-		cmd, errInfo := graphtab.HandleUndoCompletedMsg(msg, &m.appState)
-		if errInfo != nil {
-			m.appState.Loading = false
-			m.errorModal.SetError(errInfo.Err, false, "")
-			return m, nil
-		}
-		if msg.Message == "Undo completed" {
-			m.redoOperationID = msg.RedoOpID
-		} else {
-			m.redoOperationID = ""
-		}
-		return m, cmd
-
-	// Handle our custom messages
-	case TabSelectedMsg:
-		m.appState.ViewMode = msg.Tab
-		if msg.Tab == state.ViewSettings {
-			m.settingsTabModel.SetViewOpts(m.buildSettingsViewOpts())
-		}
-		if msg.Tab == state.ViewHelp {
-			m.helpTabModel.SetCommandHistoryEntries(helptab.BuildCommandHistoryEntries(m.appState.JJService))
-		}
-		return m, nil
-
-	// Theme color picker: close picker and update color when user confirms or cancels
-	case bubblepicker.ColorChosenMsg, bubblepicker.ColorCanceledMsg:
-		if m.appState.ViewMode == state.ViewSettings {
-			cmds := util.PropagateUpdate(msg, &m.settingsTabModel)
-			if len(cmds) > 0 && cmds[0] != nil {
-				return m, cmds[0]
-			}
-		}
-		return m, nil
-
-	case ActionMsg:
-		return m.handleAction(msg.Action)
-
-	// Handle messages from actions package
-	case util.ExternalEditorOpenedMsg:
-		m.appState.Loading = false
-		if strings.TrimSpace(msg.FileBase) != "" {
-			m.appState.StatusMessage = fmt.Sprintf("Opened %s", msg.FileBase)
-		} else {
-			m.appState.StatusMessage = "Opened in external editor"
-		}
-		return m, nil
-
-	case util.ErrorMsg:
-		if msg.StatusOnly {
-			m.appState.Loading = false
-			m.appState.StatusMessage = util.StatusStringFromError(msg.Err, 220)
-			return m, nil
-		}
-		m.evologPostSplitDescribe = false
-		m.evologDescribePreviewActive = false
-		m.evologDescribePreviewFromPlan = false
-		m.evologDescribeSkipParent = false
-		m.evologDescribeParent = ""
-		m.evologDescribeChild = ""
-		m.evologPrecomputedDescribeParent = ""
-		m.evologPrecomputedDescribeChild = ""
-		return m.Update(errorMsg{Err: msg.Err})
+	default:
+		return m.dispatchAsyncMsg(msg)
 	}
-
-	return m, nil
 }
 
 // isStaleFileDiffGlobalStatus reports status strings tied to the file-diff overlay that should not

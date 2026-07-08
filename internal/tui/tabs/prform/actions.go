@@ -11,8 +11,6 @@ import (
 	"github.com/madicen/jj-tui/internal/integrations/github"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tui/state"
-	"github.com/madicen/jj-tui/internal/tui/tabs/bookmark"
-	"github.com/madicen/jj-tui/internal/tui/tabs/prs"
 	"github.com/madicen/jj-tui/internal/tui/util"
 )
 
@@ -47,7 +45,7 @@ func PrepareCreatePR(repo *internal.Repository, commitIdx int, jiraTitles map[st
 		}
 		needsMove = false
 	} else {
-		headBranch = bookmark.FindBookmarkForCommit(repo, commitIdx)
+		headBranch = util.FindBookmarkForCommit(repo, commitIdx)
 		if headBranch == "" {
 			return PrepareCreatePRResult{Ok: false}
 		}
@@ -308,7 +306,9 @@ func SubmitPR(modal *Model, repo *internal.Repository, jjService *jj.Service, gi
 }
 
 // HandlePRCreatedMsg mutates app (ViewMode, StatusMessage, Repository in demo) and returns the Cmd to run.
-func HandlePRCreatedMsg(input PRCreatedInput, app *state.AppState) tea.Cmd {
+// reloadPRs is the PR-list reload command main supplies (P2.5: this package no
+// longer imports the prs tab to build it).
+func HandlePRCreatedMsg(input PRCreatedInput, app *state.AppState, reloadPRs tea.Cmd) tea.Cmd {
 	app.Loading = false
 	app.ViewMode = state.ViewCommitGraph
 	app.StatusMessage = fmt.Sprintf("PR #%d created: %s", input.PR.Number, input.PR.Title)
@@ -318,11 +318,7 @@ func HandlePRCreatedMsg(input PRCreatedInput, app *state.AppState) tea.Cmd {
 		}
 		return nil
 	}
-	existing := 0
-	if app.Repository != nil {
-		existing = len(app.Repository.PRs)
-	}
-	return tea.Batch(util.OpenURL(input.PR.URL), prs.LoadPRsCmd(app.GitHubService, app.GithubInfo, app.DemoMode, existing))
+	return tea.Batch(util.OpenURL(input.PR.URL), reloadPRs)
 }
 
 // PRCreatedInput is the context main sends when forwarding PRCreatedMsg.

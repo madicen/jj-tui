@@ -1,6 +1,6 @@
 # jj-tui Makefile
 
-.PHONY: build test clean screenshots demo-repo after-origin-vhs-repo after-origin-gif evolog-split-vhs-repo evolog-split-gif divergent-vhs-repo divergent-gif bookmark-conflict-vhs-repo bookmark-conflict-gif screenshot-after-origin screenshot-evolog-split screenshot-divergent screenshot-bookmark-conflict help
+.PHONY: build test cover clean screenshots demo-repo after-origin-vhs-repo after-origin-gif evolog-split-vhs-repo evolog-split-gif divergent-vhs-repo divergent-gif bookmark-conflict-vhs-repo bookmark-conflict-gif op-log-vhs-repo op-log-gif revset-filter-vhs-repo revset-filter-gif multiselect-vhs-repo multiselect-gif screenshot-after-origin screenshot-evolog-split screenshot-divergent screenshot-bookmark-conflict screenshot-op-log screenshot-revset-filter screenshot-multiselect help
 
 # Default target
 all: build
@@ -13,10 +13,15 @@ build:
 test:
 	go test ./...
 
+# Run tests with coverage and print a per-function coverage summary
+cover:
+	go test ./... -coverprofile=coverage.out -covermode=atomic
+	go tool cover -func=coverage.out
+
 # Clean build artifacts
 clean:
 	rm -f jj-tui
-	rm -rf fixtures/demo-repo fixtures/after-origin-vhs-repo fixtures/after-origin-fake-origin.git fixtures/evolog-split-vhs-repo fixtures/divergent-vhs-repo fixtures/bookmark-conflict-vhs-repo fixtures/bookmark-conflict-fake-origin.git
+	rm -rf fixtures/demo-repo fixtures/after-origin-vhs-repo fixtures/after-origin-fake-origin.git fixtures/evolog-split-vhs-repo fixtures/divergent-vhs-repo fixtures/bookmark-conflict-vhs-repo fixtures/bookmark-conflict-fake-origin.git fixtures/op-log-vhs-repo fixtures/revset-filter-vhs-repo fixtures/multiselect-vhs-repo
 
 # Setup the demo repository for screenshots
 demo-repo:
@@ -40,7 +45,10 @@ screenshots: build demo-repo
 	vhs vhs/evolog-split.tape
 	vhs vhs/divergent.tape
 	vhs vhs/bookmark-conflict.tape
-	@echo "Screenshots saved to screenshots/ (including after-origin.gif, evolog-split.gif, divergent.gif, bookmark-conflict.gif)"
+	vhs vhs/op-log.tape
+	vhs vhs/revset-filter.tape
+	vhs vhs/multiselect.tape
+	@echo "Screenshots saved to screenshots/ (including after-origin.gif, evolog-split.gif, divergent.gif, bookmark-conflict.gif, op-log.gif, revset-filter.gif, multiselect.gif)"
 
 # Generate a demo GIF showing the TUI in action
 demo-gif: build demo-repo
@@ -95,6 +103,33 @@ bookmark-conflict-gif: build bookmark-conflict-vhs-repo
 	vhs vhs/bookmark-conflict.tape
 	@echo "GIF saved to screenshots/bookmark-conflict.gif"
 
+# Operation log browser (Ctrl+o) + restore; see vhs/op-log.tape
+op-log-vhs-repo:
+	bash fixtures/setup-op-log-vhs-repo.sh
+
+op-log-gif: build op-log-vhs-repo
+	@mkdir -p screenshots
+	vhs vhs/op-log.tape
+	@echo "GIF saved to screenshots/op-log.gif"
+
+# Revset search/filter (/ overlay); see vhs/revset-filter.tape
+revset-filter-vhs-repo:
+	bash fixtures/setup-revset-filter-vhs-repo.sh
+
+revset-filter-gif: build revset-filter-vhs-repo
+	@mkdir -p screenshots
+	vhs vhs/revset-filter.tape
+	@echo "GIF saved to screenshots/revset-filter.gif"
+
+# Multi-select batch abandon confirm (Space, a, n); see vhs/multiselect.tape
+multiselect-vhs-repo:
+	bash fixtures/setup-multiselect-vhs-repo.sh
+
+multiselect-gif: build multiselect-vhs-repo
+	@mkdir -p screenshots
+	vhs vhs/multiselect.tape
+	@echo "GIF saved to screenshots/multiselect.gif"
+
 # Generate individual screenshots
 screenshot-graph: build demo-repo
 	vhs vhs/graph.tape
@@ -133,6 +168,18 @@ screenshot-bookmark-conflict: build bookmark-conflict-vhs-repo
 	@mkdir -p screenshots
 	vhs vhs/bookmark-conflict.tape
 
+screenshot-op-log: build op-log-vhs-repo
+	@mkdir -p screenshots
+	vhs vhs/op-log.tape
+
+screenshot-revset-filter: build revset-filter-vhs-repo
+	@mkdir -p screenshots
+	vhs vhs/revset-filter.tape
+
+screenshot-multiselect: build multiselect-vhs-repo
+	@mkdir -p screenshots
+	vhs vhs/multiselect.tape
+
 # Run in demo mode (for manual testing)
 demo: build demo-repo
 	cd fixtures/demo-repo && ../../jj-tui --demo
@@ -147,6 +194,7 @@ help:
 	@echo "jj-tui Makefile targets:"
 	@echo "  build        - Build the application"
 	@echo "  test         - Run tests"
+	@echo "  cover        - Run tests with coverage and print a summary"
 	@echo "  clean        - Clean build artifacts"
 	@echo "  demo-repo    - Setup demo repository for screenshots"
 	@echo "  screenshots  - Generate PNG screenshots + after-origin.gif + evolog-split.gif (see also demo-gif)"
@@ -156,10 +204,16 @@ help:
 	@echo "  evolog-split-gif - Generate evolog-split GIF: experimental (z) split (vhs/evolog-split.tape)"
 	@echo "  divergent-gif    - Generate divergent GIF: resolve duplicate change ID (vhs/divergent.tape)"
 	@echo "  bookmark-conflict-gif - Generate diverged-bookmark GIF: Branches (c) resolver (vhs/bookmark-conflict.tape)"
+	@echo "  op-log-gif            - Generate operation-log GIF: Ctrl+o restore (vhs/op-log.tape)"
+	@echo "  revset-filter-gif     - Generate revset filter GIF: / search (vhs/revset-filter.tape)"
+	@echo "  multiselect-gif       - Generate multi-select GIF: Space batch abandon (vhs/multiselect.tape)"
 	@echo "  screenshot-after-origin   - Regenerate only screenshots/after-origin.gif"
 	@echo "  screenshot-evolog-split   - Regenerate only screenshots/evolog-split.gif"
 	@echo "  screenshot-divergent      - Regenerate only screenshots/divergent.gif"
 	@echo "  screenshot-bookmark-conflict - Regenerate only screenshots/bookmark-conflict.gif"
+	@echo "  screenshot-op-log         - Regenerate only screenshots/op-log.gif"
+	@echo "  screenshot-revset-filter  - Regenerate only screenshots/revset-filter.gif"
+	@echo "  screenshot-multiselect    - Regenerate only screenshots/multiselect.gif"
 	@echo "  demo         - Run the app in demo mode"
 	@echo "  deps         - Install/tidy dependencies"
 	@echo "  help         - Show this help"

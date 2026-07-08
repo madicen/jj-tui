@@ -9,6 +9,7 @@ import (
 	bubbledropdown "github.com/madicen/bubble-dropdown"
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/render"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 	"github.com/madicen/jj-tui/internal/tui/tabs/settings/theme"
 	"github.com/madicen/jj-tui/internal/version"
@@ -189,10 +190,7 @@ type ddBound struct {
 }
 
 func (r renderCtx) mark(id, content string) string {
-	if r.zm != nil {
-		return r.zm.Mark(id, content)
-	}
-	return content
+	return render.Mark(r.zm, id, content)
 }
 
 // recordDropdown notes a trigger's absolute line index and column for later SetBounds.
@@ -618,7 +616,7 @@ func (r renderCtx) renderTickets(data RenderData, base int) []string {
 }
 
 func (r renderCtx) renderBranches(data RenderData) []string {
-	var lines []string
+	lines := make([]string, 0, 11)
 	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render("Branch Settings"))
 	lines = append(lines, "", lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("Configure how branches are loaded and displayed."), "")
 	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("  Branch Limit:"))
@@ -637,10 +635,10 @@ func (r renderCtx) renderBranches(data RenderData) []string {
 const themeLabelWidth = 12
 
 func (r renderCtx) renderTheme(data RenderData, startRow int) []string {
-	var lines []string
 	if data.ThemeModel == nil {
-		return lines
+		return nil
 	}
+	lines := make([]string, 0, 7)
 	tm := data.ThemeModel
 	lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render("Theme Colors"))
 	lines = append(lines, "", lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("Click a swatch to change the color. Save (^s or ^l) to persist."), "")
@@ -667,7 +665,7 @@ func (r renderCtx) renderTheme(data RenderData, startRow int) []string {
 // editing AND marks it active (the long-press menu picks per-call). The
 // "active" mark distinguishes whatever the global default model is.
 func (r renderCtx) renderAIProfileList(data RenderData) []string {
-	var lines []string
+	lines := make([]string, 0, 6+len(data.AIProfiles))
 	header := lipgloss.NewStyle().Bold(true).Foreground(styles.ColorSecondary).Render("AI profiles")
 	hint := lipgloss.NewStyle().Foreground(styles.ColorMuted).Render(
 		"    Each profile bundles provider + model + base URL + API key + timeout. " +

@@ -51,9 +51,23 @@ type AppState struct {
 	PRsLoadedOnce bool
 	// TicketsLoadedOnce is set after the first ticket list load completes (success or error).
 	TicketsLoadedOnce bool
-	// BranchRemoteFetchPending: branches tab started "fetch all remotes"; main batches spinner with the cmd.
-	BranchRemoteFetchPending bool
+	// SpinnerStartPending: a submodel just started a slow remote/network op (e.g. branch
+	// fetch-all/push, PR merge/close) and set Loading=true, but cannot start the busy spinner
+	// itself (the spinner lives on the main Model). Main batches the spinner tick with the cmd
+	// via wrapSpinnerStart and clears this flag. See internal/tui/model/overlay_helpers.go.
+	SpinnerStartPending bool
+
+	// Graph search filter (P4.4): active revset search in the commit graph tab.
+	GraphFilterQuery  string // display text (/ input or raw revset)
+	GraphFilterRevset string // compiled jj revset; empty = no filter
+	GraphFilterError  string // last jj revset error (graph unchanged)
 }
+
+// UpdateRepository replaces the loaded repository. It is the single setter for the
+// repository single source of truth (P2.8): the root writes the freshly-loaded repo
+// here and then calls propagateRepository() to let repository-aware tabs recompute.
+// Tabs no longer keep their own authoritative copy fed by a per-tab fan-out.
+func (a *AppState) UpdateRepository(repo *internal.Repository) { a.Repository = repo }
 
 // HasRepository returns true if repository data is loaded.
 func (a *AppState) HasRepository() bool { return a.Repository != nil }

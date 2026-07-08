@@ -9,7 +9,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/config"
-	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tui/data"
 	"github.com/madicen/jj-tui/internal/tui/state"
 	graphtab "github.com/madicen/jj-tui/internal/tui/tabs/graph"
@@ -19,12 +18,14 @@ import (
 
 // handleDataServicesInitializedMsg applies initialized services and repository; starts tick and PR load.
 // Kept for tests or code paths that still send the full message.
+//
+//nolint:staticcheck // SA1019: transitional handler intentionally still processes the deprecated one-shot message.
 func (m *Model) handleDataServicesInitializedMsg(msg data.ServicesInitializedMsg) (tea.Model, tea.Cmd) {
 	m.silentReloadInFlight = false
 	m.appState.JJService = msg.JJService
 	m.appState.GitHubService = msg.GitHubService
 	m.appState.TicketService = msg.TicketService
-	m.appState.Repository = msg.Repository
+	m.appState.UpdateRepository(msg.Repository)
 	m.appState.GithubInfo = msg.GitHubInfo
 	m.appState.DemoMode = msg.DemoMode
 	m.appState.Loading = false
@@ -60,20 +61,15 @@ func (m *Model) handleDataServicesInitializedMsg(msg data.ServicesInitializedMsg
 func (m *Model) handleRepoReadyMsg(msg data.RepoReadyMsg) (tea.Model, tea.Cmd) {
 	m.silentReloadInFlight = false
 	m.appState.JJService = msg.JJService
-	m.appState.Repository = msg.Repository
+	m.appState.UpdateRepository(msg.Repository)
 	m.appState.DemoMode = msg.DemoMode
 	m.appState.Loading = false
 	m.appState.StatusMessage = fmt.Sprintf("Loaded %d commits", len(msg.Repository.Graph.Commits))
 	if m.appState.Repository != nil {
 		m.appState.Repository.PRs = nil
 	}
-	m.graphTabModel.UpdateRepository(m.appState.Repository)
-	m.prsTabModel.UpdateRepository(m.appState.Repository)
+	m.propagateRepository()
 	m.prsTabModel.SetGithubService(false)
-	m.branchesTabModel.UpdateRepository(m.appState.Repository)
-	m.ticketsTabModel.UpdateRepository(m.appState.Repository)
-	m.settingsTabModel.UpdateRepository(m.appState.Repository)
-	m.helpTabModel.UpdateRepository(m.appState.Repository)
 	var cmds []tea.Cmd
 	cmds = append(cmds, m.tickCmd())
 	if m.graphTabModel.GetSelectedCommit() < 0 && len(msg.Repository.Graph.Commits) > 0 {
@@ -128,7 +124,7 @@ func (m *Model) handleAuxServicesReadyMsg(msg data.AuxServicesReadyMsg) (tea.Mod
 func (m *Model) handleRemoteOpResultMsg(msg data.RemoteOpResultMsg) (tea.Model, tea.Cmd) {
 	m.appState.Loading = false
 	if msg.Err != nil {
-		m.errorModal.SetError(msg.Err, false, "")
+		m.applyEffects(effShowError{msg.Err})
 		// Refresh anyway so the panel shows whatever state we ended up in (e.g. the user
 		// changed origin but the fetch failed; current origin should still update).
 		m.refreshSettingsOriginURL()
@@ -153,7 +149,7 @@ func (m *Model) handleRemoteOpResultMsg(msg data.RemoteOpResultMsg) (tea.Model, 
 			// Soft-failure: create succeeded, push didn't. Status reads the success-side, the
 			// modal carries the failure detail so the user knows to retry the push.
 			m.appState.StatusMessage = base + "; push failed (see error)"
-			m.errorModal.SetError(fmt.Errorf("post-create push failed: %w\nUse Push all bookmarks to retry once you've resolved the underlying issue", msg.PushErr), false, "")
+			m.applyEffects(effShowError{fmt.Errorf("post-create push failed: %w\nUse Push all bookmarks to retry once you've resolved the underlying issue", msg.PushErr)})
 		case msg.PushedCount > 0:
 			m.appState.StatusMessage = fmt.Sprintf("%s and pushed %d bookmark(s): %s", base, msg.PushedCount, strings.Join(msg.PushedNames, ", "))
 		default:
@@ -167,10 +163,7 @@ func (m *Model) handleRemoteOpResultMsg(msg data.RemoteOpResultMsg) (tea.Model, 
 	}
 	m.refreshSettingsOriginURL()
 	// Reload the repo (and branches) so any newly fetched remote bookmarks appear immediately.
-	cmds := []tea.Cmd{
-		data.LoadRepository(m.appState.JJService),
-	}
-	return m, tea.Batch(cmds...)
+	return m, m.applyEffects(effReloadRepository{})
 }
 
 // handlePushResultMsg processes the outcome of a standalone Push current / Push all action from
@@ -180,8 +173,12 @@ func (m *Model) handleRemoteOpResultMsg(msg data.RemoteOpResultMsg) (tea.Model, 
 func (m *Model) handlePushResultMsg(msg data.PushResultMsg) (tea.Model, tea.Cmd) {
 	m.appState.Loading = false
 	if msg.Err != nil {
-		m.errorModal.SetError(msg.Err, false, "")
-		return m, nil
+		// P5.5: push failures are usually transient (network / auth); offer Retry that re-runs
+		// the same push (msg.All carries whether this was Push all vs Push current).
+		return m, m.applyEffects(effShowRetryableError{
+			err:   msg.Err,
+			retry: data.PushBookmarksCmd(m.appState.JJService, msg.All),
+		})
 	}
 	switch {
 	case msg.PushedCount == 0:
@@ -201,7 +198,27 @@ func (m *Model) handlePushResultMsg(msg data.PushResultMsg) (tea.Model, tea.Cmd)
 		}
 	}
 	// Reload the repo so the graph picks up new remote-tracking bookmarks (e.g. main@origin).
-	return m, data.LoadRepository(m.appState.JJService)
+	return m, m.applyEffects(effReloadRepository{})
+}
+
+// handleGraphFilterLoadedMsg applies a graph search filter result (P4.4).
+func (m *Model) handleGraphFilterLoadedMsg(msg data.GraphFilterLoadedMsg) (tea.Model, tea.Cmd) {
+	m.appState.Loading = false
+	m.appState.GraphFilterQuery = msg.Query
+	m.appState.GraphFilterRevset = msg.Revset
+	if msg.Err != nil {
+		m.appState.GraphFilterError = msg.Err.Error()
+		m.graphTabModel.SetFilterDisplay(msg.Query, msg.Err.Error())
+		m.appState.StatusMessage = "Filter error: " + msg.Err.Error()
+		return m, nil
+	}
+	m.appState.GraphFilterError = ""
+	m.graphTabModel.SetFilterDisplay(msg.Query, "")
+	if msg.Repository != nil {
+		m.appState.StatusMessage = fmt.Sprintf("Filtered: %d commits", len(msg.Repository.Graph.Commits))
+		return m.applyRepositoryLoaded(msg.Repository)
+	}
+	return m, nil
 }
 
 // handleDataRepositoryLoadedMsg delegates to shared applyRepositoryLoaded.
@@ -235,8 +252,8 @@ func (m *Model) handleOpenPRsResolvedMsg(msg prstab.OpenPRsResolvedMsg) (tea.Mod
 		added = true
 	}
 	if added {
-		m.graphTabModel.UpdateRepository(m.appState.Repository)
-		m.prsTabModel.UpdateRepository(m.appState.Repository)
+		m.graphTabModel.OnRepositoryLoaded(m.appState.Repository)
+		m.prsTabModel.OnRepositoryLoaded(m.appState.Repository)
 	}
 	return m, nil
 }
@@ -251,15 +268,10 @@ func (m *Model) handleDataSilentRepositoryLoadedMsg(msg data.SilentRepositoryLoa
 			oldCount = len(m.appState.Repository.Graph.Commits)
 			oldPRs = m.appState.Repository.PRs
 		}
-		m.appState.Repository = msg.Repository
+		m.appState.UpdateRepository(msg.Repository)
 		m.appState.Repository.PRs = oldPRs
-		m.graphTabModel.UpdateRepository(m.appState.Repository)
-		m.prsTabModel.UpdateRepository(m.appState.Repository)
+		m.propagateRepository()
 		m.prsTabModel.SetGithubService(m.isGitHubAvailable())
-		m.branchesTabModel.UpdateRepository(m.appState.Repository)
-		m.ticketsTabModel.UpdateRepository(m.appState.Repository)
-		m.settingsTabModel.UpdateRepository(m.appState.Repository)
-		m.helpTabModel.UpdateRepository(m.appState.Repository)
 		newCount := len(msg.Repository.Graph.Commits)
 		if newCount != oldCount && m.errorModal.GetError() == nil {
 			m.appState.StatusMessage = fmt.Sprintf("Updated: %d commits", newCount)
@@ -269,7 +281,7 @@ func (m *Model) handleDataSilentRepositoryLoadedMsg(msg data.SilentRepositoryLoa
 }
 
 // handleTickMsg runs auto-refresh and ensures changed files for selected commit; forwards PR tick to PRs tab.
-func (m *Model) handleTickMsg() (tea.Model, tea.Cmd) {
+func (m *Model) handleTickMsg(now time.Time) (tea.Model, tea.Cmd) {
 	// Don't run background refresh/updates if a modal is showing or we're in a blocking flow
 	isBlockingView := m.appState.ViewMode == state.ViewEditDescription ||
 		m.appState.ViewMode == state.ViewCreatePR ||
@@ -293,21 +305,12 @@ func (m *Model) handleTickMsg() (tea.Model, tea.Cmd) {
 			}
 		}
 	}
-	if !m.silentReloadInFlight && !m.appState.Loading && !m.aiGenOverlayActive && m.appState.JJService != nil && m.appState.ViewMode != state.ViewEditDescription && m.appState.ViewMode != state.ViewCreatePR && m.appState.ViewMode != state.ViewCreateTicket && m.appState.ViewMode != state.ViewCreateBookmark && m.appState.ViewMode != state.ViewFileDiff && (m.appState.ViewMode != state.ViewEvologSplit || !m.evologSplitModal.SuggestLoading()) && !m.graphTabModel.IsInRebaseMode() && !m.graphTabModel.IsInMergeMode() {
-		revset := ""
-		if m.appState.Config != nil {
-			revset = m.appState.Config.GraphRevset
-			// Mirror LoadRepository's mine() intersection so the silent background
-			// refresh produces the same graph as the foreground load. Without this,
-			// the periodic tick would silently widen the revset and reintroduce
-			// other contributors' commits between user-initiated reloads.
-			if m.appState.Config.GraphFilterToMine() {
-				revset = jj.ApplyMineFilterToRevset(revset)
-			}
-			m.appState.JJService.BookmarkListPreferTracked = m.appState.Config.BranchesFilterToTrackedAndMine()
-		}
+	// P5.2: opt-in silent auto-refresh. shouldSilentReload gates on ui.auto_refresh_seconds
+	// (0/off by default), the configured minimum spacing, and the modal-open / in-flight guards.
+	if m.shouldSilentReload(now) {
 		m.silentReloadInFlight = true
-		cmds = append(cmds, data.LoadRepositorySilent(m.appState.JJService, revset))
+		m.lastAutoRefresh = now
+		cmds = append(cmds, data.LoadRepositorySilent(m.appState.JJService, m.appState.GraphFilterRevset))
 	}
 	prInput := prstab.PrTickInput{
 		IsPRView:      m.appState.ViewMode == state.ViewPullRequests,
@@ -327,6 +330,42 @@ func (m *Model) handleTickMsg() (tea.Model, tea.Cmd) {
 	}
 	cmds = append(cmds, m.tickCmd())
 	return m, tea.Batch(cmds...)
+}
+
+// shouldSilentReload reports whether handleTickMsg should kick off a P5.2 silent background
+// graph reload on this tick. It is the single guard for the feature and is intentionally
+// conservative: auto-refresh must never clobber in-progress work, so ANY open modal (form,
+// error, warning, workspaces, operations, evolog split, file diff) or in-flight/loading state
+// suppresses it, as do the in-graph rebase/merge modes (which aren't modals). It also honors
+// the configured minimum spacing so the faster heartbeat tick can't refresh more often than
+// ui.auto_refresh_seconds. Returns false when the feature is off (interval <= 0, the default).
+func (m *Model) shouldSilentReload(now time.Time) bool {
+	if m.appState.JJService == nil {
+		return false
+	}
+	interval := m.appState.Config.AutoRefreshInterval()
+	if interval <= 0 {
+		return false // auto-refresh disabled (default)
+	}
+	// Never overlap or clobber work already in flight.
+	if m.silentReloadInFlight || m.appState.Loading || m.aiGenOverlayActive {
+		return false
+	}
+	// Any open modal suppresses the background refresh (ModalStack read-model covers form modals,
+	// the error/warning overlays, and the graph-overlay modals like workspaces/operations/evolog).
+	stack := m.modalStack()
+	if stack.Len() > 0 {
+		return false
+	}
+	// Rebase/merge are in-graph modes rather than chromed modals, so guard them explicitly.
+	if m.graphTabModel.IsInRebaseMode() || m.graphTabModel.IsInMergeMode() {
+		return false
+	}
+	// Respect the configured minimum spacing between silent reloads.
+	if !m.lastAutoRefresh.IsZero() && now.Sub(m.lastAutoRefresh) < interval {
+		return false
+	}
+	return true
 }
 
 // handleReauthNeededEffect applies PR tab's reauth request (clear GitHub, start login).

@@ -97,11 +97,13 @@ func TestProfilesCycleSelectedWraps(t *testing.T) {
 // fills the editor with the active profile's fields.
 func TestNewModelFromConfig_PopulatesProfileList(t *testing.T) {
 	cfg := &config.Config{
-		AIProfiles: []config.AIProfile{
-			{Name: "openai", Provider: "openai_compatible", Model: "gpt-4o-mini", APIKey: "sk-a"},
-			{Name: "local", Provider: "ollama", Model: "qwen2.5:1.5b", BaseURL: "http://127.0.0.1:11434/v1"},
+		AIConfig: config.AIConfig{
+			AIProfiles: []config.AIProfile{
+				{Name: "openai", Provider: "openai_compatible", Model: "gpt-4o-mini", APIKey: "sk-a"},
+				{Name: "local", Provider: "ollama", Model: "qwen2.5:1.5b", BaseURL: "http://127.0.0.1:11434/v1"},
+			},
+			AIActiveProfile: "local",
 		},
-		AIActiveProfile: "local",
 	}
 	// The settings sub-model doesn't run normalizeAIProfiles itself — it expects
 	// to be handed an already-loaded config. Mimic Load's normalization here so

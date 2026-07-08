@@ -7,7 +7,6 @@ import (
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/bubble-color-picker"
 	bubbledropdown "github.com/madicen/bubble-dropdown"
-	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/state"
@@ -828,7 +827,8 @@ func (m *Model) SetSettingInputValue(index int, value string) {
 	}
 	// Other indices (jira/codecks/tickets) could be set here if needed
 }
-func (m *Model) UpdateRepository(repo *internal.Repository) {}
+// P2.8: settings never used the repository, so its no-op UpdateRepository hook
+// (and the per-sub-model ones) were removed (the root no longer fans out to it).
 
 // Getters for toggle/state (delegate to sub-models)
 func (m *Model) GetSettingsShowMerged() bool        { return m.githubModel.GetShowMerged() }

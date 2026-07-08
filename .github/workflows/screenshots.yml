@@ -79,6 +79,9 @@ jobs:
           vhs vhs/evolog-split.tape
           vhs vhs/divergent.tape
           vhs vhs/bookmark-conflict.tape
+          vhs vhs/op-log.tape
+          vhs vhs/revset-filter.tape
+          vhs vhs/multiselect.tape
 
       - name: List generated files
         run: ls -la screenshots/

@@ -13,10 +13,6 @@ import (
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tui/data"
 	"github.com/madicen/jj-tui/internal/tui/state"
-	bookmarktab "github.com/madicen/jj-tui/internal/tui/tabs/bookmark"
-	branchestab "github.com/madicen/jj-tui/internal/tui/tabs/branches"
-	descedittab "github.com/madicen/jj-tui/internal/tui/tabs/descedit"
-	prstab "github.com/madicen/jj-tui/internal/tui/tabs/prs"
 	"github.com/madicen/jj-tui/internal/tui/util"
 )
 
@@ -66,16 +62,44 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 		cmd, status := executeAbandon(ctx)
 		return Result{Cmd: cmd, Status: status, SuccessStatus: "Abandoning commit…", Loading: true}
 	}
+	if r.BatchAbandon {
+		cmd, status := executeBatchAbandon(ctx)
+		if status != "" && cmd == nil {
+			return Result{Status: status}
+		}
+		return Result{Cmd: cmd, Status: status, SuccessStatus: "Abandoning selected commits…", Loading: true}
+	}
+	if r.StartAbsorb {
+		return Result{Cmd: AbsorbDryRunCmd(ctx.JJService), SuccessStatus: "Previewing absorb…", Loading: true}
+	}
+	if r.Duplicate {
+		cmd, status := executeDuplicate(ctx)
+		return Result{Cmd: cmd, Status: status, SuccessStatus: "Duplicating commit…", Loading: true}
+	}
+	if r.StartDuplicateOnto {
+		if !ctx.IsSelectedCommitValid() {
+			return Result{}
+		}
+		return Result{FollowUp: FollowUpStartDuplicateMode}
+	}
+	if r.Backout {
+		cmd, status := executeBackout(ctx)
+		return Result{Cmd: cmd, Status: status, SuccessStatus: "Backing out commit…", Loading: true}
+	}
 	if r.PerformRebase {
 		cmd, status := executePerformRebase(r.RebaseDestIndex, ctx)
 		if status != "" {
 			return Result{Status: status}
 		}
+		verb := "Rebasing"
+		if ctx.DuplicateMode {
+			verb = "Duplicating"
+		}
 		if cmd != nil && ctx.RebaseSourceCommit >= 0 && ctx.RebaseSourceCommit < len(ctx.Repository.Graph.Commits) &&
 			r.RebaseDestIndex >= 0 && r.RebaseDestIndex < len(ctx.Repository.Graph.Commits) {
 			src := ctx.Repository.Graph.Commits[ctx.RebaseSourceCommit]
 			dst := ctx.Repository.Graph.Commits[r.RebaseDestIndex]
-			return Result{Cmd: cmd, SuccessStatus: fmt.Sprintf("Rebasing %s onto %s...", src.ShortID, dst.ShortID), PerformRebase: true, Loading: true}
+			return Result{Cmd: cmd, SuccessStatus: fmt.Sprintf("%s %s onto %s...", verb, src.ShortID, dst.ShortID), PerformRebase: true, Loading: true}
 		}
 		return Result{Cmd: cmd, PerformRebase: true, Loading: true}
 	}
@@ -112,8 +136,13 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 		return Result{Cmd: cmd, PerformMerge: true, Loading: true}
 	}
 	if r.DeleteBookmark {
-		cmd, status := executeDeleteBookmark(ctx)
-		return Result{Cmd: cmd, Status: status, SuccessStatus: "Deleting bookmark…", Loading: true}
+		name, status := resolveDeleteBookmarkName(ctx)
+		if name == "" {
+			return Result{Status: status}
+		}
+		// Routed through main (NavigateDeleteBookmark) so the graph tab no longer
+		// imports the bookmark tab; main constructs bookmarktab.DeleteBookmarkCmd.
+		return Result{FollowUp: FollowUpDeleteBookmark, BookmarkConflictName: name}
 	}
 	if r.MoveFileUp {
 		cmd, status := executeMoveFileUp(ctx)
@@ -156,6 +185,52 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 			FollowUp:     FollowUpViewFileDiff,
 			CommitIndex:  ctx.SelectedCommit,
 			FileDiffPath: ctx.ChangedFiles[ctx.SelectedFile].Path,
+		}
+	}
+	if r.Annotate {
+		if ctx.JJService == nil {
+			return Result{Status: "Cannot annotate: jj not available"}
+		}
+		if ctx.GraphFocused {
+			return Result{Status: "Press Tab to focus files, select a file, then press B"}
+		}
+		if len(ctx.ChangedFiles) == 0 {
+			return Result{Status: "No changed files for this commit"}
+		}
+		if ctx.SelectedFile < 0 || ctx.SelectedFile >= len(ctx.ChangedFiles) {
+			return Result{Status: "Select a file in the changed-files list"}
+		}
+		if !ctx.IsSelectedCommitValid() {
+			return Result{Status: "No commit selected"}
+		}
+		if ctx.ChangedFiles[ctx.SelectedFile].Status == "D" {
+			return Result{Status: "Cannot annotate a deleted file"}
+		}
+		return Result{
+			FollowUp:     FollowUpAnnotate,
+			CommitIndex:  ctx.SelectedCommit,
+			FileDiffPath: ctx.ChangedFiles[ctx.SelectedFile].Path,
+		}
+	}
+	if r.ResolveFileConflict {
+		if ctx.GraphFocused {
+			return Result{Status: "Press Tab to focus files, select a conflicted file, then press ="}
+		}
+		if len(ctx.ChangedFiles) == 0 || ctx.SelectedFile < 0 || ctx.SelectedFile >= len(ctx.ChangedFiles) {
+			return Result{Status: "Select a conflicted file in the changed-files list"}
+		}
+		f := ctx.ChangedFiles[ctx.SelectedFile]
+		if !f.Conflicted {
+			return Result{Status: "Selected file has no unresolved conflict"}
+		}
+		if !ctx.IsSelectedCommitValid() {
+			return Result{Status: "No commit selected"}
+		}
+		commit := ctx.Repository.Graph.Commits[ctx.SelectedCommit]
+		return Result{
+			Cmd:           ResolveFileConflictCmd(ctx.JJService, commit.ChangeID, f.Path, ""),
+			SuccessStatus: fmt.Sprintf("Resolving %s…", f.Path),
+			Loading:       true,
 		}
 	}
 	if r.OpenInExternalEditor {
@@ -258,6 +333,12 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 			return Result{Status: "Cannot rebase: commit is immutable"}
 		}
 		return Result{FollowUp: FollowUpStartRebaseMode}
+	}
+	if r.StartBatchRebaseMode {
+		if len(ctx.MultiSelectChangeIDs) == 0 {
+			return Result{Status: "Select commits with Space first"}
+		}
+		return Result{FollowUp: FollowUpStartBatchRebaseMode}
 	}
 	if r.StartMergeMode {
 		if !ctx.IsSelectedCommitValid() {
@@ -369,17 +450,82 @@ func executeAbandon(ctx *RequestContext) (tea.Cmd, string) {
 	return Abandon(ctx.JJService, commit.ChangeID), ""
 }
 
-func executePerformRebase(destIndex int, ctx *RequestContext) (tea.Cmd, string) {
-	if !ctx.IsSelectedCommitValid() || ctx.RebaseSourceCommit < 0 ||
-		ctx.RebaseSourceCommit >= len(ctx.Repository.Graph.Commits) ||
-		destIndex < 0 || destIndex >= len(ctx.Repository.Graph.Commits) {
+func executeBatchAbandon(ctx *RequestContext) (tea.Cmd, string) {
+	if len(ctx.MultiSelectChangeIDs) == 0 {
+		return nil, "Nothing selected to abandon"
+	}
+	if ctx.JJService == nil {
+		return nil, "Cannot abandon: not in a jj repository"
+	}
+	return AbandonBatch(ctx.JJService, ctx.MultiSelectChangeIDs), ""
+}
+
+func executeDuplicate(ctx *RequestContext) (tea.Cmd, string) {
+	if !ctx.IsSelectedCommitValid() {
 		return nil, ""
 	}
-	if ctx.RebaseSourceCommit == destIndex {
-		return nil, "Cannot rebase commit onto itself"
+	if ctx.JJService == nil {
+		return nil, "Cannot duplicate: not in a jj repository"
+	}
+	commit := ctx.Repository.Graph.Commits[ctx.SelectedCommit]
+	return Duplicate(ctx.JJService, commit.ChangeID, ""), ""
+}
+
+func executeBackout(ctx *RequestContext) (tea.Cmd, string) {
+	if !ctx.IsSelectedCommitValid() {
+		return nil, ""
+	}
+	if ctx.JJService == nil {
+		return nil, "Cannot back out: not in a jj repository"
+	}
+	commit := ctx.Repository.Graph.Commits[ctx.SelectedCommit]
+	return Backout(ctx.JJService, commit.ChangeID), ""
+}
+
+func executePerformRebase(destIndex int, ctx *RequestContext) (tea.Cmd, string) {
+	if ctx.Repository == nil || destIndex < 0 || destIndex >= len(ctx.Repository.Graph.Commits) {
+		return nil, ""
+	}
+	destCommit := ctx.Repository.Graph.Commits[destIndex]
+	if len(ctx.BatchRebaseSources) > 0 {
+		if ctx.DuplicateMode {
+			return nil, "Duplicate does not support batch selection"
+		}
+		var sources []string
+		for _, idx := range ctx.BatchRebaseSources {
+			if idx == destIndex {
+				return nil, "Cannot rebase onto a selected source commit"
+			}
+			if idx < 0 || idx >= len(ctx.Repository.Graph.Commits) {
+				continue
+			}
+			c := ctx.Repository.Graph.Commits[idx]
+			if c.Immutable || c.IsWorking {
+				return nil, "Cannot rebase: selection includes immutable or working-copy commit"
+			}
+			sources = append(sources, c.ChangeID)
+		}
+		if len(sources) == 0 {
+			return nil, ""
+		}
+		return RebaseBatch(ctx.JJService, sources, destCommit.ChangeID), ""
+	}
+	if !ctx.IsSelectedCommitValid() || ctx.RebaseSourceCommit < 0 ||
+		ctx.RebaseSourceCommit >= len(ctx.Repository.Graph.Commits) {
+		return nil, ""
 	}
 	sourceCommit := ctx.Repository.Graph.Commits[ctx.RebaseSourceCommit]
-	destCommit := ctx.Repository.Graph.Commits[destIndex]
+	// The destination picker is shared with duplicate; duplicate onto the source's
+	// own position is meaningless, but so is rebasing onto itself.
+	if ctx.RebaseSourceCommit == destIndex {
+		if ctx.DuplicateMode {
+			return nil, "Cannot duplicate a commit onto itself"
+		}
+		return nil, "Cannot rebase commit onto itself"
+	}
+	if ctx.DuplicateMode {
+		return Duplicate(ctx.JJService, sourceCommit.ChangeID, destCommit.ChangeID), ""
+	}
 	return Rebase(ctx.JJService, sourceCommit.ChangeID, destCommit.ChangeID), ""
 }
 
@@ -428,16 +574,19 @@ func executeDragRebase(fromIndex, toIndex int, ctx *RequestContext) (tea.Cmd, st
 	return Rebase(ctx.JJService, sourceCommit.ChangeID, destCommit.ChangeID), ""
 }
 
-func executeDeleteBookmark(ctx *RequestContext) (tea.Cmd, string) {
+// resolveDeleteBookmarkName validates the selection and returns the bookmark to
+// delete (empty name + status when nothing is deletable). Main turns a non-empty
+// name into bookmarktab.DeleteBookmarkCmd (P2.5: graph no longer imports bookmark).
+func resolveDeleteBookmarkName(ctx *RequestContext) (name, status string) {
 	if !ctx.IsSelectedCommitValid() {
-		return nil, ""
+		return "", ""
 	}
 	commit := ctx.Repository.Graph.Commits[ctx.SelectedCommit]
-	name := util.FirstOperableBookmarkName(commit.Branches)
+	name = util.FirstOperableBookmarkName(commit.Branches)
 	if name == "" {
-		return nil, "No bookmark on this commit to delete"
+		return "", "No bookmark on this commit to delete"
 	}
-	return bookmarktab.DeleteBookmarkCmd(ctx.JJService, name), ""
+	return name, ""
 }
 
 func executeMoveFileUp(ctx *RequestContext) (tea.Cmd, string) {
@@ -566,16 +715,6 @@ func executeMoveDeltaOntoOrigin(ctx *RequestContext) (tea.Cmd, string) {
 	return MoveBookmarkDeltaOntoOriginCmd(ctx.JJService, name, commit.ChangeID, commit.ID), ""
 }
 
-// SaveDescriptionCmd returns a command to save the description for the given commit.
-func SaveDescriptionCmd(jjService *jj.Service, commitID, body string) tea.Cmd {
-	return descedittab.SaveDescriptionCmd(jjService, commitID, strings.TrimSpace(body))
-}
-
-// CreateBookmarkCmd returns a command to create a bookmark.
-func CreateBookmarkCmd(jjService *jj.Service, bookmarkName, commitID string) tea.Cmd {
-	return bookmarktab.CreateBookmarkCmd(jjService, bookmarkName, commitID)
-}
-
 // ApplyResult applies the result: updates the graph model, mutates app state, and returns the Cmd to run.
 // For follow-ups that require main to open a modal (edit description, create bookmark, warning, create PR),
 // it returns a state.NavigateMsg cmd. For load/update PR it sets app status and returns the cmd directly.
@@ -609,10 +748,23 @@ func ApplyResult(res Result, graphModel *GraphModel, ctx *RequestContext, app *s
 			app.StatusMessage = RebaseModeStartMessage(ctx.Repository.Graph.Commits[ctx.SelectedCommit].ShortID)
 		}
 		return nil
+	case FollowUpStartBatchRebaseMode:
+		indices := graphModel.multiSelect.sortedIndices()
+		if len(indices) > 0 {
+			graphModel.StartBatchRebaseMode(indices)
+			app.StatusMessage = BatchRebaseModeStartMessage(len(indices))
+		}
+		return nil
 	case FollowUpStartMergeMode:
 		if ctx != nil && ctx.Repository != nil && ctx.SelectedCommit >= 0 && ctx.SelectedCommit < len(ctx.Repository.Graph.Commits) {
 			graphModel.StartMergeMode(ctx.SelectedCommit)
 			app.StatusMessage = MergeModeStartMessage(ctx.Repository.Graph.Commits[ctx.SelectedCommit].ShortID)
+		}
+		return nil
+	case FollowUpStartDuplicateMode:
+		if ctx != nil && ctx.Repository != nil && ctx.SelectedCommit >= 0 && ctx.SelectedCommit < len(ctx.Repository.Graph.Commits) {
+			graphModel.StartDuplicateMode(ctx.SelectedCommit)
+			app.StatusMessage = DuplicateModeStartMessage(ctx.Repository.Graph.Commits[ctx.SelectedCommit].ShortID)
 		}
 		return nil
 	case FollowUpCreateBookmark:
@@ -631,16 +783,34 @@ func ApplyResult(res Result, graphModel *GraphModel, ctx *RequestContext, app *s
 			return state.NavigateTarget{Kind: state.NavigateOpenEvologSplit, Commit: ctx.Repository.Graph.Commits[res.CommitIndex]}.Cmd()
 		}
 		return nil
+	case FollowUpDeleteBookmark:
+		// P2.5: main constructs bookmarktab.DeleteBookmarkCmd. Status + Loading are
+		// set here (same frame) exactly as the old inline SuccessStatus/Loading path.
+		if strings.TrimSpace(res.BookmarkConflictName) != "" {
+			app.StatusMessage = "Deleting bookmark…"
+			app.Loading = true
+			return state.NavigateTarget{Kind: state.NavigateDeleteBookmark, DeleteBookmarkName: res.BookmarkConflictName}.Cmd()
+		}
+		return nil
 	case FollowUpResolveBookmarkConflict:
 		if ctx != nil && ctx.JJService != nil && strings.TrimSpace(res.BookmarkConflictName) != "" {
 			app.StatusMessage = "Loading bookmark conflict info…"
-			return branchestab.LoadBookmarkConflictInfoCmd(ctx.JJService, res.BookmarkConflictName)
+			// P2.5: main constructs branchestab.LoadBookmarkConflictInfoCmd.
+			return state.NavigateTarget{Kind: state.NavigateLoadBookmarkConflictInfo, ConflictBookmarkName: res.BookmarkConflictName}.Cmd()
 		}
 		return nil
 	case FollowUpViewFileDiff:
 		if ctx != nil && ctx.Repository != nil && res.CommitIndex >= 0 && res.CommitIndex < len(ctx.Repository.Graph.Commits) && strings.TrimSpace(res.FileDiffPath) != "" {
 			c := ctx.Repository.Graph.Commits[res.CommitIndex]
 			return state.NavigateTarget{Kind: state.NavigateOpenFileDiff, Commit: c, FileDiffPath: res.FileDiffPath}.Cmd()
+		}
+		return nil
+	case FollowUpAnnotate:
+		if ctx != nil && ctx.JJService != nil && ctx.Repository != nil && res.CommitIndex >= 0 && res.CommitIndex < len(ctx.Repository.Graph.Commits) && strings.TrimSpace(res.FileDiffPath) != "" {
+			c := ctx.Repository.Graph.Commits[res.CommitIndex]
+			seq := graphModel.beginAnnotate(c.ShortID, res.FileDiffPath)
+			app.StatusMessage = "Loading blame…"
+			return AnnotateFileCmd(ctx.JJService, seq, c.ChangeID, res.FileDiffPath)
 		}
 		return nil
 	case FollowUpUpdatePR:
@@ -660,7 +830,13 @@ func ApplyResult(res Result, graphModel *GraphModel, ctx *RequestContext, app *s
 			app.StatusMessage = fmt.Sprintf("Pushing %s...", prBranch)
 		}
 		app.Loading = true
-		return prstab.PushToPRCmd(ctx.JJService, prBranch, commit.ChangeID, needsMoveBookmark, ctx.DemoMode)
+		// P2.5: main constructs prstab.PushToPRCmd (graph no longer imports prs).
+		return state.NavigateTarget{
+			Kind:                      state.NavigateUpdatePR,
+			UpdatePRBranch:            prBranch,
+			UpdatePRCommitID:          commit.ChangeID,
+			UpdatePRNeedsMoveBookmark: needsMoveBookmark,
+		}.Cmd()
 	}
 	if res.Cmd != nil {
 		if res.PerformRebase {
@@ -676,6 +852,9 @@ func ApplyResult(res Result, graphModel *GraphModel, ctx *RequestContext, app *s
 			app.StatusMessage = res.SuccessStatus
 		}
 		if res.Loading {
+			if res.PerformRebase || strings.Contains(res.SuccessStatus, "selected") {
+				graphModel.ClearMultiSelect()
+			}
 			app.Loading = true
 		}
 		return res.Cmd
@@ -756,11 +935,67 @@ func Abandon(svc *jj.Service, changeID string) tea.Cmd {
 	}
 }
 
+// AbandonBatch abandons multiple commits in one jj operation (single undo).
+func AbandonBatch(svc *jj.Service, changeIDs []string) tea.Cmd {
+	return func() tea.Msg {
+		if err := svc.AbandonCommitsBatch(context.Background(), changeIDs); err != nil {
+			return util.ErrorMsg{Err: fmt.Errorf("failed to abandon: %w", err)}
+		}
+		repo, err := svc.GetRepository(context.Background(), "")
+		if err != nil {
+			return util.ErrorMsg{Err: err}
+		}
+		return RepositoryLoadedMsg{Repository: repo}
+	}
+}
+
+// RebaseBatch rebases multiple commits onto one destination.
+func RebaseBatch(svc *jj.Service, sourceChangeIDs []string, destChangeID string) tea.Cmd {
+	return func() tea.Msg {
+		if err := svc.RebaseCommitsBatch(context.Background(), sourceChangeIDs, destChangeID); err != nil {
+			return util.ErrorMsg{Err: fmt.Errorf("failed to rebase: %w", err)}
+		}
+		repo, err := svc.GetRepository(context.Background(), "")
+		if err != nil {
+			return util.ErrorMsg{Err: err}
+		}
+		return RepositoryLoadedMsg{Repository: repo}
+	}
+}
+
 // Rebase rebases the source commit onto the destination.
 func Rebase(svc *jj.Service, sourceChangeID, destChangeID string) tea.Cmd {
 	return func() tea.Msg {
 		if err := svc.RebaseCommit(context.Background(), sourceChangeID, destChangeID); err != nil {
 			return util.ErrorMsg{Err: fmt.Errorf("failed to rebase: %w", err)}
+		}
+		repo, err := svc.GetRepository(context.Background(), "")
+		if err != nil {
+			return util.ErrorMsg{Err: err}
+		}
+		return RepositoryLoadedMsg{Repository: repo}
+	}
+}
+
+// Duplicate copies the source revision, optionally onto a destination commit.
+func Duplicate(svc *jj.Service, sourceChangeID, destChangeID string) tea.Cmd {
+	return func() tea.Msg {
+		if err := svc.DuplicateCommit(context.Background(), sourceChangeID, destChangeID); err != nil {
+			return util.ErrorMsg{Err: fmt.Errorf("failed to duplicate: %w", err)}
+		}
+		repo, err := svc.GetRepository(context.Background(), "")
+		if err != nil {
+			return util.ErrorMsg{Err: err}
+		}
+		return RepositoryLoadedMsg{Repository: repo}
+	}
+}
+
+// Backout applies the reverse of the source revision on top of the working copy.
+func Backout(svc *jj.Service, sourceChangeID string) tea.Cmd {
+	return func() tea.Msg {
+		if err := svc.BackoutCommit(context.Background(), sourceChangeID); err != nil {
+			return util.ErrorMsg{Err: fmt.Errorf("failed to back out: %w", err)}
 		}
 		repo, err := svc.GetRepository(context.Background(), "")
 		if err != nil {
@@ -928,7 +1163,7 @@ func HandleUndoCompletedMsg(msg UndoCompletedMsg, app *state.AppState) (tea.Cmd,
 		return nil, &UndoErrorInfo{Err: msg.Err}
 	}
 	app.StatusMessage = msg.Message
-	return data.LoadRepository(app.JJService), nil
+	return data.LoadRepository(app.JJService, app.GraphFilterRevset), nil
 }
 
 // SetStatusEffect carries a status line for ApplyResult follow-ups when main handles the effect; other effect types in this group follow the same pattern (NavigateTarget.Cmd when app is non-nil; tests may use a nil app).

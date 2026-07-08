@@ -31,10 +31,10 @@ func TestSanitizeBookmarkName(t *testing.T) {
 
 func TestTruncateBookmarkNameTo(t *testing.T) {
 	tests := []struct {
-		name  string
-		in    string
-		max   int
-		want  string
+		name string
+		in   string
+		max  int
+		want string
 	}{
 		// Short / boundary inputs pass through verbatim.
 		{"empty", "", 50, ""},

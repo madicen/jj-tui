@@ -13,6 +13,7 @@ type ContextProvider interface {
 	GetRepository() *internal.Repository
 	GetSelectedCommit() int
 	GetRebaseSourceCommit() int
+	GetDuplicateMode() bool
 	GetMergeTargetCommit() int
 	GetChangedFiles() []jj.ChangedFile
 	GetChangedFilesCommitID() string
@@ -34,6 +35,7 @@ func BuildRequestContextFrom(p ContextProvider) *RequestContext {
 		Repository:           p.GetRepository(),
 		SelectedCommit:       p.GetSelectedCommit(),
 		RebaseSourceCommit:   p.GetRebaseSourceCommit(),
+		DuplicateMode:        p.GetDuplicateMode(),
 		MergeTargetCommit:    p.GetMergeTargetCommit(),
 		ChangedFiles:         p.GetChangedFiles(),
 		ChangedFilesCommitID: p.GetChangedFilesCommitID(),
@@ -53,6 +55,7 @@ type RequestContext struct {
 	Repository           *internal.Repository
 	SelectedCommit       int
 	RebaseSourceCommit   int
+	DuplicateMode        bool
 	MergeTargetCommit    int
 	ChangedFiles         []jj.ChangedFile
 	ChangedFilesCommitID string
@@ -62,6 +65,8 @@ type RequestContext struct {
 	CreatePRBranch       string // branch that would be used for Create PR for selected commit (to block main/master)
 	DemoMode             bool
 	Config               *config.Config
+	BatchRebaseSources   []int
+	MultiSelectChangeIDs []string
 }
 
 // ContextInput is the data needed to build a RequestContext. Main passes this from its state.
@@ -70,6 +75,7 @@ type ContextInput struct {
 	Repository           *internal.Repository
 	SelectedCommit       int
 	RebaseSourceCommit   int
+	DuplicateMode        bool
 	MergeTargetCommit    int
 	ChangedFiles         []jj.ChangedFile
 	ChangedFilesCommitID string
@@ -91,6 +97,7 @@ func BuildRequestContext(input *ContextInput) *RequestContext {
 		Repository:           input.Repository,
 		SelectedCommit:       input.SelectedCommit,
 		RebaseSourceCommit:   input.RebaseSourceCommit,
+		DuplicateMode:        input.DuplicateMode,
 		MergeTargetCommit:    input.MergeTargetCommit,
 		ChangedFiles:         input.ChangedFiles,
 		ChangedFilesCommitID: input.ChangedFilesCommitID,
@@ -118,11 +125,12 @@ func BuildRequestContextFromApp(app *state.AppState, m *GraphModel) *RequestCont
 		return nil
 	}
 	githubAvailable := app.GitHubService != nil || app.DemoMode
-	return BuildRequestContext(&ContextInput{
+	ctx := BuildRequestContext(&ContextInput{
 		JJService:            app.JJService,
 		Repository:           app.Repository,
 		SelectedCommit:       m.GetSelectedCommit(),
 		RebaseSourceCommit:   m.GetRebaseSourceCommit(),
+		DuplicateMode:        m.GetDuplicateMode(),
 		MergeTargetCommit:    m.GetMergeTargetCommit(),
 		ChangedFiles:         m.GetChangedFiles(),
 		ChangedFilesCommitID: m.GetChangedFilesCommitID(),
@@ -133,4 +141,10 @@ func BuildRequestContextFromApp(app *state.AppState, m *GraphModel) *RequestCont
 		DemoMode:             app.DemoMode,
 		Config:               app.Config,
 	})
+	if ctx == nil {
+		return nil
+	}
+	ctx.BatchRebaseSources = append([]int(nil), m.batchRebaseSources...)
+	ctx.MultiSelectChangeIDs = append([]string(nil), m.multiSelectChangeIDs()...)
+	return ctx
 }

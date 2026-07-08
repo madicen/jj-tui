@@ -6,7 +6,7 @@ import (
 	zone "github.com/lrstanley/bubblezone"
 	bubbledropdown "github.com/madicen/bubble-dropdown"
 	"github.com/madicen/jj-tui/internal/config"
-	"github.com/madicen/jj-tui/internal/tui/styles"
+	"github.com/madicen/jj-tui/internal/tui/form/dropdown"
 )
 
 // providerValues maps the ticket-provider dropdown indices to their config
@@ -34,7 +34,7 @@ type Model struct {
 	focusedField         int
 
 	// providerDropdown replaces the old radio rows for the active ticket provider.
-	providerDropdown *bubbledropdown.Dropdown
+	providerDropdown *dropdown.Field
 }
 
 // NewModel creates a new Tickets settings model with default state.
@@ -48,9 +48,8 @@ func NewModel() Model {
 		autoInProgress:       true,
 		githubIssuesExcluded: excluded,
 		focusedField:         0,
-		providerDropdown: bubbledropdown.New(
+		providerDropdown: dropdown.New(
 			bubbledropdown.WithOptions(providerLabels),
-			bubbledropdown.WithAccentColor(string(styles.ColorPrimary)),
 		),
 	}
 }
@@ -95,10 +94,7 @@ func (m *Model) SetTicketProvider(s string) {
 // ProviderDropdown returns the active-provider dropdown (for rendering and
 // overlay). It syncs the accent so the panel tracks the live theme primary color.
 func (m *Model) ProviderDropdown() *bubbledropdown.Dropdown {
-	if accent := string(styles.ColorPrimary); m.providerDropdown.AccentColor() != accent {
-		m.providerDropdown.SetAccentColor(accent)
-	}
-	return m.providerDropdown
+	return m.providerDropdown.Dropdown()
 }
 
 // DropdownOpen reports whether the provider dropdown panel is open.
@@ -112,18 +108,11 @@ func (m *Model) SetZoneManager(zm *zone.Manager) {
 // UpdateDropdown forwards a message to the provider dropdown and, on selection,
 // applies the chosen provider value. Returns any tea.Cmd the dropdown emits.
 func (m *Model) UpdateDropdown(msg tea.Msg) tea.Cmd {
-	if m.providerDropdown == nil {
-		return nil
-	}
-	wasOpen := m.providerDropdown.Open()
-	dd, cmd := m.providerDropdown.Update(msg)
-	m.providerDropdown = dd
-	if chosen, ok := msg.(bubbledropdown.ItemChosenMsg); ok && wasOpen {
-		if chosen.Index >= 0 && chosen.Index < len(providerValues) {
-			m.SetTicketProvider(providerValues[chosen.Index])
+	return m.providerDropdown.Update(msg, func(i int) {
+		if i >= 0 && i < len(providerValues) {
+			m.SetTicketProvider(providerValues[i])
 		}
-	}
-	return cmd
+	})
 }
 
 // GetAutoInProgress returns whether to auto-set "In Progress" when creating a branch.

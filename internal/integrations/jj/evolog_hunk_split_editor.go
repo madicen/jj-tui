@@ -25,6 +25,7 @@ func RunEvologHunkSplitDiffEditor(leftDir, rightDir, outputDir string) error {
 	if specPath == "" {
 		return fmt.Errorf("missing %s", EvologHunkSplitSpecEnv)
 	}
+	//nolint:gosec // G304/G703: specPath is provided by jj via our own env var, not attacker input.
 	raw, err := os.ReadFile(specPath)
 	if err != nil {
 		return fmt.Errorf("read hunk split spec: %w", err)
@@ -176,7 +177,7 @@ func processHunkSplitRel(rel string, leftDir, rightDir, outputDir string, hunksP
 			}
 			return nil
 		}
-		return os.WriteFile(outPath, leftRaw, 0o644)
+		return os.WriteFile(outPath, leftRaw, 0o644) //nolint:gosec // G306: jj diff-editor output; 0644 matches jj's working-copy file perms.
 	}
 	hunks := hunksPerPath[rel]
 	k, ok := prefix[rel]
@@ -193,7 +194,7 @@ func processHunkSplitRel(rel string, leftDir, rightDir, outputDir string, hunksP
 			}
 			return nil
 		}
-		return os.WriteFile(outPath, rightRaw, 0o644)
+		return os.WriteFile(outPath, rightRaw, 0o644) //nolint:gosec // G306: jj diff-editor output; 0644 matches jj's working-copy file perms.
 	}
 	if k < 0 || k > len(hunks) {
 		return fmt.Errorf("%s: hunk prefix k=%d exceeds %d @@ hunks (k is how many leading hunks to peel, not a line number)", rel, k, len(hunks))
@@ -214,7 +215,7 @@ func processHunkSplitRel(rel string, leftDir, rightDir, outputDir string, hunksP
 	if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(outPath, []byte(outStr), 0o644)
+	return os.WriteFile(outPath, []byte(outStr), 0o644) //nolint:gosec // G306: jj diff-editor output; 0644 matches jj's working-copy file perms.
 }
 
 func copyFileToOutput(leftDir, rightDir, outputDir, rel string) error {
@@ -227,7 +228,7 @@ func copyFileToOutput(leftDir, rightDir, outputDir, rel string) error {
 			if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
 				return err
 			}
-			return os.WriteFile(out, b, 0o644)
+			return os.WriteFile(out, b, 0o644) //nolint:gosec // G306: jj diff-editor output; 0644 matches jj's working-copy file perms.
 		}
 	}
 	return nil

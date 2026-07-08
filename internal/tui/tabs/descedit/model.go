@@ -11,6 +11,7 @@ import (
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/tui/genmenu"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/render"
 	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 )
@@ -226,10 +227,7 @@ func (m Model) View() string {
 		contentW = 60
 	}
 	mark := func(id, s string) string {
-		if m.zoneManager == nil {
-			return s
-		}
-		return m.zoneManager.Mark(id, s)
+		return render.Mark(m.zoneManager, id, s)
 	}
 	genChip := mark(mouse.ZoneDescGenerate, styles.AIGenerateChip())
 	commitLine := styles.SpreadRow(contentW, subtitleStyle.Render(fmt.Sprintf("Commit: %s", commitInfo)), genChip)

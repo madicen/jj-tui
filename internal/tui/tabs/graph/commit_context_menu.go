@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/madicen/jj-tui/internal/tui/longpress"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/render"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 )
 
@@ -44,6 +45,11 @@ func commitContextMenuItems() []commitContextMenuItem {
 		{Label: "Rebase", Key: "r", Request: Request{StartRebaseMode: true}, Mutable: true},
 		{Label: "Merge from", Key: "M", Request: Request{StartMergeMode: true}, Mutable: true},
 		{Label: "Abandon", Key: "a", Request: Request{Abandon: true}, Mutable: true},
+		// Duplicate and Backout can act on immutable commits too (the new commit is
+		// mutable), so they are not gated on Mutable.
+		{Label: "Duplicate", Key: "D", Request: Request{Duplicate: true}},
+		{Label: "Duplicate onto…", Key: "", Request: Request{StartDuplicateOnto: true}},
+		{Label: "Backout", Key: "", Request: Request{Backout: true}},
 		{Label: "Bookmark", Key: "m", Request: Request{CreateBookmark: true}, Mutable: true},
 	}
 }
@@ -63,6 +69,11 @@ func (m *GraphModel) commitContextMenuRows(ci int, firstParentImmutable bool) []
 	}
 	if m.repository.Graph.Commits[ci].Immutable {
 		return out
+	}
+	// Absorb only makes sense on the working copy (@), whose changes get folded
+	// into their closest mutable ancestors.
+	if m.repository.Graph.Commits[ci].IsWorking {
+		out = append(out, commitContextMenuItem{Label: "Absorb", Key: "A", Request: Request{StartAbsorb: true}, Mutable: true})
 	}
 	data := m.buildGraphData()
 	prBranch := ""
@@ -152,7 +163,7 @@ func (m *GraphModel) renderCommitContextMenu(isMutable bool, firstParentImmutabl
 		if ci >= 0 && ci < len(m.repository.Graph.Commits) {
 			desc := m.repository.Graph.Commits[ci].Description
 			if len(desc) > 40 {
-				desc = desc[:37] + "..."
+				desc = render.TruncateEllipsis(desc, 37)
 			}
 			header = lipgloss.NewStyle().
 				Foreground(styles.ColorSecondary).

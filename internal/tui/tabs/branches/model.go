@@ -4,11 +4,14 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 	overlay "github.com/madicen/bubble-overlay"
 	"github.com/madicen/jj-tui/internal"
+	"github.com/madicen/jj-tui/internal/tui/keys"
+	"github.com/madicen/jj-tui/internal/tui/listnav"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/util"
@@ -16,20 +19,18 @@ import (
 
 // Model represents the state of the Branches tab
 type Model struct {
+	listnav.Model // shared list scroll + long-press state
+
+	keys keys.BranchesKeyMap
+
 	zoneManager    *zone.Manager
 	repository     *internal.Repository
 	branchList     []internal.Branch
 	selectedBranch int
-	listYOffset    int // Scroll offset for list (details stay fixed)
 	width          int
 	height         int
 
-	// Long-press context menu for branch rows.
-	longPressItemIndex int
-	longPressPressID   int
-	longPressMouseX    int
-	longPressMouseY    int
-	contextMenu        *ContextMenuState
+	contextMenu *ContextMenuState
 
 	// Inline "pull & track remote branch by name" input. When addingRemote is true the input
 	// captures all keystrokes; Enter submits a FetchAndTrack request, Esc cancels.
@@ -46,18 +47,24 @@ func NewModel(zoneManager *zone.Manager) Model {
 	remoteInput.Width = 40
 
 	return Model{
-		zoneManager:        zoneManager,
-		selectedBranch:     -1,
-		width:              80,
-		height:             24,
-		longPressItemIndex: -1,
-		remoteInput:        remoteInput,
+		Model:          listnav.New(),
+		keys:           keys.DefaultBranchesKeyMap(nil),
+		zoneManager:    zoneManager,
+		selectedBranch: -1,
+		width:          80,
+		height:         24,
+		remoteInput:    remoteInput,
 	}
 }
 
 // Init initializes the model
 func (m Model) Init() tea.Cmd {
 	return nil
+}
+
+// SetKeyMap replaces the branches keybindings (PLAN(P5.1): config overrides).
+func (m *Model) SetKeyMap(km keys.BranchesKeyMap) {
+	m.keys = km
 }
 
 // SetDimensions sets the content area size (used for list-only scrolling)
@@ -79,15 +86,15 @@ func (m Model) UpdateWithApp(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) 
 func (m Model) update(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case LongPressTickMsg:
-		if msg.PressID == m.longPressPressID && m.longPressItemIndex >= 0 {
+		if msg.PressID == m.LongPressPressID && m.LongPressItemIndex >= 0 {
 			m.contextMenu = &ContextMenuState{
-				BranchIndex: m.longPressItemIndex,
-				MouseX:      m.longPressMouseX,
-				MouseY:      m.longPressMouseY,
+				BranchIndex: m.LongPressItemIndex,
+				MouseX:      m.LongPressMouseX,
+				MouseY:      m.LongPressMouseY,
 				PressID:     msg.PressID,
 				HoverItem:   -1,
 			}
-			m.selectedBranch = m.longPressItemIndex
+			m.selectedBranch = m.LongPressItemIndex
 		}
 		return m, nil
 
@@ -169,8 +176,8 @@ func (m Model) update(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
 			if statusMsg != "" {
 				app.StatusMessage = statusMsg
 			}
-			if (req.FetchAll || req.FetchAndTrack) && runCmd != nil {
-				app.BranchRemoteFetchPending = true
+			if (req.FetchAll || req.FetchAndTrack || req.PushBranch) && runCmd != nil {
+				app.SpinnerStartPending = true
 				app.Loading = true
 			}
 			return updated, runCmd
@@ -187,8 +194,8 @@ func (m Model) update(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
 			if statusMsg != "" {
 				app.StatusMessage = statusMsg
 			}
-			if (req.FetchAll || req.FetchAndTrack) && runCmd != nil {
-				app.BranchRemoteFetchPending = true
+			if (req.FetchAll || req.FetchAndTrack || req.PushBranch) && runCmd != nil {
+				app.SpinnerStartPending = true
 				app.Loading = true
 			}
 			return updated, runCmd
@@ -198,17 +205,7 @@ func (m Model) update(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
 		}
 		return updated, cmd
 	case tea.MouseMsg:
-		isWheel := tea.MouseEvent(msg).IsWheel() || msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown
-		if isWheel {
-			isUp := msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelLeft
-			if isUp {
-				m.listYOffset -= 3
-				if m.listYOffset < 0 {
-					m.listYOffset = 0
-				}
-			} else {
-				m.listYOffset += 3
-			}
+		if m.WheelScroll(msg) {
 			return m, nil
 		}
 		if cmd := m.handleLongPress(msg); cmd != nil {
@@ -259,32 +256,32 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, *Request, tea.Cmd) {
 		m.remoteInput, cmd = m.remoteInput.Update(msg)
 		return m, nil, cmd
 	}
-	switch msg.String() {
-	case "t":
+	switch {
+	case key.Matches(msg, m.keys.TrackByName):
 		return m.openRemoteInput()
-	case "j", "down":
+	case key.Matches(msg, m.keys.MoveDown):
 		if m.selectedBranch < len(m.branchList)-1 {
 			m.selectedBranch++
 		}
 		return m, nil, nil
-	case "k", "up":
+	case key.Matches(msg, m.keys.MoveUp):
 		if m.selectedBranch > 0 {
 			m.selectedBranch--
 		}
 		return m, nil, nil
-	case "T":
+	case key.Matches(msg, m.keys.Track):
 		return m, &Request{TrackBranch: true}, nil
-	case "U":
+	case key.Matches(msg, m.keys.Untrack):
 		return m, &Request{UntrackBranch: true}, nil
-	case "L":
+	case key.Matches(msg, m.keys.Restore):
 		return m, &Request{RestoreLocalBranch: true}, nil
-	case "P":
+	case key.Matches(msg, m.keys.Push):
 		return m, &Request{PushBranch: true}, nil
-	case "F":
+	case key.Matches(msg, m.keys.Fetch):
 		return m, &Request{FetchAll: true}, nil
-	case "c":
+	case key.Matches(msg, m.keys.ResolveConflict):
 		return m, &Request{ResolveBookmarkConflict: true}, nil
-	case "x":
+	case key.Matches(msg, m.keys.Delete):
 		return m, &Request{DeleteBranchBookmark: true}, nil
 	}
 	return m, nil, nil
@@ -375,7 +372,7 @@ func (m *Model) GetSelectedBranch() int {
 
 // GetListYOffset returns the list scroll offset (for tests and accessors)
 func (m *Model) GetListYOffset() int {
-	return m.listYOffset
+	return m.YOffset
 }
 
 // SetSelectedBranch sets the selected branch index
@@ -398,10 +395,11 @@ func (m *Model) UpdateBranches(branches []internal.Branch) {
 	}
 }
 
-// UpdateRepository updates the repository
-func (m *Model) UpdateRepository(repo *internal.Repository) {
+// OnRepositoryLoaded caches the newly-loaded repository (used for trunk/target
+// rendering). It implements tab.RepositoryAware (P2.8). Branches themselves are
+// loaded via a separate loadBranches() call, not from repository directly.
+func (m *Model) OnRepositoryLoaded(repo *internal.Repository) {
 	m.repository = repo
-	// Branches are loaded via separate loadBranches() call, not from repository directly
 }
 
 // BuildBookmarkNameConflictSources returns branch names and all commit branch names, for the bookmark modal's "name exists" check. Uses the tab's own repository and branch list (same data as appState, kept in sync by main).

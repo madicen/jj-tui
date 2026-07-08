@@ -15,6 +15,7 @@ import (
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tui/genmenu"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/render"
 	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 	"github.com/mattn/go-runewidth"
@@ -231,7 +232,8 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 // ZoneIDs returns the zone IDs this modal uses when rendering (same IDs passed to Mark). Used to resolve clicks.
 func (m Model) ZoneIDs() []string {
-	ids := []string{mouse.ZoneBookmarkName, mouse.ZoneBookmarkSubmit, mouse.ZoneBookmarkGenerate, mouse.ZoneBookmarkCancel}
+	ids := make([]string, 0, 4+len(m.existingBookmarks))
+	ids = append(ids, mouse.ZoneBookmarkName, mouse.ZoneBookmarkSubmit, mouse.ZoneBookmarkGenerate, mouse.ZoneBookmarkCancel)
 	for i := range m.existingBookmarks {
 		ids = append(ids, mouse.ZoneExistingBookmark(i))
 	}
@@ -395,8 +397,11 @@ func (m *Model) GetNameInput() *textinput.Model {
 	return &m.nameInput
 }
 
-// UpdateRepository updates the repository (for rendering commit target)
-func (m *Model) UpdateRepository(repo *internal.Repository) {
+// SetRepository caches the repository the create-bookmark modal renders its commit
+// target from. Renamed off "UpdateRepository" (P2.8) so the repository single-source
+// grep only surfaces the AppState setter; this is a modal-local cache, not the tab
+// fan-out.
+func (m *Model) SetRepository(repo *internal.Repository) {
 	m.repository = repo
 }
 
@@ -481,13 +486,6 @@ func (m *Model) MenuOverlay() (string, int, int) {
 	return view, x, y
 }
 
-func mark(z *zone.Manager, id, content string) string {
-	if z == nil {
-		return content
-	}
-	return z.Mark(id, content)
-}
-
 // boxWidth returns the Width to set on the inner rounded boxes (Target / Jira Ticket).
 // Falls back to a sensible default when contentWidth hasn't been propagated yet (e.g. the
 // very first render before tea.WindowSizeMsg arrives), so we never call Width(0) which
@@ -551,7 +549,7 @@ func (m Model) renderBookmark() string {
 					display = runewidth.Truncate(display, nameW, "…")
 				}
 				bookmarkLine := fmt.Sprintf("%s%s", prefix, display)
-				lines = append(lines, mark(m.zoneManager, mouse.ZoneExistingBookmark(i), style.Render(bookmarkLine)))
+				lines = append(lines, render.Mark(m.zoneManager, mouse.ZoneExistingBookmark(i), style.Render(bookmarkLine)))
 			}
 			lines = append(lines, "")
 			lines = append(lines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render("─────────────────────────────────"))
@@ -581,12 +579,12 @@ func (m Model) renderBookmark() string {
 	// Align the ✧ ^g chip with the indented input row ("  " + field, width 2+nameW).
 	nameRowW := 2 + nameW
 	if m.selectedBookmarkIdx == -1 {
-		genChip := mark(m.zoneManager, mouse.ZoneBookmarkGenerate, styles.AIGenerateChip())
+		genChip := render.Mark(m.zoneManager, mouse.ZoneBookmarkGenerate, styles.AIGenerateChip())
 		lines = append(lines, styles.SpreadRow(nameRowW, inputStyle.Render("  Name:"), genChip))
 	} else {
 		lines = append(lines, inputStyle.Render("Name:"))
 	}
-	lines = append(lines, mark(m.zoneManager, mouse.ZoneBookmarkName, "  "+m.nameInput.View()))
+	lines = append(lines, render.Mark(m.zoneManager, mouse.ZoneBookmarkName, "  "+m.nameInput.View()))
 	if m.bookmarkNameExists {
 		warningStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#E3B341")).Bold(true)
 		lines = append(lines, "")
@@ -602,8 +600,8 @@ func (m Model) renderBookmark() string {
 	} else {
 		submitLabel = "Create (Enter)"
 	}
-	submitButton := mark(m.zoneManager, mouse.ZoneBookmarkSubmit, styles.ButtonStyle.Render(submitLabel))
-	cancelButton := mark(m.zoneManager, mouse.ZoneBookmarkCancel, styles.ButtonStyle.Render("Cancel (Esc)"))
+	submitButton := render.Mark(m.zoneManager, mouse.ZoneBookmarkSubmit, styles.ButtonStyle.Render(submitLabel))
+	cancelButton := render.Mark(m.zoneManager, mouse.ZoneBookmarkCancel, styles.ButtonStyle.Render("Cancel (Esc)"))
 	lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Left, submitButton, " ", cancelButton))
 	return strings.Join(lines, "\n")
 }

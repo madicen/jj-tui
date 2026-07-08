@@ -2,7 +2,43 @@ package util
 
 import (
 	"strings"
+
+	"github.com/madicen/jj-tui/internal"
 )
+
+// FindBookmarkForCommit finds a bookmark from ancestors using BFS. It is a pure
+// graph helper shared by the bookmark and prform tabs (P2.5: hosting it here lets
+// prform stop importing the bookmark tab).
+func FindBookmarkForCommit(repo *internal.Repository, commitIdx int) string {
+	if repo == nil || commitIdx < 0 || commitIdx >= len(repo.Graph.Commits) {
+		return ""
+	}
+	commitIDToIndex := make(map[string]int)
+	for i, commit := range repo.Graph.Commits {
+		commitIDToIndex[commit.ID] = i
+		commitIDToIndex[commit.ChangeID] = i
+	}
+	visited := make(map[int]bool)
+	queue := []int{commitIdx}
+	for len(queue) > 0 {
+		idx := queue[0]
+		queue = queue[1:]
+		if visited[idx] {
+			continue
+		}
+		visited[idx] = true
+		commit := repo.Graph.Commits[idx]
+		if len(commit.Branches) > 0 {
+			return FirstOperableBookmarkName(commit.Branches)
+		}
+		for _, parentID := range commit.Parents {
+			if parentIdx, ok := commitIDToIndex[parentID]; ok {
+				queue = append(queue, parentIdx)
+			}
+		}
+	}
+	return ""
+}
 
 // stripJJBookmarkDisplaySuffixes removes jj bookmark list labels that are not part of the name,
 // e.g. "my/feature (conflicted):" from `jj bookmark list` — otherwise revsets break on '('.

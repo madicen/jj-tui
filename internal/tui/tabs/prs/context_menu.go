@@ -7,8 +7,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/madicen/jj-tui/internal/tui/longpress"
+	"github.com/madicen/jj-tui/internal/tui/listnav"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/render"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 )
 
@@ -89,7 +90,7 @@ func (m *Model) renderContextMenu(prIsOpen bool) string {
 		}
 		label := ls.Render(fmt.Sprintf("  %s", item.Label))
 		key := ks.Render(fmt.Sprintf("  %s", item.Key))
-		row := mark(m.zoneManager, mouse.ZonePRCtxMenuItem(i), label+key)
+		row := render.Mark(m.zoneManager, mouse.ZonePRCtxMenuItem(i), label+key)
 		rows = append(rows, row)
 	}
 
@@ -100,7 +101,7 @@ func (m *Model) renderContextMenu(prIsOpen bool) string {
 			pr := m.repository.PRs[pi]
 			title := pr.Title
 			if len(title) > 40 {
-				title = title[:37] + "..."
+				title = render.TruncateEllipsis(title, 37)
 			}
 			header = lipgloss.NewStyle().
 				Foreground(styles.ColorSecondary).
@@ -127,43 +128,15 @@ func (m *Model) handleLongPress(msg tea.MouseMsg) tea.Cmd {
 		m.contextMenu.HoverItem = hit
 	}
 
-	switch msg.Action {
-	case tea.MouseActionMotion:
-		// Stay armed while the cursor remains over the originating PR row
-		// or within the small slack box around the anchor.
-		if m.contextMenu == nil && m.longPressItemIndex >= 0 {
-			origin := mouse.ZonePR(m.longPressItemIndex)
-			if !longpress.StillArmed(m.zoneManager, origin, m.longPressMouseX, m.longPressMouseY, msg) {
-				m.longPressItemIndex = -1
-			}
-		}
-
-	case tea.MouseActionPress:
-		if msg.Button != tea.MouseButtonLeft {
-			return nil
-		}
-		if m.contextMenu != nil {
-			return nil
-		}
-		if m.repository == nil {
-			return nil
-		}
-		for i := range m.repository.PRs {
-			z := m.zoneManager.Get(mouse.ZonePR(i))
-			if z != nil && z.InBounds(msg) {
-				m.longPressPressID++
-				m.longPressItemIndex = i
-				m.longPressMouseX = msg.X
-				m.longPressMouseY = msg.Y
-				pressID := m.longPressPressID
-				return tea.Tick(longPressThreshold, func(time.Time) tea.Msg {
-					return LongPressTickMsg{PressID: pressID}
-				})
-			}
-		}
-
-	case tea.MouseActionRelease:
-		m.longPressItemIndex = -1
+	itemCount := 0
+	if m.repository != nil {
+		itemCount = len(m.repository.PRs)
 	}
-	return nil
+	return m.ArmLongPress(m.zoneManager, msg, listnav.LongPressConfig{
+		MenuOpen:  m.contextMenu != nil,
+		ItemCount: itemCount,
+		RowZoneID: mouse.ZonePR,
+		Threshold: longPressThreshold,
+		MakeTick:  func(pressID int) tea.Msg { return LongPressTickMsg{PressID: pressID} },
+	})
 }

@@ -5,17 +5,10 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/render"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 )
-
-func mark(z *zone.Manager, id, content string) string {
-	if z == nil {
-		return content
-	}
-	return z.Mark(id, content)
-}
 
 func (m *Model) renderTickets() string {
 	if !m.jiraService {
@@ -74,10 +67,7 @@ func (m *Model) renderTickets() string {
 			ticket.Type, ticket.Priority, ticket.Status,
 		))
 		if ticket.Description != "" {
-			desc := ticket.Description
-			if len(desc) > 150 {
-				desc = desc[:150] + "..."
-			}
+			desc := render.TruncateEllipsis(ticket.Description, 150)
 			detailLines = append(detailLines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Render(desc))
 		} else {
 			detailLines = append(detailLines, lipgloss.NewStyle().Foreground(styles.ColorMuted).Italic(true).Render("(No description)"))
@@ -92,11 +82,7 @@ func (m *Model) renderTickets() string {
 		detailsLineCount := strings.Count(detailsBox, "\n") + 1
 
 		separatorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#444444"))
-		separatorWidth := m.width - 4
-		if separatorWidth < 20 {
-			separatorWidth = 80
-		}
-		separator := separatorStyle.Render(strings.Repeat("─", separatorWidth))
+		separator := separatorStyle.Render(render.Separator(m.width))
 		headerLines = append(headerLines, separator)
 		headerLines = append(headerLines, "Actions:")
 		// Line index (0-based) of the actions button row within the final tickets view (before list).
@@ -104,12 +90,12 @@ func (m *Model) renderTickets() string {
 
 		var actionButtons []string
 		actionButtons = append(actionButtons,
-			mark(m.zoneManager, mouse.ZoneJiraCreateBranch, styles.ButtonStyle.Render("Create Branch (Enter)")),
-			mark(m.zoneManager, mouse.ZoneJiraOpenBrowser, styles.ButtonStyle.Render("Open in Browser (o)")),
+			render.Mark(m.zoneManager, mouse.ZoneJiraCreateBranch, styles.ButtonStyle.Render("Create Branch (Enter)")),
+			render.Mark(m.zoneManager, mouse.ZoneJiraOpenBrowser, styles.ButtonStyle.Render("Open in Browser (o)")),
 		)
 		if m.canCreateTicket {
 			actionButtons = append(actionButtons,
-				mark(m.zoneManager, mouse.ZoneTicketNew, styles.ButtonStyle.Render("New Ticket (n)")),
+				render.Mark(m.zoneManager, mouse.ZoneTicketNew, styles.ButtonStyle.Render("New Ticket (n)")),
 			)
 		}
 
@@ -123,15 +109,15 @@ func (m *Model) renderTickets() string {
 					Bold(true)
 				changeStatusContent := highlightedBtnStyle.Render("Change Status (c)")
 				actionButtons = append(actionButtons,
-					mark(m.zoneManager, mouse.ZoneJiraChangeStatus, changeStatusContent),
+					render.Mark(m.zoneManager, mouse.ZoneJiraChangeStatus, changeStatusContent),
 				)
 				headerLines = append(headerLines, strings.Join(actionButtons, " "))
 				// Popover anchors to the right of the button (not on top): prefix width + button + gap.
 				if len(actionButtons) > 1 {
 					prefixW := lipgloss.Width(strings.Join(actionButtons[:len(actionButtons)-1], " "))
-					statusPopoverAnchorLeft = prefixW + 1 + lipgloss.Width(mark(m.zoneManager, mouse.ZoneJiraChangeStatus, changeStatusContent))
+					statusPopoverAnchorLeft = prefixW + 1 + lipgloss.Width(render.Mark(m.zoneManager, mouse.ZoneJiraChangeStatus, changeStatusContent))
 				} else {
-					statusPopoverAnchorLeft = lipgloss.Width(mark(m.zoneManager, mouse.ZoneJiraChangeStatus, changeStatusContent))
+					statusPopoverAnchorLeft = lipgloss.Width(render.Mark(m.zoneManager, mouse.ZoneJiraChangeStatus, changeStatusContent))
 				}
 				const popoverGapAfterButton = 2
 				statusPopoverAnchorLeft += popoverGapAfterButton
@@ -140,7 +126,7 @@ func (m *Model) renderTickets() string {
 				popoverAnchorLeft = statusPopoverAnchorLeft
 			} else {
 				actionButtons = append(actionButtons,
-					mark(m.zoneManager, mouse.ZoneJiraChangeStatus, styles.ButtonStyle.Render("Change Status (c)")),
+					render.Mark(m.zoneManager, mouse.ZoneJiraChangeStatus, styles.ButtonStyle.Render("Change Status (c)")),
 				)
 				headerLines = append(headerLines, strings.Join(actionButtons, " "))
 			}
@@ -185,7 +171,7 @@ func (m *Model) renderTickets() string {
 			statusStyle.Render("["+ticket.Status+"]"),
 			ticket.Summary,
 		)
-		listLines = append(listLines, mark(m.zoneManager, mouse.ZoneJiraTicket(i), style.Render(ticketLine)))
+		listLines = append(listLines, render.Mark(m.zoneManager, mouse.ZoneJiraTicket(i), style.Render(ticketLine)))
 	}
 
 	fixedHeader := strings.Join(headerLines, "\n")
@@ -195,32 +181,12 @@ func (m *Model) renderTickets() string {
 		listHeight = 0
 	}
 	totalListLines := len(listLines)
-	maxListOffset := 0
-	if totalListLines > listHeight {
-		maxListOffset = totalListLines - listHeight
-	}
-	if m.listYOffset > maxListOffset {
-		m.listYOffset = maxListOffset
-	}
-	if m.listYOffset < 0 {
-		m.listYOffset = 0
-	}
 	// Keep selection in view only when selection changed via key/click (so mouse scroll can move selection off screen)
 	if m.scrollToSelectedTicket {
 		m.scrollToSelectedTicket = false
-		if m.selectedTicket >= 0 && m.selectedTicket < totalListLines {
-			if m.selectedTicket < m.listYOffset {
-				m.listYOffset = m.selectedTicket
-			} else if m.selectedTicket >= m.listYOffset+listHeight {
-				m.listYOffset = m.selectedTicket - listHeight + 1
-			}
-		}
+		m.ScrollToSelected(m.selectedTicket, totalListLines, listHeight)
 	}
-	start := m.listYOffset
-	end := start + listHeight
-	if end > totalListLines {
-		end = totalListLines
-	}
+	start, end := m.VisibleRange(totalListLines, listHeight)
 	var visibleList string
 	if start < end {
 		visibleList = strings.Join(listLines[start:end], "\n")

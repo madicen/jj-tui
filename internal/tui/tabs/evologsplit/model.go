@@ -17,6 +17,7 @@ import (
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	aitab "github.com/madicen/jj-tui/internal/tui/ai"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/render"
 	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 	"github.com/mattn/go-runewidth"
@@ -224,10 +225,7 @@ func (m Model) WithSuggestPrepProgress(jjDone, jjTotal int, phase string) Model 
 }
 
 func (m Model) mark(id, s string) string {
-	if m.zoneManager == nil {
-		return s
-	}
-	return m.zoneManager.Mark(id, s)
+	return render.Mark(m.zoneManager, id, s)
 }
 
 func (m Model) syncListScroll() Model {
@@ -1132,7 +1130,7 @@ func (m Model) View() string {
 	innerW := max(48, modalW-6)
 
 	if m.loading {
-		var lines []string
+		lines := make([]string, 0, 1)
 		lines = append(lines, muted.Render("Loading jj evolog…"))
 		box := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(styles.ColorMuted).Padding(1, 2).Width(modalW)
 		return box.Render(strings.Join(lines, "\n"))

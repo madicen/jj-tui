@@ -63,6 +63,9 @@ func (m *Model) View() string {
 	if m.evologDescribePreviewActive {
 		v = applyBubbleOverlayCentered(v, m.renderEvologDescribePreview(), m.width, m.height)
 	}
+	if m.absorbPreviewActive {
+		v = applyBubbleOverlayCentered(v, m.renderAbsorbPreview(), m.width, m.height)
+	}
 	if key != "warning" {
 		if warningContent := m.warningModal.View(); warningContent != "" {
 			v = applyBubbleOverlayCentered(v, warningContent, m.width, m.height)
@@ -174,6 +177,23 @@ func (m *Model) renderEvologDescribePreview() string {
 	return box.Render(b.String())
 }
 
+func (m *Model) renderAbsorbPreview() string {
+	maxW := min(m.width-8, 78)
+	title := lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render("Absorb working-copy changes")
+	muted := lipgloss.NewStyle().Foreground(styles.ColorMuted)
+	var b strings.Builder
+	b.WriteString(title)
+	b.WriteString("\n\n")
+	for _, line := range strings.Split(m.absorbPreviewSummary, "\n") {
+		b.WriteString(runewidth.Truncate(line, maxW, "…"))
+		b.WriteString("\n")
+	}
+	b.WriteString("\n")
+	b.WriteString(muted.Render("y confirm · n or Esc cancel"))
+	box := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(styles.ColorMuted).Padding(1, 2).Width(min(m.width-4, 84))
+	return box.Render(b.String())
+}
+
 // renderMainLayoutView builds header + tab content + status (no error/warning/divergent full-screen branches).
 func (m *Model) renderMainLayoutView() string {
 	header := m.renderHeader()
@@ -182,23 +202,12 @@ func (m *Model) renderMainLayoutView() string {
 	statusHeight := strings.Count(statusBar, "\n") + 1
 	contentHeight := max(m.height-headerHeight-statusHeight-2, 1)
 
-	m.graphTabModel.SetDimensions(m.width, contentHeight)
-	m.prsTabModel.SetDimensions(m.width, contentHeight)
-	m.branchesTabModel.SetDimensions(m.width, contentHeight)
-	m.ticketsTabModel.SetDimensions(m.width, contentHeight)
-	m.settingsTabModel.SetDimensions(m.width, contentHeight)
-	m.helpTabModel.SetDimensions(m.width, contentHeight)
+	for _, vm := range m.tabOrder {
+		m.tabRegistry[vm].SetDimensions(m.width, contentHeight)
+	}
 
 	var content string
 	switch m.layoutContentMode() {
-	case state.ViewCommitGraph:
-		content = m.graphTabModel.View()
-	case state.ViewPullRequests:
-		content = m.prsTabModel.View()
-	case state.ViewBranches:
-		content = m.branchesTabModel.View()
-	case state.ViewTickets:
-		content = m.ticketsTabModel.View()
 	case state.ViewSettings:
 		// Settings content is composited below the header and a one-line
 		// separator (see JoinVertical below). Tell the settings model where its
@@ -206,10 +215,12 @@ func (m *Model) renderMainLayoutView() string {
 		// space its open dropdown panels are drawn in.
 		m.settingsTabModel.SetContentOrigin(headerHeight + 1)
 		content = m.settingsTabModel.View()
-	case state.ViewHelp:
-		content = m.helpTabModel.View()
 	default:
-		content = m.graphTabModel.View()
+		if t, ok := m.tabRegistry[m.layoutContentMode()]; ok {
+			content = t.View(&m.appState)
+		} else {
+			content = m.graphTabModel.View()
+		}
 	}
 
 	contentLines := strings.Split(content, "\n")
@@ -282,6 +293,12 @@ func (m *Model) renderTab(label string, active bool) string {
 // renderStatusBar renders the status bar with global shortcuts (always single line).
 func (m *Model) renderStatusBar() string {
 	status := m.appState.StatusMessage
+	// P5.4: while an undo hint is active, it takes over the status text (it is
+	// strictly more informative than the post-reload "Loaded N commits" message
+	// it replaces, and expires on its own via undoHintExpiredMsg).
+	if m.undoHint != "" {
+		status = m.undoHint
+	}
 
 	// Sanitize status message: remove literal newlines
 	status = strings.ReplaceAll(status, "\n", " ")

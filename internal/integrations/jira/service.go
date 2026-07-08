@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/madicen/jj-tui/internal/integrations/httpapi"
 	"github.com/madicen/jj-tui/internal/tickets"
 )
 
@@ -19,7 +20,7 @@ type Service struct {
 	baseURL  string
 	username string
 	token    string
-	client   *http.Client
+	api      *httpapi.Client
 }
 
 // NewService creates a new Jira service
@@ -40,13 +41,21 @@ func NewService() (*Service, error) {
 	}
 
 	// Ensure baseURL doesn't have trailing slash
-	baseURL = strings.TrimSuffix(baseURL, "/")
+	baseURL = httpapi.NormalizeBaseURL(baseURL)
 
 	svc := &Service{
 		baseURL:  baseURL,
 		username: username,
 		token:    token,
-		client:   &http.Client{},
+		api: &httpapi.Client{
+			Provider: "jira",
+			HTTP:     &http.Client{},
+			Decorate: func(req *http.Request) {
+				req.SetBasicAuth(username, token)
+				req.Header.Set("Accept", "application/json")
+				req.Header.Set("Content-Type", "application/json")
+			},
+		},
 	}
 
 	// Verify the token has proper permissions by checking BROWSE_PROJECTS
@@ -60,7 +69,7 @@ func NewService() (*Service, error) {
 // checkPermissions verifies the API token has necessary permissions
 func (s *Service) checkPermissions() error {
 	ctx := context.Background()
-	
+
 	// Check if we have BROWSE_PROJECTS permission
 	resp, err := s.doRequest(ctx, "GET", "/rest/api/3/mypermissions?permissions=BROWSE_PROJECTS", nil)
 	if err != nil {
@@ -164,18 +173,7 @@ type searchResponse struct {
 
 // doRequest performs an authenticated request to the Jira API
 func (s *Service) doRequest(ctx context.Context, method, endpoint string, body io.Reader) (*http.Response, error) {
-	reqURL := s.baseURL + endpoint
-
-	req, err := http.NewRequestWithContext(ctx, method, reqURL, body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.SetBasicAuth(s.username, s.token)
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Content-Type", "application/json")
-
-	return s.client.Do(req)
+	return s.api.Do(ctx, method, s.baseURL+endpoint, body)
 }
 
 // GetAssignedTickets fetches tickets assigned to the current user using API v3
@@ -194,9 +192,8 @@ func (s *Service) GetAssignedTickets(ctx context.Context) ([]tickets.Ticket, err
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("jira API error (status %d): %s", resp.StatusCode, string(bodyBytes))
+	if err := s.api.EnsureOK(resp); err != nil {
+		return nil, err
 	}
 
 	var result searchResponse
@@ -275,9 +272,8 @@ func (s *Service) GetTicket(ctx context.Context, key string) (*tickets.Ticket, e
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("jira API error (status %d): %s", resp.StatusCode, string(bodyBytes))
+	if err := s.api.EnsureOK(resp); err != nil {
+		return nil, err
 	}
 
 	var issue issueResponse
@@ -353,9 +349,8 @@ func (s *Service) GetAvailableTransitions(ctx context.Context, ticketKey string)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("jira API error (status %d): %s", resp.StatusCode, string(bodyBytes))
+	if err := s.api.EnsureOK(resp); err != nil {
+		return nil, err
 	}
 
 	var result transitionsResponse
@@ -414,8 +409,8 @@ type adfDocument struct {
 }
 
 type adfBlock struct {
-	Type    string     `json:"type"`
-	Content []adfText  `json:"content,omitempty"`
+	Type    string    `json:"type"`
+	Content []adfText `json:"content,omitempty"`
 }
 
 type adfText struct {
@@ -457,7 +452,7 @@ func (s *Service) CreateTicket(ctx context.Context, input *tickets.CreateTicketI
 			Type:    "doc",
 			Version: 1,
 			Content: []adfBlock{{
-				Type: "paragraph",
+				Type:    "paragraph",
 				Content: []adfText{{Type: "text", Text: strings.TrimSpace(input.Description)}},
 			}},
 		}

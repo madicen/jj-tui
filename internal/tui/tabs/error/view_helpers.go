@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/render"
 	"github.com/madicen/jj-tui/internal/tui/util"
 )
 
@@ -83,10 +84,7 @@ func renderModal(zm *zone.Manager, width, height int, errStr string, copied, has
 	content.WriteString("\n\n")
 
 	mark := func(id, s string) string {
-		if zm != nil {
-			return zm.Mark(id, s)
-		}
-		return s
+		return render.Mark(zm, id, s)
 	}
 
 	dismissBtn := mark(mouse.ZoneActionDismissError, buttonStyle.Render("Dismiss (Esc)"))

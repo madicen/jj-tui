@@ -195,7 +195,7 @@ func TestSanitizeHunkPrefixMapAgainstDiff_stalePathDropped(t *testing.T) {
 `
 	got, err := SanitizeHunkPrefixMapAgainstDiff(git, map[string]int{
 		"internal/integrations/jj/service.go": 1,
-		"a.go":                                  1,
+		"a.go":                                1,
 	})
 	if err != nil {
 		t.Fatal(err)

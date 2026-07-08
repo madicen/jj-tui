@@ -7,23 +7,27 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 	bubbledropdown "github.com/madicen/bubble-dropdown"
-	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/config"
-	"github.com/madicen/jj-tui/internal/tui/styles"
+	"github.com/madicen/jj-tui/internal/tui/form"
+	"github.com/madicen/jj-tui/internal/tui/form/dropdown"
+)
+
+// Field indices into the shared form (0 = graph revset, 1 = custom editor).
+const (
+	fieldGraphRevset = iota
+	fieldCustomEditor
 )
 
 // Model represents the Advanced settings sub-tab (sanitize bookmarks, graph revset, external editor, cleanup).
 type Model struct {
 	sanitizeBookmarks    bool
 	confirmingCleanup    string
-	graphRevsetInput     textinput.Model
-	customEditorInput    textinput.Model
-	focusedField         int // 0 = graph revset, 1 = custom editor
+	form                 form.Model
 	externalEditorPreset int // 0..8 — see externalEditorPresetLabels
 
 	// editorDropdown replaces the old radio rows for picking the external editor
 	// preset. The selected index maps 1:1 onto externalEditorPreset.
-	editorDropdown *bubbledropdown.Dropdown
+	editorDropdown *dropdown.Field
 }
 
 // ExternalEditorPresetLabels are UI labels for each editor preset (same order as config values below).
@@ -66,13 +70,10 @@ func NewModel() Model {
 	return Model{
 		sanitizeBookmarks: true,
 		confirmingCleanup: "",
-		graphRevsetInput:  revsetInput,
-		customEditorInput: customIn,
-		focusedField:      0,
-		editorDropdown: bubbledropdown.New(
+		form:              form.New(revsetInput, customIn),
+		editorDropdown: dropdown.New(
 			bubbledropdown.WithOptions(ExternalEditorPresetLabels),
 			bubbledropdown.WithMaxVisible(len(ExternalEditorPresetLabels)),
-			bubbledropdown.WithAccentColor(string(styles.ColorPrimary)),
 		),
 	}
 }
@@ -82,8 +83,8 @@ func NewModelFromConfig(cfg *config.Config) Model {
 	m := NewModel()
 	if cfg != nil {
 		m.sanitizeBookmarks = cfg.ShouldSanitizeBookmarkNames()
-		m.graphRevsetInput.SetValue(cfg.GraphRevset)
-		m.customEditorInput.SetValue(cfg.ExternalFileEditorCustom)
+		m.form.SetValue(fieldGraphRevset, cfg.GraphRevset)
+		m.form.SetValue(fieldCustomEditor, cfg.ExternalFileEditorCustom)
 		m.externalEditorPreset = presetIndexFromConfig(cfg.ExternalFileEditor)
 	}
 	m.editorDropdown.SetSelectedIndex(m.externalEditorPreset)
@@ -91,7 +92,7 @@ func NewModelFromConfig(cfg *config.Config) Model {
 }
 
 func presetIndexFromConfig(s string) int {
-	n := config.NormalizeExternalFileEditor(&config.Config{ExternalFileEditor: s})
+	n := config.NormalizeExternalFileEditor(&config.Config{AdvancedConfig: config.AdvancedConfig{ExternalFileEditor: s}})
 	for i, v := range externalEditorPresetConfig {
 		if v == n {
 			return i
@@ -107,18 +108,7 @@ func (m Model) Init() tea.Cmd {
 
 // Update handles messages (key handling for inputs; zones handled by parent)
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
-	switch m.focusedField {
-	case 0:
-		var cmd tea.Cmd
-		m.graphRevsetInput, cmd = m.graphRevsetInput.Update(msg)
-		return m, cmd
-	case 1:
-		var cmd tea.Cmd
-		m.customEditorInput, cmd = m.customEditorInput.Update(msg)
-		return m, cmd
-	default:
-		return m, nil
-	}
+	return m, m.form.Update(msg)
 }
 
 // View renders the model
@@ -138,12 +128,12 @@ func (m *Model) SetSanitizeBookmarks(sanitize bool) {
 
 // GetGraphRevset returns the graph revset string
 func (m *Model) GetGraphRevset() string {
-	return m.graphRevsetInput.Value()
+	return m.form.Value(fieldGraphRevset)
 }
 
 // SetGraphRevset sets the graph revset string
 func (m *Model) SetGraphRevset(s string) {
-	m.graphRevsetInput.SetValue(s)
+	m.form.SetValue(fieldGraphRevset, s)
 }
 
 // GetConfirmingCleanup returns the current cleanup confirmation type ("", "delete_bookmarks", "abandon_old_commits")
@@ -158,35 +148,18 @@ func (m *Model) SetConfirmingCleanup(s string) {
 
 // GetInputViews returns graph revset and custom editor views (global input indices 14–15 on the Advanced tab).
 func (m *Model) GetInputViews() []string {
-	return []string{
-		m.graphRevsetInput.View(),
-		m.customEditorInput.View(),
-	}
+	return m.form.Views()
 }
 
 // GetFocusedField returns the focused input index (0 = graph revset, 1 = custom editor).
 func (m *Model) GetFocusedField() int {
-	return m.focusedField
+	return m.form.Focused()
 }
 
 // SetFocusedField sets the focused input index.
 // Returns the tea.Cmd from Focus() so the cursor is shown; caller must return it from Update.
 func (m *Model) SetFocusedField(i int) tea.Cmd {
-	if i < 0 {
-		i = 0
-	}
-	if i > 1 {
-		i = 1
-	}
-	m.focusedField = i
-	m.graphRevsetInput.Blur()
-	m.customEditorInput.Blur()
-	switch m.focusedField {
-	case 0:
-		return m.graphRevsetInput.Focus()
-	default:
-		return m.customEditorInput.Focus()
-	}
+	return m.form.Focus(i)
 }
 
 // SetInputWidth sets input widths (minimum 40 so the field and cursor are visible).
@@ -194,8 +167,7 @@ func (m *Model) SetInputWidth(w int) {
 	if w < 40 {
 		w = 40
 	}
-	m.graphRevsetInput.Width = w
-	m.customEditorInput.Width = w
+	m.form.SetWidth(w)
 }
 
 // GetExternalEditorPreset returns the selected editor preset index (0..len(ExternalEditorPresetLabels)-1).
@@ -220,10 +192,7 @@ func (m *Model) SetExternalEditorPreset(i int) {
 // EditorDropdown returns the external-editor preset dropdown (for rendering and
 // overlay). It syncs the accent so the panel tracks the live theme primary color.
 func (m *Model) EditorDropdown() *bubbledropdown.Dropdown {
-	if accent := string(styles.ColorPrimary); m.editorDropdown.AccentColor() != accent {
-		m.editorDropdown.SetAccentColor(accent)
-	}
-	return m.editorDropdown
+	return m.editorDropdown.Dropdown()
 }
 
 // DropdownOpen reports whether the editor preset dropdown panel is open.
@@ -237,26 +206,18 @@ func (m *Model) SetZoneManager(zm *zone.Manager) {
 // UpdateDropdown forwards a message to the editor dropdown and, on selection,
 // applies the chosen preset index. Returns any tea.Cmd the dropdown emits.
 func (m *Model) UpdateDropdown(msg tea.Msg) tea.Cmd {
-	if m.editorDropdown == nil {
-		return nil
-	}
-	wasOpen := m.editorDropdown.Open()
-	dd, cmd := m.editorDropdown.Update(msg)
-	m.editorDropdown = dd
-	if chosen, ok := msg.(bubbledropdown.ItemChosenMsg); ok && wasOpen {
-		m.SetExternalEditorPreset(chosen.Index)
-	}
-	return cmd
+	return m.editorDropdown.Update(msg, func(i int) {
+		m.SetExternalEditorPreset(i)
+	})
 }
 
 // SavedExternalEditor returns config strings to persist.
 func (m *Model) SavedExternalEditor() (preset string, custom string) {
 	i := m.externalEditorPreset
 	if i < 0 || i >= len(externalEditorPresetConfig) {
-		return config.ExternalEditorNone, strings.TrimSpace(m.customEditorInput.Value())
+		return config.ExternalEditorNone, strings.TrimSpace(m.form.Value(fieldCustomEditor))
 	}
-	return externalEditorPresetConfig[i], strings.TrimSpace(m.customEditorInput.Value())
+	return externalEditorPresetConfig[i], strings.TrimSpace(m.form.Value(fieldCustomEditor))
 }
 
-// UpdateRepository updates the repository
-func (m *Model) UpdateRepository(repo *internal.Repository) {}
+// P2.8: Advanced settings don't depend on the repository; no-op hook removed.

@@ -227,8 +227,8 @@ const (
 	ZoneSettingsJiraExcludedClear      = "zone:settings:jira_excluded_clear"
 	ZoneSettingsCodecksSubdomain       = "zone:settings:codecks_subdomain"
 	ZoneSettingsCodecksSubdomainClear  = "zone:settings:codecks_subdomain_clear"
-	ZoneSettingsCodecksToken           = "zone:settings:codecks_token"
-	ZoneSettingsCodecksTokenClear      = "zone:settings:codecks_token_clear"
+	ZoneSettingsCodecksToken           = "zone:settings:codecks_token"       //nolint:gosec // G101: bubblezone element ID, not a credential.
+	ZoneSettingsCodecksTokenClear      = "zone:settings:codecks_token_clear" //nolint:gosec // G101: bubblezone element ID, not a credential.
 	ZoneSettingsCodecksProject         = "zone:settings:codecks_project"
 	ZoneSettingsCodecksProjectClear    = "zone:settings:codecks_project_clear"
 	ZoneSettingsCodecksExcluded        = "zone:settings:codecks_excluded"

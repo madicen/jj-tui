@@ -6,8 +6,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
-	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/render"
 	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 	"github.com/mattn/go-runewidth"
@@ -87,10 +87,7 @@ func (m Model) View() string {
 
 // mark wraps content in a zone if zoneManager is set
 func (m *Model) mark(id, content string) string {
-	if m.zoneManager != nil {
-		return m.zoneManager.Mark(id, content)
-	}
-	return content
+	return render.Mark(m.zoneManager, id, content)
 }
 
 func (m *Model) layoutCols() (sideBySide bool, colW int) {
@@ -347,7 +344,5 @@ func (m *Model) SetSelectedOption(opt int) {
 	}
 }
 
-// UpdateRepository updates the repository
-func (m *Model) UpdateRepository(repo *internal.Repository) {
-	_ = repo
-}
+// P2.8: the conflict modal never used the repository, so its no-op
+// UpdateRepository hook was removed (the root no longer fans out to it).

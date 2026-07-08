@@ -324,4 +324,3 @@ func githubIssuesTickets() []tickets.Ticket {
 
 // Ensure TicketService implements tickets.Service
 var _ tickets.Service = (*TicketService)(nil)
-

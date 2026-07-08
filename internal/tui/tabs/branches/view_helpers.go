@@ -5,18 +5,11 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	zone "github.com/lrstanley/bubblezone"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
+	"github.com/madicen/jj-tui/internal/tui/render"
 	"github.com/madicen/jj-tui/internal/tui/styles"
 )
-
-func mark(z *zone.Manager, id, content string) string {
-	if z == nil {
-		return content
-	}
-	return z.Mark(id, content)
-}
 
 func findBranchIndex(branches []internal.Branch, target internal.Branch) int {
 	for i, b := range branches {
@@ -99,43 +92,39 @@ func (m Model) renderBranches() string {
 		headerLines = append(headerLines, detailsBox)
 
 		separatorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#444444"))
-		separatorWidth := m.width - 4
-		if separatorWidth < 20 {
-			separatorWidth = 80
-		}
-		separator := separatorStyle.Render(strings.Repeat("─", separatorWidth))
+		separator := separatorStyle.Render(render.Separator(m.width))
 		headerLines = append(headerLines, separator)
 		headerLines = append(headerLines, "Actions:")
 
 		var actionButtons []string
 		if branch.IsLocal {
 			actionButtons = append(actionButtons,
-				mark(m.zoneManager, mouse.ZoneBranchPush, styles.ButtonStyle.Render("Push (P)")),
-				mark(m.zoneManager, mouse.ZoneBranchDelete, styles.ButtonStyle.Render("Delete (x)")),
+				render.Mark(m.zoneManager, mouse.ZoneBranchPush, styles.ButtonStyle.Render("Push (P)")),
+				render.Mark(m.zoneManager, mouse.ZoneBranchDelete, styles.ButtonStyle.Render("Delete (x)")),
 			)
 			if branch.HasConflict {
 				conflictBtnStyle := styles.ButtonStyle.Background(lipgloss.Color("#FF5555"))
 				actionButtons = append(actionButtons,
-					mark(m.zoneManager, mouse.ZoneBranchResolveConflict, conflictBtnStyle.Render("Resolve Conflict (c)")),
+					render.Mark(m.zoneManager, mouse.ZoneBranchResolveConflict, conflictBtnStyle.Render("Resolve Conflict (c)")),
 				)
 			}
 		} else if branch.IsTracked {
 			actionButtons = append(actionButtons,
-				mark(m.zoneManager, mouse.ZoneBranchUntrack, styles.ButtonStyle.Render("Untrack (U)")),
+				render.Mark(m.zoneManager, mouse.ZoneBranchUntrack, styles.ButtonStyle.Render("Untrack (U)")),
 			)
 			if branch.LocalDeleted {
 				actionButtons = append(actionButtons,
-					mark(m.zoneManager, mouse.ZoneBranchRestore, styles.ButtonStyle.Render("Restore Local (L)")),
+					render.Mark(m.zoneManager, mouse.ZoneBranchRestore, styles.ButtonStyle.Render("Restore Local (L)")),
 				)
 			}
 		} else {
 			actionButtons = append(actionButtons,
-				mark(m.zoneManager, mouse.ZoneBranchTrack, styles.ButtonStyle.Render("Track (T)")),
+				render.Mark(m.zoneManager, mouse.ZoneBranchTrack, styles.ButtonStyle.Render("Track (T)")),
 			)
 		}
 		actionButtons = append(actionButtons,
-			mark(m.zoneManager, mouse.ZoneBranchTrackRemote, styles.ButtonStyle.Render("Track by name (t)")),
-			mark(m.zoneManager, mouse.ZoneBranchFetch, styles.ButtonStyle.Render("Fetch All (F)")),
+			render.Mark(m.zoneManager, mouse.ZoneBranchTrackRemote, styles.ButtonStyle.Render("Track by name (t)")),
+			render.Mark(m.zoneManager, mouse.ZoneBranchFetch, styles.ButtonStyle.Render("Fetch All (F)")),
 		)
 		headerLines = append(headerLines, strings.Join(actionButtons, " "))
 		headerLines = append(headerLines, separator)
@@ -150,21 +139,7 @@ func (m Model) renderBranches() string {
 		listHeight = 0
 	}
 	totalListLines := len(listLines)
-	maxListOffset := 0
-	if totalListLines > listHeight {
-		maxListOffset = totalListLines - listHeight
-	}
-	if m.listYOffset > maxListOffset {
-		m.listYOffset = maxListOffset
-	}
-	if m.listYOffset < 0 {
-		m.listYOffset = 0
-	}
-	start := m.listYOffset
-	end := start + listHeight
-	if end > totalListLines {
-		end = totalListLines
-	}
+	start, end := m.VisibleRange(totalListLines, listHeight)
 	var visibleList string
 	if start < end {
 		visibleList = strings.Join(listLines[start:end], "\n")
@@ -313,5 +288,5 @@ func (m Model) renderGraphBranch(branch internal.Branch, idx int, isSelected, is
 		status,
 		conflictIndicator,
 	)
-	return mark(m.zoneManager, mouse.ZoneBranch(idx), branchLine)
+	return render.Mark(m.zoneManager, mouse.ZoneBranch(idx), branchLine)
 }
