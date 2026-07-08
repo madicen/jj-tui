@@ -1,0 +1,65 @@
+[3;38;2;97;113;163mConfig: ~/.config/jj-tui/config.json[0m
+[3;38;2;97;113;163m^j/^k: switch tabs  Tab: next field[0m
+
+[1001z  [1;4;38;2;126;0;175;4mG[0m[1;4;38;2;126;0;175;4mi[0m[1;4;38;2;126;0;175;4mt[0m[1;4;38;2;126;0;175;4mH[0m[1;4;38;2;126;0;175;4mu[0m[1;4;38;2;126;0;175;4mb[0m  [1001z │ [1002z  [38;2;97;113;163mJira[0m  [1002z │ [1003z  [38;2;97;113;163mCodecks[0m  [1003z │ [1004z  [38;2;97;113;163mTickets[0m  [1004z │ [1005z  [38;2;97;113;163mBranches[0m  [1005z │ [1006z  [38;2;97;113;163mTheme[0m  [1006z │ [1007z  [38;2;97;113;163mAI[0m  [1007z │ [1008z  [38;2;97;113;163mAdvanced[0m  [1008z
+
+[1;38;2;126;0;175mGitHub Integration[0m
+
+[38;2;97;113;163mConnect to GitHub for PR management.[0m
+
+[1m  API token source:[0m
+
+    [1009z[ Saved in jj-tui                     ▼ ][1009z
+[38;2;97;113;163m    Only the selected source is used (no fallback). Restart jj-tui after changing GITHUB_TOKEN in your shell.[0m
+
+
+[38;2;80;250;123m  ✓ Connected to GitHub[0m
+[38;2;97;113;163m    [1010z[Reconnect][1010z[0m
+
+[1;38;2;126;0;175m  Token (saved in jj-tui only):[0m
+  [1011z> [7mG[0m[38;5;240mitHub Personal Access Token[0m                              [1011z [1012z[1;38;2;248;81;73m[Clear][0m[1012z
+[38;2;97;113;163m    Optional manual PAT: https://github.com/settings/tokens[0m
+
+[1m  PR Filters:[0m
+
+    [1013z[1;38;2;80;250;123m[✓][0m Only My PRs[1013z
+    [1014z[1;38;2;80;250;123m[✓][0m Show Merged PRs[1014z
+    [1015z[1;38;2;80;250;123m[✓][0m Show Closed PRs[1015z
+
+[1m  PR Limit:[0m
+    [1016z[38;2;126;0;175m[-][0m[1016z [1m25[0m [1017z[38;2;126;0;175m[+][0m[1017z
+[38;2;97;113;163m    Max PRs to load (reduces API calls)[0m
+
+[1m  PR Auto-Refresh:[0m
+    [1018z[38;2;126;0;175m[-][0m[1018z [1m2m[0m [1019z[38;2;126;0;175m[+][0m[1019z [1020z[38;2;126;0;175m[Toggle][0m[1020z
+[38;2;97;113;163m    Auto-refresh PRs when viewing PR tab (0 = disabled)[0m
+
+[1;38;2;126;0;175mRepository remote[0m
+
+[38;2;97;113;163m  The git remote `origin` jj-tui pushes branches to. Required for `Update PR`,[0m
+[38;2;97;113;163m  branch push, and bookmark tracking against a remote `main`.[0m
+
+  Current origin:  [38;2;97;113;163m(none configured)[0m
+
+  [38;2;97;113;163mRemote URL:[0m
+  [1021z> [38;5;240mg[0m[38;5;240mit@github.com:owner/repo.git or https://github.com/owner…[0m[1021z
+[38;2;97;113;163m    Tab/down to focus, paste a URL, then press Enter or click Apply.[0m
+
+  [1022z[48;2;35;134;54m [0m[38;2;248;248;242;48;2;35;134;54mAdd origin (^enter)[0m[48;2;35;134;54m [0m [1022z  [1023z[38;2;97;113;163m[Remove origin (n/a)][0m[1023z
+
+  [1024z[38;2;97;113;163m[Push current bookmark (p) — set origin first][0m[1024z  [1025z[38;2;97;113;163m[Push all bookmarks (P) — set origin first][0m[1025z
+[38;2;97;113;163m    Runs `jj git push --bookmark <name>` for the bookmark on @ (current) or once per local bookmark (all).[0m
+
+[1m  Or create a brand-new GitHub repo[0m
+
+[38;2;97;113;163m  `gh` CLI not found in PATH. Install GitHub CLI and run `gh auth login` to enable this option.[0m
+
+[1mConnection Status:[0m
+[38;2;80;250;123m  ✓ GitHub connected[0m
+[38;2;80;250;123m  ✓ Tickets connected[0m
+
+[1mVersion:[0m
+[38;2;97;113;163m  dev[0m
+
+
+[1026z[48;2;68;71;89m [0m[38;2;248;248;242;48;2;68;71;89mSave Global (^s)[0m[48;2;68;71;89m [0m [1026z [1027z[48;2;68;71;89m [0m[38;2;248;248;242;48;2;68;71;89mSave Local (^l)[0m[48;2;68;71;89m [0m [1027z [1028z[48;2;68;71;89m [0m[38;2;248;248;242;48;2;68;71;89mCancel (Esc)[0m[48;2;68;71;89m [0m [1028z

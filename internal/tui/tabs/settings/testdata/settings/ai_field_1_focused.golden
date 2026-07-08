@@ -1,0 +1,58 @@
+[3;38;2;97;113;163mConfig: ~/.config/jj-tui/config.json[0m
+[3;38;2;97;113;163m^j/^k: switch tabs  Tab: next field[0m
+
+[1194z  [38;2;97;113;163mGitHub[0m  [1194z │ [1195z  [38;2;97;113;163mJira[0m  [1195z │ [1196z  [38;2;97;113;163mCodecks[0m  [1196z │ [1197z  [38;2;97;113;163mTickets[0m  [1197z │ [1198z  [38;2;97;113;163mBranches[0m  [1198z │ [1199z  [38;2;97;113;163mTheme[0m  [1199z │ [1200z  [1;4;38;2;126;0;175;4mA[0m[1;4;38;2;126;0;175;4mI[0m  [1200z │ [1201z  [38;2;97;113;163mAdvanced[0m  [1201z
+
+[1;38;2;126;0;175mAI assist[0m
+
+[38;2;97;113;163m    API keys can be stored in config (0600) or provided via env (JJ_TUI_AI_API_KEY overrides). Sending a diff exposes code to the API.[0m
+
+  [1202z[1;38;2;126;0;175m[✓] Enable AI (✧ ^g chip in description, PR, Create ticket, and bookmark modals)[0m[1202z
+
+[1;38;2;80;250;123mAI profiles[0m
+[38;2;97;113;163m    Each profile bundles provider + model + base URL + API key + timeout. Click a row to edit and set active. Long-press a generate button to pick one model for a single run.[0m
+
+    [1203z[38;2;80;250;123m● [0m[1;38;2;126;0;175mdefault[0m [38;2;126;0;175m— ollama · qwen2.5-coder:7b[0m[1203z
+
+    [1204z[38;2;126;0;175m[‹ prev][0m[1204z [1205z[38;2;126;0;175m[next ›][0m[1205z    [1206z[38;2;80;250;123m[+ new][0m[1206z  [1207z[38;2;97;113;163;9m[[0m[38;2;97;113;163;9md[0m[38;2;97;113;163;9me[0m[38;2;97;113;163;9ml[0m[38;2;97;113;163;9me[0m[38;2;97;113;163;9mt[0m[38;2;97;113;163;9me[0m[38;2;97;113;163;9m][0m[1207z
+
+[1m  Provider:[0m
+
+    [1208z[ Ollama (local Chat Completions)         ▼ ][1208z
+
+  [38;2;80;250;123mLLM credentials: ready (API key, Ollama preset, or local Ollama URL)[0m
+[38;2;97;113;163m    Ollama: API key optional; first request after idle may exceed 60s—raise the generation timeout below if needed.[0m
+
+  API base URL (Ollama; empty = http://127.0.0.1:11434/v1):
+  [1209z> http://127.0.0.1:11434/v1                                    [1209z
+[1;38;2;126;0;175m  Model (empty = default):[0m
+  [1210z> qwen2.5-coder:7b[7m [0m                                            [1210z
+  API key (optional for Ollama / local http://127.0.0.1:11434/v1; env overrides):
+  [1211z> [38;5;240mA[0m[38;5;240mPI key (stored in config.json unless env overrides)[0m      [1211z
+  Profile name:
+  [1212z> default                        [1212z
+
+
+[1m  Generation timeout:[0m
+    [1213z[38;2;126;0;175m[-][0m[1213z [1m150s[0m [1214z[38;2;126;0;175m[+][0m[1214z
+[38;2;97;113;163m    Max time to wait for an LLM response. Local models (Ollama) may need 120s+ on first request (model load).[0m
+
+[1;38;2;126;0;175mAI evolog split (graph z)[0m
+
+[38;2;97;113;163m    Multi-split cap limits how many FAQ bases the model may suggest (1–128; also capped by evolog row count). Stepwise: one split per Enter with evolog reload between steps.[0m
+
+  [1215z[1;38;2;126;0;175m[ ] Open split modal with post-split AI describe on (still toggle with d)[0m[1215z
+  [1216z[1;38;2;126;0;175m[✓] Honor AI file lists for jj split after row split[0m[1216z
+  [1217z[1;38;2;126;0;175m[✓] Honor AI hunk_prefix (@@-level) split after row split[0m[1217z
+  [1218z[1;38;2;126;0;175m[ ] Stepwise multi-split (reload evolog between steps)[0m[1218z
+  [1219z[38;2;126;0;175m−[0m[1219z  [38;2;97;113;163mAI multi-split max bases: 128[0m  [1220z[38;2;126;0;175m+[0m[1220z
+
+[1mConnection Status:[0m
+[38;2;80;250;123m  ✓ GitHub connected[0m
+[38;2;80;250;123m  ✓ Tickets connected[0m
+
+[1mVersion:[0m
+[38;2;97;113;163m  dev[0m
+
+
+[1221z[48;2;68;71;89m [0m[38;2;248;248;242;48;2;68;71;89mSave Global (^s)[0m[48;2;68;71;89m [0m [1221z [1222z[48;2;68;71;89m [0m[38;2;248;248;242;48;2;68;71;89mSave Local (^l)[0m[48;2;68;71;89m [0m [1222z [1223z[48;2;68;71;89m [0m[38;2;248;248;242;48;2;68;71;89mCancel (Esc)[0m[48;2;68;71;89m [0m [1223z

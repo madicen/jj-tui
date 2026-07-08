@@ -1,0 +1,50 @@
+[3;38;2;97;113;163mConfig: ~/.config/jj-tui/config.json[0m
+[3;38;2;97;113;163m^j/^k: switch tabs  Tab: next field[0m
+
+[1029z  [38;2;97;113;163mGitHub[0m  [1029z │ [1030z  [1;4;38;2;126;0;175;4mJ[0m[1;4;38;2;126;0;175;4mi[0m[1;4;38;2;126;0;175;4mr[0m[1;4;38;2;126;0;175;4ma[0m  [1030z │ [1031z  [38;2;97;113;163mCodecks[0m  [1031z │ [1032z  [38;2;97;113;163mTickets[0m  [1032z │ [1033z  [38;2;97;113;163mBranches[0m  [1033z │ [1034z  [38;2;97;113;163mTheme[0m  [1034z │ [1035z  [38;2;97;113;163mAI[0m  [1035z │ [1036z  [38;2;97;113;163mAdvanced[0m  [1036z
+
+[1;38;2;126;0;175mJira Integration[0m
+
+[38;2;97;113;163mConnect to Jira for ticket management.[0m
+
+[1;38;2;126;0;175m  Instance URL:[0m
+  [1037z> [7mh[0m[38;5;240mttps://your-domain.atlassian.net[0m                         [1037z [1038z[1;38;2;248;81;73m[Clear][0m[1038z
+[38;2;97;113;163m    e.g., https://yourcompany.atlassian.net[0m
+
+  Email:
+  [1039z> [38;5;240my[0m[38;5;240mour-email@example.com[0m                                    [1039z [1040z[1;38;2;248;81;73m[Clear][0m[1040z
+  API Token:
+  [1041z> [38;5;240mJ[0m[38;5;240mira API Token[0m                                            [1041z [1042z[1;38;2;248;81;73m[Clear][0m[1042z
+[38;2;97;113;163m    Get from: https://id.atlassian.com/manage-profile/security/api-tokens[0m
+
+[1m  Creating issues:[0m
+  Project for new issues:
+  [1043z> APP                                                          [1043z [1044z[1;38;2;248;81;73m[Clear][0m[1044z
+[38;2;97;113;163m    Project key when creating issues (e.g., PROJ)[0m
+
+  Default issue type:
+  [1045z> Task                                                         [1045z [1046z[1;38;2;248;81;73m[Clear][0m[1046z
+[38;2;97;113;163m    Type when creating issues (e.g., Task, Bug, Story). Empty = Task[0m
+
+[1m  Ticket Filters:[0m
+  Project filter(s):
+  [1047z> APP,TEAM                                                     [1047z [1048z[1;38;2;248;81;73m[Clear][0m[1048z
+[38;2;97;113;163m    Optional: filter ticket list by project(s) (e.g., PROJ or PROJ,TEAM)[0m
+
+  Custom JQL:
+  [1049z> sprint in openSprints()                                      [1049z [1050z[1;38;2;248;81;73m[Clear][0m[1050z
+[38;2;97;113;163m    Additional JQL filter (e.g., sprint in openSprints())[0m
+
+  Exclude Statuses:
+  [1051z> [38;5;240mD[0m[38;5;240mone, Won't Do, Cancelled (comma-separated)[0m               [1051z [1052z[1;38;2;248;81;73m[Clear][0m[1052z
+[38;2;97;113;163m    Comma-separated list (e.g., Done, Won't Do, Cancelled)[0m
+
+[1mConnection Status:[0m
+[38;2;80;250;123m  ✓ GitHub connected[0m
+[38;2;80;250;123m  ✓ Tickets connected[0m
+
+[1mVersion:[0m
+[38;2;97;113;163m  dev[0m
+
+
+[1053z[48;2;68;71;89m [0m[38;2;248;248;242;48;2;68;71;89mSave Global (^s)[0m[48;2;68;71;89m [0m [1053z [1054z[48;2;68;71;89m [0m[38;2;248;248;242;48;2;68;71;89mSave Local (^l)[0m[48;2;68;71;89m [0m [1054z [1055z[48;2;68;71;89m [0m[38;2;248;248;242;48;2;68;71;89mCancel (Esc)[0m[48;2;68;71;89m [0m [1055z

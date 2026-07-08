@@ -1,0 +1,35 @@
+[3;38;2;97;113;163mConfig: ~/.config/jj-tui/config.json[0m
+[3;38;2;97;113;163m^j/^k: switch tabs  Tab: next field[0m
+
+[1056z  [38;2;97;113;163mGitHub[0m  [1056z │ [1057z  [38;2;97;113;163mJira[0m  [1057z │ [1058z  [1;4;38;2;126;0;175;4mC[0m[1;4;38;2;126;0;175;4mo[0m[1;4;38;2;126;0;175;4md[0m[1;4;38;2;126;0;175;4me[0m[1;4;38;2;126;0;175;4mc[0m[1;4;38;2;126;0;175;4mk[0m[1;4;38;2;126;0;175;4ms[0m  [1058z │ [1059z  [38;2;97;113;163mTickets[0m  [1059z │ [1060z  [38;2;97;113;163mBranches[0m  [1060z │ [1061z  [38;2;97;113;163mTheme[0m  [1061z │ [1062z  [38;2;97;113;163mAI[0m  [1062z │ [1063z  [38;2;97;113;163mAdvanced[0m  [1063z
+
+[1;38;2;126;0;175mCodecks Integration[0m
+
+[38;2;97;113;163mConnect to Codecks for card management.[0m
+
+[1;38;2;126;0;175m  Subdomain:[0m
+  [1064z> [7my[0m[38;5;240mour-team (from your-team.codecks.io)[0m                     [1064z [1065z[1;38;2;248;81;73m[Clear][0m[1065z
+[38;2;97;113;163m    Your team name (e.g., 'myteam' from myteam.codecks.io)[0m
+
+  Auth Token:
+  [1066z> [38;5;240mC[0m[38;5;240modecks API Token (from browser cookie 'at')[0m              [1066z [1067z[1;38;2;248;81;73m[Clear][0m[1067z
+[38;2;97;113;163m    Extract 'at' cookie from browser DevTools[0m
+
+[1m  Card Filters:[0m
+  Project Filter:
+  [1068z> [38;5;240mP[0m[38;5;240mroject name (optional, filters cards)[0m                    [1068z [1069z[1;38;2;248;81;73m[Clear][0m[1069z
+[38;2;97;113;163m    Optional: Only show cards from this project[0m
+
+  Exclude Statuses:
+  [1070z> [38;5;240md[0m[38;5;240mone, archived (comma-separated)[0m                          [1070z [1071z[1;38;2;248;81;73m[Clear][0m[1071z
+[38;2;97;113;163m    Comma-separated list (e.g., done, archived)[0m
+
+[1mConnection Status:[0m
+[38;2;80;250;123m  ✓ GitHub connected[0m
+[38;2;80;250;123m  ✓ Tickets connected[0m
+
+[1mVersion:[0m
+[38;2;97;113;163m  dev[0m
+
+
+[1072z[48;2;68;71;89m [0m[38;2;248;248;242;48;2;68;71;89mSave Global (^s)[0m[48;2;68;71;89m [0m [1072z [1073z[48;2;68;71;89m [0m[38;2;248;248;242;48;2;68;71;89mSave Local (^l)[0m[48;2;68;71;89m [0m [1073z [1074z[48;2;68;71;89m [0m[38;2;248;248;242;48;2;68;71;89mCancel (Esc)[0m[48;2;68;71;89m [0m [1074z
