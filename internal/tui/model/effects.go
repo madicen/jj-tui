@@ -46,6 +46,13 @@ type effLoadBranches struct{}
 
 func (effLoadBranches) isEffect() {}
 
+// effSetBookmarkConflictSources refreshes the create-bookmark modal's
+// name-conflict source list from the branches tab and re-evaluates whether the
+// current input collides with an existing name.
+type effSetBookmarkConflictSources struct{}
+
+func (effSetBookmarkConflictSources) isEffect() {}
+
 // applyEffects applies every effect in order and batches any resulting commands.
 // Effects that only mutate component state contribute no command.
 func (m *Model) applyEffects(effs ...effect) tea.Cmd {
@@ -82,6 +89,10 @@ func (m *Model) applyEffect(e effect) tea.Cmd {
 		return data.LoadRepository(m.appState.JJService)
 	case effLoadBranches:
 		return branchestab.LoadBranchesCmd(m.appState.JJService, m.settingsTabModel.GetSettingsBranchLimit())
+	case effSetBookmarkConflictSources:
+		m.bookmarkModal.SetNameConflictSources(m.branchesTabModel.BuildBookmarkNameConflictSources())
+		m.bookmarkModal.UpdateNameExistsFromInput(m.appState.Config != nil && m.appState.Config.ShouldSanitizeBookmarkNames())
+		return nil
 	default:
 		return nil
 	}

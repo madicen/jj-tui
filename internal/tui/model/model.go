@@ -2029,8 +2029,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		updated, cmd := m.branchesTabModel.UpdateWithApp(input, &m.appState)
 		m.branchesTabModel = updated
 		if input.InCreateBookmarkView {
-			m.bookmarkModal.SetNameConflictSources(m.branchesTabModel.BuildBookmarkNameConflictSources())
-			m.bookmarkModal.UpdateNameExistsFromInput(m.appState.Config != nil && m.appState.Config.ShouldSanitizeBookmarkNames())
+			m.applyEffects(effSetBookmarkConflictSources{})
 		}
 		return m, cmd
 	case branchestab.BranchActionMsg:
