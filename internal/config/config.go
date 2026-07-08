@@ -153,6 +153,13 @@ type UIConfig struct {
 	// view. Set true to disable the intersection and show every row the configured revset
 	// (or DefaultGraphRevset) matches.
 	GraphShowEveryonesCommits *bool `json:"graph_show_everyones_commits,omitempty"`
+
+	// ConfirmDestructive gates the y/n confirmation prompts shown before destructive jj
+	// operations (abandon, divergent-commit resolution which abandons the losing revisions,
+	// backout, and force-ish pushes). nil/true (default) = prompt; false = skip the prompt
+	// and act immediately. Files written before this key existed have it nil and therefore
+	// keep prompting. See Config.ConfirmDestructiveOps.
+	ConfirmDestructive *bool `json:"confirm_destructive,omitempty"`
 }
 
 // ThemeConfig groups the user's theme color overrides.
@@ -370,6 +377,9 @@ func mergeConfig(dest, source *Config) {
 	}
 	if source.GraphShowEveryonesCommits != nil {
 		dest.GraphShowEveryonesCommits = source.GraphShowEveryonesCommits
+	}
+	if source.ConfirmDestructive != nil {
+		dest.ConfirmDestructive = source.ConfirmDestructive
 	}
 	if source.ThemePrimary != "" {
 		dest.ThemePrimary = source.ThemePrimary
@@ -834,6 +844,16 @@ func (c *Config) ShouldSanitizeBookmarkNames() bool {
 		return true // Default: enabled
 	}
 	return *c.SanitizeBookmarkNames
+}
+
+// ConfirmDestructiveOps returns whether destructive jj operations (abandon, divergent-commit
+// resolution, backout, force-ish push) should show a y/n confirmation first. Nil-safe:
+// defaults to true so configs written before the key existed keep prompting.
+func (c *Config) ConfirmDestructiveOps() bool {
+	if c == nil || c.ConfirmDestructive == nil {
+		return true // Default: confirm
+	}
+	return *c.ConfirmDestructive
 }
 
 // BranchesFilterToTrackedAndMine returns true when the branches tab should hide

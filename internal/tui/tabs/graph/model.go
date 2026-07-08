@@ -15,6 +15,7 @@ import (
 	"github.com/madicen/jj-tui/internal/tui/mousedouble"
 	"github.com/madicen/jj-tui/internal/tui/render"
 	"github.com/madicen/jj-tui/internal/tui/state"
+	"github.com/madicen/jj-tui/internal/tui/styles"
 	"github.com/madicen/jj-tui/internal/tui/util"
 	"github.com/mattn/go-runewidth"
 )
@@ -74,6 +75,11 @@ type GraphModel struct {
 	mousePressGen  uint64
 	zoneOverlap    mousedouble.OverlapRelease
 	rowDoubleClick mousedouble.DoubleClick
+
+	// confirm holds a pending destructive-op confirmation (abandon / backout) when the
+	// ui.confirm_destructive toggle is on. While set, the graph shows a y/n prompt and
+	// swallows other keys until the user confirms (y) or cancels (n/Esc). See confirm.go.
+	confirm *destructiveConfirm
 }
 
 // SelectionMode indicates what the user is selecting commits for
@@ -294,9 +300,21 @@ func (m *GraphModel) UpdateWithApp(msg tea.Msg, app *state.AppState) (GraphModel
 		return *m, nil
 
 	case tea.KeyMsg:
+		// A pending destructive confirmation owns the keyboard until resolved.
+		if m.confirm != nil {
+			if req, run := m.resolveConfirm(msg, app); run {
+				ctx := BuildRequestContextFromApp(app, m)
+				res := HandleRequest(req, ctx)
+				return *m, ApplyResult(res, m, ctx, app)
+			}
+			return *m, nil
+		}
 		updated, req, directCmd := m.handleKeyMsg(msg)
 		*m = updated
 		if req != nil {
+			if m.maybeConfirmDestructive(*req, app) {
+				return *m, nil
+			}
 			ctx := BuildRequestContextFromApp(app, m)
 			res := HandleRequest(*req, ctx)
 			return *m, ApplyResult(res, m, ctx, app)
@@ -304,9 +322,16 @@ func (m *GraphModel) UpdateWithApp(msg tea.Msg, app *state.AppState) (GraphModel
 		return *m, directCmd
 
 	case zone.MsgZoneInBounds:
+		// Ignore stray clicks while a destructive confirmation is pending (it is keyboard-only).
+		if m.confirm != nil {
+			return *m, nil
+		}
 		updated, req, directCmd := m.handleZoneClick(msg)
 		*m = updated
 		if req != nil {
+			if m.maybeConfirmDestructive(*req, app) {
+				return *m, nil
+			}
 			ctx := BuildRequestContextFromApp(app, m)
 			res := HandleRequest(*req, ctx)
 			return *m, ApplyResult(res, m, ctx, app)
@@ -511,6 +536,15 @@ func (m *GraphModel) View() string {
 		firstParentImm := m.commitMenuFirstParentImmutable()
 		menuView := m.renderCommitContextMenu(isMutable, firstParentImm)
 		v = overlay.OverlayViewAtPoint(v, menuView, m.width, m.height, m.commitContextMenu.MouseY, m.commitContextMenu.MouseX)
+	}
+
+	if m.confirm != nil {
+		box := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(styles.ColorPrimary).
+			Padding(0, 1).
+			Render(m.confirm.prompt)
+		v = overlay.OverlayViewInCenterWithOffset(v, box, m.width, m.height, 0, 0)
 	}
 
 	return v

@@ -39,6 +39,7 @@ const goldenConfigJSON = `{
   "branches_show_all_remotes": false,
   "graph_revset": "trunk() | ancestors(@)",
   "graph_show_everyones_commits": false,
+  "confirm_destructive": true,
   "external_file_editor": "cursor",
   "external_file_editor_custom": "cursor -g {path}",
   "theme_primary": "#9529be",
@@ -117,6 +118,43 @@ func TestConfigGoldenRoundTrip(t *testing.T) {
 	}
 	if !reflect.DeepEqual(cfg, reloaded) {
 		t.Fatalf("config not stable across round-trip:\n first: %+v\nsecond: %+v", cfg, reloaded)
+	}
+}
+
+// TestConfirmDestructiveDefaultsOnForOldConfigs verifies that a config file written before the
+// confirm_destructive key existed (i.e. without the key) still defaults to prompting, and that
+// re-marshaling such a config does not inject the key (omitempty keeps old files byte-compatible).
+func TestConfirmDestructiveDefaultsOnForOldConfigs(t *testing.T) {
+	const oldSchema = `{"github_token":"x","graph_revset":"trunk()"}`
+
+	var cfg Config
+	if err := json.Unmarshal([]byte(oldSchema), &cfg); err != nil {
+		t.Fatalf("failed to unmarshal old-schema config: %v", err)
+	}
+	if cfg.ConfirmDestructive != nil {
+		t.Errorf("expected ConfirmDestructive to be nil for a file without the key, got %v", *cfg.ConfirmDestructive)
+	}
+	if !cfg.ConfirmDestructiveOps() {
+		t.Error("ConfirmDestructiveOps() must default to true when the key is absent")
+	}
+
+	out, err := json.Marshal(&cfg)
+	if err != nil {
+		t.Fatalf("failed to marshal config: %v", err)
+	}
+	var round map[string]json.RawMessage
+	if err := json.Unmarshal(out, &round); err != nil {
+		t.Fatalf("re-marshaled config is not valid JSON: %v", err)
+	}
+	if _, ok := round["confirm_destructive"]; ok {
+		t.Error("confirm_destructive must not be emitted for a config that never set it (breaks byte-compat)")
+	}
+
+	// And an explicit false disables the prompt.
+	off := false
+	cfg.ConfirmDestructive = &off
+	if cfg.ConfirmDestructiveOps() {
+		t.Error("ConfirmDestructiveOps() must return false when the toggle is explicitly off")
 	}
 }
 
