@@ -1027,6 +1027,10 @@ func (m *Model) dispatchAsyncMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tickMsg:
 		return m.handleTickMsg()
+	case undoHintReadyMsg:
+		return m.handleUndoHintReady(msg)
+	case undoHintExpiredMsg:
+		return m.handleUndoHintExpired(msg)
 	case graphtab.UndoCompletedMsg:
 		cmd, errInfo := graphtab.HandleUndoCompletedMsg(msg, &m.appState)
 		if errInfo != nil {
@@ -1038,6 +1042,8 @@ func (m *Model) dispatchAsyncMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.redoOperationID = ""
 		}
+		// P5.4: undo/redo change the current operation; refresh the hint on reload.
+		m.pendingUndoHint = true
 		return m, cmd
 
 	// Handle our custom messages

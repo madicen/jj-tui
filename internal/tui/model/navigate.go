@@ -38,11 +38,33 @@ func isRedoResettingNavigate(k state.NavigateKind) bool {
 	}
 }
 
+// isMutatingJJNavigate reports navigations that create a new jj operation on the
+// local repo (and therefore should surface the P5.4 undo hint). PR/ticket API
+// calls, repo init, and pushes are deliberately excluded: they either aren't jj
+// operations or can't be meaningfully undone with Ctrl+z.
+func isMutatingJJNavigate(k state.NavigateKind) bool {
+	switch k {
+	case state.NavigateSaveDescription,
+		state.NavigateSubmitBookmark,
+		state.NavigateDeleteBookmark,
+		state.NavigateResolveConflict,
+		state.NavigateResolveDivergent,
+		state.NavigatePerformEvologSplit,
+		state.NavigateRestoreOperation:
+		return true
+	default:
+		return false
+	}
+}
+
 // handleNavigate performs view changes that only main can do (it owns modals and
 // cross-tab state). It dispatches to the per-domain handlers below.
 func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 	if isRedoResettingNavigate(t.Kind) {
 		m.redoOperationID = ""
+	}
+	if isMutatingJJNavigate(t.Kind) {
+		m.pendingUndoHint = true
 	}
 	for _, h := range []navHandler{
 		m.handleNavigateDescription,

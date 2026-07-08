@@ -293,6 +293,12 @@ func (m *Model) renderTab(label string, active bool) string {
 // renderStatusBar renders the status bar with global shortcuts (always single line).
 func (m *Model) renderStatusBar() string {
 	status := m.appState.StatusMessage
+	// P5.4: while an undo hint is active, it takes over the status text (it is
+	// strictly more informative than the post-reload "Loaded N commits" message
+	// it replaces, and expires on its own via undoHintExpiredMsg).
+	if m.undoHint != "" {
+		status = m.undoHint
+	}
 
 	// Sanitize status message: remove literal newlines
 	status = strings.ReplaceAll(status, "\n", " ")

@@ -453,6 +453,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.absorbPreviewActive = false
 				m.absorbPreviewSummary = ""
 				m.redoOperationID = ""
+				m.pendingUndoHint = true
 				m.appState.Loading = true
 				m.appState.StatusMessage = "Absorbing…"
 				return m, tea.Batch(

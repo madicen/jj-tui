@@ -94,6 +94,14 @@ func (m *Model) applyRepositoryLoaded(repo *internal.Repository) (*Model, tea.Cm
 	m.prsTabModel.SetGithubService(m.isGitHubAvailable())
 	var cmds []tea.Cmd
 	cmds = append(cmds, m.tickCmd())
+	// P5.4: after a mutating jj command reloads the repo, surface a transient
+	// "Ctrl+z undoes: <op>" hint in the status bar.
+	if m.pendingUndoHint {
+		m.pendingUndoHint = false
+		if c := m.fetchUndoHintCmd(); c != nil {
+			cmds = append(cmds, c)
+		}
+	}
 	if m.appState.GitHubService != nil {
 		existing := 0
 		if m.appState.Repository != nil {
@@ -145,6 +153,12 @@ func (m *Model) refreshRepository() tea.Cmd {
 func (m *Model) processGraphRequest(r graphtab.Request) (tea.Model, tea.Cmd) {
 	if r.Checkout || r.Squash || r.Abandon || r.NewCommit || r.PerformRebase || r.DragRebase || r.ResolveDivergent != nil || r.CreateBookmark || r.DeleteBookmark || r.CreatePR || r.UpdatePR || r.MoveFileUp || r.MoveFileDown || r.RevertFile || r.MoveDeltaOntoOrigin || r.StartEvologSplit || r.ResolveBookmarkConflict || r.Duplicate || r.Backout {
 		m.redoOperationID = ""
+	}
+	// P5.4: graph actions that mutate the repo (and thus create a jj operation)
+	// should surface the undo hint once the reload completes. Exclude PR ops
+	// (CreatePR/UpdatePR are GitHub API calls, not jj operations).
+	if r.Checkout || r.Squash || r.Abandon || r.NewCommit || r.PerformRebase || r.DragRebase || r.ResolveDivergent != nil || r.CreateBookmark || r.DeleteBookmark || r.MoveFileUp || r.MoveFileDown || r.RevertFile || r.MoveDeltaOntoOrigin || r.StartEvologSplit || r.ResolveBookmarkConflict || r.Duplicate || r.Backout {
+		m.pendingUndoHint = true
 	}
 	ctx := graphtab.BuildRequestContextFrom(m)
 	res := graphtab.HandleRequest(r, ctx)

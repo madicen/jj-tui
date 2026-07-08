@@ -63,6 +63,13 @@ type Model struct {
 	modalUnderlayView  state.ViewMode
 	// Selection state lives in tab models: graph (commit/file), prs, tickets, branches
 	redoOperationID string
+	// Undo-hint state (P5.4): after a mutating jj command, pendingUndoHint drives a
+	// cheap `jj op log --limit 1` fetch once the repo reloads; the result is shown
+	// as "Ctrl+z undoes: <op>" in the status bar for undoHintDuration. undoHintSeq
+	// invalidates stale expiry ticks so a newer hint isn't cleared early.
+	pendingUndoHint bool
+	undoHint        string
+	undoHintSeq     int
 	// Silent background graph refresh (handleTickMsg) runs concurrently per Bubble Tea Batch;
 	// without this guard, overlapping GetRepository calls can retain multi-copy graphs and spike RSS.
 	silentReloadInFlight bool

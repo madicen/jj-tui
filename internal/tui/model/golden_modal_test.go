@@ -24,9 +24,9 @@ import (
 	"github.com/madicen/jj-tui/internal/tui/state"
 	bookmarktab "github.com/madicen/jj-tui/internal/tui/tabs/bookmark"
 	branchestab "github.com/madicen/jj-tui/internal/tui/tabs/branches"
+	operationstab "github.com/madicen/jj-tui/internal/tui/tabs/operations"
 	prformtab "github.com/madicen/jj-tui/internal/tui/tabs/prform"
 	prstab "github.com/madicen/jj-tui/internal/tui/tabs/prs"
-	operationstab "github.com/madicen/jj-tui/internal/tui/tabs/operations"
 	ticketformtab "github.com/madicen/jj-tui/internal/tui/tabs/ticketform"
 	workspacestab "github.com/madicen/jj-tui/internal/tui/tabs/workspaces"
 )
