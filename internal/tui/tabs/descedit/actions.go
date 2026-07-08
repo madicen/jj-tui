@@ -40,7 +40,7 @@ func SaveDescriptionCmd(svc *jj.Service, commitID, description string) tea.Cmd {
 func HandleDescriptionSavedMsg(msg DescriptionSavedMsg, app *state.AppState) tea.Cmd {
 	app.ViewMode = state.ViewCommitGraph
 	app.StatusMessage = fmt.Sprintf("Description updated for %s", msg.CommitID)
-	return data.LoadRepository(app.JJService)
+	return data.LoadRepository(app.JJService, app.GraphFilterRevset)
 }
 
 // DescriptionLoadedInput is the context main sends when forwarding DescriptionLoadedMsg (for building suggested description).

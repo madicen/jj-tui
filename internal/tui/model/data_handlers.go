@@ -9,7 +9,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/config"
-	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tui/data"
 	"github.com/madicen/jj-tui/internal/tui/state"
 	graphtab "github.com/madicen/jj-tui/internal/tui/tabs/graph"
@@ -202,6 +201,26 @@ func (m *Model) handlePushResultMsg(msg data.PushResultMsg) (tea.Model, tea.Cmd)
 	return m, m.applyEffects(effReloadRepository{})
 }
 
+// handleGraphFilterLoadedMsg applies a graph search filter result (P4.4).
+func (m *Model) handleGraphFilterLoadedMsg(msg data.GraphFilterLoadedMsg) (tea.Model, tea.Cmd) {
+	m.appState.Loading = false
+	m.appState.GraphFilterQuery = msg.Query
+	m.appState.GraphFilterRevset = msg.Revset
+	if msg.Err != nil {
+		m.appState.GraphFilterError = msg.Err.Error()
+		m.graphTabModel.SetFilterDisplay(msg.Query, msg.Err.Error())
+		m.appState.StatusMessage = "Filter error: " + msg.Err.Error()
+		return m, nil
+	}
+	m.appState.GraphFilterError = ""
+	m.graphTabModel.SetFilterDisplay(msg.Query, "")
+	if msg.Repository != nil {
+		m.appState.StatusMessage = fmt.Sprintf("Filtered: %d commits", len(msg.Repository.Graph.Commits))
+		return m.applyRepositoryLoaded(msg.Repository)
+	}
+	return m, nil
+}
+
 // handleDataRepositoryLoadedMsg delegates to shared applyRepositoryLoaded.
 func (m *Model) handleDataRepositoryLoadedMsg(msg data.RepositoryLoadedMsg) (tea.Model, tea.Cmd) {
 	return m.applyRepositoryLoaded(msg.Repository)
@@ -289,21 +308,9 @@ func (m *Model) handleTickMsg(now time.Time) (tea.Model, tea.Cmd) {
 	// P5.2: opt-in silent auto-refresh. shouldSilentReload gates on ui.auto_refresh_seconds
 	// (0/off by default), the configured minimum spacing, and the modal-open / in-flight guards.
 	if m.shouldSilentReload(now) {
-		revset := ""
-		if m.appState.Config != nil {
-			revset = m.appState.Config.GraphRevset
-			// Mirror LoadRepository's mine() intersection so the silent background
-			// refresh produces the same graph as the foreground load. Without this,
-			// the periodic tick would silently widen the revset and reintroduce
-			// other contributors' commits between user-initiated reloads.
-			if m.appState.Config.GraphFilterToMine() {
-				revset = jj.ApplyMineFilterToRevset(revset)
-			}
-			m.appState.JJService.BookmarkListPreferTracked = m.appState.Config.BranchesFilterToTrackedAndMine()
-		}
 		m.silentReloadInFlight = true
 		m.lastAutoRefresh = now
-		cmds = append(cmds, data.LoadRepositorySilent(m.appState.JJService, revset))
+		cmds = append(cmds, data.LoadRepositorySilent(m.appState.JJService, m.appState.GraphFilterRevset))
 	}
 	prInput := prstab.PrTickInput{
 		IsPRView:      m.appState.ViewMode == state.ViewPullRequests,

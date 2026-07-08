@@ -99,5 +99,5 @@ func HandleDivergentCommitResolvedMsg(msg DivergentCommitResolvedMsg, app *state
 	}
 	app.StatusMessage = fmt.Sprintf("Divergent commit resolved (kept %s)", kept)
 	app.ViewMode = state.ViewCommitGraph
-	return data.LoadRepository(app.JJService)
+	return data.LoadRepository(app.JJService, app.GraphFilterRevset)
 }

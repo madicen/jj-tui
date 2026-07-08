@@ -30,6 +30,13 @@ var (
 				Foreground(lipgloss.Color("#FFAA00")).
 				Bold(true)
 
+	FilterHeaderStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#8BE9FD")).
+				Bold(true)
+	FilterErrorStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#FF5555")).
+				Bold(true)
+
 	CommitStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#F8F8F2"))
 

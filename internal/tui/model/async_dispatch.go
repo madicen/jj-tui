@@ -292,6 +292,8 @@ func (m *Model) dispatchAsyncMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleDataServicesInitializedMsg(msg)
 	case data.RepositoryLoadedMsg:
 		return m.handleDataRepositoryLoadedMsg(msg)
+	case data.GraphFilterLoadedMsg:
+		return m.handleGraphFilterLoadedMsg(msg)
 	case graphtab.RepositoryLoadedMsg:
 		return m.handleActionsRepositoryLoadedMsg(msg)
 	case data.SilentRepositoryLoadedMsg:
@@ -589,7 +591,7 @@ func (m *Model) dispatchAsyncMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			existing = len(m.appState.Repository.PRs)
 		}
 		return m, tea.Batch(
-			data.LoadRepository(m.appState.JJService),
+			data.LoadRepository(m.appState.JJService, m.appState.GraphFilterRevset),
 			prstab.LoadPRsCmd(m.appState.GitHubService, m.appState.GithubInfo, m.appState.DemoMode, existing),
 		)
 	case bookmarktab.BookmarkCreatedMsg:
@@ -614,7 +616,7 @@ func (m *Model) dispatchAsyncMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			existing = len(m.appState.Repository.PRs)
 		}
 		return m, tea.Batch(
-			data.LoadRepository(m.appState.JJService),
+			data.LoadRepository(m.appState.JJService, m.appState.GraphFilterRevset),
 			prstab.LoadPRsCmd(m.appState.GitHubService, m.appState.GithubInfo, m.appState.DemoMode, existing),
 		)
 	case branchestab.BookmarkConflictInfoMsg:

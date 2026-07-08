@@ -350,9 +350,9 @@ func HandleBookmarkCreatedMsg(msg BookmarkCreatedMsg, app *state.AppState, trans
 	app.StatusMessage = statusMsg
 	if transitionCmd != nil {
 		return tea.Batch(
-			data.LoadRepository(app.JJService),
+			data.LoadRepository(app.JJService, app.GraphFilterRevset),
 			transitionCmd,
 		)
 	}
-	return data.LoadRepository(app.JJService)
+	return data.LoadRepository(app.JJService, app.GraphFilterRevset)
 }

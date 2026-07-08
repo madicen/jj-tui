@@ -4,6 +4,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -87,6 +88,13 @@ type GraphModel struct {
 	// annotate holds the scrollable blame overlay (`B` on a changed file). While
 	// shown it owns navigation keys (j/k/Enter/Esc) — see annotate.go.
 	annotate *annotateView
+
+	// filterInput is the `/` revset search overlay (P4.4).
+	filterInput revsetFilterInput
+
+	// filterQuery / filterError mirror app state for header rendering in View().
+	filterQuery string
+	filterError string
 }
 
 // SelectionMode indicates what the user is selecting commits for
@@ -122,6 +130,8 @@ type GraphData struct {
 	ChangedFiles       []ChangedFile   // Changed files for the selected commit
 	GraphFocused       bool            // True if graph pane has focus
 	SelectedFile       int             // Index of selected file in changed files list
+	FilterQuery        string          // Active revset search display text (empty = none)
+	FilterError        string          // Inline jj revset error for the active filter attempt
 	// RebaseDragSource / RebaseDragHoverDest: mouse drag rebase (-1 = none)
 	RebaseDragSource    int
 	RebaseDragHoverDest int
@@ -146,6 +156,7 @@ func NewGraphModel(zoneManager *zone.Manager) GraphModel {
 		mergeTargetCommit:    -1,
 		longPressFileIndex:   -1,
 		longPressCommitIndex: -1,
+		filterInput:          newRevsetFilterInput(),
 	}
 }
 
@@ -317,6 +328,12 @@ func (m *GraphModel) UpdateWithApp(msg tea.Msg, app *state.AppState) (GraphModel
 		return *m, nil
 
 	case tea.KeyMsg:
+		// The search overlay owns the keyboard while open.
+		if m.filterInput.open {
+			updated, cmd := m.handleFilterInputKey(msg, app)
+			*m = updated
+			return *m, cmd
+		}
 		// A pending destructive confirmation owns the keyboard until resolved.
 		if m.confirm != nil {
 			if req, run := m.resolveConfirm(msg, app); run {
@@ -325,6 +342,14 @@ func (m *GraphModel) UpdateWithApp(msg tea.Msg, app *state.AppState) (GraphModel
 				return *m, ApplyResult(res, m, ctx, app)
 			}
 			return *m, nil
+		}
+		if key.Matches(msg, m.keys.SearchFilter) && m.graphFocused {
+			return *m, m.beginFilterInput(app)
+		}
+		if key.Matches(msg, m.keys.CancelSelection) && m.contextMenu == nil && m.commitContextMenu == nil &&
+			m.selectionMode == SelectionNormal && app != nil && strings.TrimSpace(app.GraphFilterRevset) != "" {
+			m.ClearFilterDisplay()
+			return *m, clearGraphFilter(app)
 		}
 		updated, req, directCmd := m.handleKeyMsg(msg)
 		*m = updated
@@ -569,7 +594,21 @@ func (m *GraphModel) View() string {
 		v = overlay.OverlayViewInCenterWithOffset(v, box, m.width, m.height, 0, 0)
 	}
 
+	v = m.overlayFilterInput(v)
+
 	return v
+}
+
+// SetFilterDisplay updates the active-filter header state (mirrors app.GraphFilter*).
+func (m *GraphModel) SetFilterDisplay(query, errMsg string) {
+	m.filterQuery = query
+	m.filterError = errMsg
+}
+
+// ClearFilterDisplay clears the filter header.
+func (m *GraphModel) ClearFilterDisplay() {
+	m.filterQuery = ""
+	m.filterError = ""
 }
 
 // getGraphResult returns the GraphResult for the commit graph view
@@ -700,6 +739,8 @@ func (m *GraphModel) buildGraphData() GraphData {
 		ChangedFiles:        changedFiles,
 		GraphFocused:        m.graphFocused,
 		SelectedFile:        m.selectedFile,
+		FilterQuery:         m.filterQuery,
+		FilterError:         m.filterError,
 		RebaseDragSource:    m.rebaseDragSource,
 		RebaseDragHoverDest: m.rebaseDragHoverDest,
 	}

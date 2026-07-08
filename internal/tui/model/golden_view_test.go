@@ -183,6 +183,21 @@ func TestGoldenViewGraph(t *testing.T) {
 		})
 		testutil.AssertGolden(t, "graph/annotate_overlay", m.View())
 	})
+
+	t.Run("active_filter", func(t *testing.T) {
+		m := newGoldenModel(t)
+		defer m.Close()
+		m.SetViewMode(state.ViewCommitGraph)
+		m.graphTabModel.SelectCommit(0)
+		m.appState.GraphFilterQuery = "Ada"
+		m.appState.GraphFilterRevset = `description(substring-i:"Ada") | author(substring-i:"Ada")`
+		m.graphTabModel.SetFilterDisplay("Ada", "")
+		filtered := goldenRepo()
+		filtered.Graph.Commits = filtered.Graph.Commits[:2]
+		m.SetRepository(filtered)
+		m.graphTabModel.OnRepositoryLoaded(filtered)
+		testutil.AssertGolden(t, "graph/active_filter", m.View())
+	})
 }
 
 func TestGoldenViewPRs(t *testing.T) {

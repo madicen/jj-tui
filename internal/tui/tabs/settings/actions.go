@@ -89,7 +89,7 @@ func HandleCleanupCompletedMsg(msg CleanupCompletedMsg, app *state.AppState) tea
 	if msg.Success {
 		app.StatusMessage = msg.Message
 		if app.JJService != nil {
-			return data.LoadRepository(app.JJService)
+			return data.LoadRepository(app.JJService, app.GraphFilterRevset)
 		}
 		return nil
 	}

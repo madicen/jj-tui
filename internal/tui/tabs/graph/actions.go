@@ -1056,7 +1056,7 @@ func HandleUndoCompletedMsg(msg UndoCompletedMsg, app *state.AppState) (tea.Cmd,
 		return nil, &UndoErrorInfo{Err: msg.Err}
 	}
 	app.StatusMessage = msg.Message
-	return data.LoadRepository(app.JJService), nil
+	return data.LoadRepository(app.JJService, app.GraphFilterRevset), nil
 }
 
 // SetStatusEffect carries a status line for ApplyResult follow-ups when main handles the effect; other effect types in this group follow the same pattern (NavigateTarget.Cmd when app is non-nil; tests may use a nil app).

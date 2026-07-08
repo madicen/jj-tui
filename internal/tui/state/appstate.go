@@ -56,6 +56,11 @@ type AppState struct {
 	// itself (the spinner lives on the main Model). Main batches the spinner tick with the cmd
 	// via wrapSpinnerStart and clears this flag. See internal/tui/model/overlay_helpers.go.
 	SpinnerStartPending bool
+
+	// Graph search filter (P4.4): active revset search in the commit graph tab.
+	GraphFilterQuery  string // display text (/ input or raw revset)
+	GraphFilterRevset string // compiled jj revset; empty = no filter
+	GraphFilterError  string // last jj revset error (graph unchanged)
 }
 
 // UpdateRepository replaces the loaded repository. It is the single setter for the

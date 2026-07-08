@@ -106,7 +106,7 @@ func (m *Model) applyEffect(e effect) tea.Cmd {
 	case effResolveOpenPRs:
 		return prstab.ResolveOpenPRsForBookmarksCmd(m.appState.GitHubService, m.bookmarksNeedingPRLookup(), m.appState.DemoMode)
 	case effReloadRepository:
-		return data.LoadRepository(m.appState.JJService)
+		return data.LoadRepository(m.appState.JJService, m.appState.GraphFilterRevset)
 	case effLoadBranches:
 		return branchestab.LoadBranchesCmd(m.appState.JJService, m.settingsTabModel.GetSettingsBranchLimit())
 	case effSetBookmarkConflictSources:

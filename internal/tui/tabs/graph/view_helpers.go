@@ -126,6 +126,17 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 		graphLines = append(graphLines, "")
 	}
 
+	if data.FilterQuery != "" || data.FilterError != "" {
+		header := FilterHeaderStyle.Render("🔍 FILTER: " + data.FilterQuery)
+		if data.FilterError != "" {
+			header += "  " + FilterErrorStyle.Render(data.FilterError)
+		} else {
+			header += FilterHeaderStyle.Render("  (Esc to clear)")
+		}
+		graphLines = append(graphLines, header)
+		graphLines = append(graphLines, "")
+	}
+
 	for i, commit := range data.Repository.Graph.Commits {
 		style := CommitStyle
 		if data.RebaseDragSource >= 0 {
