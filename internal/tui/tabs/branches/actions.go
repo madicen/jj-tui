@@ -9,10 +9,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
-	"github.com/madicen/jj-tui/internal/tui/data"
-	"github.com/madicen/jj-tui/internal/tui/state"
-	"github.com/madicen/jj-tui/internal/tui/tabs/bookmark"
-	"github.com/madicen/jj-tui/internal/tui/tabs/prs"
 	"github.com/madicen/jj-tui/internal/tui/util"
 )
 
@@ -294,30 +290,8 @@ func ExecuteRequest(r Request, ctx *RequestContext) (statusMsg string, cmd tea.C
 	}
 }
 
-// HandleBranchPushedMsg mutates app (StatusMessage) and returns the Cmd to run.
-func HandleBranchPushedMsg(msg prs.BranchPushedMsg, app *state.AppState) tea.Cmd {
-	app.Loading = false
-	app.StatusMessage = fmt.Sprintf("Pushed %s to remote", msg.Branch)
-	existing := 0
-	if app.Repository != nil {
-		existing = len(app.Repository.PRs)
-	}
-	return tea.Batch(
-		data.LoadRepository(app.JJService),
-		prs.LoadPRsCmd(app.GitHubService, app.GithubInfo, app.DemoMode, existing),
-	)
-}
-
-// HandleBookmarkDeletedMsg mutates app (ViewMode, StatusMessage) and returns the Cmd to run.
-func HandleBookmarkDeletedMsg(msg bookmark.BookmarkDeletedMsg, app *state.AppState) tea.Cmd {
-	app.ViewMode = state.ViewCommitGraph
-	app.StatusMessage = fmt.Sprintf("Bookmark '%s' deleted", msg.BookmarkName)
-	existing := 0
-	if app.Repository != nil {
-		existing = len(app.Repository.PRs)
-	}
-	return tea.Batch(
-		data.LoadRepository(app.JJService),
-		prs.LoadPRsCmd(app.GitHubService, app.GithubInfo, app.DemoMode, existing),
-	)
-}
+// P2.5: HandleBranchPushedMsg / HandleBookmarkDeletedMsg were moved into the root
+// model's async dispatch. They only mutated *state.AppState and dispatched loader
+// commands (repo + PRs), so keeping them here forced branches to import the prs and
+// bookmark tabs. The orchestration now lives at the root, which already owns those
+// cross-tab imports; branches no longer imports a sibling tab.

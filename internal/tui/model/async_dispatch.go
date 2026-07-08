@@ -548,7 +548,14 @@ func (m *Model) dispatchAsyncMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.clearAIGenOverlay()
 		m.prFormModal.Hide()
 		m.clearModalUnderlay()
-		return m, prformtab.HandlePRCreatedMsg(prformtab.PRCreatedInput{PRCreatedMsg: msg, DemoMode: m.appState.DemoMode}, &m.appState)
+		// P2.5: the root owns the prs-tab import and builds the reload command, so
+		// prform no longer imports the prs tab.
+		prCreatedExisting := 0
+		if m.appState.Repository != nil {
+			prCreatedExisting = len(m.appState.Repository.PRs)
+		}
+		return m, prformtab.HandlePRCreatedMsg(prformtab.PRCreatedInput{PRCreatedMsg: msg, DemoMode: m.appState.DemoMode}, &m.appState,
+			prstab.LoadPRsCmd(m.appState.GitHubService, m.appState.GithubInfo, m.appState.DemoMode, prCreatedExisting))
 	case ticketformtab.TicketCreatedMsg:
 		m.clearAIGenOverlay()
 		m.ticketFormModal.Hide()
@@ -565,17 +572,54 @@ func (m *Model) dispatchAsyncMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, ticketstab.LoadTicketsCmd(m.appState.TicketService, m.appState.DemoMode)
 	case prstab.BranchPushedMsg:
-		return m, branchestab.HandleBranchPushedMsg(msg, &m.appState)
+		// P2.5: cross-tab orchestration (reload repo + PRs) lives here in the root
+		// instead of the branches tab, so branches no longer imports prs.
+		m.appState.Loading = false
+		m.appState.StatusMessage = fmt.Sprintf("Pushed %s to remote", msg.Branch)
+		existing := 0
+		if m.appState.Repository != nil {
+			existing = len(m.appState.Repository.PRs)
+		}
+		return m, tea.Batch(
+			data.LoadRepository(m.appState.JJService),
+			prstab.LoadPRsCmd(m.appState.GitHubService, m.appState.GithubInfo, m.appState.DemoMode, existing),
+		)
 	case bookmarktab.BookmarkCreatedMsg:
 		m.clearAIGenOverlay()
 		m.bookmarkModal.Hide()
 		m.clearModalUnderlay()
 		m.appState.Loading = false
-		return m, bookmarktab.HandleBookmarkCreatedMsg(msg, &m.appState)
+		// P2.5: the root owns the tickets-tab import and builds the optional
+		// ticket-transition command, so the bookmark tab no longer imports tickets.
+		var transitionCmd tea.Cmd
+		if msg.TicketKey != "" && m.appState.TicketService != nil && m.appState.Config != nil && m.appState.Config.AutoInProgressOnBranch() {
+			transitionCmd = ticketstab.TransitionTicketToInProgressCmd(m.appState.TicketService, msg.TicketKey)
+		}
+		return m, bookmarktab.HandleBookmarkCreatedMsg(msg, &m.appState, transitionCmd)
 	case bookmarktab.BookmarkDeletedMsg:
-		return m, branchestab.HandleBookmarkDeletedMsg(msg, &m.appState)
+		// P2.5: cross-tab orchestration (reload repo + PRs) lives here in the root
+		// instead of the branches tab, so branches no longer imports bookmark.
+		m.appState.ViewMode = state.ViewCommitGraph
+		m.appState.StatusMessage = fmt.Sprintf("Bookmark '%s' deleted", msg.BookmarkName)
+		existing := 0
+		if m.appState.Repository != nil {
+			existing = len(m.appState.Repository.PRs)
+		}
+		return m, tea.Batch(
+			data.LoadRepository(m.appState.JJService),
+			prstab.LoadPRsCmd(m.appState.GitHubService, m.appState.GithubInfo, m.appState.DemoMode, existing),
+		)
 	case branchestab.BookmarkConflictInfoMsg:
-		cmd, info := conflicttab.HandleBookmarkConflictInfoMsg(msg, &m.appState)
+		cmd, info := conflicttab.HandleBookmarkConflictInfoMsg(conflicttab.ConflictInfoInput{
+			BookmarkName:  msg.BookmarkName,
+			LocalID:       msg.LocalID,
+			RemoteID:      msg.RemoteID,
+			LocalSummary:  msg.LocalSummary,
+			RemoteSummary: msg.RemoteSummary,
+			LocalWhen:     msg.LocalWhen,
+			RemoteWhen:    msg.RemoteWhen,
+			Err:           msg.Err,
+		}, &m.appState)
 		if msg.Err != nil {
 			m.applyEffects(effShowError{msg.Err})
 		} else {
@@ -600,7 +644,7 @@ func (m *Model) dispatchAsyncMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Err != nil {
 			m.applyEffects(effShowError{msg.Err})
 		}
-		return m, conflicttab.HandleBookmarkConflictResolvedMsg(msg, &m.appState, m.settingsTabModel.GetSettingsBranchLimit())
+		return m, conflicttab.HandleBookmarkConflictResolvedMsg(msg, &m.appState, branchestab.LoadBranchesCmd(m.appState.JJService, m.settingsTabModel.GetSettingsBranchLimit()))
 	case workspacestab.WorkspacesLoadedMsg:
 		m.appState.Loading = false
 		if msg.Err != nil {
@@ -640,7 +684,7 @@ func (m *Model) dispatchAsyncMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.appState.StatusMessage = "Review absorb preview: y confirm · n or Esc cancel"
 		return m, nil
 	case graphtab.DivergentCommitInfoMsg:
-		cmd, info := divergenttab.HandleDivergentCommitInfoMsg(msg, &m.appState)
+		cmd, info := divergenttab.HandleDivergentCommitInfoMsg(divergenttab.DivergentCommitInfoInput{ChangeID: msg.ChangeID, Versions: msg.Versions, Err: msg.Err}, &m.appState)
 		if info != nil {
 			m.divergentModal = m.divergentModal.SetDimensions(m.width, m.height)
 			m.divergentModal.Show(info.ChangeID, info.Versions)

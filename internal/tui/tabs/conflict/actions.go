@@ -8,7 +8,6 @@ import (
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tui/data"
 	"github.com/madicen/jj-tui/internal/tui/state"
-	"github.com/madicen/jj-tui/internal/tui/tabs/branches"
 )
 
 // ResolveBookmarkConflictCmd runs jj resolve for the bookmark and sends BookmarkConflictResolvedMsg.
@@ -43,28 +42,43 @@ type ShowConflictInfo struct {
 	RemoteWhen    string
 }
 
+// ConflictInfoInput carries the loaded diverged-bookmark info from main (P2.5):
+// the branches tab's BookmarkConflictInfoMsg is destructured by the root so this
+// package no longer imports the branches tab for the message type.
+type ConflictInfoInput struct {
+	BookmarkName  string
+	LocalID       string
+	RemoteID      string
+	LocalSummary  string
+	RemoteSummary string
+	LocalWhen     string
+	RemoteWhen    string
+	Err           error
+}
+
 // HandleBookmarkConflictInfoMsg mutates app when err; otherwise returns info for main to show the modal.
-func HandleBookmarkConflictInfoMsg(msg branches.BookmarkConflictInfoMsg, app *state.AppState) (tea.Cmd, *ShowConflictInfo) {
-	if msg.Err != nil {
-		app.StatusMessage = fmt.Sprintf("Error loading conflict info: %v", msg.Err)
+func HandleBookmarkConflictInfoMsg(in ConflictInfoInput, app *state.AppState) (tea.Cmd, *ShowConflictInfo) {
+	if in.Err != nil {
+		app.StatusMessage = fmt.Sprintf("Error loading conflict info: %v", in.Err)
 		app.ViewMode = state.ViewBranches
 		return nil, nil
 	}
 	return nil, &ShowConflictInfo{
-		BookmarkName:  msg.BookmarkName,
-		LocalID:       msg.LocalID,
-		RemoteID:      msg.RemoteID,
-		LocalSummary:  msg.LocalSummary,
-		RemoteSummary: msg.RemoteSummary,
-		LocalWhen:     msg.LocalWhen,
-		RemoteWhen:    msg.RemoteWhen,
+		BookmarkName:  in.BookmarkName,
+		LocalID:       in.LocalID,
+		RemoteID:      in.RemoteID,
+		LocalSummary:  in.LocalSummary,
+		RemoteSummary: in.RemoteSummary,
+		LocalWhen:     in.LocalWhen,
+		RemoteWhen:    in.RemoteWhen,
 	}
 }
 
 // HandleBookmarkConflictResolvedMsg mutates app StatusMessage and returns the Cmd to run.
 // Main sets ViewMode to the tab the user was on when opening the dialog.
-// branchLimit is used for LoadBranchesCmd (e.g. from settings).
-func HandleBookmarkConflictResolvedMsg(msg BookmarkConflictResolvedMsg, app *state.AppState, branchLimit int) tea.Cmd {
+// reloadBranches is the branches-list reload command main supplies (P2.5: this
+// package no longer imports the branches tab to build it).
+func HandleBookmarkConflictResolvedMsg(msg BookmarkConflictResolvedMsg, app *state.AppState, reloadBranches tea.Cmd) tea.Cmd {
 	if msg.Err != nil {
 		app.StatusMessage = fmt.Sprintf("Error resolving conflict: %v", msg.Err)
 		return nil
@@ -77,6 +91,6 @@ func HandleBookmarkConflictResolvedMsg(msg BookmarkConflictResolvedMsg, app *sta
 	// Sequence so graph reload applies before branch list (trunk view uses branchList, not repo alone).
 	return tea.Sequence(
 		data.LoadRepository(app.JJService),
-		branches.LoadBranchesCmd(app.JJService, branchLimit),
+		reloadBranches,
 	)
 }

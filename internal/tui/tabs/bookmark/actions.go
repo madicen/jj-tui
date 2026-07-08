@@ -12,7 +12,6 @@ import (
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tui/data"
 	"github.com/madicen/jj-tui/internal/tui/state"
-	"github.com/madicen/jj-tui/internal/tui/tabs/tickets"
 	"github.com/madicen/jj-tui/internal/tui/util"
 )
 
@@ -331,50 +330,28 @@ func DeleteBookmarkCmd(svc *jj.Service, bookmarkName string) tea.Cmd {
 	}
 }
 
-// FindBookmarkForCommit finds a bookmark from ancestors using BFS.
+// FindBookmarkForCommit finds a bookmark from ancestors using BFS. The
+// implementation now lives in util (P2.5) so sibling tabs can share it without
+// importing this package; this thin wrapper preserves the existing call sites.
 func FindBookmarkForCommit(repo *internal.Repository, commitIdx int) string {
-	if repo == nil || commitIdx < 0 || commitIdx >= len(repo.Graph.Commits) {
-		return ""
-	}
-	commitIDToIndex := make(map[string]int)
-	for i, commit := range repo.Graph.Commits {
-		commitIDToIndex[commit.ID] = i
-		commitIDToIndex[commit.ChangeID] = i
-	}
-	visited := make(map[int]bool)
-	queue := []int{commitIdx}
-	for len(queue) > 0 {
-		idx := queue[0]
-		queue = queue[1:]
-		if visited[idx] {
-			continue
-		}
-		visited[idx] = true
-		commit := repo.Graph.Commits[idx]
-		if len(commit.Branches) > 0 {
-			return util.FirstOperableBookmarkName(commit.Branches)
-		}
-		for _, parentID := range commit.Parents {
-			if parentIdx, ok := commitIDToIndex[parentID]; ok {
-				queue = append(queue, parentIdx)
-			}
-		}
-	}
-	return ""
+	return util.FindBookmarkForCommit(repo, commitIdx)
 }
 
 // HandleBookmarkCreatedMsg mutates app (ViewMode, StatusMessage) and returns the Cmd to run.
-func HandleBookmarkCreatedMsg(msg BookmarkCreatedMsg, app *state.AppState) tea.Cmd {
+// transitionCmd is the optional ticket-transition command main supplies when the
+// created bookmark should move its ticket to in-progress (P2.5: this package no
+// longer imports the tickets tab to build that command).
+func HandleBookmarkCreatedMsg(msg BookmarkCreatedMsg, app *state.AppState, transitionCmd tea.Cmd) tea.Cmd {
 	app.ViewMode = state.ViewCommitGraph
 	statusMsg := fmt.Sprintf("Bookmark '%s' created", msg.BookmarkName)
 	if msg.WasMoved {
 		statusMsg = fmt.Sprintf("Bookmark '%s' moved", msg.BookmarkName)
 	}
 	app.StatusMessage = statusMsg
-	if msg.TicketKey != "" && app.TicketService != nil && app.Config != nil && app.Config.AutoInProgressOnBranch() {
+	if transitionCmd != nil {
 		return tea.Batch(
 			data.LoadRepository(app.JJService),
-			tickets.TransitionTicketToInProgressCmd(app.TicketService, msg.TicketKey),
+			transitionCmd,
 		)
 	}
 	return data.LoadRepository(app.JJService)
