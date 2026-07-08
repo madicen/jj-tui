@@ -61,6 +61,11 @@ const (
 	// flow so users can retry pushes after configuration changes without re-creating the
 	// GitHub repo.
 	NavigatePushBookmarks
+	// Workspaces (view-only MVP): AddWorkspace / ForgetWorkspace run the jj command
+	// and reload the list; CloseWorkspaces dismisses the modal.
+	NavigateAddWorkspace
+	NavigateForgetWorkspace
+	NavigateCloseWorkspaces
 )
 
 // NavigateTarget describes a navigation request. Only main can perform these
@@ -140,6 +145,9 @@ type NavigateTarget struct {
 	FileDiffRawGit          string
 	FileDiffOverlayTitle    string // e.g. "Evolog step"; empty => default "File diff"
 	FileDiffOverlaySubtitle string // e.g. "abc… → def…"; empty => path @ change id
+	// Workspaces payload: WorkspacePath for NavigateAddWorkspace, WorkspaceName for NavigateForgetWorkspace.
+	WorkspacePath string
+	WorkspaceName string
 }
 
 // NavigateMsg is the only callback from submodels to main: they request a view change or

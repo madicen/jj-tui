@@ -27,6 +27,7 @@ import (
 	ticketformtab "github.com/madicen/jj-tui/internal/tui/tabs/ticketform"
 	ticketstab "github.com/madicen/jj-tui/internal/tui/tabs/tickets"
 	warningtab "github.com/madicen/jj-tui/internal/tui/tabs/warning"
+	workspacestab "github.com/madicen/jj-tui/internal/tui/tabs/workspaces"
 )
 
 // New creates a new Model
@@ -66,6 +67,7 @@ func New(ctx context.Context) *Model {
 		ticketFormModal:  ticketformtab.NewModel(zm),
 		desceditModal:    descedittab.NewModel(zm),
 		githubLoginModel: githublogintab.NewModel(zm),
+		workspacesModal:  workspacestab.NewModel(),
 	}
 	m.errorModal.SetZoneManager(zm)
 	m.initRepoModel.SetZoneManager(zm)

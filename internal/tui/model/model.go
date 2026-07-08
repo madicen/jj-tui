@@ -40,6 +40,7 @@ import (
 	ticketformtab "github.com/madicen/jj-tui/internal/tui/tabs/ticketform"
 	ticketstab "github.com/madicen/jj-tui/internal/tui/tabs/tickets"
 	warningtab "github.com/madicen/jj-tui/internal/tui/tabs/warning"
+	workspacestab "github.com/madicen/jj-tui/internal/tui/tabs/workspaces"
 	"github.com/madicen/jj-tui/internal/tui/util"
 )
 
@@ -94,6 +95,7 @@ type Model struct {
 	warningModal     warningtab.Model
 	conflictModal    conflicttab.Model
 	divergentModal   divergenttab.Model
+	workspacesModal  workspacestab.Model
 	evologSplitModal evologsplittab.Model
 	// evologPostSplitDescribe is set when the user confirms split with “AI describe after split”; cleared after describe runs or on graph return.
 	evologPostSplitDescribe bool
@@ -569,6 +571,15 @@ func (m *Model) handleNavigateToHelpTab() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m *Model) handleNavigateToWorkspaces() (tea.Model, tea.Cmd) {
+	if m.appState.JJService == nil {
+		return m, nil
+	}
+	m.appState.Loading = true
+	m.appState.StatusMessage = "Loading workspaces…"
+	return m, workspacestab.LoadWorkspacesCmd(m.appState.JJService)
+}
+
 func (m *Model) handleNavigateToBranchesTab() (tea.Model, tea.Cmd) {
 	m.appState.ViewMode = state.ViewBranches
 	status, cmd := branchestab.EnterTab(m)
@@ -789,6 +800,21 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 	case state.NavigateResolveDivergent:
 		m.appState.StatusMessage = "Resolving divergent commit..."
 		return m, divergenttab.ResolveDivergentCommitCmd(m.appState.JJService, t.DivergentChangeID, t.DivergentKeepCommitID)
+	case state.NavigateAddWorkspace:
+		m.appState.Loading = true
+		m.appState.StatusMessage = "Adding workspace…"
+		return m, workspacestab.AddWorkspaceCmd(m.appState.JJService, t.WorkspacePath)
+	case state.NavigateForgetWorkspace:
+		m.appState.Loading = true
+		m.appState.StatusMessage = "Forgetting workspace…"
+		return m, workspacestab.ForgetWorkspaceCmd(m.appState.JJService, t.WorkspaceName)
+	case state.NavigateCloseWorkspaces:
+		m.workspacesModal.Hide()
+		m.appState.ViewMode = state.ViewCommitGraph
+		if t.StatusMessage != "" {
+			m.appState.StatusMessage = t.StatusMessage
+		}
+		return m, nil
 	case state.NavigateWarningCancel:
 		if t.StatusMessage != "" {
 			m.appState.StatusMessage = t.StatusMessage
@@ -1248,6 +1274,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.fileDiffModal = m.fileDiffModal.SetDimensions(m.width, m.height)
 		m.divergentModal = m.divergentModal.SetDimensions(m.width, m.height)
 		m.conflictModal = m.conflictModal.SetDimensions(m.width, m.height)
+		m.workspacesModal = m.workspacesModal.SetDimensions(m.width, m.height)
 		if len(cmds) > 0 {
 			return m, tea.Batch(cmds...)
 		}
@@ -1315,7 +1342,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleKeyMsg(msg)
 		}
 		// View-specific modals (divergent, bookmark conflict): route keys to handleKeyMsg so the modal gets them.
-		if m.appState.ViewMode == state.ViewDivergentCommit || m.appState.ViewMode == state.ViewBookmarkConflict || m.appState.ViewMode == state.ViewEvologSplit || m.appState.ViewMode == state.ViewFileDiff {
+		if m.appState.ViewMode == state.ViewDivergentCommit || m.appState.ViewMode == state.ViewBookmarkConflict || m.appState.ViewMode == state.ViewEvologSplit || m.appState.ViewMode == state.ViewFileDiff || m.appState.ViewMode == state.ViewWorkspaces {
 			return m.handleKeyMsg(msg)
 		}
 		// Esc in Settings: close in-tab overlays (theme picker, cleanup confirm) first; otherwise leave settings.
@@ -2208,6 +2235,33 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.errorModal.SetError(msg.Err, false, "")
 		}
 		return m, conflicttab.HandleBookmarkConflictResolvedMsg(msg, &m.appState, m.settingsTabModel.GetSettingsBranchLimit())
+	case workspacestab.WorkspacesLoadedMsg:
+		m.appState.Loading = false
+		if msg.Err != nil {
+			m.errorModal.SetError(msg.Err, false, "")
+			return m, nil
+		}
+		if m.appState.ViewMode == state.ViewWorkspaces && m.workspacesModal.IsShown() {
+			// Refresh in place (e.g. after add/forget) without re-opening.
+			m.workspacesModal.SetWorkspaces(msg.Workspaces)
+		} else {
+			m.workspacesModal = m.workspacesModal.SetDimensions(m.width, m.height)
+			m.workspacesModal.Show(msg.Workspaces)
+			m.appState.ViewMode = state.ViewWorkspaces
+		}
+		m.appState.StatusMessage = "Workspaces"
+		return m, nil
+	case workspacestab.WorkspaceChangedMsg:
+		m.appState.Loading = false
+		if msg.Err != nil {
+			m.errorModal.SetError(msg.Err, false, "")
+			return m, nil
+		}
+		if msg.StatusMessage != "" {
+			m.appState.StatusMessage = msg.StatusMessage
+		}
+		// Reload the list so the modal reflects the change.
+		return m, workspacestab.LoadWorkspacesCmd(m.appState.JJService)
 	case graphtab.AbsorbPreviewReadyMsg:
 		m.appState.Loading = false
 		if msg.Err != nil {

@@ -19,6 +19,7 @@ const (
 	ViewDivergentCommit  // Divergent commit resolution dialog
 	ViewEvologSplit      // Experimental evolog-driven stack split (FAQ-style)
 	ViewFileDiff         // Full-file diff for selected changed file (graph overlay)
+	ViewWorkspaces       // Workspaces list (view-only MVP: list + add/forget)
 )
 
 func (v ViewMode) String() string {
@@ -53,6 +54,8 @@ func (v ViewMode) String() string {
 		return "evolog_split"
 	case ViewFileDiff:
 		return "file_diff"
+	case ViewWorkspaces:
+		return "workspaces"
 	default:
 		return "unknown"
 	}

@@ -70,6 +70,9 @@ func (m *Model) chromedSlot() (key, content, title string, closeCmd tea.Cmd) {
 		// synthesise it for chrome [x].
 		return "divergent", m.divergentModal.View(), "Divergent commit",
 			func() tea.Msg { return tea.KeyMsg{Type: tea.KeyEsc} }
+	case state.ViewWorkspaces:
+		return "workspaces", m.workspacesModal.View(), "Workspaces",
+			state.NavigateTarget{Kind: state.NavigateCloseWorkspaces, StatusMessage: "Closed workspaces"}.Cmd()
 	case state.ViewEvologSplit:
 		return "evolog", m.evologSplitModal.View(), "Evolog split",
 			state.NavigateTarget{Kind: state.NavigateBackToGraph, StatusMessage: "Evolog split cancelled"}.Cmd()
@@ -109,7 +112,7 @@ func (m *Model) layoutContentMode() state.ViewMode {
 			}
 		}
 		return state.ViewCommitGraph
-	case state.ViewDivergentCommit, state.ViewEvologSplit, state.ViewFileDiff:
+	case state.ViewDivergentCommit, state.ViewEvologSplit, state.ViewFileDiff, state.ViewWorkspaces:
 		return state.ViewCommitGraph
 	default:
 		return m.appState.ViewMode
@@ -131,7 +134,7 @@ func (m *Model) tabHighlightMode() state.ViewMode {
 		if m.bookmarkConflictReturnValid {
 			return m.bookmarkConflictReturnView
 		}
-	case state.ViewDivergentCommit, state.ViewEvologSplit, state.ViewFileDiff:
+	case state.ViewDivergentCommit, state.ViewEvologSplit, state.ViewFileDiff, state.ViewWorkspaces:
 		return state.ViewCommitGraph
 	}
 	return vm

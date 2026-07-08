@@ -62,6 +62,10 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		updated, cmd := m.divergentModal.Update(msg)
 		m.divergentModal = updated
 		return m, cmd
+	case state.ViewWorkspaces:
+		updated, cmd := m.workspacesModal.Update(msg)
+		m.workspacesModal = updated
+		return m, cmd
 	case state.ViewEvologSplit:
 		updated, cmd := m.evologSplitModal.Update(msg)
 		m.evologSplitModal = updated
@@ -93,6 +97,8 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleNavigateToSettingsTab()
 	case "h", "?":
 		return m.handleNavigateToHelpTab()
+	case "w":
+		return m.handleNavigateToWorkspaces()
 	case "ctrl+r":
 		return m, m.refreshRepository()
 	case "ctrl+z":
