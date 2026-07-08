@@ -151,13 +151,13 @@ func (m *Model) refreshRepository() tea.Cmd {
 
 // createIsZoneClickedFuncWithEvent returns a function that checks if the given zone ID contains the mouse event.
 func (m *Model) processGraphRequest(r graphtab.Request) (tea.Model, tea.Cmd) {
-	if r.Checkout || r.Squash || r.Abandon || r.BatchAbandon || r.NewCommit || r.PerformRebase || r.DragRebase || r.ResolveDivergent != nil || r.CreateBookmark || r.DeleteBookmark || r.CreatePR || r.UpdatePR || r.MoveFileUp || r.MoveFileDown || r.RevertFile || r.MoveDeltaOntoOrigin || r.StartEvologSplit || r.ResolveBookmarkConflict || r.Duplicate || r.Backout {
+	if r.Checkout || r.Squash || r.Abandon || r.BatchAbandon || r.NewCommit || r.PerformRebase || r.DragRebase || r.ResolveDivergent != nil || r.CreateBookmark || r.DeleteBookmark || r.CreatePR || r.UpdatePR || r.MoveFileUp || r.MoveFileDown || r.RevertFile || r.ResolveFileConflict || r.MoveDeltaOntoOrigin || r.StartEvologSplit || r.ResolveBookmarkConflict || r.Duplicate || r.Backout {
 		m.redoOperationID = ""
 	}
 	// P5.4: graph actions that mutate the repo (and thus create a jj operation)
 	// should surface the undo hint once the reload completes. Exclude PR ops
 	// (CreatePR/UpdatePR are GitHub API calls, not jj operations).
-	if r.Checkout || r.Squash || r.Abandon || r.BatchAbandon || r.NewCommit || r.PerformRebase || r.DragRebase || r.ResolveDivergent != nil || r.CreateBookmark || r.DeleteBookmark || r.MoveFileUp || r.MoveFileDown || r.RevertFile || r.MoveDeltaOntoOrigin || r.StartEvologSplit || r.ResolveBookmarkConflict || r.Duplicate || r.Backout {
+	if r.Checkout || r.Squash || r.Abandon || r.BatchAbandon || r.NewCommit || r.PerformRebase || r.DragRebase || r.ResolveDivergent != nil || r.CreateBookmark || r.DeleteBookmark || r.MoveFileUp || r.MoveFileDown || r.RevertFile || r.ResolveFileConflict || r.MoveDeltaOntoOrigin || r.StartEvologSplit || r.ResolveBookmarkConflict || r.Duplicate || r.Backout {
 		m.pendingUndoHint = true
 	}
 	ctx := graphtab.BuildRequestContextFrom(m)

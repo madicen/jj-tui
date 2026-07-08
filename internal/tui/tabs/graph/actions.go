@@ -212,6 +212,27 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 			FileDiffPath: ctx.ChangedFiles[ctx.SelectedFile].Path,
 		}
 	}
+	if r.ResolveFileConflict {
+		if ctx.GraphFocused {
+			return Result{Status: "Press Tab to focus files, select a conflicted file, then press ="}
+		}
+		if len(ctx.ChangedFiles) == 0 || ctx.SelectedFile < 0 || ctx.SelectedFile >= len(ctx.ChangedFiles) {
+			return Result{Status: "Select a conflicted file in the changed-files list"}
+		}
+		f := ctx.ChangedFiles[ctx.SelectedFile]
+		if !f.Conflicted {
+			return Result{Status: "Selected file has no unresolved conflict"}
+		}
+		if !ctx.IsSelectedCommitValid() {
+			return Result{Status: "No commit selected"}
+		}
+		commit := ctx.Repository.Graph.Commits[ctx.SelectedCommit]
+		return Result{
+			Cmd:           ResolveFileConflictCmd(ctx.JJService, commit.ChangeID, f.Path, ""),
+			SuccessStatus: fmt.Sprintf("Resolving %s…", f.Path),
+			Loading:       true,
+		}
+	}
 	if r.OpenInExternalEditor {
 		if ctx.GraphFocused {
 			return Result{Status: "Press Tab to focus files, select a file, then press O"}

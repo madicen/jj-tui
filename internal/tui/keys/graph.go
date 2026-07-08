@@ -26,7 +26,8 @@ type GraphKeyMap struct {
 	UpdatePR        key.Binding
 	CreatePR        key.Binding
 	ResolveConflict key.Binding
-	MoveDelta       key.Binding
+	ResolveFile      key.Binding
+	MoveDelta          key.Binding
 	EvologSplit     key.Binding
 	MoveFileUp      key.Binding
 	MoveFileDown    key.Binding
@@ -60,6 +61,7 @@ func DefaultGraphKeyMap(overrides map[string]string) GraphKeyMap {
 		UpdatePR:        bind(overrides, "graph.update_pr", "u", "Update existing PR with new commits", "u"),
 		CreatePR:        bind(overrides, "graph.create_pr", "c", "Create new PR from commit chain", "c"),
 		ResolveConflict: bind(overrides, "graph.resolve_conflict", "C", "Resolve diverged bookmark (when shown): graph pane focused; same flow as Branches (c)", "C"),
+		ResolveFile:     bind(overrides, "graph.resolve_file", "=", "Resolve conflicted file with merge tool (files pane)", "="),
 		MoveDelta:       bind(overrides, "graph.move_delta", "f", "Forgot new commit? Stack on bookmark@origin (avoid force-push)", "f"),
 		EvologSplit:     bind(overrides, "graph.evolog_split", "z", "split (experimental, when shown): jj evolog parent + step file list; o patch; p plan overlay (Enter runs split from overlay); s / ✧^g AI suggest; Graph (g) vs preview after split; FAQ bases on evolog row you pick, not main unless you choose that row; if AI says no split, Enter twice (or j/k); d optional AI describe; moves change (and feature bookmark if present)", "z"),
 		MoveFileUp:      bind(overrides, "graph.move_file_up", "[", "Move selected file up", "["),
@@ -94,6 +96,7 @@ func (k GraphKeyMap) entries() []entry {
 		{"graph.update_pr", k.UpdatePR},
 		{"graph.create_pr", k.CreatePR},
 		{"graph.resolve_conflict", k.ResolveConflict},
+		{"graph.resolve_file", k.ResolveFile},
 		{"graph.move_delta", k.MoveDelta},
 		{"graph.evolog_split", k.EvologSplit},
 		{"graph.move_file_up", k.MoveFileUp},

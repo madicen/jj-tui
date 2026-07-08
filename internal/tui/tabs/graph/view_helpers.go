@@ -512,6 +512,9 @@ func (m *GraphModel) renderTreeNodeWithLineIndex(node *fileTreeNode, indent stri
 			if node.fileIndex >= 0 && node.fileIndex < len(data.ChangedFiles) {
 				cf := data.ChangedFiles[node.fileIndex]
 				statSuffix = styles.DiffStatsSuffix(cf.LinesAdded, cf.LinesRemoved, cf.StatsOK)
+				if cf.Conflicted {
+					statSuffix += lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555")).Render(" ⚠conflict")
+				}
 			}
 			var fileLine string
 			if isSelected {

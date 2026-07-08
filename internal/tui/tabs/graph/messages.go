@@ -127,6 +127,23 @@ func LoadChangedFilesCmd(svc *jj.Service, commitID string) tea.Cmd {
 	}
 }
 
+// ResolveFileConflictCmd runs `jj resolve` for one conflicted file and reloads changed files.
+func ResolveFileConflictCmd(svc *jj.Service, commitID, path, tool string) tea.Cmd {
+	if svc == nil || commitID == "" || strings.TrimSpace(path) == "" {
+		return nil
+	}
+	return func() tea.Msg {
+		if err := svc.ResolveFileWithTool(context.Background(), commitID, path, tool); err != nil {
+			return util.ErrorMsg{Err: fmt.Errorf("failed to resolve %s: %w", path, err)}
+		}
+		files, err := svc.GetChangedFiles(context.Background(), commitID)
+		if err != nil {
+			return ChangedFilesLoadedMsg{Files: nil, CommitID: commitID}
+		}
+		return ChangedFilesLoadedMsg{Files: files, CommitID: commitID}
+	}
+}
+
 // LoadDivergentCommitInfoCmd returns a command that loads divergent commit info and sends DivergentCommitInfoMsg.
 func LoadDivergentCommitInfoCmd(svc *jj.Service, changeID string) tea.Cmd {
 	if svc == nil || changeID == "" {
@@ -217,6 +234,8 @@ type Request struct {
 	StartDuplicateOnto bool
 	// Backout: apply the reverse of the selected revision on top of the working copy (jj backout/revert).
 	Backout bool
+	// ResolveFileConflict: run jj resolve on the selected conflicted changed file.
+	ResolveFileConflict bool
 }
 
 // Cmd returns a tea.Cmd that sends this request to the program.

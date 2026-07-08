@@ -219,6 +219,13 @@ func (m GraphModel) handleKeyMsg(msg tea.KeyMsg) (GraphModel, *Request, tea.Cmd)
 		if !m.graphFocused {
 			return m, &Request{ViewFileDiff: true}, nil
 		}
+	case key.Matches(msg, m.keys.ResolveFile):
+		if !m.graphFocused && len(m.changedFiles) > 0 && m.selectedFile >= 0 && m.selectedFile < len(m.changedFiles) {
+			if m.changedFiles[m.selectedFile].Conflicted {
+				return m, &Request{ResolveFileConflict: true}, nil
+			}
+			return m, nil, nil
+		}
 	case key.Matches(msg, m.keys.Annotate):
 		if !m.graphFocused {
 			return m, &Request{Annotate: true}, nil

@@ -118,6 +118,7 @@ type ChangedFile struct {
 	LinesAdded   int
 	LinesRemoved int
 	StatsOK      bool
+	Conflicted   bool
 }
 
 // GraphData contains data needed for commit graph rendering
@@ -738,6 +739,7 @@ func (m *GraphModel) buildGraphData() GraphData {
 			LinesAdded:   f.LinesAdded,
 			LinesRemoved: f.LinesRemoved,
 			StatsOK:      f.StatsOK,
+			Conflicted:   f.Conflicted,
 		})
 	}
 
