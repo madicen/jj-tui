@@ -68,21 +68,30 @@ jj-tui/
 │   ├── setup-evolog-split-vhs-repo.sh
 │   ├── setup-divergent-vhs-repo.sh
 │   ├── setup-bookmark-conflict-vhs-repo.sh
+│   ├── setup-op-log-vhs-repo.sh
+│   ├── setup-revset-filter-vhs-repo.sh
+│   ├── setup-multiselect-vhs-repo.sh
 │   ├── after-origin-vhs-append-and-tui.sh
 │   ├── demo-repo/             # Created by setup-demo-repo.sh
 │   ├── after-origin-vhs-repo/ # Created by setup-after-origin-vhs-repo.sh (after-origin GIF)
 │   ├── evolog-split-vhs-repo/ # Created by setup-evolog-split-vhs-repo.sh (evolog-split GIF)
 │   ├── divergent-vhs-repo/    # Created by setup-divergent-vhs-repo.sh (divergent GIF)
-│   └── bookmark-conflict-vhs-repo/ # setup-bookmark-conflict-vhs-repo.sh (bookmark-conflict GIF)
+│   ├── bookmark-conflict-vhs-repo/ # setup-bookmark-conflict-vhs-repo.sh (bookmark-conflict GIF)
+│   ├── op-log-vhs-repo/       # setup-op-log-vhs-repo.sh (op-log GIF)
+│   ├── revset-filter-vhs-repo/ # setup-revset-filter-vhs-repo.sh (revset-filter GIF)
+│   └── multiselect-vhs-repo/  # setup-multiselect-vhs-repo.sh (multiselect GIF)
 ├── vhs/                       # VHS tapes for screenshot generation
 │   ├── all.tape               # Main demo GIF
 │   ├── after-origin.tape      # Forgot New Commit? (f) workflow GIF
 │   ├── evolog-split.tape      # Evolog split (z) workflow GIF
 │   ├── divergent.tape         # Resolve divergent change (d) GIF
 │   ├── bookmark-conflict.tape # Diverged bookmark resolver (Branches c) GIF
+│   ├── op-log.tape            # Operation log browser (Ctrl+o) GIF
+│   ├── revset-filter.tape     # Revset search/filter (/) GIF
+│   ├── multiselect.tape       # Multi-select batch abandon GIF
 │   ├── graph.tape
 │   └── ...
-├── screenshots/               # Generated (demo.gif, after-origin.gif, evolog-split.gif, divergent.gif, bookmark-conflict.gif, *.png)
+├── screenshots/               # Generated (demo.gif, after-origin.gif, evolog-split.gif, divergent.gif, bookmark-conflict.gif, op-log.gif, revset-filter.gif, multiselect.gif, *.png)
 └── README.md
 ```
 
@@ -158,27 +167,24 @@ New VHS fixture repos should follow the pattern in existing `fixtures/setup-*-vh
 
 Screenshots are generated using [VHS](https://github.com/charmbracelet/vhs) with mock data for consistent, reproducible images.
 
-**Automatic (CI)**: The [Generate Screenshots](../.github/workflows/screenshots.yml) workflow produces `demo.gif` (`all.tape`), `after-origin.gif`, `evolog-split.gif`, `divergent.gif`, `bookmark-conflict.gif`, and the PNG captures; it runs after releases (via release workflows) and can be triggered manually. Results are committed to `screenshots/` on `main` when they change.
+**Automatic (CI)**: The [Generate Screenshots](../.github/workflows/screenshots.yml) workflow produces `demo.gif` (`all.tape`), `after-origin.gif`, `evolog-split.gif`, `divergent.gif`, `bookmark-conflict.gif`, `op-log.gif`, `revset-filter.gif`, `multiselect.gif`, and the PNG captures; it runs after releases (via release workflows) and can be triggered manually. Results are committed to `screenshots/` on `main` when they change.
 
 **Manual (Local)**:
 ```bash
-# Generate PNG captures + after-origin.gif + evolog-split.gif + divergent.gif + bookmark-conflict.gif (demo GIF is separate; see make demo-gif)
+# Generate PNG captures + workflow GIFs (demo GIF is separate; see make demo-gif)
 make screenshots
 
 # Generate demo GIF
 make demo-gif
 
-# Regenerate only the after-origin GIF (also included in `make screenshots`)
+# Regenerate individual workflow GIFs (also included in `make screenshots`)
 make after-origin-gif
-
-# Regenerate only the evolog-split GIF (also included in `make screenshots`)
 make evolog-split-gif
-
-# Regenerate only the divergent GIF (also included in `make screenshots`)
 make divergent-gif
-
-# Regenerate only the diverged-bookmark GIF (also included in `make screenshots`)
 make bookmark-conflict-gif
+make op-log-gif
+make revset-filter-gif
+make multiselect-gif
 
 # Or run individual tapes (PNG/GIF outputs live under screenshots/)
 vhs vhs/graph.tape
@@ -186,6 +192,9 @@ vhs vhs/command_history.tape
 vhs vhs/after-origin.tape
 vhs vhs/evolog-split.tape
 vhs vhs/divergent.tape
+vhs vhs/op-log.tape
+vhs vhs/revset-filter.tape
+vhs vhs/multiselect.tape
 ```
 
 This creates a demo jj repository and runs the app in `--demo` mode, which uses mock ticket and PR data.
