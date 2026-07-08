@@ -62,6 +62,13 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 		cmd, status := executeAbandon(ctx)
 		return Result{Cmd: cmd, Status: status, SuccessStatus: "Abandoning commit…", Loading: true}
 	}
+	if r.BatchAbandon {
+		cmd, status := executeBatchAbandon(ctx)
+		if status != "" && cmd == nil {
+			return Result{Status: status}
+		}
+		return Result{Cmd: cmd, Status: status, SuccessStatus: "Abandoning selected commits…", Loading: true}
+	}
 	if r.StartAbsorb {
 		return Result{Cmd: AbsorbDryRunCmd(ctx.JJService), SuccessStatus: "Previewing absorb…", Loading: true}
 	}
@@ -306,6 +313,12 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 		}
 		return Result{FollowUp: FollowUpStartRebaseMode}
 	}
+	if r.StartBatchRebaseMode {
+		if len(ctx.MultiSelectChangeIDs) == 0 {
+			return Result{Status: "Select commits with Space first"}
+		}
+		return Result{FollowUp: FollowUpStartBatchRebaseMode}
+	}
 	if r.StartMergeMode {
 		if !ctx.IsSelectedCommitValid() {
 			return Result{}
@@ -416,6 +429,16 @@ func executeAbandon(ctx *RequestContext) (tea.Cmd, string) {
 	return Abandon(ctx.JJService, commit.ChangeID), ""
 }
 
+func executeBatchAbandon(ctx *RequestContext) (tea.Cmd, string) {
+	if len(ctx.MultiSelectChangeIDs) == 0 {
+		return nil, "Nothing selected to abandon"
+	}
+	if ctx.JJService == nil {
+		return nil, "Cannot abandon: not in a jj repository"
+	}
+	return AbandonBatch(ctx.JJService, ctx.MultiSelectChangeIDs), ""
+}
+
 func executeDuplicate(ctx *RequestContext) (tea.Cmd, string) {
 	if !ctx.IsSelectedCommitValid() {
 		return nil, ""
@@ -439,13 +462,38 @@ func executeBackout(ctx *RequestContext) (tea.Cmd, string) {
 }
 
 func executePerformRebase(destIndex int, ctx *RequestContext) (tea.Cmd, string) {
+	if ctx.Repository == nil || destIndex < 0 || destIndex >= len(ctx.Repository.Graph.Commits) {
+		return nil, ""
+	}
+	destCommit := ctx.Repository.Graph.Commits[destIndex]
+	if len(ctx.BatchRebaseSources) > 0 {
+		if ctx.DuplicateMode {
+			return nil, "Duplicate does not support batch selection"
+		}
+		var sources []string
+		for _, idx := range ctx.BatchRebaseSources {
+			if idx == destIndex {
+				return nil, "Cannot rebase onto a selected source commit"
+			}
+			if idx < 0 || idx >= len(ctx.Repository.Graph.Commits) {
+				continue
+			}
+			c := ctx.Repository.Graph.Commits[idx]
+			if c.Immutable || c.IsWorking {
+				return nil, "Cannot rebase: selection includes immutable or working-copy commit"
+			}
+			sources = append(sources, c.ChangeID)
+		}
+		if len(sources) == 0 {
+			return nil, ""
+		}
+		return RebaseBatch(ctx.JJService, sources, destCommit.ChangeID), ""
+	}
 	if !ctx.IsSelectedCommitValid() || ctx.RebaseSourceCommit < 0 ||
-		ctx.RebaseSourceCommit >= len(ctx.Repository.Graph.Commits) ||
-		destIndex < 0 || destIndex >= len(ctx.Repository.Graph.Commits) {
+		ctx.RebaseSourceCommit >= len(ctx.Repository.Graph.Commits) {
 		return nil, ""
 	}
 	sourceCommit := ctx.Repository.Graph.Commits[ctx.RebaseSourceCommit]
-	destCommit := ctx.Repository.Graph.Commits[destIndex]
 	// The destination picker is shared with duplicate; duplicate onto the source's
 	// own position is meaningless, but so is rebasing onto itself.
 	if ctx.RebaseSourceCommit == destIndex {
@@ -679,6 +727,13 @@ func ApplyResult(res Result, graphModel *GraphModel, ctx *RequestContext, app *s
 			app.StatusMessage = RebaseModeStartMessage(ctx.Repository.Graph.Commits[ctx.SelectedCommit].ShortID)
 		}
 		return nil
+	case FollowUpStartBatchRebaseMode:
+		indices := graphModel.multiSelect.sortedIndices()
+		if len(indices) > 0 {
+			graphModel.StartBatchRebaseMode(indices)
+			app.StatusMessage = BatchRebaseModeStartMessage(len(indices))
+		}
+		return nil
 	case FollowUpStartMergeMode:
 		if ctx != nil && ctx.Repository != nil && ctx.SelectedCommit >= 0 && ctx.SelectedCommit < len(ctx.Repository.Graph.Commits) {
 			graphModel.StartMergeMode(ctx.SelectedCommit)
@@ -776,6 +831,9 @@ func ApplyResult(res Result, graphModel *GraphModel, ctx *RequestContext, app *s
 			app.StatusMessage = res.SuccessStatus
 		}
 		if res.Loading {
+			if res.PerformRebase || strings.Contains(res.SuccessStatus, "selected") {
+				graphModel.ClearMultiSelect()
+			}
 			app.Loading = true
 		}
 		return res.Cmd
@@ -847,6 +905,34 @@ func Abandon(svc *jj.Service, changeID string) tea.Cmd {
 	return func() tea.Msg {
 		if err := svc.AbandonCommit(context.Background(), changeID); err != nil {
 			return util.ErrorMsg{Err: fmt.Errorf("failed to abandon: %w", err)}
+		}
+		repo, err := svc.GetRepository(context.Background(), "")
+		if err != nil {
+			return util.ErrorMsg{Err: err}
+		}
+		return RepositoryLoadedMsg{Repository: repo}
+	}
+}
+
+// AbandonBatch abandons multiple commits in one jj operation (single undo).
+func AbandonBatch(svc *jj.Service, changeIDs []string) tea.Cmd {
+	return func() tea.Msg {
+		if err := svc.AbandonCommitsBatch(context.Background(), changeIDs); err != nil {
+			return util.ErrorMsg{Err: fmt.Errorf("failed to abandon: %w", err)}
+		}
+		repo, err := svc.GetRepository(context.Background(), "")
+		if err != nil {
+			return util.ErrorMsg{Err: err}
+		}
+		return RepositoryLoadedMsg{Repository: repo}
+	}
+}
+
+// RebaseBatch rebases multiple commits onto one destination.
+func RebaseBatch(svc *jj.Service, sourceChangeIDs []string, destChangeID string) tea.Cmd {
+	return func() tea.Msg {
+		if err := svc.RebaseCommitsBatch(context.Background(), sourceChangeIDs, destChangeID); err != nil {
+			return util.ErrorMsg{Err: fmt.Errorf("failed to rebase: %w", err)}
 		}
 		repo, err := svc.GetRepository(context.Background(), "")
 		if err != nil {

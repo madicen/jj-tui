@@ -95,6 +95,11 @@ type GraphModel struct {
 	// filterQuery / filterError mirror app state for header rendering in View().
 	filterQuery string
 	filterError string
+
+	// multiSelect tracks Space-toggled commits for batch abandon/rebase (P4.7).
+	multiSelect multiSelect
+	// batchRebaseSources lists commit indices being rebased together (non-empty = batch mode).
+	batchRebaseSources []int
 }
 
 // SelectionMode indicates what the user is selecting commits for
@@ -132,6 +137,8 @@ type GraphData struct {
 	SelectedFile       int             // Index of selected file in changed files list
 	FilterQuery        string          // Active revset search display text (empty = none)
 	FilterError        string          // Inline jj revset error for the active filter attempt
+	MultiSelect        map[int]bool    // Batch-selected commit indices (Space toggled)
+	BatchRebaseSources []int           // Source indices during batch rebase destination pick
 	// RebaseDragSource / RebaseDragHoverDest: mouse drag rebase (-1 = none)
 	RebaseDragSource    int
 	RebaseDragHoverDest int
@@ -157,6 +164,7 @@ func NewGraphModel(zoneManager *zone.Manager) GraphModel {
 		longPressFileIndex:   -1,
 		longPressCommitIndex: -1,
 		filterInput:          newRevsetFilterInput(),
+		multiSelect:          newMultiSelect(),
 	}
 }
 
@@ -345,6 +353,14 @@ func (m *GraphModel) UpdateWithApp(msg tea.Msg, app *state.AppState) (GraphModel
 		}
 		if key.Matches(msg, m.keys.SearchFilter) && m.graphFocused {
 			return *m, m.beginFilterInput(app)
+		}
+		if key.Matches(msg, m.keys.CancelSelection) && m.contextMenu == nil && m.commitContextMenu == nil &&
+			m.selectionMode == SelectionNormal && m.multiSelect.count() > 0 {
+			m.ClearMultiSelect()
+			if app != nil {
+				app.StatusMessage = "Selection cleared"
+			}
+			return *m, nil
 		}
 		if key.Matches(msg, m.keys.CancelSelection) && m.contextMenu == nil && m.commitContextMenu == nil &&
 			m.selectionMode == SelectionNormal && app != nil && strings.TrimSpace(app.GraphFilterRevset) != "" {
@@ -741,6 +757,8 @@ func (m *GraphModel) buildGraphData() GraphData {
 		SelectedFile:        m.selectedFile,
 		FilterQuery:         m.filterQuery,
 		FilterError:         m.filterError,
+		MultiSelect:         m.multiSelectMap(),
+		BatchRebaseSources:  append([]int(nil), m.batchRebaseSources...),
 		RebaseDragSource:    m.rebaseDragSource,
 		RebaseDragHoverDest: m.rebaseDragHoverDest,
 	}
@@ -939,6 +957,22 @@ func (m *GraphModel) GetFilesViewport() viewport.Model {
 func (m *GraphModel) StartRebaseMode(sourceCommitIdx int) {
 	m.selectionMode = SelectionRebaseDestination
 	m.rebaseSourceCommit = sourceCommitIdx
+	m.batchRebaseSources = nil
+	m.rebasePressAnchor = -1
+	m.rebaseDragSource = -1
+	m.rebaseDragHoverDest = -1
+}
+
+// StartBatchRebaseMode starts destination picking for a multi-selected rebase.
+func (m *GraphModel) StartBatchRebaseMode(sourceIndices []int) {
+	m.selectionMode = SelectionRebaseDestination
+	m.batchRebaseSources = append([]int(nil), sourceIndices...)
+	if len(m.batchRebaseSources) > 0 {
+		m.rebaseSourceCommit = m.batchRebaseSources[0]
+	} else {
+		m.rebaseSourceCommit = -1
+	}
+	m.duplicateMode = false
 	m.rebasePressAnchor = -1
 	m.rebaseDragSource = -1
 	m.rebaseDragHoverDest = -1
@@ -948,6 +982,7 @@ func (m *GraphModel) StartRebaseMode(sourceCommitIdx int) {
 func (m *GraphModel) CancelRebaseMode() {
 	m.selectionMode = SelectionNormal
 	m.rebaseSourceCommit = -1
+	m.batchRebaseSources = nil
 	m.duplicateMode = false
 	m.rebasePressAnchor = -1
 	m.rebaseDragSource = -1

@@ -88,7 +88,20 @@ func (m GraphModel) handleKeyMsg(msg tea.KeyMsg) (GraphModel, *Request, tea.Cmd)
 
 	case key.Matches(msg, m.keys.Rebase):
 		if m.repository != nil && m.selectedCommit >= 0 && m.selectedCommit < len(m.repository.Graph.Commits) {
+			if m.multiSelect.count() > 0 {
+				return m, &Request{StartBatchRebaseMode: true}, nil
+			}
 			return m, &Request{StartRebaseMode: true}, nil
+		}
+		return m, nil, nil
+
+	case key.Matches(msg, m.keys.ToggleSelect):
+		if m.graphFocused && m.repository != nil && m.selectedCommit >= 0 &&
+			m.selectedCommit < len(m.repository.Graph.Commits) && m.selectionMode == SelectionNormal {
+			c := m.repository.Graph.Commits[m.selectedCommit]
+			if !c.Immutable && !c.IsWorking {
+				m.ToggleMultiSelect(m.selectedCommit)
+			}
 		}
 		return m, nil, nil
 
@@ -128,8 +141,13 @@ func (m GraphModel) handleKeyMsg(msg tea.KeyMsg) (GraphModel, *Request, tea.Cmd)
 			return m, &Request{Squash: true}, nil
 		}
 	case key.Matches(msg, m.keys.Abandon):
-		if m.repository != nil && m.selectedCommit >= 0 && m.selectedCommit < len(m.repository.Graph.Commits) {
-			return m, &Request{Abandon: true}, nil
+		if m.repository != nil {
+			if m.multiSelect.count() > 0 {
+				return m, &Request{BatchAbandon: true}, nil
+			}
+			if m.selectedCommit >= 0 && m.selectedCommit < len(m.repository.Graph.Commits) {
+				return m, &Request{Abandon: true}, nil
+			}
 		}
 	case key.Matches(msg, m.keys.Absorb):
 		// Absorb always operates on the working copy (@), so it doesn't depend on

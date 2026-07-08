@@ -198,6 +198,15 @@ func TestGoldenViewGraph(t *testing.T) {
 		m.graphTabModel.OnRepositoryLoaded(filtered)
 		testutil.AssertGolden(t, "graph/active_filter", m.View())
 	})
+
+	t.Run("multiselect", func(t *testing.T) {
+		m := newGoldenModel(t)
+		defer m.Close()
+		m.SetViewMode(state.ViewCommitGraph)
+		m.graphTabModel.SelectCommit(1)
+		m.graphTabModel.SetMultiSelect(0, 1)
+		testutil.AssertGolden(t, "graph/multiselect", m.View())
+	})
 }
 
 func TestGoldenViewPRs(t *testing.T) {

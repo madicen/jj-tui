@@ -111,6 +111,9 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 
 	if data.InRebaseMode {
 		headerText := "🔀 REBASE MODE - Select destination commit (Esc to cancel)"
+		if len(data.BatchRebaseSources) > 0 {
+			headerText = fmt.Sprintf("🔀 BATCH REBASE - Select destination for %d commits (Esc to cancel)", len(data.BatchRebaseSources))
+		}
 		if data.DuplicateMode {
 			headerText = "⧉ DUPLICATE MODE - Select destination commit (Esc to cancel)"
 		}
@@ -148,9 +151,11 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 			}
 		} else if data.InRebaseMode {
 			switch {
-			case data.RebaseSourceCommit > -1:
+			case containsInt(data.BatchRebaseSources, i):
 				style = RebaseSourceStyle
-			case data.SelectedCommit > -1:
+			case data.RebaseSourceCommit == i:
+				style = RebaseSourceStyle
+			case data.SelectedCommit == i:
 				style = RebaseDestStyle
 			}
 		} else if data.InMergeMode {
@@ -192,6 +197,8 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 			}
 		} else if data.InRebaseMode {
 			switch {
+			case containsInt(data.BatchRebaseSources, i):
+				selectionPrefix = "⚡ "
 			case data.RebaseSourceCommit == i:
 				selectionPrefix = "⚡ "
 			case data.SelectedCommit == i:
@@ -204,6 +211,8 @@ func (m GraphModel) Graph(data GraphData) GraphResult {
 			case data.SelectedCommit:
 				selectionPrefix = "⚡ "
 			}
+		} else if data.MultiSelect[i] {
+			selectionPrefix = "☑ "
 		} else if i == data.SelectedCommit {
 			selectionPrefix = "► "
 		}
@@ -538,4 +547,13 @@ func (m *GraphModel) renderTreeNodeWithLineIndex(node *fileTreeNode, indent stri
 	for _, name := range fileNodes {
 		m.renderTreeNodeWithLineIndex(node.children[name], newIndent, lines, false, data, lineIdx, fileIndexToLineIndex)
 	}
+}
+
+func containsInt(list []int, v int) bool {
+	for _, x := range list {
+		if x == v {
+			return true
+		}
+	}
+	return false
 }

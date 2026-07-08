@@ -176,9 +176,11 @@ type Request struct {
 	Checkout             bool
 	Squash               bool
 	Abandon              bool
+	BatchAbandon         bool
 	StartEditDescription bool
 	NewCommit            bool
 	StartRebaseMode      bool
+	StartBatchRebaseMode bool
 	PerformRebase        bool
 	RebaseDestIndex      int
 	// DragRebase: mouse drag from DragRebaseFrom onto DragRebaseTo (same semantics as r + pick destination).
@@ -230,6 +232,7 @@ const (
 	FollowUpResolveDivergent
 	FollowUpStartEditDescription
 	FollowUpStartRebaseMode
+	FollowUpStartBatchRebaseMode
 	FollowUpStartMergeMode
 	FollowUpCreateBookmark
 	FollowUpCreatePR
@@ -278,6 +281,10 @@ func FocusMessage(graphFocused bool) string {
 // RebaseModeStartMessage returns the status message when entering rebase mode.
 func RebaseModeStartMessage(shortID string) string {
 	return fmt.Sprintf("Select destination for rebasing %s (Esc to cancel)", shortID)
+}
+
+func BatchRebaseModeStartMessage(count int) string {
+	return fmt.Sprintf("Select destination to rebase %d selected commits onto (Esc to cancel)", count)
 }
 
 // MergeModeStartMessage returns the status message when entering merge mode.

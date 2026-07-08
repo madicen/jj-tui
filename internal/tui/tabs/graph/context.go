@@ -65,6 +65,8 @@ type RequestContext struct {
 	CreatePRBranch       string // branch that would be used for Create PR for selected commit (to block main/master)
 	DemoMode             bool
 	Config               *config.Config
+	BatchRebaseSources   []int
+	MultiSelectChangeIDs []string
 }
 
 // ContextInput is the data needed to build a RequestContext. Main passes this from its state.
@@ -123,7 +125,7 @@ func BuildRequestContextFromApp(app *state.AppState, m *GraphModel) *RequestCont
 		return nil
 	}
 	githubAvailable := app.GitHubService != nil || app.DemoMode
-	return BuildRequestContext(&ContextInput{
+	ctx := BuildRequestContext(&ContextInput{
 		JJService:            app.JJService,
 		Repository:           app.Repository,
 		SelectedCommit:       m.GetSelectedCommit(),
@@ -139,4 +141,10 @@ func BuildRequestContextFromApp(app *state.AppState, m *GraphModel) *RequestCont
 		DemoMode:             app.DemoMode,
 		Config:               app.Config,
 	})
+	if ctx == nil {
+		return nil
+	}
+	ctx.BatchRebaseSources = append([]int(nil), m.batchRebaseSources...)
+	ctx.MultiSelectChangeIDs = append([]string(nil), m.multiSelectChangeIDs()...)
+	return ctx
 }

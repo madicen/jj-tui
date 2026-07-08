@@ -2,6 +2,7 @@ package graph
 
 import (
 	"fmt"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen/jj-tui/internal/tui/state"
@@ -63,6 +64,13 @@ func (m *GraphModel) destructiveRequestPrompt(req Request) string {
 			return fmt.Sprintf("Abandon revision %s? Undo with Ctrl+z  ·  y = yes, n = cancel", shortID)
 		}
 		return "Abandon this revision? Undo with Ctrl+z  ·  y = yes, n = cancel"
+	case req.BatchAbandon:
+		ids := m.multiSelectShortIDs()
+		if len(ids) > 0 {
+			return fmt.Sprintf("Abandon %d revisions (%s)? One undo restores all  ·  y = yes, n = cancel",
+				len(ids), strings.Join(ids, ", "))
+		}
+		return "Abandon selected revisions? Undo with Ctrl+z  ·  y = yes, n = cancel"
 	case req.Backout:
 		if shortID != "" {
 			return fmt.Sprintf("Back out revision %s? Creates a revert commit; undo with Ctrl+z  ·  y = yes, n = cancel", shortID)
