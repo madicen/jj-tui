@@ -57,6 +57,24 @@ When a bookmark was pushed and then amended or moved locally, **jj** may show th
 
 ![Resolve diverged bookmark](screenshots/bookmark-conflict.gif)
 
+### Operation log (time travel)
+
+**Ctrl+o** opens the **jj** operation log: browse recent operations (newest first, current flagged), pick an older entry, confirm restore (**`y`**), and the graph reloads to that point in history. Recording: `fixtures/setup-op-log-vhs-repo.sh`, `make op-log-gif`.
+
+![Operation log browser](screenshots/op-log.gif)
+
+### Revset search / filter
+
+Press **`/`** in the graph to filter commits by free text (matches description or author) or prefix **`:`** for a raw **jj** revset. The active filter appears in the header; **Esc** clears it and reloads the default graph. Recording: `fixtures/setup-revset-filter-vhs-repo.sh`, `make revset-filter-gif`.
+
+![Revset filter](screenshots/revset-filter.gif)
+
+### Multi-select batch operations
+
+**Space** toggles batch selection on mutable commits (gutter markers); **Esc** clears the selection. With commits selected, **`a`** batch-abandons (with a confirm listing all targets) and **`r`** enters batch rebase destination-pick mode. The clip below shows three selected commits and the batch-abandon confirm (cancelled with **`n`**). Recording: `fixtures/setup-multiselect-vhs-repo.sh`, `make multiselect-gif`.
+
+![Multi-select batch abandon](screenshots/multiselect.gif)
+
 ## Features
 
 - **Visual commit graph**: Navigate history with ASCII graph, symbols for working copy / mutable / immutable, divergent and conflict indicators
