@@ -34,3 +34,18 @@ func DefaultTicketsKeyMap(overrides map[string]string) TicketsKeyMap {
 		CreateBranch:     bind(overrides, "tickets.create_branch", "Enter", "Create branch from ticket", "enter", "e"),
 	}
 }
+
+func (k TicketsKeyMap) entries() []entry {
+	return []entry{
+		{"tickets.move_down", k.MoveDown},
+		{"tickets.move_up", k.MoveUp},
+		{"tickets.change_status", k.ChangeStatus},
+		{"tickets.status_in_progress", k.StatusInProgress},
+		{"tickets.status_done", k.StatusDone},
+		{"tickets.status_blocked", k.StatusBlocked},
+		{"tickets.status_not_started", k.StatusNotStarted},
+		{"tickets.open", k.Open},
+		{"tickets.new_ticket", k.NewTicket},
+		{"tickets.create_branch", k.CreateBranch},
+	}
+}

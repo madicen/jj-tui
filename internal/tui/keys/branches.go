@@ -34,3 +34,18 @@ func DefaultBranchesKeyMap(overrides map[string]string) BranchesKeyMap {
 		ResolveConflict: bind(overrides, "branches.resolve_conflict", "c", "Resolve conflicted bookmark", "c"),
 	}
 }
+
+func (k BranchesKeyMap) entries() []entry {
+	return []entry{
+		{"branches.move_down", k.MoveDown},
+		{"branches.move_up", k.MoveUp},
+		{"branches.track_by_name", k.TrackByName},
+		{"branches.track", k.Track},
+		{"branches.untrack", k.Untrack},
+		{"branches.restore", k.Restore},
+		{"branches.delete", k.Delete},
+		{"branches.push", k.Push},
+		{"branches.fetch", k.Fetch},
+		{"branches.resolve_conflict", k.ResolveConflict},
+	}
+}

@@ -78,6 +78,7 @@ func New(ctx context.Context) *Model {
 	m.settingsTabModel.SetZoneManager(zm)
 	m.githubLoginModel.SetZoneManager(zm)
 	m.appState.Config = cfg
+	m.applyKeyBindings(cfg)
 	// ShowMinimizeButton renders a [-]/[+] toggle in the chrome tab so the
 	// user can collapse any chromed modal to its title strip and click on the
 	// underlying tab (graph / PRs / branches / tickets) while the modal stays
@@ -111,6 +112,30 @@ func (m *Model) initTabRegistry() {
 		state.ViewTickets:      ticketsTabAdapter{m: &m.ticketsTabModel},
 		state.ViewSettings:     settingsTabAdapter{m: &m.settingsTabModel},
 		state.ViewHelp:         helpTabAdapter{m: &m.helpTabModel},
+	}
+}
+
+// applyKeyBindings resolves the KeyMaps from config (PLAN(P5.1): the optional
+// "keys" override map) and pushes them to the root model and every tab. When a
+// per-scope key collision is detected it keeps the compiled-in defaults (safe;
+// no silent misbehavior) and surfaces the conflict in the error modal so the
+// user can fix their config.
+func (m *Model) applyKeyBindings(cfg *config.Config) {
+	overrides := cfg.KeyOverrides()
+	var collisionErr error
+	if collisions := keys.Validate(overrides); len(collisions) > 0 {
+		overrides = nil // fall back to defaults for all scopes
+		collisionErr = keys.CollisionError(collisions)
+	}
+	km := keys.DefaultKeyMaps(overrides)
+	m.keys = km.Global
+	m.graphTabModel.SetKeyMap(km.Graph)
+	m.prsTabModel.SetKeyMap(km.PRs)
+	m.branchesTabModel.SetKeyMap(km.Branches)
+	m.ticketsTabModel.SetKeyMap(km.Tickets)
+	m.helpTabModel.SetKeyMaps(km)
+	if collisionErr != nil {
+		m.errorModal.SetError(collisionErr, false, "")
 	}
 }
 

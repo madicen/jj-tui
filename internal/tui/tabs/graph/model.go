@@ -150,6 +150,11 @@ func (m GraphModel) Init() tea.Cmd {
 	return nil
 }
 
+// SetKeyMap replaces the graph keybindings (PLAN(P5.1): config overrides).
+func (m *GraphModel) SetKeyMap(km keys.GraphKeyMap) {
+	m.keys = km
+}
+
 // Update uses a pointer receiver so scroll state is modified in place on the main model's graphTabModel.
 func (m *GraphModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {

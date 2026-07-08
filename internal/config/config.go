@@ -196,6 +196,14 @@ type AIConfig struct {
 	AIEvologMultiSplitMode            string `json:"ai_evolog_multi_split_mode,omitempty"`             // empty or "batch" = one cmd; "stepwise" = one base per confirm
 }
 
+// KeysConfig groups user keybinding overrides (PLAN(P5.1)). Keys are
+// scope-qualified action IDs (e.g. "graph.abandon") and values are the trigger
+// key (e.g. "x"). Unknown IDs are ignored. Missing/empty map = compiled-in
+// defaults, so old config files load unchanged.
+type KeysConfig struct {
+	Keys map[string]string `json:"keys,omitempty"`
+}
+
 // AdvancedConfig groups power-user settings that don't belong to a specific tab.
 type AdvancedConfig struct {
 	// ExternalFileEditor opens the selected changed file from the graph (files pane, key O).
@@ -220,6 +228,7 @@ type Config struct {
 	ThemeConfig
 	AIConfig
 	AdvancedConfig
+	KeysConfig
 
 	// Internal: tracks where the config was loaded from
 	loadedFrom string `json:"-"`
@@ -435,6 +444,16 @@ func mergeConfig(dest, source *Config) {
 	}
 	if source.AIEvologMultiSplitMode != "" {
 		dest.AIEvologMultiSplitMode = source.AIEvologMultiSplitMode
+	}
+	// Keybinding overrides merge per-key so a local .jj-tui.json can rebind a
+	// single action without dropping the rest of the global map.
+	if len(source.Keys) > 0 {
+		if dest.Keys == nil {
+			dest.Keys = make(map[string]string, len(source.Keys))
+		}
+		for k, v := range source.Keys {
+			dest.Keys[k] = v
+		}
 	}
 }
 
@@ -1399,6 +1418,15 @@ func (c *Config) EvologAIMultiSplitMaxCap() int {
 		return EvologAIMultiSplitHardMax
 	}
 	return v
+}
+
+// KeyOverrides returns the configured keybinding override map (nil-safe). Keys
+// are scope-qualified action IDs (e.g. "graph.abandon"); see internal/tui/keys.
+func (c *Config) KeyOverrides() map[string]string {
+	if c == nil {
+		return nil
+	}
+	return c.Keys
 }
 
 // EvologAIMultiSplitStepwise is true when multi-split runs one FAQ step per user confirm with evolog reload between steps.

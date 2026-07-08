@@ -32,3 +32,17 @@ func DefaultPRsKeyMap(overrides map[string]string) PRsKeyMap {
 		Close:      bind(overrides, "prs.close", "X", "Close pull request", "X"),
 	}
 }
+
+func (k PRsKeyMap) entries() []entry {
+	return []entry{
+		{"prs.move_down", k.MoveDown},
+		{"prs.move_up", k.MoveUp},
+		{"prs.scroll_up", k.ScrollUp},
+		{"prs.scroll_down", k.ScrollDown},
+		{"prs.home", k.Home},
+		{"prs.end", k.End},
+		{"prs.open", k.Open},
+		{"prs.merge", k.Merge},
+		{"prs.close", k.Close},
+	}
+}

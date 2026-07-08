@@ -20,3 +20,11 @@ func DefaultHelpKeyMap(overrides map[string]string) HelpKeyMap {
 		SwitchTab: bind(overrides, "help.switch_tab", "Tab", "Next sub-tab", "tab"),
 	}
 }
+
+func (k HelpKeyMap) entries() []entry {
+	return []entry{
+		{"help.prev_tab", k.PrevTab},
+		{"help.next_tab", k.NextTab},
+		{"help.switch_tab", k.SwitchTab},
+	}
+}

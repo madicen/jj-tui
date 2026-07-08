@@ -39,3 +39,20 @@ func DefaultGlobalKeyMap(overrides map[string]string) GlobalKeyMap {
 		Quit:          bind(overrides, "global.quit", "^q", "Quit", "ctrl+q", "ctrl+c"),
 	}
 }
+
+func (k GlobalKeyMap) entries() []entry {
+	return []entry{
+		{"global.graph", k.NavGraph},
+		{"global.prs", k.NavPRs},
+		{"global.tickets", k.NavTickets},
+		{"global.branches", k.NavBranches},
+		{"global.settings", k.NavSettings},
+		{"global.help", k.NavHelp},
+		{"global.workspaces", k.NavWorkspaces},
+		{"global.refresh", k.Refresh},
+		{"global.undo", k.Undo},
+		{"global.redo", k.Redo},
+		{"global.back", k.Back},
+		{"global.quit", k.Quit},
+	}
+}

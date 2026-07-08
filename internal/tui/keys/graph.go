@@ -66,3 +66,34 @@ func DefaultGraphKeyMap(overrides map[string]string) GraphKeyMap {
 		OpenExternal:    bind(overrides, "graph.open_external", "O", "Open selected file in external editor (files pane; set editor in Settings → Advanced)", "O"),
 	}
 }
+
+func (k GraphKeyMap) entries() []entry {
+	return []entry{
+		{"graph.move_down", k.MoveDown},
+		{"graph.move_up", k.MoveUp},
+		{"graph.toggle_focus", k.ToggleFocus},
+		{"graph.scroll", k.Scroll},
+		{"graph.cancel", k.CancelSelection},
+		{"graph.rebase", k.Rebase},
+		{"graph.merge", k.Merge},
+		{"graph.checkout", k.Checkout},
+		{"graph.new_commit", k.NewCommit},
+		{"graph.edit_description", k.EditDescription},
+		{"graph.squash", k.Squash},
+		{"graph.abandon", k.Abandon},
+		{"graph.absorb", k.Absorb},
+		{"graph.duplicate", k.Duplicate},
+		{"graph.create_bookmark", k.CreateBookmark},
+		{"graph.delete_bookmark", k.DeleteBookmark},
+		{"graph.update_pr", k.UpdatePR},
+		{"graph.create_pr", k.CreatePR},
+		{"graph.resolve_conflict", k.ResolveConflict},
+		{"graph.move_delta", k.MoveDelta},
+		{"graph.evolog_split", k.EvologSplit},
+		{"graph.move_file_up", k.MoveFileUp},
+		{"graph.move_file_down", k.MoveFileDown},
+		{"graph.revert_file", k.RevertFile},
+		{"graph.view_file_diff", k.ViewFileDiff},
+		{"graph.open_external", k.OpenExternal},
+	}
+}

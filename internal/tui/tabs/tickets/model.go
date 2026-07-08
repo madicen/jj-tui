@@ -62,6 +62,11 @@ func (m Model) Init() tea.Cmd {
 	return nil
 }
 
+// SetKeyMap replaces the tickets keybindings (PLAN(P5.1): config overrides).
+func (m *Model) SetKeyMap(km keys.TicketsKeyMap) {
+	m.keys = km
+}
+
 // SetDimensions sets the content area size (used for list-only scrolling)
 func (m *Model) SetDimensions(width, height int) {
 	m.width = width
