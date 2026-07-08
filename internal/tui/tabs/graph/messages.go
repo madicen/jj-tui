@@ -215,6 +215,7 @@ const (
 	FollowUpResolveBookmarkConflict
 	FollowUpViewFileDiff
 	FollowUpStartDuplicateMode
+	FollowUpDeleteBookmark
 )
 
 // Result is returned by HandleRequest. Main sets status from Status, runs Cmd if set, and performs the FollowUp action.

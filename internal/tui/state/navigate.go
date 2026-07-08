@@ -66,6 +66,12 @@ const (
 	NavigateAddWorkspace
 	NavigateForgetWorkspace
 	NavigateCloseWorkspaces
+	// Graph-originated cross-tab actions routed through main (P2.5) so the graph
+	// tab no longer imports sibling tabs directly. Main owns the sibling command
+	// construction; the graph tab only emits the intent + payload.
+	NavigateDeleteBookmark          // delete the resolved bookmark on the selected commit
+	NavigateLoadBookmarkConflictInfo // load diverged-bookmark info before opening the conflict modal
+	NavigateUpdatePR                 // push the selected commit's branch to its open PR
 )
 
 // NavigateTarget describes a navigation request. Only main can perform these
@@ -148,6 +154,15 @@ type NavigateTarget struct {
 	// Workspaces payload: WorkspacePath for NavigateAddWorkspace, WorkspaceName for NavigateForgetWorkspace.
 	WorkspacePath string
 	WorkspaceName string
+
+	// Graph-originated cross-tab payloads (P2.5). DeleteBookmarkName names the
+	// bookmark for NavigateDeleteBookmark. UpdatePR* carry the branch/commit and
+	// whether the bookmark must move first for NavigateUpdatePR.
+	// NavigateLoadBookmarkConflictInfo reuses ConflictBookmarkName above.
+	DeleteBookmarkName        string
+	UpdatePRBranch            string
+	UpdatePRCommitID          string
+	UpdatePRNeedsMoveBookmark bool
 }
 
 // NavigateMsg is the only callback from submodels to main: they request a view change or

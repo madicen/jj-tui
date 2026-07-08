@@ -13,10 +13,6 @@ import (
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tui/data"
 	"github.com/madicen/jj-tui/internal/tui/state"
-	bookmarktab "github.com/madicen/jj-tui/internal/tui/tabs/bookmark"
-	branchestab "github.com/madicen/jj-tui/internal/tui/tabs/branches"
-	descedittab "github.com/madicen/jj-tui/internal/tui/tabs/descedit"
-	prstab "github.com/madicen/jj-tui/internal/tui/tabs/prs"
 	"github.com/madicen/jj-tui/internal/tui/util"
 )
 
@@ -133,8 +129,13 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 		return Result{Cmd: cmd, PerformMerge: true, Loading: true}
 	}
 	if r.DeleteBookmark {
-		cmd, status := executeDeleteBookmark(ctx)
-		return Result{Cmd: cmd, Status: status, SuccessStatus: "Deleting bookmark…", Loading: true}
+		name, status := resolveDeleteBookmarkName(ctx)
+		if name == "" {
+			return Result{Status: status}
+		}
+		// Routed through main (NavigateDeleteBookmark) so the graph tab no longer
+		// imports the bookmark tab; main constructs bookmarktab.DeleteBookmarkCmd.
+		return Result{FollowUp: FollowUpDeleteBookmark, BookmarkConflictName: name}
 	}
 	if r.MoveFileUp {
 		cmd, status := executeMoveFileUp(ctx)
@@ -479,16 +480,19 @@ func executeDragRebase(fromIndex, toIndex int, ctx *RequestContext) (tea.Cmd, st
 	return Rebase(ctx.JJService, sourceCommit.ChangeID, destCommit.ChangeID), ""
 }
 
-func executeDeleteBookmark(ctx *RequestContext) (tea.Cmd, string) {
+// resolveDeleteBookmarkName validates the selection and returns the bookmark to
+// delete (empty name + status when nothing is deletable). Main turns a non-empty
+// name into bookmarktab.DeleteBookmarkCmd (P2.5: graph no longer imports bookmark).
+func resolveDeleteBookmarkName(ctx *RequestContext) (name, status string) {
 	if !ctx.IsSelectedCommitValid() {
-		return nil, ""
+		return "", ""
 	}
 	commit := ctx.Repository.Graph.Commits[ctx.SelectedCommit]
-	name := util.FirstOperableBookmarkName(commit.Branches)
+	name = util.FirstOperableBookmarkName(commit.Branches)
 	if name == "" {
-		return nil, "No bookmark on this commit to delete"
+		return "", "No bookmark on this commit to delete"
 	}
-	return bookmarktab.DeleteBookmarkCmd(ctx.JJService, name), ""
+	return name, ""
 }
 
 func executeMoveFileUp(ctx *RequestContext) (tea.Cmd, string) {
@@ -617,16 +621,6 @@ func executeMoveDeltaOntoOrigin(ctx *RequestContext) (tea.Cmd, string) {
 	return MoveBookmarkDeltaOntoOriginCmd(ctx.JJService, name, commit.ChangeID, commit.ID), ""
 }
 
-// SaveDescriptionCmd returns a command to save the description for the given commit.
-func SaveDescriptionCmd(jjService *jj.Service, commitID, body string) tea.Cmd {
-	return descedittab.SaveDescriptionCmd(jjService, commitID, strings.TrimSpace(body))
-}
-
-// CreateBookmarkCmd returns a command to create a bookmark.
-func CreateBookmarkCmd(jjService *jj.Service, bookmarkName, commitID string) tea.Cmd {
-	return bookmarktab.CreateBookmarkCmd(jjService, bookmarkName, commitID)
-}
-
 // ApplyResult applies the result: updates the graph model, mutates app state, and returns the Cmd to run.
 // For follow-ups that require main to open a modal (edit description, create bookmark, warning, create PR),
 // it returns a state.NavigateMsg cmd. For load/update PR it sets app status and returns the cmd directly.
@@ -688,10 +682,20 @@ func ApplyResult(res Result, graphModel *GraphModel, ctx *RequestContext, app *s
 			return state.NavigateTarget{Kind: state.NavigateOpenEvologSplit, Commit: ctx.Repository.Graph.Commits[res.CommitIndex]}.Cmd()
 		}
 		return nil
+	case FollowUpDeleteBookmark:
+		// P2.5: main constructs bookmarktab.DeleteBookmarkCmd. Status + Loading are
+		// set here (same frame) exactly as the old inline SuccessStatus/Loading path.
+		if strings.TrimSpace(res.BookmarkConflictName) != "" {
+			app.StatusMessage = "Deleting bookmark…"
+			app.Loading = true
+			return state.NavigateTarget{Kind: state.NavigateDeleteBookmark, DeleteBookmarkName: res.BookmarkConflictName}.Cmd()
+		}
+		return nil
 	case FollowUpResolveBookmarkConflict:
 		if ctx != nil && ctx.JJService != nil && strings.TrimSpace(res.BookmarkConflictName) != "" {
 			app.StatusMessage = "Loading bookmark conflict info…"
-			return branchestab.LoadBookmarkConflictInfoCmd(ctx.JJService, res.BookmarkConflictName)
+			// P2.5: main constructs branchestab.LoadBookmarkConflictInfoCmd.
+			return state.NavigateTarget{Kind: state.NavigateLoadBookmarkConflictInfo, ConflictBookmarkName: res.BookmarkConflictName}.Cmd()
 		}
 		return nil
 	case FollowUpViewFileDiff:
@@ -717,7 +721,13 @@ func ApplyResult(res Result, graphModel *GraphModel, ctx *RequestContext, app *s
 			app.StatusMessage = fmt.Sprintf("Pushing %s...", prBranch)
 		}
 		app.Loading = true
-		return prstab.PushToPRCmd(ctx.JJService, prBranch, commit.ChangeID, needsMoveBookmark, ctx.DemoMode)
+		// P2.5: main constructs prstab.PushToPRCmd (graph no longer imports prs).
+		return state.NavigateTarget{
+			Kind:                      state.NavigateUpdatePR,
+			UpdatePRBranch:            prBranch,
+			UpdatePRCommitID:          commit.ChangeID,
+			UpdatePRNeedsMoveBookmark: needsMoveBookmark,
+		}.Cmd()
 	}
 	if res.Cmd != nil {
 		if res.PerformRebase {

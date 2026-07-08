@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen/jj-tui/internal/tui/state"
+	branchestab "github.com/madicen/jj-tui/internal/tui/tabs/branches"
 	conflicttab "github.com/madicen/jj-tui/internal/tui/tabs/conflict"
 	divergenttab "github.com/madicen/jj-tui/internal/tui/tabs/divergent"
 	evologsplittab "github.com/madicen/jj-tui/internal/tui/tabs/evologsplit"
@@ -122,6 +123,11 @@ func (m *Model) handleNavigateConflictDivergent(t state.NavigateTarget) (tea.Mod
 			m.appState.StatusMessage = t.StatusMessage
 		}
 		return m, nil, true
+	case state.NavigateLoadBookmarkConflictInfo:
+		// Graph tab requested loading diverged-bookmark info before opening the
+		// conflict modal (P2.5); main constructs branchestab.LoadBookmarkConflictInfoCmd.
+		// Status was set by the graph ApplyResult follow-up on the same frame.
+		return m, branchestab.LoadBookmarkConflictInfoCmd(m.appState.JJService, t.ConflictBookmarkName), true
 	case state.NavigateResolveConflict:
 		m.appState.StatusMessage = "Resolving bookmark conflict..."
 		return m, conflicttab.ResolveBookmarkConflictCmd(m.appState.JJService, t.ConflictBookmarkName, t.ConflictResolution), true

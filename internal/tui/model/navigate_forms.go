@@ -1,10 +1,13 @@
 package model
 
 import (
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen/jj-tui/internal/tui/state"
 	bookmarktab "github.com/madicen/jj-tui/internal/tui/tabs/bookmark"
-	graphtab "github.com/madicen/jj-tui/internal/tui/tabs/graph"
+	descedittab "github.com/madicen/jj-tui/internal/tui/tabs/descedit"
+	prstab "github.com/madicen/jj-tui/internal/tui/tabs/prs"
 )
 
 // navigate_forms.go holds the per-domain NavigateKind handlers for the centered
@@ -50,7 +53,7 @@ func (m *Model) handleNavigateDescription(t state.NavigateTarget) (tea.Model, te
 		if t.SaveCommitID != "" && m.appState.JJService != nil {
 			m.appState.Loading = true
 			m.appState.StatusMessage = "Saving description…"
-			cmd := graphtab.SaveDescriptionCmd(m.appState.JJService, t.SaveCommitID, t.SaveDescription)
+			cmd := descedittab.SaveDescriptionCmd(m.appState.JJService, t.SaveCommitID, strings.TrimSpace(t.SaveDescription))
 			return m, tea.Batch(cmd, m.startBusySpinnerCmd()), true
 		}
 		return m, nil, true
@@ -72,6 +75,11 @@ func (m *Model) handleNavigateBookmark(t state.NavigateTarget) (tea.Model, tea.C
 		m.appState.StatusMessage = bookmarktab.OpenCreateBookmarkFromTicket(&m.bookmarkModal, m.appState.Repository, t.TicketKey, t.TicketTitle, t.TicketDisplayKey, m.branchesTabModel.BuildBookmarkNameConflictSources(), m.appState.Config != nil && m.appState.Config.ShouldSanitizeBookmarkNames(), ModalInnerWidth(m.width))
 		m.pushAIProfilesToFormModals()
 		return m, nil, true
+	case state.NavigateDeleteBookmark:
+		// Graph tab requested a bookmark delete (P2.5); it emits the resolved name
+		// and main constructs the command. Status/Loading were set by the graph
+		// ApplyResult follow-up on the same frame.
+		return m, bookmarktab.DeleteBookmarkCmd(m.appState.JJService, t.DeleteBookmarkName), true
 	case state.NavigateSubmitBookmark:
 		if m.appState.JJService != nil {
 			cmd, status := bookmarktab.SubmitBookmark(&m.bookmarkModal, m.appState.Repository, m.appState.Config, m.appState.JJService)
@@ -102,6 +110,11 @@ func (m *Model) handleNavigatePR(t state.NavigateTarget) (tea.Model, tea.Cmd, bo
 			return m, m.submitPR(), true
 		}
 		return m, nil, true
+	case state.NavigateUpdatePR:
+		// Graph tab requested pushing the selected commit's branch to its open PR
+		// (P2.5); main constructs prstab.PushToPRCmd. Status/Loading were set by the
+		// graph ApplyResult follow-up on the same frame.
+		return m, prstab.PushToPRCmd(m.appState.JJService, t.UpdatePRBranch, t.UpdatePRCommitID, t.UpdatePRNeedsMoveBookmark, m.appState.DemoMode), true
 	case state.NavigateBackFromPRForm:
 		m.clearAIGenOverlay()
 		m.clearPendingAIRetry()
