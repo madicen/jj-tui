@@ -30,7 +30,6 @@ import (
 	filedifftab "github.com/madicen/jj-tui/internal/tui/tabs/filediff"
 	githublogintab "github.com/madicen/jj-tui/internal/tui/tabs/githublogin"
 	graphtab "github.com/madicen/jj-tui/internal/tui/tabs/graph"
-	helptab "github.com/madicen/jj-tui/internal/tui/tabs/help"
 	"github.com/madicen/jj-tui/internal/tui/tabs/help/commandhistory"
 	initrepotab "github.com/madicen/jj-tui/internal/tui/tabs/initrepo"
 	prformtab "github.com/madicen/jj-tui/internal/tui/tabs/prform"
@@ -452,7 +451,7 @@ func (m *Model) refreshSettingsOriginURL() {
 
 func (m *Model) handleNavigateToHelpTab() (tea.Model, tea.Cmd) {
 	m.appState.ViewMode = state.ViewHelp
-	m.helpTabModel.SetCommandHistoryEntries(helptab.BuildCommandHistoryEntries(m.appState.JJService))
+	m.refreshHelpCommandHistory()
 	m.helpTabModel.SetSelectedCommand(0)
 	m.appState.StatusMessage = "Loaded Help"
 	return m, nil
@@ -2407,7 +2406,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.settingsTabModel.SetViewOpts(m.buildSettingsViewOpts())
 		}
 		if msg.Tab == state.ViewHelp {
-			m.helpTabModel.SetCommandHistoryEntries(helptab.BuildCommandHistoryEntries(m.appState.JJService))
+			m.refreshHelpCommandHistory()
 		}
 		return m, nil
 
