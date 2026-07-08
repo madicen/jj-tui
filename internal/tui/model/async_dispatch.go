@@ -202,7 +202,7 @@ func (m *Model) dispatchAsyncMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.appState.Repository != nil {
 			oldPRs = m.appState.Repository.PRs
 		}
-		m.appState.Repository = msg.Repository
+		m.appState.UpdateRepository(msg.Repository)
 		m.appState.Repository.PRs = oldPRs // Restore PRs temporarily
 		// Push fresh graph into tab models before clearing loading so the overlay stays up until
 		// the UI can render the new @ / tree (appState alone does not update GraphModel).

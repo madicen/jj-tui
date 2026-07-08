@@ -58,6 +58,12 @@ type AppState struct {
 	SpinnerStartPending bool
 }
 
+// UpdateRepository replaces the loaded repository. It is the single setter for the
+// repository single source of truth (P2.8): the root writes the freshly-loaded repo
+// here and then calls propagateRepository() to let repository-aware tabs recompute.
+// Tabs no longer keep their own authoritative copy fed by a per-tab fan-out.
+func (a *AppState) UpdateRepository(repo *internal.Repository) { a.Repository = repo }
+
 // HasRepository returns true if repository data is loaded.
 func (a *AppState) HasRepository() bool { return a.Repository != nil }
 

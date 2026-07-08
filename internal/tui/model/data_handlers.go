@@ -26,7 +26,7 @@ func (m *Model) handleDataServicesInitializedMsg(msg data.ServicesInitializedMsg
 	m.appState.JJService = msg.JJService
 	m.appState.GitHubService = msg.GitHubService
 	m.appState.TicketService = msg.TicketService
-	m.appState.Repository = msg.Repository
+	m.appState.UpdateRepository(msg.Repository)
 	m.appState.GithubInfo = msg.GitHubInfo
 	m.appState.DemoMode = msg.DemoMode
 	m.appState.Loading = false
@@ -62,7 +62,7 @@ func (m *Model) handleDataServicesInitializedMsg(msg data.ServicesInitializedMsg
 func (m *Model) handleRepoReadyMsg(msg data.RepoReadyMsg) (tea.Model, tea.Cmd) {
 	m.silentReloadInFlight = false
 	m.appState.JJService = msg.JJService
-	m.appState.Repository = msg.Repository
+	m.appState.UpdateRepository(msg.Repository)
 	m.appState.DemoMode = msg.DemoMode
 	m.appState.Loading = false
 	m.appState.StatusMessage = fmt.Sprintf("Loaded %d commits", len(msg.Repository.Graph.Commits))
@@ -244,7 +244,7 @@ func (m *Model) handleDataSilentRepositoryLoadedMsg(msg data.SilentRepositoryLoa
 			oldCount = len(m.appState.Repository.Graph.Commits)
 			oldPRs = m.appState.Repository.PRs
 		}
-		m.appState.Repository = msg.Repository
+		m.appState.UpdateRepository(msg.Repository)
 		m.appState.Repository.PRs = oldPRs
 		m.propagateRepository()
 		m.prsTabModel.SetGithubService(m.isGitHubAvailable())

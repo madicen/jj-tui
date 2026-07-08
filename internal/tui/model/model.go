@@ -312,7 +312,7 @@ func (m *Model) handleClipboardCopiedMsg(msg util.ClipboardCopiedMsg) (tea.Model
 
 // SetRepository sets the repository data and syncs to tab models (e.g. for tests)
 func (m *Model) SetRepository(repo *internal.Repository) {
-	m.appState.Repository = repo
+	m.appState.UpdateRepository(repo)
 	m.propagateRepository()
 	m.prsTabModel.SetGithubService(m.isGitHubAvailable())
 }

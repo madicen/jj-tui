@@ -71,7 +71,7 @@ func (m *Model) applyRepositoryLoaded(repo *internal.Repository) (*Model, tea.Cm
 	if m.appState.Repository != nil {
 		oldPRs = m.appState.Repository.PRs
 	}
-	m.appState.Repository = repo
+	m.appState.UpdateRepository(repo)
 	m.appState.Repository.PRs = oldPRs
 	m.appState.Loading = false
 	if m.appState.JJService == nil {
