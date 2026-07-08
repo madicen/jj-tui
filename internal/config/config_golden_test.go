@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"reflect"
 	"testing"
+	"time"
 )
 
 // goldenConfigJSON mirrors the on-disk schema of today's config files (the repo's
@@ -40,6 +41,7 @@ const goldenConfigJSON = `{
   "graph_revset": "trunk() | ancestors(@)",
   "graph_show_everyones_commits": false,
   "confirm_destructive": true,
+  "auto_refresh_seconds": 10,
   "external_file_editor": "cursor",
   "external_file_editor_custom": "cursor -g {path}",
   "theme_primary": "#9529be",
@@ -155,6 +157,54 @@ func TestConfirmDestructiveDefaultsOnForOldConfigs(t *testing.T) {
 	cfg.ConfirmDestructive = &off
 	if cfg.ConfirmDestructiveOps() {
 		t.Error("ConfirmDestructiveOps() must return false when the toggle is explicitly off")
+	}
+}
+
+// TestAutoRefreshDefaultsOffForOldConfigs verifies that a config file written before the
+// auto_refresh_seconds key existed defaults to OFF (0 interval), that omitempty keeps old files
+// byte-compatible, and that a positive value yields the configured interval while negatives clamp
+// to off.
+func TestAutoRefreshDefaultsOffForOldConfigs(t *testing.T) {
+	const oldSchema = `{"github_token":"x","graph_revset":"trunk()"}`
+
+	var cfg Config
+	if err := json.Unmarshal([]byte(oldSchema), &cfg); err != nil {
+		t.Fatalf("failed to unmarshal old-schema config: %v", err)
+	}
+	if cfg.AutoRefreshSeconds != nil {
+		t.Errorf("expected AutoRefreshSeconds nil for a file without the key, got %v", *cfg.AutoRefreshSeconds)
+	}
+	if cfg.AutoRefreshInterval() != 0 {
+		t.Errorf("AutoRefreshInterval() must default to 0 (off), got %v", cfg.AutoRefreshInterval())
+	}
+
+	out, err := json.Marshal(&cfg)
+	if err != nil {
+		t.Fatalf("failed to marshal config: %v", err)
+	}
+	var round map[string]json.RawMessage
+	if err := json.Unmarshal(out, &round); err != nil {
+		t.Fatalf("re-marshaled config is not valid JSON: %v", err)
+	}
+	if _, ok := round["auto_refresh_seconds"]; ok {
+		t.Error("auto_refresh_seconds must not be emitted for a config that never set it (breaks byte-compat)")
+	}
+
+	secs := 15
+	cfg.AutoRefreshSeconds = &secs
+	if got := cfg.AutoRefreshInterval(); got != 15*time.Second {
+		t.Errorf("AutoRefreshInterval() = %v, want 15s", got)
+	}
+
+	neg := -5
+	cfg.AutoRefreshSeconds = &neg
+	if got := cfg.AutoRefreshInterval(); got != 0 {
+		t.Errorf("negative AutoRefreshSeconds must clamp to 0 (off), got %v", got)
+	}
+
+	var nilCfg *Config
+	if nilCfg.AutoRefreshInterval() != 0 {
+		t.Error("AutoRefreshInterval() must be nil-safe and return 0")
 	}
 }
 

@@ -10,6 +10,7 @@ package model
 
 import (
 	"context"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -74,6 +75,10 @@ type Model struct {
 	// Silent background graph refresh (handleTickMsg) runs concurrently per Bubble Tea Batch;
 	// without this guard, overlapping GetRepository calls can retain multi-copy graphs and spike RSS.
 	silentReloadInFlight bool
+	// lastAutoRefresh timestamps the most recent P5.2 silent auto-refresh so handleTickMsg can honor
+	// the configured ui.auto_refresh_seconds minimum spacing (the heartbeat tick fires more often than
+	// most refresh intervals). Zero value = never refreshed yet.
+	lastAutoRefresh time.Time
 	// Monotonic id for optional LLM requests; stale responses are ignored.
 	aiGenReqID int
 	// aiGenOverlayActive shows the centered spinner while Generate*Cmd runs (form modals + description editor).

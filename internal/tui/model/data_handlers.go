@@ -262,7 +262,7 @@ func (m *Model) handleDataSilentRepositoryLoadedMsg(msg data.SilentRepositoryLoa
 }
 
 // handleTickMsg runs auto-refresh and ensures changed files for selected commit; forwards PR tick to PRs tab.
-func (m *Model) handleTickMsg() (tea.Model, tea.Cmd) {
+func (m *Model) handleTickMsg(now time.Time) (tea.Model, tea.Cmd) {
 	// Don't run background refresh/updates if a modal is showing or we're in a blocking flow
 	isBlockingView := m.appState.ViewMode == state.ViewEditDescription ||
 		m.appState.ViewMode == state.ViewCreatePR ||
@@ -286,7 +286,9 @@ func (m *Model) handleTickMsg() (tea.Model, tea.Cmd) {
 			}
 		}
 	}
-	if !m.silentReloadInFlight && !m.appState.Loading && !m.aiGenOverlayActive && m.appState.JJService != nil && m.appState.ViewMode != state.ViewEditDescription && m.appState.ViewMode != state.ViewCreatePR && m.appState.ViewMode != state.ViewCreateTicket && m.appState.ViewMode != state.ViewCreateBookmark && m.appState.ViewMode != state.ViewFileDiff && (m.appState.ViewMode != state.ViewEvologSplit || !m.evologSplitModal.SuggestLoading()) && !m.graphTabModel.IsInRebaseMode() && !m.graphTabModel.IsInMergeMode() {
+	// P5.2: opt-in silent auto-refresh. shouldSilentReload gates on ui.auto_refresh_seconds
+	// (0/off by default), the configured minimum spacing, and the modal-open / in-flight guards.
+	if m.shouldSilentReload(now) {
 		revset := ""
 		if m.appState.Config != nil {
 			revset = m.appState.Config.GraphRevset
@@ -300,6 +302,7 @@ func (m *Model) handleTickMsg() (tea.Model, tea.Cmd) {
 			m.appState.JJService.BookmarkListPreferTracked = m.appState.Config.BranchesFilterToTrackedAndMine()
 		}
 		m.silentReloadInFlight = true
+		m.lastAutoRefresh = now
 		cmds = append(cmds, data.LoadRepositorySilent(m.appState.JJService, revset))
 	}
 	prInput := prstab.PrTickInput{
@@ -320,6 +323,42 @@ func (m *Model) handleTickMsg() (tea.Model, tea.Cmd) {
 	}
 	cmds = append(cmds, m.tickCmd())
 	return m, tea.Batch(cmds...)
+}
+
+// shouldSilentReload reports whether handleTickMsg should kick off a P5.2 silent background
+// graph reload on this tick. It is the single guard for the feature and is intentionally
+// conservative: auto-refresh must never clobber in-progress work, so ANY open modal (form,
+// error, warning, workspaces, operations, evolog split, file diff) or in-flight/loading state
+// suppresses it, as do the in-graph rebase/merge modes (which aren't modals). It also honors
+// the configured minimum spacing so the faster heartbeat tick can't refresh more often than
+// ui.auto_refresh_seconds. Returns false when the feature is off (interval <= 0, the default).
+func (m *Model) shouldSilentReload(now time.Time) bool {
+	if m.appState.JJService == nil {
+		return false
+	}
+	interval := m.appState.Config.AutoRefreshInterval()
+	if interval <= 0 {
+		return false // auto-refresh disabled (default)
+	}
+	// Never overlap or clobber work already in flight.
+	if m.silentReloadInFlight || m.appState.Loading || m.aiGenOverlayActive {
+		return false
+	}
+	// Any open modal suppresses the background refresh (ModalStack read-model covers form modals,
+	// the error/warning overlays, and the graph-overlay modals like workspaces/operations/evolog).
+	stack := m.modalStack()
+	if stack.Len() > 0 {
+		return false
+	}
+	// Rebase/merge are in-graph modes rather than chromed modals, so guard them explicitly.
+	if m.graphTabModel.IsInRebaseMode() || m.graphTabModel.IsInMergeMode() {
+		return false
+	}
+	// Respect the configured minimum spacing between silent reloads.
+	if !m.lastAutoRefresh.IsZero() && now.Sub(m.lastAutoRefresh) < interval {
+		return false
+	}
+	return true
 }
 
 // handleReauthNeededEffect applies PR tab's reauth request (clear GitHub, start login).

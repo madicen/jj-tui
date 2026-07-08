@@ -387,6 +387,7 @@ jj-tui
   "branch_limit": 50,
   "sanitize_bookmark_names": true,
   "graph_revset": "",
+  "auto_refresh_seconds": 0,
   "external_file_editor": "cursor",
   "external_file_editor_custom": "cursor -g {path}",
   "theme_primary": "#7E00AF",
@@ -557,6 +558,12 @@ To use a custom revset, set `graph_revset` in your config. Examples:
 - **Also show parents of immutable bookmark tips** (e.g. parent of `main` when the bookmark sits on an immutable commit): append `| parents(bookmarks())` to the built-in default in Settings / JSON.
 
 Leave `graph_revset` empty to use the built-in default. See [jj revset docs](https://jj-vcs.github.io/jj/latest/revsets) for more.
+
+### Auto-refresh
+
+Set `auto_refresh_seconds` to a positive value to have jj-tui silently reload the commit graph in the background on that interval, so repository activity performed outside the TUI (e.g. a `jj new` run in another terminal) appears without a manual refresh. The default is `0`, which turns auto-refresh **off**.
+
+The silent reload is skipped whenever a modal is open (Edit Description, Create PR/Bookmark/Ticket, the error/workspaces/operations overlays, etc.) or a `jj` command is already in flight, so it never clobbers work in progress. You can always refresh manually regardless of this setting.
 
 ### Ticket Provider Options
 

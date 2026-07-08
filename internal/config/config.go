@@ -160,6 +160,14 @@ type UIConfig struct {
 	// and act immediately. Files written before this key existed have it nil and therefore
 	// keep prompting. See Config.ConfirmDestructiveOps.
 	ConfirmDestructive *bool `json:"confirm_destructive,omitempty"`
+
+	// AutoRefreshSeconds enables the periodic SILENT background reload of the commit graph so
+	// external `jj` activity (e.g. a `jj new` run in another terminal) appears without a manual
+	// refresh. nil/0 (default) = OFF; a positive value is the minimum number of seconds between
+	// silent reloads. The reload is skipped whenever a modal is open or a jj command is already
+	// in flight so it can never clobber in-progress work. Files written before this key existed
+	// have it nil and therefore keep auto-refresh off. See Config.AutoRefreshInterval.
+	AutoRefreshSeconds *int `json:"auto_refresh_seconds,omitempty"`
 }
 
 // ThemeConfig groups the user's theme color overrides.
@@ -873,6 +881,16 @@ func (c *Config) ConfirmDestructiveOps() bool {
 		return true // Default: confirm
 	}
 	return *c.ConfirmDestructive
+}
+
+// AutoRefreshInterval returns the configured minimum interval between silent background graph
+// reloads, or 0 when auto-refresh is disabled. Nil-safe and clamps negatives to 0 (off) so a
+// malformed config can't produce a tight refresh loop. See UIConfig.AutoRefreshSeconds.
+func (c *Config) AutoRefreshInterval() time.Duration {
+	if c == nil || c.AutoRefreshSeconds == nil || *c.AutoRefreshSeconds <= 0 {
+		return 0
+	}
+	return time.Duration(*c.AutoRefreshSeconds) * time.Second
 }
 
 // BranchesFilterToTrackedAndMine returns true when the branches tab should hide

@@ -1038,7 +1038,7 @@ func (m *Model) dispatchAsyncMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case tickMsg:
-		return m.handleTickMsg()
+		return m.handleTickMsg(time.Time(msg))
 	case undoHintReadyMsg:
 		return m.handleUndoHintReady(msg)
 	case undoHintExpiredMsg:
