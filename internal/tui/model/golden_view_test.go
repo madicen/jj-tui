@@ -165,6 +165,24 @@ func TestGoldenViewGraph(t *testing.T) {
 		m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 		testutil.AssertGolden(t, "graph/empty_loading", m.View())
 	})
+
+	t.Run("annotate_overlay", func(t *testing.T) {
+		m := newGoldenModel(t)
+		defer m.Close()
+		m.SetViewMode(state.ViewCommitGraph)
+		m.graphTabModel.SelectCommit(1)
+		selCID := m.appState.Repository.Graph.Commits[1].ChangeID
+		m.graphTabModel.SetChangedFiles([]jj.ChangedFile{
+			{Path: "internal/tui/model/model.go", Status: "M"},
+		}, selCID)
+		m.graphTabModel.ShowAnnotate("bbbb", "internal/tui/model/model.go", []jj.AnnotationLine{
+			{ChangeID: "zkztqwxr", Author: "ada", Age: "2 hours ago", LineNumber: 1, Content: "package model"},
+			{ChangeID: "nmqrstuv", Author: "grace", Age: "3 days ago", LineNumber: 2, Content: ""},
+			{ChangeID: "nmqrstuv", Author: "grace", Age: "3 days ago", LineNumber: 3, Content: "func New() Model {"},
+			{ChangeID: "wpqxlmno", Author: "alan", Age: "1 week ago", LineNumber: 4, Content: "\treturn Model{}"},
+		})
+		testutil.AssertGolden(t, "graph/annotate_overlay", m.View())
+	})
 }
 
 func TestGoldenViewPRs(t *testing.T) {

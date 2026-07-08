@@ -7,6 +7,10 @@ import (
 
 // handleKeyMsg handles keyboard input; returns (updated model, optional request, direct cmd).
 func (m GraphModel) handleKeyMsg(msg tea.KeyMsg) (GraphModel, *Request, tea.Cmd) {
+	// The blame overlay owns the keyboard while shown.
+	if m.annotate != nil && m.annotate.shown {
+		return m.handleAnnotateKey(msg)
+	}
 	switch {
 	// Navigation keys
 	case key.Matches(msg, m.keys.MoveDown):
@@ -196,6 +200,10 @@ func (m GraphModel) handleKeyMsg(msg tea.KeyMsg) (GraphModel, *Request, tea.Cmd)
 	case key.Matches(msg, m.keys.ViewFileDiff):
 		if !m.graphFocused {
 			return m, &Request{ViewFileDiff: true}, nil
+		}
+	case key.Matches(msg, m.keys.Annotate):
+		if !m.graphFocused {
+			return m, &Request{Annotate: true}, nil
 		}
 	case key.Matches(msg, m.keys.OpenExternal):
 		if !m.graphFocused {

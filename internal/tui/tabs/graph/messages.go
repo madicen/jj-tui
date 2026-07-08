@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen/jj-tui/internal"
@@ -86,6 +87,29 @@ func AbsorbApplyCmd(svc *jj.Service) tea.Cmd {
 			return util.ErrorMsg{Err: err}
 		}
 		return RepositoryLoadedMsg{Repository: repo}
+	}
+}
+
+// AnnotateLoadedMsg carries `jj file annotate` output for the blame overlay.
+type AnnotateLoadedMsg struct {
+	Seq   int
+	Lines []jj.AnnotationLine
+	Err   error
+}
+
+// AnnotateFileCmd runs `jj file annotate` for one file at a revision and sends AnnotateLoadedMsg.
+func AnnotateFileCmd(svc *jj.Service, seq int, changeID, path string) tea.Cmd {
+	if svc == nil || seq <= 0 {
+		return nil
+	}
+	ch := strings.TrimSpace(changeID)
+	p := strings.TrimSpace(path)
+	if p == "" {
+		return nil
+	}
+	return func() tea.Msg {
+		lines, err := svc.AnnotateFile(context.Background(), ch, p)
+		return AnnotateLoadedMsg{Seq: seq, Lines: lines, Err: err}
 	}
 }
 
@@ -175,6 +199,8 @@ type Request struct {
 	RevertFile           bool
 	ViewFileDiff         bool
 	OpenInExternalEditor bool
+	// Annotate: open the blame overlay for the selected changed file (jj file annotate).
+	Annotate bool
 	// MoveDeltaOntoOrigin: new commit on bookmark@origin with same tree as selection; avoids force-push after amending a pushed branch.
 	MoveDeltaOntoOrigin bool
 	// StartEvologSplit: experimental FAQ-style split using jj evolog to pick parent revision.
@@ -216,6 +242,7 @@ const (
 	FollowUpViewFileDiff
 	FollowUpStartDuplicateMode
 	FollowUpDeleteBookmark
+	FollowUpAnnotate
 )
 
 // Result is returned by HandleRequest. Main sets status from Status, runs Cmd if set, and performs the FollowUp action.

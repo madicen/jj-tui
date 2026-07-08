@@ -83,6 +83,10 @@ type GraphModel struct {
 	// ui.confirm_destructive toggle is on. While set, the graph shows a y/n prompt and
 	// swallows other keys until the user confirms (y) or cancels (n/Esc). See confirm.go.
 	confirm *destructiveConfirm
+
+	// annotate holds the scrollable blame overlay (`B` on a changed file). While
+	// shown it owns navigation keys (j/k/Enter/Esc) — see annotate.go.
+	annotate *annotateView
 }
 
 // SelectionMode indicates what the user is selecting commits for
@@ -160,6 +164,10 @@ func (m *GraphModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case ChangedFilesLoadedMsg:
 		m.SetChangedFiles(msg.Files, msg.CommitID)
+		return m, nil
+
+	case AnnotateLoadedMsg:
+		m.SetAnnotateResult(msg.Seq, msg.Lines, msg.Err)
 		return m, nil
 
 	case tea.WindowSizeMsg:
@@ -553,6 +561,11 @@ func (m *GraphModel) View() string {
 			BorderForeground(styles.ColorPrimary).
 			Padding(0, 1).
 			Render(m.confirm.prompt)
+		v = overlay.OverlayViewInCenterWithOffset(v, box, m.width, m.height, 0, 0)
+	}
+
+	if m.AnnotateShown() {
+		box := m.renderAnnotateOverlay()
 		v = overlay.OverlayViewInCenterWithOffset(v, box, m.width, m.height, 0, 0)
 	}
 

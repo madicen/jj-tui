@@ -32,6 +32,7 @@ type GraphKeyMap struct {
 	MoveFileDown    key.Binding
 	RevertFile      key.Binding
 	ViewFileDiff    key.Binding
+	Annotate        key.Binding
 	OpenExternal    key.Binding
 }
 
@@ -63,6 +64,7 @@ func DefaultGraphKeyMap(overrides map[string]string) GraphKeyMap {
 		MoveFileDown:    bind(overrides, "graph.move_file_down", "]", "Move selected file down", "]"),
 		RevertFile:      bind(overrides, "graph.revert_file", "v", "Revert selected file", "v"),
 		ViewFileDiff:    bind(overrides, "graph.view_file_diff", "o", "View full jj diff for selected changed file (files pane)", "o"),
+		Annotate:        bind(overrides, "graph.annotate", "B", "Blame: annotate selected file line-by-line (files pane; Enter jumps to change)", "B"),
 		OpenExternal:    bind(overrides, "graph.open_external", "O", "Open selected file in external editor (files pane; set editor in Settings → Advanced)", "O"),
 	}
 }
@@ -94,6 +96,7 @@ func (k GraphKeyMap) entries() []entry {
 		{"graph.move_file_down", k.MoveFileDown},
 		{"graph.revert_file", k.RevertFile},
 		{"graph.view_file_diff", k.ViewFileDiff},
+		{"graph.annotate", k.Annotate},
 		{"graph.open_external", k.OpenExternal},
 	}
 }

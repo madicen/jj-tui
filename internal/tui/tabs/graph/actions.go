@@ -180,6 +180,31 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 			FileDiffPath: ctx.ChangedFiles[ctx.SelectedFile].Path,
 		}
 	}
+	if r.Annotate {
+		if ctx.JJService == nil {
+			return Result{Status: "Cannot annotate: jj not available"}
+		}
+		if ctx.GraphFocused {
+			return Result{Status: "Press Tab to focus files, select a file, then press B"}
+		}
+		if len(ctx.ChangedFiles) == 0 {
+			return Result{Status: "No changed files for this commit"}
+		}
+		if ctx.SelectedFile < 0 || ctx.SelectedFile >= len(ctx.ChangedFiles) {
+			return Result{Status: "Select a file in the changed-files list"}
+		}
+		if !ctx.IsSelectedCommitValid() {
+			return Result{Status: "No commit selected"}
+		}
+		if ctx.ChangedFiles[ctx.SelectedFile].Status == "D" {
+			return Result{Status: "Cannot annotate a deleted file"}
+		}
+		return Result{
+			FollowUp:     FollowUpAnnotate,
+			CommitIndex:  ctx.SelectedCommit,
+			FileDiffPath: ctx.ChangedFiles[ctx.SelectedFile].Path,
+		}
+	}
 	if r.OpenInExternalEditor {
 		if ctx.GraphFocused {
 			return Result{Status: "Press Tab to focus files, select a file, then press O"}
@@ -702,6 +727,14 @@ func ApplyResult(res Result, graphModel *GraphModel, ctx *RequestContext, app *s
 		if ctx != nil && ctx.Repository != nil && res.CommitIndex >= 0 && res.CommitIndex < len(ctx.Repository.Graph.Commits) && strings.TrimSpace(res.FileDiffPath) != "" {
 			c := ctx.Repository.Graph.Commits[res.CommitIndex]
 			return state.NavigateTarget{Kind: state.NavigateOpenFileDiff, Commit: c, FileDiffPath: res.FileDiffPath}.Cmd()
+		}
+		return nil
+	case FollowUpAnnotate:
+		if ctx != nil && ctx.JJService != nil && ctx.Repository != nil && res.CommitIndex >= 0 && res.CommitIndex < len(ctx.Repository.Graph.Commits) && strings.TrimSpace(res.FileDiffPath) != "" {
+			c := ctx.Repository.Graph.Commits[res.CommitIndex]
+			seq := graphModel.beginAnnotate(c.ShortID, res.FileDiffPath)
+			app.StatusMessage = "Loading blame…"
+			return AnnotateFileCmd(ctx.JJService, seq, c.ChangeID, res.FileDiffPath)
 		}
 		return nil
 	case FollowUpUpdatePR:

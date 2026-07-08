@@ -1014,6 +1014,17 @@ func (m *Model) dispatchAsyncMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.graphTabModel = *g
 		}
 		return m, cmd
+	case graphtab.AnnotateLoadedMsg:
+		updated, cmd := m.graphTabModel.Update(msg)
+		if g, ok := updated.(*graphtab.GraphModel); ok {
+			m.graphTabModel = *g
+		}
+		if msg.Err != nil && !m.appState.Loading {
+			m.appState.StatusMessage = "Blame failed"
+		} else if !m.appState.Loading {
+			m.appState.StatusMessage = ""
+		}
+		return m, cmd
 	case filedifftab.FileDiffLoadedMsg:
 		updated, cmd := m.fileDiffModal.Update(msg)
 		m.fileDiffModal = updated
