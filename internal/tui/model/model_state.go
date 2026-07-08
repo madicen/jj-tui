@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	zone "github.com/lrstanley/bubblezone"
 	overlay "github.com/madicen/bubble-overlay"
+	"github.com/madicen/jj-tui/internal/tui/keys"
 	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/tab"
 	bookmarktab "github.com/madicen/jj-tui/internal/tui/tabs/bookmark"
@@ -44,6 +45,10 @@ type Model struct {
 	ctx         context.Context
 	zoneManager *zone.Manager
 	appState    state.AppState // Shared state and services; submodels receive &appState
+
+	// keys holds the global (always-available) keybindings. Tabs hold their own
+	// scoped KeyMaps; see internal/tui/keys.
+	keys keys.GlobalKeyMap
 
 	// Dimensions (main only)
 	width  int

@@ -1,6 +1,7 @@
 package model
 
 import (
+	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/util"
@@ -81,31 +82,31 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// Global shortcuts (and Esc/Tab when not in a modal).
-	switch msg.String() {
-	case "ctrl+q", "ctrl+c":
+	switch {
+	case key.Matches(msg, m.keys.Quit):
 		util.FlushMouse() // sync: stop SGR mouse before quit cmd runs (avoids shell seeing "35;…M")
 		return m, tea.Quit
-	case "g":
+	case key.Matches(msg, m.keys.NavGraph):
 		return m.handleNavigateToGraphTab()
-	case "p":
+	case key.Matches(msg, m.keys.NavPRs):
 		return m.handleNavigateToPRTab()
-	case "t":
+	case key.Matches(msg, m.keys.NavTickets):
 		return m.handleNavigateToTicketsTab()
-	case "b":
+	case key.Matches(msg, m.keys.NavBranches):
 		return m.handleNavigateToBranchesTab()
-	case ",":
+	case key.Matches(msg, m.keys.NavSettings):
 		return m.handleNavigateToSettingsTab()
-	case "h", "?":
+	case key.Matches(msg, m.keys.NavHelp):
 		return m.handleNavigateToHelpTab()
-	case "w":
+	case key.Matches(msg, m.keys.NavWorkspaces):
 		return m.handleNavigateToWorkspaces()
-	case "ctrl+r":
+	case key.Matches(msg, m.keys.Refresh):
 		return m, m.refreshRepository()
-	case "ctrl+z":
+	case key.Matches(msg, m.keys.Undo):
 		return m.handleUndo()
-	case "ctrl+y":
+	case key.Matches(msg, m.keys.Redo):
 		return m.handleRedo()
-	case "esc":
+	case key.Matches(msg, m.keys.Back):
 		if m.appState.ViewMode == state.ViewTickets && m.ticketsTabModel.IsStatusChangeMode() {
 			m.ticketsTabModel.SetStatusChangeMode(false)
 			m.appState.StatusMessage = "Ready"
@@ -114,7 +115,7 @@ func (m *Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.appState.ViewMode != state.ViewCommitGraph {
 			m.appState.ViewMode = state.ViewCommitGraph
 		}
-	case "tab":
+	case msg.String() == "tab":
 		if m.appState.ViewMode != state.ViewCommitGraph {
 			m.appState.ViewMode = state.ViewCommitGraph
 		}

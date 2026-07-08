@@ -8,6 +8,7 @@ import (
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/integrations/github"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
+	"github.com/madicen/jj-tui/internal/tui/keys"
 	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/tab"
 	bookmarktab "github.com/madicen/jj-tui/internal/tui/tabs/bookmark"
@@ -44,6 +45,7 @@ func New(ctx context.Context) *Model {
 	m := &Model{
 		ctx:         ctx,
 		zoneManager: zm,
+		keys:        keys.DefaultGlobalKeyMap(nil),
 		busySpinner: newBusySpinner(),
 		appState: state.AppState{
 			ViewMode:      state.ViewCommitGraph,
