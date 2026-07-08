@@ -3,9 +3,11 @@ package help
 import (
 	"strings"
 
+	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
+	"github.com/madicen/jj-tui/internal/tui/keys"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/tabs/help/commandhistory"
 	"github.com/madicen/jj-tui/internal/tui/tabs/help/shortcuts"
@@ -21,6 +23,7 @@ type CommandInfo struct {
 // Model represents the state of the Help tab. It routes to Shortcuts or Command History sub-tab.
 type Model struct {
 	zoneManager *zone.Manager
+	keys        keys.HelpKeyMap
 	activeTab   int // 0=Shortcuts, 1=Commands
 	width       int
 	height      int
@@ -33,10 +36,19 @@ type Model struct {
 func NewModel(zoneManager *zone.Manager) Model {
 	return Model{
 		zoneManager: zoneManager,
+		keys:        keys.DefaultHelpKeyMap(nil),
 		activeTab:   0,
 		shortcuts:   shortcuts.NewModel(zoneManager),
 		commands:    commandhistory.NewModel(zoneManager),
 	}
+}
+
+// SetKeyMaps pushes config-resolved keybindings into the help tab so the
+// generated shortcuts list and sub-tab navigation reflect any user rebinding
+// (PLAN(P5.1)). Called by the root model at startup.
+func (m *Model) SetKeyMaps(km keys.KeyMaps) {
+	m.keys = km.Help
+	m.shortcuts.SetKeyMaps(km)
 }
 
 // Init initializes the model
@@ -55,18 +67,18 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+j":
+		switch {
+		case key.Matches(msg, m.keys.PrevTab):
 			// Previous sub-tab (wrap: 0 -> 1)
 			m.activeTab = (m.activeTab - 1 + 2) % 2
 			m.commands.SetSelectedCommand(0)
 			return m, nil
-		case "ctrl+k":
+		case key.Matches(msg, m.keys.NextTab):
 			// Next sub-tab
 			m.activeTab = (m.activeTab + 1) % 2
 			m.commands.SetSelectedCommand(0)
 			return m, nil
-		case "tab":
+		case key.Matches(msg, m.keys.SwitchTab):
 			m.activeTab = (m.activeTab + 1) % 2
 			m.commands.SetSelectedCommand(0)
 			return m, nil
