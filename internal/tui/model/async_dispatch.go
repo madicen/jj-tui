@@ -332,7 +332,15 @@ func (m *Model) dispatchAsyncMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.appState.Loading = false
 		updated, _ := m.prsTabModel.UpdateWithApp(msg, &m.appState)
 		m.prsTabModel = updated
-		return m, m.applyEffects(effShowError{msg.Err})
+		// P5.5: PR fetch is a transient GitHub API call; offer Retry that re-runs the same load.
+		existingPRs := 0
+		if m.appState.Repository != nil {
+			existingPRs = len(m.appState.Repository.PRs)
+		}
+		return m, m.applyEffects(effShowRetryableError{
+			err:   msg.Err,
+			retry: prstab.LoadPRsCmd(m.appState.GitHubService, m.appState.GithubInfo, m.appState.DemoMode, existingPRs),
+		})
 	case prstab.ReauthNeededMsg:
 		updated, _ := m.prsTabModel.UpdateWithApp(msg, &m.appState)
 		m.prsTabModel = updated
@@ -385,7 +393,11 @@ func (m *Model) dispatchAsyncMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.appState.Loading = false
 		updated, _ := m.ticketsTabModel.UpdateWithApp(msg, &m.appState)
 		m.ticketsTabModel = updated
-		m.applyEffects(effShowError{msg.Err})
+		// P5.5: ticket fetch is a transient provider API call; offer Retry that re-runs the load.
+		m.applyEffects(effShowRetryableError{
+			err:   msg.Err,
+			retry: ticketstab.LoadTicketsCmd(m.appState.TicketService, m.appState.DemoMode),
+		})
 		m.appState.StatusMessage = fmt.Sprintf("Error: %v", msg.Err)
 		return m, nil
 

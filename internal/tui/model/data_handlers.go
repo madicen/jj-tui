@@ -174,7 +174,12 @@ func (m *Model) handleRemoteOpResultMsg(msg data.RemoteOpResultMsg) (tea.Model, 
 func (m *Model) handlePushResultMsg(msg data.PushResultMsg) (tea.Model, tea.Cmd) {
 	m.appState.Loading = false
 	if msg.Err != nil {
-		return m, m.applyEffects(effShowError{msg.Err})
+		// P5.5: push failures are usually transient (network / auth); offer Retry that re-runs
+		// the same push (msg.All carries whether this was Push all vs Push current).
+		return m, m.applyEffects(effShowRetryableError{
+			err:   msg.Err,
+			retry: data.PushBookmarksCmd(m.appState.JJService, msg.All),
+		})
 	}
 	switch {
 	case msg.PushedCount == 0:

@@ -103,6 +103,7 @@ func (m *Model) handleNavigateError(t state.NavigateTarget) (tea.Model, tea.Cmd,
 	case state.NavigateDismissError:
 		m.errorModal.ClearError()
 		m.clearPendingAIRetry()
+		m.pendingRetryCmd = nil
 		// If a form modal (Edit Description, PR/Ticket/Bookmark, GitHub login) is open, keep it
 		// open after dismissing the error. Previously we forced ViewMode back to the graph,
 		// which silently discarded whatever the user had typed. Errors triggered from these
@@ -129,6 +130,19 @@ func (m *Model) handleNavigateError(t state.NavigateTarget) (tea.Model, tea.Cmd,
 			m.pendingAIRetryActive = false
 			model, cmd := m.handleNavigate(state.NavigateTarget{Kind: retryKind, AIOverrideProfile: retryOverride})
 			return model, cmd, true
+		}
+		// P5.5: generic replay target (PR/ticket API load, bookmark push, etc.). Clear the modal
+		// and re-run the exact command that failed. The command was captured verbatim at the
+		// failure site so it reproduces the attempt without depending on any transient state.
+		if m.pendingRetryCmd != nil {
+			m.errorModal.ClearError()
+			retryCmd := m.pendingRetryCmd
+			m.pendingRetryCmd = nil
+			if !m.isFormModalView() {
+				m.appState.ViewMode = state.ViewCommitGraph
+			}
+			m.appState.Loading = true
+			return m, retryCmd, true
 		}
 		// No replayable action: fall back to the legacy behavior of dismissing and refreshing
 		// the repository. Today the Retry button is hidden in this case (errortab.HasRetry is

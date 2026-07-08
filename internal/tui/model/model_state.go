@@ -12,6 +12,7 @@ import (
 	"context"
 
 	"github.com/charmbracelet/bubbles/spinner"
+	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 	overlay "github.com/madicen/bubble-overlay"
 	"github.com/madicen/jj-tui/internal/tui/keys"
@@ -86,6 +87,12 @@ type Model struct {
 	// pendingAIRetryOverrideProfile preserves the long-press menu's one-shot profile selection so a retry
 	// after a transient error uses the same model the user picked. Empty = retry with active profile.
 	pendingAIRetryOverrideProfile string
+	// pendingRetryCmd is the generic (non-AI) replay target for the error modal's Retry (^r) button.
+	// P5.5: any retryable operation that surfaces a failure via effShowRetryableError stashes the exact
+	// command that reproduces the attempt (e.g. re-load PRs, re-load tickets, re-push bookmarks) here so
+	// NavigateRetryError can re-run it verbatim. Cleared on retry, on dismiss, and whenever a plain
+	// (non-retryable) effShowError fires so a stale command can never replay against an unrelated error.
+	pendingRetryCmd tea.Cmd
 
 	// Tab-specific models (own all tab/modal state; main model does not duplicate)
 	graphTabModel    graphtab.GraphModel

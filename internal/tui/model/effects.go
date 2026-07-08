@@ -20,10 +20,22 @@ import (
 // inline code did before.
 type effect interface{ isEffect() }
 
-// effShowError routes an error into the shared error modal.
+// effShowError routes an error into the shared error modal (no Retry offered).
 type effShowError struct{ err error }
 
 func (effShowError) isEffect() {}
+
+// effShowRetryableError routes an error into the shared error modal AND offers a Retry (^r)
+// button that replays the exact command that produced the failure. P5.5: use this for any
+// transient/network operation the user can simply re-run (PR/ticket API loads, bookmark push).
+// retry must be the self-contained command that reproduces the attempt; it is stashed on the
+// Model and re-run by NavigateRetryError. A nil retry degrades to a plain error (no Retry).
+type effShowRetryableError struct {
+	err   error
+	retry tea.Cmd
+}
+
+func (effShowRetryableError) isEffect() {}
 
 // effClearError dismisses whatever is currently in the error modal.
 type effClearError struct{}
@@ -78,7 +90,15 @@ func (m *Model) applyEffects(effs ...effect) tea.Cmd {
 func (m *Model) applyEffect(e effect) tea.Cmd {
 	switch ef := e.(type) {
 	case effShowError:
+		// A plain error clears any stale generic replay target so Retry can never fire against an
+		// unrelated failure (SetError already turns hasRetry off).
+		m.pendingRetryCmd = nil
 		m.errorModal.SetError(ef.err, false, "")
+		return nil
+	case effShowRetryableError:
+		m.errorModal.SetError(ef.err, false, "")
+		m.pendingRetryCmd = ef.retry
+		m.errorModal.SetHasRetry(ef.retry != nil)
 		return nil
 	case effClearError:
 		m.errorModal.SetError(nil, false, "")
