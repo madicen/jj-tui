@@ -57,6 +57,16 @@ const autoRefreshInterval = 5 * time.Second
 // (tickets/settings/help/…) no longer implement or receive a repository hook, and
 // the three that do (graph selection, prs selection, branches render cache) satisfy
 // tab.RepositoryAware via OnRepositoryLoaded.
+//
+// PLAN(P2.8): the graph/prs/branches tabs still hold a *cached snapshot* of the repo
+// (m.repository) rather than reading m.appState.Repository directly. That final
+// cache removal is blocked on the unfinished P2.3 Tab migration: these tabs render
+// via the no-argument Renderer.View() (see tab_adapters.go), which has no access to
+// *AppState, so View() must read a cached field. Once View(app) is plumbed through
+// (the P2.3 target contract), OnRepositoryLoaded can shrink to only the recompute
+// (selection reconcile / clamp) and drop the stored copy. Until then app.Repository
+// is the single WRITE source (all writes go through AppState.UpdateRepository) and
+// the caches are refreshed only from it, on load, through this one function.
 func (m *Model) propagateRepository() {
 	repo := m.appState.Repository
 	m.graphTabModel.OnRepositoryLoaded(repo)
