@@ -89,8 +89,10 @@ jj-tui/
 ## Tabs and the root model
 
 The root model (`internal/tui/model`) owns each tab. Cross-cutting orchestration
-and tab wiring are being consolidated (plan item P2.3) so that adding a tab
-touches as few places as possible.
+and tab wiring were consolidated (plan item P2.3) so that `model.go` no longer
+imports any concrete tab package: those imports are now construction-time-only
+(in `model/init.go`), and the runtime `Update`/`View` paths reach tabs only
+through the `tab.Tab` interface and small typed hook interfaces.
 
 - **Effects (`model/effects.go`).** Message handlers that need to touch another
   component's state (the error modal, cross-tab PR reconciliation, follow-up
@@ -99,13 +101,30 @@ touches as few places as possible.
   `eff*` type + `applyEffect` case over reaching into another component inline.
 - **Tab registry (`model/init.go` `initTabRegistry`).** The six primary content
   tabs (graph, PRs, branches, tickets, settings, help) are registered in
-  `tabRegistry` / `tabOrder` behind the `tab.Renderer` interface
-  (`internal/tui/tab`). The window-resize fan-out and the content-render
-  dispatch iterate the registry instead of naming each concrete field, so a new
-  primary tab is wired for sizing/rendering in one place (`initTabRegistry`).
-  The concrete fields remain the source of truth for accessors and message
-  handling; `tab.Tab`/`RepositoryAware`/`Activatable` document the target
-  contract the remaining migration grows into.
+  `tabRegistry` / `tabOrder` behind the `tab.Tab` interface (`internal/tui/tab`).
+  The window-resize fan-out, content-render dispatch, and generic input
+  forwarding (keys, mouse, zone clicks) iterate the registry instead of naming
+  each concrete field.
+- **Adapters (`model/tab_adapters.go`).** Each concrete tab is wrapped by a small
+  adapter that satisfies `tab.Tab` (`Update(msg, *AppState) (Tab, tea.Cmd)`,
+  `View(app)`, `SetDimensions`) and applies any per-tab command wrapping. Tab
+  specific queries the model still needs (e.g. tickets' status-change mode,
+  settings' esc handling) are exposed via typed hook interfaces
+  (`model/tab_hooks.go`) and looked up with a type assertion — the base
+  `tab.Tab` interface is deliberately kept narrow.
+- **Async/handler routing (`model/async_dispatch.go`, `model/model_handlers.go`).**
+  The concrete-typed message cases (background `*LoadedMsg` routing, effects,
+  form submits) live in `dispatchAsyncMsg` — the `default` arm of the root
+  `Update` switch — and the tab-driving `*Model` methods live in
+  `model_handlers.go`. These sibling files hold the concrete tab-package imports
+  so `model.go` stays free of them.
+
+**Adding a primary tab touches ≤3 places:** (1) add the concrete field to the
+`Model` struct in `model/model_state.go`; (2) register a `tab.Tab` adapter for it
+in `model/init.go` `initTabRegistry` (and add the adapter struct in
+`model/tab_adapters.go`); (3) wire any async result messages it emits into
+`dispatchAsyncMsg` (`model/async_dispatch.go`). Optional tab-specific queries go
+through a hook interface in `model/tab_hooks.go` rather than widening `tab.Tab`.
 
 ## Building
 
