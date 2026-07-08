@@ -2,6 +2,7 @@ package model
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
+	prstab "github.com/madicen/jj-tui/internal/tui/tabs/prs"
 )
 
 // effect is a cross-cutting intention produced by a message handler and applied
@@ -26,6 +27,12 @@ func (effShowError) isEffect() {}
 type effClearError struct{}
 
 func (effClearError) isEffect() {}
+
+// effResolveOpenPRs kicks off targeted per-bookmark open-PR lookups for local
+// bookmarks that the bulk PR list did not match.
+type effResolveOpenPRs struct{}
+
+func (effResolveOpenPRs) isEffect() {}
 
 // applyEffects applies every effect in order and batches any resulting commands.
 // Effects that only mutate component state contribute no command.
@@ -57,6 +64,8 @@ func (m *Model) applyEffect(e effect) tea.Cmd {
 	case effClearError:
 		m.errorModal.SetError(nil, false, "")
 		return nil
+	case effResolveOpenPRs:
+		return prstab.ResolveOpenPRsForBookmarksCmd(m.appState.GitHubService, m.bookmarksNeedingPRLookup(), m.appState.DemoMode)
 	default:
 		return nil
 	}

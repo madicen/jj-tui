@@ -1937,7 +1937,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The bulk list just replaced Repository.PRs; resolve any still-unmatched local bookmarks to
 		// their open PR via targeted lookups so the graph can offer "Update PR" for branches the
 		// limited bulk fetch omitted. Run after the bulk load so PrsLoadedMsg can't clobber the result.
-		if resolveCmd := prstab.ResolveOpenPRsForBookmarksCmd(m.appState.GitHubService, m.bookmarksNeedingPRLookup(), m.appState.DemoMode); resolveCmd != nil {
+		if resolveCmd := m.applyEffects(effResolveOpenPRs{}); resolveCmd != nil {
 			cmd = tea.Batch(cmd, resolveCmd)
 		}
 		return m, cmd
