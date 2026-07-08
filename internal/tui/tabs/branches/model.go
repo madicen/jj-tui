@@ -166,8 +166,8 @@ func (m Model) update(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
 			if statusMsg != "" {
 				app.StatusMessage = statusMsg
 			}
-			if (req.FetchAll || req.FetchAndTrack) && runCmd != nil {
-				app.BranchRemoteFetchPending = true
+			if (req.FetchAll || req.FetchAndTrack || req.PushBranch) && runCmd != nil {
+				app.SpinnerStartPending = true
 				app.Loading = true
 			}
 			return updated, runCmd
@@ -184,8 +184,8 @@ func (m Model) update(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
 			if statusMsg != "" {
 				app.StatusMessage = statusMsg
 			}
-			if (req.FetchAll || req.FetchAndTrack) && runCmd != nil {
-				app.BranchRemoteFetchPending = true
+			if (req.FetchAll || req.FetchAndTrack || req.PushBranch) && runCmd != nil {
+				app.SpinnerStartPending = true
 				app.Loading = true
 			}
 			return updated, runCmd

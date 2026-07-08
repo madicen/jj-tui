@@ -188,6 +188,10 @@ func (m Model) update(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
 			if statusMsg != "" {
 				app.StatusMessage = statusMsg
 			}
+			if runCmd != nil && (req.MergePR || req.ClosePR) {
+				app.SpinnerStartPending = true
+				app.Loading = true
+			}
 			return updated, runCmd
 		}
 		if req != nil {
@@ -201,6 +205,10 @@ func (m Model) update(msg tea.Msg, app *state.AppState) (Model, tea.Cmd) {
 			statusMsg, runCmd := ExecuteRequest(*req, ctx)
 			if statusMsg != "" {
 				app.StatusMessage = statusMsg
+			}
+			if runCmd != nil && (req.MergePR || req.ClosePR) {
+				app.SpinnerStartPending = true
+				app.Loading = true
 			}
 			return updated, runCmd
 		}

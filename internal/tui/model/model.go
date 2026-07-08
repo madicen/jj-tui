@@ -1363,14 +1363,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			updated, cmd := m.prsTabModel.UpdateWithApp(msg, &m.appState)
 			m.prsTabModel = updated
 			if cmd != nil {
-				return m, cmd
+				return m, m.wrapSpinnerStart(cmd)
 			}
 			// Fall through to handleKeyMsg for non-delegated keys
 		case state.ViewBranches:
 			updated, cmd := m.branchesTabModel.UpdateWithApp(msg, &m.appState)
 			m.branchesTabModel = updated
 			if cmd != nil {
-				return m, m.wrapBranchFetchCmd(cmd)
+				return m, m.wrapSpinnerStart(cmd)
 			}
 		case state.ViewTickets:
 			wasStatusChange := m.ticketsTabModel.IsStatusChangeMode()
@@ -1504,7 +1504,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				updated, cmd := m.prsTabModel.UpdateWithApp(msg, &m.appState)
 				m.prsTabModel = updated
 				if cmd != nil {
-					return m, cmd
+					return m, m.wrapSpinnerStart(cmd)
 				}
 			case state.ViewBranches:
 				m.branchesTabModel.SetDimensions(m.width, contentHeight)
@@ -1549,14 +1549,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			updated, cmd := m.prsTabModel.UpdateWithApp(msg, &m.appState)
 			m.prsTabModel = updated
 			if cmd != nil {
-				return m, cmd
+				return m, m.wrapSpinnerStart(cmd)
 			}
 		case state.ViewBranches:
 			m.branchesTabModel.SetDimensions(m.width, contentHeight)
 			updated, cmd := m.branchesTabModel.UpdateWithApp(msg, &m.appState)
 			m.branchesTabModel = updated
 			if cmd != nil {
-				return m, m.wrapBranchFetchCmd(cmd)
+				return m, m.wrapSpinnerStart(cmd)
 			}
 		case state.ViewTickets:
 			m.ticketsTabModel.SetDimensions(m.width, contentHeight)
@@ -1640,14 +1640,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			updated, cmd := m.prsTabModel.UpdateWithApp(msg, &m.appState)
 			m.prsTabModel = updated
 			if cmd != nil {
-				return m, cmd
+				return m, m.wrapSpinnerStart(cmd)
 			}
 		}
 		if m.appState.ViewMode == state.ViewBranches {
 			updated, cmd := m.branchesTabModel.UpdateWithApp(msg, &m.appState)
 			m.branchesTabModel = updated
 			if cmd != nil {
-				return m, m.wrapBranchFetchCmd(cmd)
+				return m, m.wrapSpinnerStart(cmd)
 			}
 		}
 		if m.appState.ViewMode == state.ViewTickets {
@@ -1954,6 +1954,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			err = mmsg.Err
 		}
 		if err != nil {
+			m.appState.Loading = false
 			m.errorModal.SetError(err, false, "")
 			return m, nil
 		}
@@ -2039,7 +2040,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		updated, _ := m.branchesTabModel.UpdateWithApp(msg, &m.appState)
 		m.branchesTabModel = updated
 		if msg.Action == "fetch" {
-			m.appState.BranchRemoteFetchPending = false
+			m.appState.SpinnerStartPending = false
 		}
 		if msg.Err != nil {
 			// Branches tab already set StatusMessage (e.g. "Failed to push branch: ...").

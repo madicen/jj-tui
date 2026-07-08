@@ -51,8 +51,11 @@ type AppState struct {
 	PRsLoadedOnce bool
 	// TicketsLoadedOnce is set after the first ticket list load completes (success or error).
 	TicketsLoadedOnce bool
-	// BranchRemoteFetchPending: branches tab started "fetch all remotes"; main batches spinner with the cmd.
-	BranchRemoteFetchPending bool
+	// SpinnerStartPending: a submodel just started a slow remote/network op (e.g. branch
+	// fetch-all/push, PR merge/close) and set Loading=true, but cannot start the busy spinner
+	// itself (the spinner lives on the main Model). Main batches the spinner tick with the cmd
+	// via wrapSpinnerStart and clears this flag. See internal/tui/model/overlay_helpers.go.
+	SpinnerStartPending bool
 }
 
 // HasRepository returns true if repository data is loaded.
