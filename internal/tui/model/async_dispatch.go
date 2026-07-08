@@ -206,13 +206,8 @@ func (m *Model) dispatchAsyncMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.appState.Repository.PRs = oldPRs // Restore PRs temporarily
 		// Push fresh graph into tab models before clearing loading so the overlay stays up until
 		// the UI can render the new @ / tree (appState alone does not update GraphModel).
-		m.graphTabModel.UpdateRepository(m.appState.Repository)
-		m.prsTabModel.UpdateRepository(m.appState.Repository)
+		m.propagateRepository()
 		m.prsTabModel.SetGithubService(m.isGitHubAvailable())
-		m.branchesTabModel.UpdateRepository(m.appState.Repository)
-		m.ticketsTabModel.UpdateRepository(m.appState.Repository)
-		m.settingsTabModel.UpdateRepository(m.appState.Repository)
-		m.helpTabModel.UpdateRepository(m.appState.Repository)
 		// Don't clear error modal here - let errors persist until dismissed
 		var workingChangeID string
 		for i, commit := range msg.Repository.Graph.Commits {
@@ -306,7 +301,7 @@ func (m *Model) dispatchAsyncMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.appState.Loading = false
 		updated, cmd := m.prsTabModel.UpdateWithApp(msg, &m.appState)
 		m.prsTabModel = updated
-		m.prsTabModel.UpdateRepository(m.appState.Repository)
+		m.prsTabModel.OnRepositoryLoaded(m.appState.Repository)
 		// The bulk list just replaced Repository.PRs; resolve any still-unmatched local bookmarks to
 		// their open PR via targeted lookups so the graph can offer "Update PR" for branches the
 		// limited bulk fetch omitted. Run after the bulk load so PrsLoadedMsg can't clobber the result.
@@ -883,7 +878,7 @@ func (m *Model) dispatchAsyncMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			FileMoveCompletedMsg: msg,
 			ChangedFilesCommitID: m.graphTabModel.GetChangedFilesCommitID(),
 		}, &m.appState)
-		m.graphTabModel.UpdateRepository(m.appState.Repository)
+		m.graphTabModel.OnRepositoryLoaded(m.appState.Repository)
 		if m.appState.Repository != nil {
 			for i, commit := range m.appState.Repository.Graph.Commits {
 				if commit.ChangeID == m.graphTabModel.GetChangedFilesCommitID() {
@@ -904,7 +899,7 @@ func (m *Model) dispatchAsyncMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			FileRevertedMsg:      msg,
 			ChangedFilesCommitID: m.graphTabModel.GetChangedFilesCommitID(),
 		}, &m.appState)
-		m.graphTabModel.UpdateRepository(m.appState.Repository)
+		m.graphTabModel.OnRepositoryLoaded(m.appState.Repository)
 		if m.appState.Repository != nil {
 			for i, commit := range m.appState.Repository.Graph.Commits {
 				if commit.ChangeID == m.graphTabModel.GetChangedFilesCommitID() {

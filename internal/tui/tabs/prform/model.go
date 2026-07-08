@@ -8,7 +8,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
-	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/tui/genmenu"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
@@ -427,10 +426,8 @@ func (m *Model) GetBodyInput() *textarea.Model {
 	return &m.bodyInput
 }
 
-// UpdateRepository updates the repository
-func (m *Model) UpdateRepository(repo *internal.Repository) {
-	// PR creation model doesn't use repository directly
-}
+// P2.8: the PR-creation modal doesn't use the repository directly, so its no-op
+// UpdateRepository hook was removed (the root no longer fans out to it).
 
 // SetAIProfiles updates the profile list shown by the long-press menu and the
 // active profile mark. See descedit/model.go SetAIProfiles for design notes.

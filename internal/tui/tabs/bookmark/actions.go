@@ -90,7 +90,7 @@ func SubmitCmd(input SubmitInput) (tea.Cmd, string) {
 func OpenCreateBookmark(modal *Model, repo *internal.Repository, commitIdx int, conflictSources []string, sanitize bool, width int) string {
 	data := PrepareShow(repo, commitIdx)
 	modal.Show(commitIdx, data.ExistingBookmarks)
-	modal.UpdateRepository(repo)
+	modal.SetRepository(repo)
 	modal.SetNameConflictSources(conflictSources)
 	modal.UpdateNameExistsFromInput(sanitize)
 	ni := modal.GetNameInput()
@@ -107,7 +107,7 @@ func OpenCreateBookmarkFromTicket(modal *Model, repo *internal.Repository, ticke
 	if workingCopyIdx < 0 {
 		modal.Show(-1, nil)
 		modal.SetFromJira(ticketKey, title, displayKey)
-		modal.UpdateRepository(repo)
+		modal.SetRepository(repo)
 		modal.SetNameConflictSources(conflictSources)
 		modal.UpdateNameExistsFromInput(sanitize)
 		ni := modal.GetNameInput()
@@ -132,7 +132,7 @@ func OpenCreateBookmarkFromTicket(modal *Model, repo *internal.Repository, ticke
 	// is already at the operational cap; user can still edit before submitting.
 	defaultName = jj.TruncateBookmarkName(defaultName)
 	modal.SetBookmarkName(defaultName)
-	modal.UpdateRepository(repo)
+	modal.SetRepository(repo)
 	modal.SetNameConflictSources(conflictSources)
 	modal.UpdateNameExistsFromInput(sanitize)
 	ni := modal.GetNameInput()

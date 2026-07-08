@@ -6,7 +6,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
-	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/render"
 	"github.com/madicen/jj-tui/internal/tui/state"
@@ -345,7 +344,5 @@ func (m *Model) SetSelectedOption(opt int) {
 	}
 }
 
-// UpdateRepository updates the repository
-func (m *Model) UpdateRepository(repo *internal.Repository) {
-	_ = repo
-}
+// P2.8: the conflict modal never used the repository, so its no-op
+// UpdateRepository hook was removed (the root no longer fans out to it).

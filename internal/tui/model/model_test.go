@@ -42,11 +42,11 @@ func newTestModel() *Model {
 	m.appState.StatusMessage = "Ready"
 
 	// Sync repository and selection to tab models (bypasses data.RepositoryLoadedMsg in tests)
-	m.graphTabModel.UpdateRepository(m.appState.Repository)
+	m.graphTabModel.OnRepositoryLoaded(m.appState.Repository)
 	m.graphTabModel.SelectCommit(0)
-	m.prsTabModel.UpdateRepository(m.appState.Repository)
+	m.prsTabModel.OnRepositoryLoaded(m.appState.Repository)
 	m.prsTabModel.SetGithubService(m.isGitHubAvailable())
-	m.branchesTabModel.UpdateRepository(m.appState.Repository)
+	m.branchesTabModel.OnRepositoryLoaded(m.appState.Repository)
 	m.ticketsTabModel.SetTicketServiceInfo("", false)
 
 	// Initialize by processing a window size message
@@ -114,7 +114,7 @@ func TestChangedFilesLoadedMsgUpdatesGraphTab(t *testing.T) {
 		},
 	}
 	m.SetRepository(repo)
-	m.graphTabModel.UpdateRepository(m.appState.Repository)
+	m.graphTabModel.OnRepositoryLoaded(m.appState.Repository)
 	// Do not call SelectCommit so changedFilesCommitID stays "" (simulates initial load before
 	// loadChangedFiles request was made, or race where the msg arrives before we set it).
 	// selectedCommit is 0 by default. Deliver changed files for the first commit.
@@ -160,7 +160,7 @@ func TestMouseScrollGraphTabWithoutClicking(t *testing.T) {
 		Graph: internal.CommitGraph{Commits: commits},
 		PRs:   nil,
 	})
-	m.graphTabModel.UpdateRepository(m.appState.Repository)
+	m.graphTabModel.OnRepositoryLoaded(m.appState.Repository)
 	m.graphTabModel.SelectCommit(0)
 	m.appState.ViewMode = state.ViewCommitGraph
 	m.graphTabModel.SetGraphFocused(true)
@@ -476,7 +476,7 @@ func TestWorkingCopyNodeAppearsInGraph(t *testing.T) {
 			Commits: []internal.Commit{workingCopyCommit, parentCommit},
 		},
 	})
-	m.graphTabModel.UpdateRepository(m.appState.Repository)
+	m.graphTabModel.OnRepositoryLoaded(m.appState.Repository)
 	m.graphTabModel.SelectCommit(0)
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 80})
 	defer m.Close()

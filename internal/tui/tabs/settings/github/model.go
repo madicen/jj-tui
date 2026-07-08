@@ -5,7 +5,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 	bubbledropdown "github.com/madicen/bubble-dropdown"
-	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/tui/form/dropdown"
 )
@@ -405,7 +404,4 @@ func (m *Model) FocusOriginInput() {
 	m.refocus()
 }
 
-// UpdateRepository updates the repository
-func (m *Model) UpdateRepository(repo *internal.Repository) {
-	// GitHub settings don't depend on repository
-}
+// P2.8: GitHub settings don't depend on the repository; no-op hook removed.

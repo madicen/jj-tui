@@ -23,7 +23,7 @@ func newTestGraphModel() *GraphModel {
 			},
 		},
 	}
-	m.UpdateRepository(repo)
+	m.OnRepositoryLoaded(repo)
 	m.SetChangedFiles([]jj.ChangedFile{
 		{Path: "src/main.go", Status: "M"},
 		{Path: "src/util.go", Status: "A"},
@@ -266,7 +266,7 @@ func TestContextMenu_MenuItemClick_ReturnsRequest(t *testing.T) {
 			},
 		},
 	}
-	m.UpdateRepository(repo)
+	m.OnRepositoryLoaded(repo)
 	m.SetChangedFiles([]jj.ChangedFile{
 		{Path: "src/main.go", Status: "M"},
 	}, "chg1")

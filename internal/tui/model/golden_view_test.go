@@ -111,10 +111,10 @@ func newGoldenModel(t *testing.T) *Model {
 	m.appState.Loading = false
 	m.SetRepository(goldenRepo())
 	m.appState.StatusMessage = "Ready"
-	m.graphTabModel.UpdateRepository(m.appState.Repository)
+	m.graphTabModel.OnRepositoryLoaded(m.appState.Repository)
 	m.graphTabModel.SelectCommit(0)
-	m.prsTabModel.UpdateRepository(m.appState.Repository)
-	m.branchesTabModel.UpdateRepository(m.appState.Repository)
+	m.prsTabModel.OnRepositoryLoaded(m.appState.Repository)
+	m.branchesTabModel.OnRepositoryLoaded(m.appState.Repository)
 	m.branchesTabModel.UpdateBranches(goldenBranches())
 	m.ticketsTabModel.SetTicketServiceInfo("Jira", true)
 	m.SetTicketList(goldenTickets())

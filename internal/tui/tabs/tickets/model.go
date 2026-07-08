@@ -8,7 +8,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 	overlay "github.com/madicen/bubble-overlay"
-	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/tickets"
 	"github.com/madicen/jj-tui/internal/tui/listnav"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
@@ -509,11 +508,9 @@ func (m *Model) UpdateTickets(ticketList []tickets.Ticket) {
 	}
 }
 
-// UpdateRepository updates the repository
-func (m *Model) UpdateRepository(repo *internal.Repository) {
-	// Repos may be updated but tickets are loaded separately
-	// This is a no-op for tickets but required for interface consistency
-}
+// P2.8: tickets loads its own data and never used the repository, so the no-op
+// UpdateRepository hook was removed rather than renamed — the root no longer fans
+// the repository out to tabs that don't consume it.
 
 // GetAvailableTransitions returns available transitions
 func (m *Model) GetAvailableTransitions() []tickets.Transition {

@@ -397,8 +397,11 @@ func (m *Model) GetNameInput() *textinput.Model {
 	return &m.nameInput
 }
 
-// UpdateRepository updates the repository (for rendering commit target)
-func (m *Model) UpdateRepository(repo *internal.Repository) {
+// SetRepository caches the repository the create-bookmark modal renders its commit
+// target from. Renamed off "UpdateRepository" (P2.8) so the repository single-source
+// grep only surfaces the AppState setter; this is a modal-local cache, not the tab
+// fan-out.
+func (m *Model) SetRepository(repo *internal.Repository) {
 	m.repository = repo
 }
 

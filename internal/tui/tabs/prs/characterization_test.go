@@ -19,7 +19,7 @@ func loadedModel(n int) Model {
 	m := NewModel(nil)
 	prs := make([]internal.GitHubPR, n)
 	repo := &internal.Repository{PRs: prs}
-	m.UpdateRepository(repo)
+	m.OnRepositoryLoaded(repo)
 	return m
 }
 

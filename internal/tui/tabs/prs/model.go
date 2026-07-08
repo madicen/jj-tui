@@ -396,8 +396,9 @@ func (m *Model) GetRepository() *internal.Repository {
 	return m.repository
 }
 
-// UpdateRepository updates the repository and auto-selects the first PR when the list loads or changes.
-func (m *Model) UpdateRepository(repo *internal.Repository) {
+// OnRepositoryLoaded updates the repository and auto-selects the first PR when the list loads or changes.
+// It implements tab.RepositoryAware (P2.8).
+func (m *Model) OnRepositoryLoaded(repo *internal.Repository) {
 	m.repository = repo
 	if m.repository == nil {
 		return

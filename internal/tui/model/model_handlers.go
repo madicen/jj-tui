@@ -51,6 +51,19 @@ func (m *Model) buildSettingsViewOpts() settingstab.ViewOpts {
 // Kept at 5s to limit CPU and allocation churn from repeated jj log + parse.
 const autoRefreshInterval = 5 * time.Second
 
+// propagateRepository pushes the single source of truth (m.appState.Repository)
+// to the tabs that keep derived state or a render cache. It replaces the old
+// per-site UpdateRepository fan-out (P2.8): tabs that never consumed the repository
+// (tickets/settings/help/…) no longer implement or receive a repository hook, and
+// the three that do (graph selection, prs selection, branches render cache) satisfy
+// tab.RepositoryAware via OnRepositoryLoaded.
+func (m *Model) propagateRepository() {
+	repo := m.appState.Repository
+	m.graphTabModel.OnRepositoryLoaded(repo)
+	m.prsTabModel.OnRepositoryLoaded(repo)
+	m.branchesTabModel.OnRepositoryLoaded(repo)
+}
+
 // tickCmd returns a command that sends a tick after the refresh interval.
 func (m *Model) applyRepositoryLoaded(repo *internal.Repository) (*Model, tea.Cmd) {
 	m.silentReloadInFlight = false
@@ -66,13 +79,8 @@ func (m *Model) applyRepositoryLoaded(repo *internal.Repository) (*Model, tea.Cm
 		m.appState.JJService = jjSvc
 	}
 	m.appState.StatusMessage = fmt.Sprintf("Loaded %d commits", len(repo.Graph.Commits))
-	m.graphTabModel.UpdateRepository(m.appState.Repository)
-	m.prsTabModel.UpdateRepository(m.appState.Repository)
+	m.propagateRepository()
 	m.prsTabModel.SetGithubService(m.isGitHubAvailable())
-	m.branchesTabModel.UpdateRepository(m.appState.Repository)
-	m.ticketsTabModel.UpdateRepository(m.appState.Repository)
-	m.settingsTabModel.UpdateRepository(m.appState.Repository)
-	m.helpTabModel.UpdateRepository(m.appState.Repository)
 	var cmds []tea.Cmd
 	cmds = append(cmds, m.tickCmd())
 	if m.appState.GitHubService != nil {

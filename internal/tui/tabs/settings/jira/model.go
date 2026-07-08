@@ -5,7 +5,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/tui/form"
 )
@@ -194,7 +193,4 @@ func (m *Model) SetFocusedField(i int) { m.form.SetFocused(i) }
 // SetInputWidth sets the width of all inputs
 func (m *Model) SetInputWidth(w int) { m.form.SetWidth(w) }
 
-// UpdateRepository updates the repository
-func (m *Model) UpdateRepository(repo *internal.Repository) {
-	// Jira settings don't depend on repository
-}
+// P2.8: Jira settings don't depend on the repository; no-op hook removed.

@@ -16,7 +16,7 @@ import (
 func TestMergePRStartsBusySpinner(t *testing.T) {
 	m := NewModel(nil)
 	repo := &internal.Repository{PRs: []internal.GitHubPR{{Number: 1, State: "open"}}}
-	m.UpdateRepository(repo)
+	m.OnRepositoryLoaded(repo)
 
 	app := &state.AppState{Repository: repo, GitHubService: &github.Service{}}
 	// Shift+M triggers a merge request in handleKeyMsg.

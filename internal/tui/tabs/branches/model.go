@@ -385,10 +385,11 @@ func (m *Model) UpdateBranches(branches []internal.Branch) {
 	}
 }
 
-// UpdateRepository updates the repository
-func (m *Model) UpdateRepository(repo *internal.Repository) {
+// OnRepositoryLoaded caches the newly-loaded repository (used for trunk/target
+// rendering). It implements tab.RepositoryAware (P2.8). Branches themselves are
+// loaded via a separate loadBranches() call, not from repository directly.
+func (m *Model) OnRepositoryLoaded(repo *internal.Repository) {
 	m.repository = repo
-	// Branches are loaded via separate loadBranches() call, not from repository directly
 }
 
 // BuildBookmarkNameConflictSources returns branch names and all commit branch names, for the bookmark modal's "name exists" check. Uses the tab's own repository and branch list (same data as appState, kept in sync by main).

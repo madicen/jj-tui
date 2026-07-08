@@ -69,13 +69,8 @@ func (m *Model) handleRepoReadyMsg(msg data.RepoReadyMsg) (tea.Model, tea.Cmd) {
 	if m.appState.Repository != nil {
 		m.appState.Repository.PRs = nil
 	}
-	m.graphTabModel.UpdateRepository(m.appState.Repository)
-	m.prsTabModel.UpdateRepository(m.appState.Repository)
+	m.propagateRepository()
 	m.prsTabModel.SetGithubService(false)
-	m.branchesTabModel.UpdateRepository(m.appState.Repository)
-	m.ticketsTabModel.UpdateRepository(m.appState.Repository)
-	m.settingsTabModel.UpdateRepository(m.appState.Repository)
-	m.helpTabModel.UpdateRepository(m.appState.Repository)
 	var cmds []tea.Cmd
 	cmds = append(cmds, m.tickCmd())
 	if m.graphTabModel.GetSelectedCommit() < 0 && len(msg.Repository.Graph.Commits) > 0 {
@@ -233,8 +228,8 @@ func (m *Model) handleOpenPRsResolvedMsg(msg prstab.OpenPRsResolvedMsg) (tea.Mod
 		added = true
 	}
 	if added {
-		m.graphTabModel.UpdateRepository(m.appState.Repository)
-		m.prsTabModel.UpdateRepository(m.appState.Repository)
+		m.graphTabModel.OnRepositoryLoaded(m.appState.Repository)
+		m.prsTabModel.OnRepositoryLoaded(m.appState.Repository)
 	}
 	return m, nil
 }
@@ -251,13 +246,8 @@ func (m *Model) handleDataSilentRepositoryLoadedMsg(msg data.SilentRepositoryLoa
 		}
 		m.appState.Repository = msg.Repository
 		m.appState.Repository.PRs = oldPRs
-		m.graphTabModel.UpdateRepository(m.appState.Repository)
-		m.prsTabModel.UpdateRepository(m.appState.Repository)
+		m.propagateRepository()
 		m.prsTabModel.SetGithubService(m.isGitHubAvailable())
-		m.branchesTabModel.UpdateRepository(m.appState.Repository)
-		m.ticketsTabModel.UpdateRepository(m.appState.Repository)
-		m.settingsTabModel.UpdateRepository(m.appState.Repository)
-		m.helpTabModel.UpdateRepository(m.appState.Repository)
 		newCount := len(msg.Repository.Graph.Commits)
 		if newCount != oldCount && m.errorModal.GetError() == nil {
 			m.appState.StatusMessage = fmt.Sprintf("Updated: %d commits", newCount)

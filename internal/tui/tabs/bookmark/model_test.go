@@ -45,7 +45,7 @@ func newModelWithCommit(t *testing.T, c internal.Commit, contentW int) Model {
 	m := NewModel(nil)
 	m.Show(0, nil)
 	m.SetCommitIdx(0)
-	m.UpdateRepository(&internal.Repository{
+	m.SetRepository(&internal.Repository{
 		Graph: internal.CommitGraph{Commits: []internal.Commit{c}},
 	})
 	if contentW > 0 {
@@ -231,7 +231,7 @@ func TestRender_ExistingBookmarkList_LongNameTruncatedForDisplay(t *testing.T) {
 	m := NewModel(nil)
 	m.Show(0, []string{"main", longName})
 	m.SetCommitIdx(0)
-	m.UpdateRepository(&internal.Repository{
+	m.SetRepository(&internal.Repository{
 		Graph: internal.CommitGraph{Commits: []internal.Commit{{ShortID: "abc1", Summary: "Short"}}},
 	})
 	syncContentWidth(&m, contentW)

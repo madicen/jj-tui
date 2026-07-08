@@ -211,7 +211,5 @@ func (m *Model) GetSelectedCommit() *internal.Commit {
 	return nil
 }
 
-// UpdateRepository updates the repository
-func (m *Model) UpdateRepository(repo *internal.Repository) {
-	// Warning modal doesn't use repository directly
-}
+// P2.8: the warning modal doesn't use the repository directly, so its no-op
+// UpdateRepository hook was removed (the root no longer fans out to it).

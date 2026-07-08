@@ -3,7 +3,6 @@ package error
 import (
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
-	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/util"
@@ -181,5 +180,4 @@ func (m *Model) SetCopied(copied bool) {
 	m.copied = copied
 }
 
-// UpdateRepository is a no-op; kept for compatibility.
-func (m *Model) UpdateRepository(repo *internal.Repository) {}
+// P2.8: the error modal never used the repository; no-op hook removed.
