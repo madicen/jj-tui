@@ -40,6 +40,70 @@ func TestUndoCapturesCurrentOpID(t *testing.T) {
 	}
 }
 
+// TestListOperationsParsesOpLog feeds canned `jj op log` output (marker +
+// pipe-separated template) and checks the parser produces ordered operations
+// with the newest flagged current.
+func TestListOperationsParsesOpLog(t *testing.T) {
+	const sample = "<<<OP>>>de64f4977189|2026-07-07 22:56:26|alice@host|describe commit abc\n" +
+		"<<<OP>>>fb10d44b8106|2026-07-07 22:56:15|alice@host|new empty commit\n" +
+		"<<<OP>>>3fd04c6d83e2|2026-07-07 22:56:00|alice@host|(no description)\n"
+	fake := &mock.FakeRunner{
+		RunOutputFn: func(_ context.Context, _ jj.RunOpts, args ...string) (string, error) {
+			if len(args) >= 2 && args[0] == "op" && args[1] == "log" {
+				return sample, nil
+			}
+			return "", nil
+		},
+	}
+	svc := jj.NewServiceWithRunner("/fake/repo", fake)
+
+	ops, err := svc.ListOperations(context.Background(), 5)
+	if err != nil {
+		t.Fatalf("ListOperations: %v", err)
+	}
+	if len(ops) != 3 {
+		t.Fatalf("expected 3 operations, got %d: %+v", len(ops), ops)
+	}
+	if ops[0].ID != "de64f4977189" || ops[0].Description != "describe commit abc" || ops[0].User != "alice@host" {
+		t.Fatalf("op[0] parsed wrong: %+v", ops[0])
+	}
+	if ops[0].Time != "2026-07-07 22:56:26" {
+		t.Fatalf("op[0] time parsed wrong: %q", ops[0].Time)
+	}
+	if !ops[0].IsCurrent {
+		t.Fatalf("newest op should be flagged current: %+v", ops[0])
+	}
+	if ops[1].IsCurrent || ops[2].IsCurrent {
+		t.Fatalf("only the newest op should be current: %+v", ops)
+	}
+	if !fake.ArgsContain("--limit 5") {
+		t.Fatalf("expected a --limit 5 flag on op log, calls=%v", fake.Calls)
+	}
+}
+
+// TestRestoreOperationArgs verifies RestoreOperation shells out to
+// `jj op restore <id>` and rejects an empty id.
+func TestRestoreOperationArgs(t *testing.T) {
+	var ranArgs []string
+	fake := &mock.FakeRunner{
+		RunFn: func(_ context.Context, _ jj.RunOpts, args ...string) error {
+			ranArgs = append([]string(nil), args...)
+			return nil
+		},
+	}
+	svc := jj.NewServiceWithRunner("/fake/repo", fake)
+
+	if err := svc.RestoreOperation(context.Background(), "  abc123  "); err != nil {
+		t.Fatalf("RestoreOperation: %v", err)
+	}
+	if got, want := ranArgs, []string{"op", "restore", "abc123"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("RestoreOperation args = %v, want %v", got, want)
+	}
+	if err := svc.RestoreOperation(context.Background(), "   "); err == nil {
+		t.Fatal("expected error for empty operation id")
+	}
+}
+
 // TestListBranchesParsesBookmarkList feeds canned `jj bookmark list` output and
 // checks the parser produces the expected local/remote branches.
 func TestListBranchesParsesBookmarkList(t *testing.T) {

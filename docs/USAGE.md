@@ -26,6 +26,7 @@ feature overview, install instructions, and screenshots, see the
   - [Config File Locations](#config-file-locations)
   - [Per-Repo Configuration](#per-repo-configuration)
   - [Config file format](#config-file-format)
+  - [Configurable keybindings](#configurable-keybindings)
   - [Optional AI assist](#optional-ai-assist)
   - [Graph view revset](#graph-view-revset)
   - [Ticket Provider Options](#ticket-provider-options)
@@ -400,6 +401,108 @@ jj-tui
 ```
 
 Omit keys you do not need. See `internal/config/config.go` for the full schema and merge rules.
+
+### Configurable keybindings
+
+Every shortcut below is rebindable via an optional `"keys"` map in the config
+file. Keys are **scope-qualified action IDs** (`"<scope>.<action>"`) and values
+are the single trigger key to bind. Anything you don't list keeps its default.
+The `keys` map merges like the rest of the config — a per-repo `.jj-tui.json`
+can rebind a single action without dropping the global map.
+
+```jsonc
+{
+  "keys": {
+    "graph.abandon": "x",
+    "graph.squash": "S",
+    "branches.push": "ctrl+p"
+  }
+}
+```
+
+If two actions in the **same scope** end up bound to the same key (default or
+rebound), jj-tui shows a conflict in the error modal on startup and falls back
+to the built-in defaults for **all** scopes so nothing misbehaves silently. The
+same key may be reused across different scopes (e.g. `c` in graph vs branches).
+
+Modifier chords use `ctrl+`, `shift+`, `alt+` prefixes (e.g. `ctrl+p`); named
+keys include `enter`, `tab`, `esc`, `up`, `down`, `pgup`, `pgdown`, `home`,
+`end`. Settings-tab navigation and text-input controls are not rebindable.
+
+**Default keybindings:**
+
+| Scope | Action ID | Default key | Description |
+|---|---|---|---|
+| global | `global.graph` | `g` | Go to commit graph |
+| global | `global.prs` | `p` | Go to pull requests |
+| global | `global.tickets` | `t` | Go to Tickets |
+| global | `global.branches` | `b` | Go to Branches |
+| global | `global.settings` | `,` | Open settings |
+| global | `global.help` | `h` / `?` | Show help |
+| global | `global.workspaces` | `w` | Manage workspaces |
+| global | `global.refresh` | `ctrl+r` | Refresh |
+| global | `global.undo` | `ctrl+z` | Undo last jj operation |
+| global | `global.redo` | `ctrl+y` | Redo jj operation |
+| global | `global.back` | `esc` | Back to graph |
+| global | `global.quit` | `ctrl+q` / `ctrl+c` | Quit |
+| graph | `graph.move_down` | `j` / `down` | Move down |
+| graph | `graph.move_up` | `k` / `up` | Move up |
+| graph | `graph.toggle_focus` | `tab` | Switch focus: graph ↔ files |
+| graph | `graph.scroll` | `pgup` / `pgdown` / `ctrl+u` / `ctrl+d` / `home` / `end` / `ctrl+f` / `ctrl+b` | Scroll graph/files pane |
+| graph | `graph.cancel` | `esc` / `q` | Close menu / cancel selection |
+| graph | `graph.rebase` | `r` | Rebase commit (with descendants) |
+| graph | `graph.merge` | `M` | Merge from a source into the selected commit |
+| graph | `graph.checkout` | `enter` / `e` | Edit selected commit (jj edit) |
+| graph | `graph.new_commit` | `n` | Create new commit from selected |
+| graph | `graph.edit_description` | `d` | Edit description / resolve divergent |
+| graph | `graph.squash` | `s` | Squash commit into parent |
+| graph | `graph.abandon` | `a` | Abandon commit |
+| graph | `graph.absorb` | `A` | Absorb working-copy changes into ancestors |
+| graph | `graph.duplicate` | `D` | Duplicate commit |
+| graph | `graph.create_bookmark` | `m` | Create/move bookmark on commit |
+| graph | `graph.delete_bookmark` | `x` | Delete bookmark from commit |
+| graph | `graph.update_pr` | `u` | Update existing PR with new commits |
+| graph | `graph.create_pr` | `c` | Create new PR from commit chain |
+| graph | `graph.resolve_conflict` | `C` | Resolve diverged bookmark |
+| graph | `graph.move_delta` | `f` | Stack forgotten commit on bookmark@origin |
+| graph | `graph.evolog_split` | `z` | Evolog split (experimental) |
+| graph | `graph.move_file_up` | `[` | Move selected file up |
+| graph | `graph.move_file_down` | `]` | Move selected file down |
+| graph | `graph.revert_file` | `v` | Revert selected file |
+| graph | `graph.view_file_diff` | `o` | View full jj diff for selected file |
+| graph | `graph.open_external` | `O` | Open selected file in external editor |
+| branches | `branches.move_down` | `j` / `down` | Move down |
+| branches | `branches.move_up` | `k` / `up` | Move up |
+| branches | `branches.track_by_name` | `t` | Pull & track remote branch by name |
+| branches | `branches.track` | `T` | Track remote branch |
+| branches | `branches.untrack` | `U` | Untrack remote branch |
+| branches | `branches.restore` | `L` | Restore deleted local branch |
+| branches | `branches.delete` | `x` | Delete local bookmark |
+| branches | `branches.push` | `P` | Push local branch to remote |
+| branches | `branches.fetch` | `F` | Fetch from all remotes |
+| branches | `branches.resolve_conflict` | `c` | Resolve conflicted bookmark |
+| prs | `prs.move_down` | `j` / `down` | Move down |
+| prs | `prs.move_up` | `k` / `up` | Move up |
+| prs | `prs.scroll_up` | `pgup` / `ctrl+u` / `ctrl+b` | Scroll page up |
+| prs | `prs.scroll_down` | `pgdown` / `ctrl+d` / `ctrl+f` | Scroll page down |
+| prs | `prs.home` | `home` | Scroll to top |
+| prs | `prs.end` | `end` | Scroll to bottom |
+| prs | `prs.open` | `o` / `enter` / `e` | Open PR in browser |
+| prs | `prs.merge` | `M` | Merge pull request |
+| prs | `prs.close` | `X` | Close pull request |
+| tickets | `tickets.move_down` | `j` / `down` | Move down |
+| tickets | `tickets.move_up` | `k` / `up` | Move up |
+| tickets | `tickets.change_status` | `c` | Change ticket status |
+| tickets | `tickets.status_in_progress` | `i` | Set status: In Progress |
+| tickets | `tickets.status_done` | `D` | Set status: Done |
+| tickets | `tickets.status_blocked` | `B` | Set status: Blocked |
+| tickets | `tickets.status_not_started` | `N` | Set status: Not Started |
+| tickets | `tickets.open` | `o` | Open ticket in browser |
+| tickets | `tickets.new_ticket` | `n` | Create new ticket |
+| tickets | `tickets.create_branch` | `enter` / `e` | Create branch from ticket |
+| help | `help.prev_tab` | `ctrl+j` | Previous help sub-tab |
+| help | `help.next_tab` | `ctrl+k` | Next help sub-tab |
+| help | `help.switch_tab` | `tab` | Next help sub-tab |
 
 ### Optional AI assist
 
