@@ -130,7 +130,7 @@ func (m *Model) handleAuxServicesReadyMsg(msg data.AuxServicesReadyMsg) (tea.Mod
 func (m *Model) handleRemoteOpResultMsg(msg data.RemoteOpResultMsg) (tea.Model, tea.Cmd) {
 	m.appState.Loading = false
 	if msg.Err != nil {
-		m.errorModal.SetError(msg.Err, false, "")
+		m.applyEffects(effShowError{msg.Err})
 		// Refresh anyway so the panel shows whatever state we ended up in (e.g. the user
 		// changed origin but the fetch failed; current origin should still update).
 		m.refreshSettingsOriginURL()
@@ -155,7 +155,7 @@ func (m *Model) handleRemoteOpResultMsg(msg data.RemoteOpResultMsg) (tea.Model, 
 			// Soft-failure: create succeeded, push didn't. Status reads the success-side, the
 			// modal carries the failure detail so the user knows to retry the push.
 			m.appState.StatusMessage = base + "; push failed (see error)"
-			m.errorModal.SetError(fmt.Errorf("post-create push failed: %w\nUse Push all bookmarks to retry once you've resolved the underlying issue", msg.PushErr), false, "")
+			m.applyEffects(effShowError{fmt.Errorf("post-create push failed: %w\nUse Push all bookmarks to retry once you've resolved the underlying issue", msg.PushErr)})
 		case msg.PushedCount > 0:
 			m.appState.StatusMessage = fmt.Sprintf("%s and pushed %d bookmark(s): %s", base, msg.PushedCount, strings.Join(msg.PushedNames, ", "))
 		default:
@@ -182,8 +182,7 @@ func (m *Model) handleRemoteOpResultMsg(msg data.RemoteOpResultMsg) (tea.Model, 
 func (m *Model) handlePushResultMsg(msg data.PushResultMsg) (tea.Model, tea.Cmd) {
 	m.appState.Loading = false
 	if msg.Err != nil {
-		m.errorModal.SetError(msg.Err, false, "")
-		return m, nil
+		return m, m.applyEffects(effShowError{msg.Err})
 	}
 	switch {
 	case msg.PushedCount == 0:

@@ -1883,7 +1883,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if info.NotJJRepo {
 				m.initRepoModel.SetPath(info.CurrentPath)
 			} else {
-				m.errorModal.SetError(info.Err, false, "")
+				m.applyEffects(effShowError{info.Err})
 			}
 		}
 		return m, cmd
@@ -1894,7 +1894,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// error modal so the user knows to set up the remote manually.
 		if msg.JJInitialized {
 			m.initRepoModel.SetPath("")
-			m.errorModal.SetError(msg.Err, false, "")
+			m.applyEffects(effShowError{msg.Err})
 			m.appState.StatusMessage = "Repository initialized; remote setup failed"
 			return m, data.InitializeServices(m.appState.DemoMode)
 		}
@@ -1903,13 +1903,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if info.NotJJRepo {
 				m.initRepoModel.SetPath(info.CurrentPath)
 			} else {
-				m.errorModal.SetError(info.Err, false, "")
+				m.applyEffects(effShowError{info.Err})
 			}
 		}
 		return m, cmd
 	case data.JJInitSuccessMsg:
 		m.initRepoModel.SetPath("")
-		m.errorModal.SetError(nil, false, "")
+		m.applyEffects(effClearError{})
 		return m, initrepotab.HandleJJInitSuccess(msg, &m.appState)
 	case data.RemoteOpResultMsg:
 		return m.handleRemoteOpResultMsg(msg)
@@ -1955,8 +1955,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if err != nil {
 			m.appState.Loading = false
-			m.errorModal.SetError(err, false, "")
-			return m, nil
+			return m, m.applyEffects(effShowError{err})
 		}
 		return m, cmd
 	case prstab.LoadErrorMsg:
@@ -1964,8 +1963,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.appState.Loading = false
 		updated, _ := m.prsTabModel.UpdateWithApp(msg, &m.appState)
 		m.prsTabModel = updated
-		m.errorModal.SetError(msg.Err, false, "")
-		return m, nil
+		return m, m.applyEffects(effShowError{msg.Err})
 	case prstab.ReauthNeededMsg:
 		updated, _ := m.prsTabModel.UpdateWithApp(msg, &m.appState)
 		m.prsTabModel = updated
@@ -2010,8 +2008,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		updated, cmd := m.ticketsTabModel.UpdateWithApp(msg, &m.appState)
 		m.ticketsTabModel = updated
 		if msg.Err != nil {
-			m.errorModal.SetError(msg.Err, false, "")
-			return m, nil
+			return m, m.applyEffects(effShowError{msg.Err})
 		}
 		return m, cmd
 	case ticketstab.LoadErrorMsg:
@@ -2019,7 +2016,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.appState.Loading = false
 		updated, _ := m.ticketsTabModel.UpdateWithApp(msg, &m.appState)
 		m.ticketsTabModel = updated
-		m.errorModal.SetError(msg.Err, false, "")
+		m.applyEffects(effShowError{msg.Err})
 		m.appState.StatusMessage = fmt.Sprintf("Error: %v", msg.Err)
 		return m, nil
 
@@ -2056,8 +2053,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		wasSettings := m.appState.ViewMode == state.ViewSettings
 		cmd, errInfo := settingstab.HandleSettingsSavedMsg(msg, &m.appState)
 		if errInfo != nil {
-			m.errorModal.SetError(errInfo.Err, false, "")
-			return m, nil
+			return m, m.applyEffects(effShowError{errInfo.Err})
 		}
 		if wasSettings {
 			m.settingsTabModel.SetViewOpts(m.buildSettingsViewOpts())
@@ -2212,9 +2208,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case branchestab.BookmarkConflictInfoMsg:
 		cmd, info := conflicttab.HandleBookmarkConflictInfoMsg(msg, &m.appState)
 		if msg.Err != nil {
-			m.errorModal.SetError(msg.Err, false, "")
+			m.applyEffects(effShowError{msg.Err})
 		} else {
-			m.errorModal.SetError(nil, false, "")
+			m.applyEffects(effClearError{})
 		}
 		if info != nil {
 			m.bookmarkConflictReturnView = m.appState.ViewMode
@@ -2233,14 +2229,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.bookmarkConflictReturnValid = false
 		m.appState.ViewMode = restore
 		if msg.Err != nil {
-			m.errorModal.SetError(msg.Err, false, "")
+			m.applyEffects(effShowError{msg.Err})
 		}
 		return m, conflicttab.HandleBookmarkConflictResolvedMsg(msg, &m.appState, m.settingsTabModel.GetSettingsBranchLimit())
 	case workspacestab.WorkspacesLoadedMsg:
 		m.appState.Loading = false
 		if msg.Err != nil {
-			m.errorModal.SetError(msg.Err, false, "")
-			return m, nil
+			return m, m.applyEffects(effShowError{msg.Err})
 		}
 		if m.appState.ViewMode == state.ViewWorkspaces && m.workspacesModal.IsShown() {
 			// Refresh in place (e.g. after add/forget) without re-opening.
@@ -2255,8 +2250,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case workspacestab.WorkspaceChangedMsg:
 		m.appState.Loading = false
 		if msg.Err != nil {
-			m.errorModal.SetError(msg.Err, false, "")
-			return m, nil
+			return m, m.applyEffects(effShowError{msg.Err})
 		}
 		if msg.StatusMessage != "" {
 			m.appState.StatusMessage = msg.StatusMessage
@@ -2266,8 +2260,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case graphtab.AbsorbPreviewReadyMsg:
 		m.appState.Loading = false
 		if msg.Err != nil {
-			m.errorModal.SetError(msg.Err, false, "")
-			return m, nil
+			return m, m.applyEffects(effShowError{msg.Err})
 		}
 		if msg.Preview == nil || msg.Preview.Nothing {
 			m.appState.StatusMessage = "Nothing to absorb"
@@ -2604,8 +2597,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd, errInfo := graphtab.HandleUndoCompletedMsg(msg, &m.appState)
 		if errInfo != nil {
 			m.appState.Loading = false
-			m.errorModal.SetError(errInfo.Err, false, "")
-			return m, nil
+			return m, m.applyEffects(effShowError{errInfo.Err})
 		}
 		if msg.Message == "Undo completed" {
 			m.redoOperationID = msg.RedoOpID
