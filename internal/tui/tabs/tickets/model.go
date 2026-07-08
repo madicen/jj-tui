@@ -5,10 +5,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 	overlay "github.com/madicen/bubble-overlay"
 	"github.com/madicen/jj-tui/internal/tickets"
+	"github.com/madicen/jj-tui/internal/tui/keys"
 	"github.com/madicen/jj-tui/internal/tui/listnav"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/mousedouble"
@@ -18,6 +20,8 @@ import (
 // Model represents the state of the Tickets tab
 type Model struct {
 	listnav.Model // shared list scroll + long-press state
+
+	keys keys.TicketsKeyMap
 
 	zoneManager          *zone.Manager
 	ticketList           []tickets.Ticket
@@ -45,6 +49,7 @@ type Model struct {
 func NewModel(zoneManager *zone.Manager) Model {
 	return Model{
 		Model:          listnav.New(),
+		keys:           keys.DefaultTicketsKeyMap(nil),
 		zoneManager:    zoneManager,
 		selectedTicket: -1,
 		width:          80,
@@ -286,47 +291,60 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, *Request, tea.Cmd) {
 		m.contextMenu = nil
 		return m, nil, nil
 	}
-	switch msg.String() {
-	case "j", "down":
+	if msg.String() == "esc" {
+		if m.statusChangeMode {
+			m.statusChangeMode = false
+		}
+		return m, nil, nil
+	}
+	switch {
+	case key.Matches(msg, m.keys.MoveDown):
 		if m.selectedTicket < len(m.ticketList)-1 {
 			m.selectedTicket++
 			m.scrollToSelectedTicket = true
 			return m, &Request{LoadTransitionsForSelection: true}, nil
 		}
 		return m, nil, nil
-	case "k", "up":
+	case key.Matches(msg, m.keys.MoveUp):
 		if m.selectedTicket > 0 {
 			m.selectedTicket--
 			m.scrollToSelectedTicket = true
 			return m, &Request{LoadTransitionsForSelection: true}, nil
 		}
 		return m, nil, nil
-	case "esc":
-		if m.statusChangeMode {
-			m.statusChangeMode = false
-		}
-		return m, nil, nil
-	case "c":
+	case key.Matches(msg, m.keys.ChangeStatus):
 		return m, &Request{ToggleStatusChangeMode: true}, nil
-	case "i", "D", "B", "N":
-		if m.statusChangeMode && !m.transitionInProgress && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
-			if id := m.transitionIDByKey(msg.String()); id != "" {
-				return m, &Request{TransitionID: id}, nil
-			}
-		}
-		return m, nil, nil
-	case "o":
+	case key.Matches(msg, m.keys.StatusInProgress):
+		return m.tryStatusTransition("i")
+	case key.Matches(msg, m.keys.StatusDone):
+		return m.tryStatusTransition("D")
+	case key.Matches(msg, m.keys.StatusBlocked):
+		return m.tryStatusTransition("B")
+	case key.Matches(msg, m.keys.StatusNotStarted):
+		return m.tryStatusTransition("N")
+	case key.Matches(msg, m.keys.Open):
 		return m, &Request{OpenInBrowser: true}, nil
-	case "n":
+	case key.Matches(msg, m.keys.NewTicket):
 		if m.canCreateTicket {
 			return m, &Request{StartCreateTicket: true}, nil
 		}
 		return m, nil, nil
-	case "enter", "e":
+	case key.Matches(msg, m.keys.CreateBranch):
 		if m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
 			return m, &Request{StartBookmarkFromTicket: true}, nil
 		}
 		return m, nil, nil
+	}
+	return m, nil, nil
+}
+
+// tryStatusTransition issues a status-change request for the given semantic key
+// (see transitionIDByKey) when in status-change mode with a valid selection.
+func (m Model) tryStatusTransition(semantic string) (Model, *Request, tea.Cmd) {
+	if m.statusChangeMode && !m.transitionInProgress && m.selectedTicket >= 0 && m.selectedTicket < len(m.ticketList) {
+		if id := m.transitionIDByKey(semantic); id != "" {
+			return m, &Request{TransitionID: id}, nil
+		}
 	}
 	return m, nil, nil
 }
