@@ -9,6 +9,7 @@ import (
 	"github.com/madicen/jj-tui/internal/integrations/github"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
 	"github.com/madicen/jj-tui/internal/tui/state"
+	"github.com/madicen/jj-tui/internal/tui/tab"
 	bookmarktab "github.com/madicen/jj-tui/internal/tui/tabs/bookmark"
 	branchestab "github.com/madicen/jj-tui/internal/tui/tabs/branches"
 	conflicttab "github.com/madicen/jj-tui/internal/tui/tabs/conflict"
@@ -83,7 +84,32 @@ func New(ctx context.Context) *Model {
 	m.chrome.Configure = func(c *overlay.OverlayConfig) {
 		c.WindowChrome.ShowMinimizeButton = true
 	}
+	m.initTabRegistry()
 	return m
+}
+
+// initTabRegistry wires the six primary content tabs into the tab.Renderer
+// registry. Entries point at the concrete struct fields so reassignments to
+// those fields (e.g. m.graphTabModel = updated) stay visible through the
+// registry. tabOrder preserves the fan-out order the resize handler used before
+// the registry existed.
+func (m *Model) initTabRegistry() {
+	m.tabOrder = []state.ViewMode{
+		state.ViewCommitGraph,
+		state.ViewPullRequests,
+		state.ViewBranches,
+		state.ViewTickets,
+		state.ViewSettings,
+		state.ViewHelp,
+	}
+	m.tabRegistry = map[state.ViewMode]tab.Renderer{
+		state.ViewCommitGraph:  &m.graphTabModel,
+		state.ViewPullRequests: &m.prsTabModel,
+		state.ViewBranches:     &m.branchesTabModel,
+		state.ViewTickets:      &m.ticketsTabModel,
+		state.ViewSettings:     &m.settingsTabModel,
+		state.ViewHelp:         &m.helpTabModel,
+	}
 }
 
 // NewWithServices creates a new Model with pre-configured services

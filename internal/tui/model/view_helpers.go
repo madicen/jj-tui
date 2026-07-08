@@ -202,23 +202,12 @@ func (m *Model) renderMainLayoutView() string {
 	statusHeight := strings.Count(statusBar, "\n") + 1
 	contentHeight := max(m.height-headerHeight-statusHeight-2, 1)
 
-	m.graphTabModel.SetDimensions(m.width, contentHeight)
-	m.prsTabModel.SetDimensions(m.width, contentHeight)
-	m.branchesTabModel.SetDimensions(m.width, contentHeight)
-	m.ticketsTabModel.SetDimensions(m.width, contentHeight)
-	m.settingsTabModel.SetDimensions(m.width, contentHeight)
-	m.helpTabModel.SetDimensions(m.width, contentHeight)
+	for _, vm := range m.tabOrder {
+		m.tabRegistry[vm].SetDimensions(m.width, contentHeight)
+	}
 
 	var content string
 	switch m.layoutContentMode() {
-	case state.ViewCommitGraph:
-		content = m.graphTabModel.View()
-	case state.ViewPullRequests:
-		content = m.prsTabModel.View()
-	case state.ViewBranches:
-		content = m.branchesTabModel.View()
-	case state.ViewTickets:
-		content = m.ticketsTabModel.View()
 	case state.ViewSettings:
 		// Settings content is composited below the header and a one-line
 		// separator (see JoinVertical below). Tell the settings model where its
@@ -226,10 +215,12 @@ func (m *Model) renderMainLayoutView() string {
 		// space its open dropdown panels are drawn in.
 		m.settingsTabModel.SetContentOrigin(headerHeight + 1)
 		content = m.settingsTabModel.View()
-	case state.ViewHelp:
-		content = m.helpTabModel.View()
 	default:
-		content = m.graphTabModel.View()
+		if t, ok := m.tabRegistry[m.layoutContentMode()]; ok {
+			content = t.View()
+		} else {
+			content = m.graphTabModel.View()
+		}
 	}
 
 	contentLines := strings.Split(content, "\n")

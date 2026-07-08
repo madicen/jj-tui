@@ -41,7 +41,8 @@ jj-tui/
 │       ├── styles/            # Lip Gloss styles
 │       ├── mouse/             # Zone IDs for clickable elements
 │       ├── util/              # Clipboard, external editor, helpers
-│       ├── model/             # Main TUI model (Update, view, keys, mouse)
+│       ├── model/             # Main TUI model (Update, view, keys, mouse, effects)
+│       ├── tab/               # Tab interfaces (Renderer + target Tab/hook contracts)
 │       └── tabs/              # Tab-specific models and views
 │           ├── graph/         # Commit graph, keys, file move/revert, actions
 │           ├── prs/           # Pull requests list
@@ -84,6 +85,27 @@ jj-tui/
 ├── screenshots/               # Generated (demo.gif, after-origin.gif, evolog-split.gif, divergent.gif, bookmark-conflict.gif, *.png)
 └── README.md
 ```
+
+## Tabs and the root model
+
+The root model (`internal/tui/model`) owns each tab. Cross-cutting orchestration
+and tab wiring are being consolidated (plan item P2.3) so that adding a tab
+touches as few places as possible.
+
+- **Effects (`model/effects.go`).** Message handlers that need to touch another
+  component's state (the error modal, cross-tab PR reconciliation, follow-up
+  repository/branch reloads, bookmark-conflict sources) return typed `effect`
+  values applied by one dispatcher (`applyEffects`). Prefer adding a new
+  `eff*` type + `applyEffect` case over reaching into another component inline.
+- **Tab registry (`model/init.go` `initTabRegistry`).** The six primary content
+  tabs (graph, PRs, branches, tickets, settings, help) are registered in
+  `tabRegistry` / `tabOrder` behind the `tab.Renderer` interface
+  (`internal/tui/tab`). The window-resize fan-out and the content-render
+  dispatch iterate the registry instead of naming each concrete field, so a new
+  primary tab is wired for sizing/rendering in one place (`initTabRegistry`).
+  The concrete fields remain the source of truth for accessors and message
+  handling; `tab.Tab`/`RepositoryAware`/`Activatable` document the target
+  contract the remaining migration grows into.
 
 ## Building
 

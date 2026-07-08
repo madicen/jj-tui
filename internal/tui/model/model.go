@@ -21,6 +21,7 @@ import (
 	"github.com/madicen/jj-tui/internal/tui/data"
 	"github.com/madicen/jj-tui/internal/tui/genmenu"
 	"github.com/madicen/jj-tui/internal/tui/state"
+	"github.com/madicen/jj-tui/internal/tui/tab"
 	bookmarktab "github.com/madicen/jj-tui/internal/tui/tabs/bookmark"
 	branchestab "github.com/madicen/jj-tui/internal/tui/tabs/branches"
 	conflicttab "github.com/madicen/jj-tui/internal/tui/tabs/conflict"
@@ -88,6 +89,17 @@ type Model struct {
 	ticketsTabModel  ticketstab.Model
 	settingsTabModel settingstab.Model
 	helpTabModel     helptab.Model
+
+	// tabRegistry / tabOrder hold the six primary content tabs behind the
+	// tab.Renderer interface, pointing at the concrete fields above. This is the
+	// P2.3 registry the plan calls for "alongside the concrete fields": the
+	// window-resize fan-out and the content-render dispatch iterate it instead
+	// of naming each field, so a new primary tab is wired in one place. The
+	// concrete fields remain the source of truth (accessors and the effect
+	// dispatcher still use them) until message handling moves fully behind the
+	// interface. Populated once in New(); safe because *Model is never copied.
+	tabRegistry map[state.ViewMode]tab.Renderer
+	tabOrder    []state.ViewMode
 
 	// Modal models (dialogs and modals)
 	initRepoModel    initrepotab.Model
@@ -1264,12 +1276,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Propagate dimensions to tab models so they can render
 		cmds := util.PropagateUpdate(msg, &m.graphTabModel, &m.prsTabModel, &m.branchesTabModel, &m.ticketsTabModel, &m.settingsTabModel, &m.helpTabModel)
 		// Set content-area height on tabs so graph/files split fills the content area (not full window)
-		m.graphTabModel.SetDimensions(m.width, contentHeight)
-		m.prsTabModel.SetDimensions(m.width, contentHeight)
-		m.branchesTabModel.SetDimensions(m.width, contentHeight)
-		m.ticketsTabModel.SetDimensions(m.width, contentHeight)
-		m.settingsTabModel.SetDimensions(m.width, contentHeight)
-		m.helpTabModel.SetDimensions(m.width, contentHeight)
+		for _, vm := range m.tabOrder {
+			m.tabRegistry[vm].SetDimensions(m.width, contentHeight)
+		}
 		m.evologSplitModal = m.evologSplitModal.SetDimensions(m.width, m.height).WithSuggestConfig(m.appState.Config)
 		m.fileDiffModal = m.fileDiffModal.SetDimensions(m.width, m.height)
 		m.divergentModal = m.divergentModal.SetDimensions(m.width, m.height)
