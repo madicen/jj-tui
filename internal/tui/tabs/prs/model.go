@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 	overlay "github.com/madicen/bubble-overlay"
 	"github.com/madicen/jj-tui/internal"
+	"github.com/madicen/jj-tui/internal/tui/keys"
 	"github.com/madicen/jj-tui/internal/tui/listnav"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/mousedouble"
@@ -17,6 +19,8 @@ import (
 // Model represents the state of the PRs tab
 type Model struct {
 	listnav.Model // shared list scroll + long-press state
+
+	keys keys.PRsKeyMap
 
 	zoneManager   *zone.Manager
 	repository    *internal.Repository
@@ -37,6 +41,7 @@ type Model struct {
 func NewModel(zoneManager *zone.Manager) Model {
 	return Model{
 		Model:       listnav.New(),
+		keys:        keys.DefaultPRsKeyMap(nil),
 		zoneManager: zoneManager,
 		selectedPR:  -1,
 		width:       80,
@@ -259,51 +264,51 @@ func (m *Model) SetGithubService(connected bool) {
 
 // handleKeyMsg handles keyboard input; returns (updated model, optional request, cmd).
 func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, *Request, tea.Cmd) {
-	switch msg.String() {
-	case "esc":
+	if msg.String() == "esc" {
 		if m.contextMenu != nil {
 			m.contextMenu = nil
-			return m, nil, nil
 		}
 		return m, nil, nil
-	case "j", "down":
+	}
+	switch {
+	case key.Matches(msg, m.keys.MoveDown):
 		if m.repository != nil && m.selectedPR < len(m.repository.PRs)-1 {
 			m.selectedPR++
 			m.scrollToSelectedPR = true
 		}
 		return m, nil, nil
-	case "k", "up":
+	case key.Matches(msg, m.keys.MoveUp):
 		if m.selectedPR > 0 {
 			m.selectedPR--
 			m.scrollToSelectedPR = true
 		}
 		return m, nil, nil
-	case "pgup", "ctrl+u", "ctrl+b":
+	case key.Matches(msg, m.keys.ScrollUp):
 		m.YOffset -= 10
 		if m.YOffset < 0 {
 			m.YOffset = 0
 		}
 		return m, nil, nil
-	case "pgdown", "ctrl+d", "ctrl+f":
+	case key.Matches(msg, m.keys.ScrollDown):
 		m.YOffset += 10
 		return m, nil, nil
-	case "home":
+	case key.Matches(msg, m.keys.Home):
 		m.YOffset = 0
 		return m, nil, nil
-	case "end":
+	case key.Matches(msg, m.keys.End):
 		m.YOffset = 99999
 		return m, nil, nil
-	case "o", "enter", "e":
+	case key.Matches(msg, m.keys.Open):
 		if m.repository != nil && m.selectedPR >= 0 && m.selectedPR < len(m.repository.PRs) {
 			return m, &Request{OpenInBrowser: true}, nil
 		}
 		return m, nil, nil
-	case "M":
+	case key.Matches(msg, m.keys.Merge):
 		if m.repository != nil && m.selectedPR >= 0 && m.selectedPR < len(m.repository.PRs) {
 			return m, &Request{MergePR: true}, nil
 		}
 		return m, nil, nil
-	case "X":
+	case key.Matches(msg, m.keys.Close):
 		if m.repository != nil && m.selectedPR >= 0 && m.selectedPR < len(m.repository.PRs) {
 			return m, &Request{ClosePR: true}, nil
 		}
