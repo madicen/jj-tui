@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 	overlay "github.com/madicen/bubble-overlay"
 	"github.com/madicen/jj-tui/internal"
+	"github.com/madicen/jj-tui/internal/tui/keys"
 	"github.com/madicen/jj-tui/internal/tui/listnav"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/state"
@@ -18,6 +20,8 @@ import (
 // Model represents the state of the Branches tab
 type Model struct {
 	listnav.Model // shared list scroll + long-press state
+
+	keys keys.BranchesKeyMap
 
 	zoneManager    *zone.Manager
 	repository     *internal.Repository
@@ -44,6 +48,7 @@ func NewModel(zoneManager *zone.Manager) Model {
 
 	return Model{
 		Model:          listnav.New(),
+		keys:           keys.DefaultBranchesKeyMap(nil),
 		zoneManager:    zoneManager,
 		selectedBranch: -1,
 		width:          80,
@@ -246,32 +251,32 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, *Request, tea.Cmd) {
 		m.remoteInput, cmd = m.remoteInput.Update(msg)
 		return m, nil, cmd
 	}
-	switch msg.String() {
-	case "t":
+	switch {
+	case key.Matches(msg, m.keys.TrackByName):
 		return m.openRemoteInput()
-	case "j", "down":
+	case key.Matches(msg, m.keys.MoveDown):
 		if m.selectedBranch < len(m.branchList)-1 {
 			m.selectedBranch++
 		}
 		return m, nil, nil
-	case "k", "up":
+	case key.Matches(msg, m.keys.MoveUp):
 		if m.selectedBranch > 0 {
 			m.selectedBranch--
 		}
 		return m, nil, nil
-	case "T":
+	case key.Matches(msg, m.keys.Track):
 		return m, &Request{TrackBranch: true}, nil
-	case "U":
+	case key.Matches(msg, m.keys.Untrack):
 		return m, &Request{UntrackBranch: true}, nil
-	case "L":
+	case key.Matches(msg, m.keys.Restore):
 		return m, &Request{RestoreLocalBranch: true}, nil
-	case "P":
+	case key.Matches(msg, m.keys.Push):
 		return m, &Request{PushBranch: true}, nil
-	case "F":
+	case key.Matches(msg, m.keys.Fetch):
 		return m, &Request{FetchAll: true}, nil
-	case "c":
+	case key.Matches(msg, m.keys.ResolveConflict):
 		return m, &Request{ResolveBookmarkConflict: true}, nil
-	case "x":
+	case key.Matches(msg, m.keys.Delete):
 		return m, &Request{DeleteBranchBookmark: true}, nil
 	}
 	return m, nil, nil
