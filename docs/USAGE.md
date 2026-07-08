@@ -39,6 +39,7 @@ feature overview, install instructions, and screenshots, see the
 - `Ctrl+z`: Undo last jj operation
 - `Ctrl+y`: Redo (undo the undo)
 - `Ctrl+o`: Browse the operation log (time-travel: restore to any past operation)
+- `w`: Manage jj workspaces (list, add, forget)
 - `g`: Switch to commit graph view
 - `p`: Switch to pull requests view
 - `t`: Switch to tickets view
@@ -95,10 +96,12 @@ The graph view has two panes: the commit graph (left) and changed files (right).
 - `n`: Create new commit (works from immutable parents like `main`)
 - `d`: Edit description; on a **divergent** row, opens the divergent resolver instead
 - `s`: Squash into parent (hidden when the parent would be immutable)
-- `r`: Rebase mode—pick destination with `Enter`/`e`, or **Esc** to cancel
+- `r`: Rebase mode—pick destination with `Enter`/`e`, or **Esc** to cancel; with **Space**-selected commits, rebases the batch together
 - **Mouse**: Press on a commit row, drag, release on another commit to rebase (same as `r` + pick destination); **Esc** cancels an in-progress drag
 - `M` (shift+m): Merge-from mode—the selected commit is the target; pick a source commit/bookmark to merge in with `Enter`/`e` or click (creates a merge commit via `jj new <target> <source>`); **Esc** to cancel
-- `a`: Abandon commit
+- `a`: Abandon commit (or batch abandon when commits are **Space**-selected)
+- `A`: **Absorb** working-copy changes into ancestors—shows a preview first, then confirm
+- `D`: Duplicate the selected revision in place (onto its existing parents)
 - `m`: Create or move bookmark
 - `x`: Delete bookmark
 - `c`: Create PR, or **resolve diverged bookmark** when the row has a conflicted/diverged bookmark (`c` matches Branches-tab behavior)
@@ -106,12 +109,22 @@ The graph view has two panes: the commit graph (left) and changed files (right).
 - `u`: Update PR (push bookmark branch)
 - `f`: **Forgot New Commit?** (when the inline control appears)—restack after amending a pushed bookmark so you can push without `--force`
 - `z`: **Split (evolog)** when the inline **split (z)** appears—see [Split](../README.md#split)
+- `/`: Open the **search/filter** overlay—free text matches description or author; prefix **`:`** for a raw **jj** revset (e.g. `:bookmarks()`); **Enter** applies, **Esc** cancels or clears an active filter
+- `Space`: Toggle batch selection on the highlighted commit (mutable, non-working-copy rows); **Esc** clears the selection
+- **Long-press** (mouse) on a commit row opens a **context menu** with the same actions plus **Duplicate onto…** and **Backout** (no dedicated key for backout)
 
 **Files pane (focus with Tab or click the files side):**
 - `o`: Open full **jj** diff for the selected file (modal)
 - `O`: Open the selected file in the **external editor** (configure under **Settings → Advanced** → Open in external editor)
+- `B`: **Blame** (annotate) the selected file line-by-line; **Enter** on a line jumps the graph to that change; **Esc** closes
+- `=`: Resolve a **conflicted** file with your configured merge tool (`jj resolve`)
 - `[` / `]`: Move file to new parent / child commit
 - `v`: Revert the file in this commit
+- **Long-press** (mouse) on a file row opens a context menu (view diff, open in editor, move, revert)
+
+**Global shortcuts in the graph:**
+- `w`: Workspaces—list, add, and forget **jj** workspaces
+- `Ctrl+o`: Operation log—browse recent **jj** operations and restore to a past op
 
 ## Help tab (`h` / `?`)
 
@@ -202,6 +215,7 @@ Use **Save** (**`Ctrl+s`** global, **`Ctrl+l`** local) after changing AI setting
 
 - **Open in external editor**: Presets (Cursor, VS Code, Zed, Neovim/`nvr`, Emacs, Sublime, JetBrains) or **Custom** (`sh -c` with `{path}` → absolute file path). Used from the graph **files** pane with **`O`**.  
 - **Default graph revset**: Optional `jj` revset for the commit list; empty = built-in default (see [Graph view revset](#graph-view-revset)).  
+- **Auto-refresh** / **destructive confirms**: `auto_refresh_seconds` and `confirm_destructive` (see [Configuration](#configuration)).  
 - **Sanitize bookmark names**: Auto-fix invalid bookmark characters when creating/moving names.  
 - **Delete all bookmarks** / **Abandon old commits**: Destructive maintenance (with confirmation).
 
@@ -388,6 +402,7 @@ jj-tui
   "sanitize_bookmark_names": true,
   "graph_revset": "",
   "auto_refresh_seconds": 0,
+  "confirm_destructive": true,
   "external_file_editor": "cursor",
   "external_file_editor_custom": "cursor -g {path}",
   "theme_primary": "#7E00AF",
@@ -473,7 +488,11 @@ keys include `enter`, `tab`, `esc`, `up`, `down`, `pgup`, `pgdown`, `home`,
 | graph | `graph.move_file_down` | `]` | Move selected file down |
 | graph | `graph.revert_file` | `v` | Revert selected file |
 | graph | `graph.view_file_diff` | `o` | View full jj diff for selected file |
+| graph | `graph.annotate` | `B` | Blame: annotate selected file line-by-line |
 | graph | `graph.open_external` | `O` | Open selected file in external editor |
+| graph | `graph.resolve_file` | `=` | Resolve conflicted file with merge tool |
+| graph | `graph.toggle_select` | `space` | Toggle batch selection on commit |
+| graph | `graph.search_filter` | `/` | Search/filter graph by text or revset |
 | branches | `branches.move_down` | `j` / `down` | Move down |
 | branches | `branches.move_up` | `k` / `up` | Move up |
 | branches | `branches.track_by_name` | `t` | Pull & track remote branch by name |
@@ -564,6 +583,10 @@ Leave `graph_revset` empty to use the built-in default. See [jj revset docs](htt
 Set `auto_refresh_seconds` to a positive value to have jj-tui silently reload the commit graph in the background on that interval, so repository activity performed outside the TUI (e.g. a `jj new` run in another terminal) appears without a manual refresh. The default is `0`, which turns auto-refresh **off**.
 
 The silent reload is skipped whenever a modal is open (Edit Description, Create PR/Bookmark/Ticket, the error/workspaces/operations overlays, etc.) or a `jj` command is already in flight, so it never clobbers work in progress. You can always refresh manually regardless of this setting.
+
+### Destructive-operation confirms
+
+Set `confirm_destructive` to control the **y/n** prompts shown before destructive **jj** operations such as **abandon**, **backout**, and divergent-commit resolution. The default is **`true`** (prompt before mutating). Set to **`false`** to run these actions immediately without confirmation. Omitted from saved config when left at the default so older config files stay byte-compatible.
 
 ### Ticket Provider Options
 

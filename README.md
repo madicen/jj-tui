@@ -75,7 +75,17 @@ When a bookmark was pushed and then amended or moved locally, **jj** may show th
 - **Help tab**: Shortcuts reference plus **command history** of **jj** commands the TUI ran (copy-friendly)
 - **Evolog split (`z`)**: Experimental FAQ-style split when evolution history allows (see [Split](#split))
 - **Divergent commits & diverged bookmarks**: Dedicated flows from the graph or Branches tab (see [screenshots](#screenshots) above)
-- **Undo / redo**: **`Ctrl+z`** / **`Ctrl+y`** for **jj** undo and redo
+- **Undo / redo**: **`Ctrl+z`** / **`Ctrl+y`** for **jj** undo and redo; after mutations, a brief **undo hint** in the status line shows what **`Ctrl+z`** will reverse
+- **Absorb (`A`)**: Preview then confirm absorbing working-copy changes into ancestors
+- **Duplicate / Backout**: Commit-row context menu (long-press); **`D`** duplicates in place; **Backout** has no dedicated key
+- **Revset search (`/`)**: Filter the graph by free text or **`:raw revset`**; **Esc** clears
+- **Blame (`B`)**: Line-by-line annotate in the files pane; **Enter** jumps to the change
+- **Multi-select**: **`Space`** toggles commits for batch abandon (**`a`**) or rebase (**`r`**); **Esc** clears selection
+- **File conflict resolve (`=`)**: Launch merge tool on a conflicted file in the files pane
+- **Operation log (`Ctrl+o`)**: Browse **jj** operations and restore to a past op
+- **Workspaces (`w`)**: List, add, and forget **jj** workspaces
+- **Configurable keys**: Rebind shortcuts via a **`"keys"`** map in config (see [Usage](docs/USAGE.md#configurable-keybindings))
+- **Auto-refresh**: Optional background graph reload via **`auto_refresh_seconds`** (default off)
 - **Non-repo & init**: [Welcome screen](docs/USAGE.md#welcome-screen-non-jj-directories) with **`jj git init --colocate`**, optional **remote URL** to wire up `origin`, and a one-shot **`gh repo create`** path (when the GitHub CLI is installed)
 - **Demo mode**: **`jj-tui --demo`** uses mock tickets/PRs for screenshots or trying the UI; **Settings** is available with the same sub-tabs (including **AI**), using mock or empty integration fields
 - **Config**: Global and per-repo **`.jj-tui.json`** merge; optional **`JJ_TUI_CONFIG`**

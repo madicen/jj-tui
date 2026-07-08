@@ -154,6 +154,8 @@ scripts, table-driven conventions, and where mocks live.
 
 ## Updating Screenshots
 
+New VHS fixture repos should follow the pattern in existing `fixtures/setup-*-vhs-repo.sh` scripts (create an isolated jj repo, seed the scenario, then point a `.tape` at it).
+
 Screenshots are generated using [VHS](https://github.com/charmbracelet/vhs) with mock data for consistent, reproducible images.
 
 **Automatic (CI)**: The [Generate Screenshots](../.github/workflows/screenshots.yml) workflow produces `demo.gif` (`all.tape`), `after-origin.gif`, `evolog-split.gif`, `divergent.gif`, `bookmark-conflict.gif`, and the PNG captures; it runs after releases (via release workflows) and can be triggered manually. Results are committed to `screenshots/` on `main` when they change.
