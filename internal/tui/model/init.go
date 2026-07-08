@@ -102,13 +102,13 @@ func (m *Model) initTabRegistry() {
 		state.ViewSettings,
 		state.ViewHelp,
 	}
-	m.tabRegistry = map[state.ViewMode]tab.Renderer{
-		state.ViewCommitGraph:  &m.graphTabModel,
-		state.ViewPullRequests: &m.prsTabModel,
-		state.ViewBranches:     &m.branchesTabModel,
-		state.ViewTickets:      &m.ticketsTabModel,
-		state.ViewSettings:     &m.settingsTabModel,
-		state.ViewHelp:         &m.helpTabModel,
+	m.tabRegistry = map[state.ViewMode]tab.Tab{
+		state.ViewCommitGraph:  graphTabAdapter{m: &m.graphTabModel, root: m},
+		state.ViewPullRequests: prsTabAdapter{m: &m.prsTabModel, root: m},
+		state.ViewBranches:     branchesTabAdapter{m: &m.branchesTabModel, root: m},
+		state.ViewTickets:      ticketsTabAdapter{m: &m.ticketsTabModel},
+		state.ViewSettings:     settingsTabAdapter{m: &m.settingsTabModel},
+		state.ViewHelp:         helpTabAdapter{m: &m.helpTabModel},
 	}
 }
 

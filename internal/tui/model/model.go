@@ -98,7 +98,7 @@ type Model struct {
 	// concrete fields remain the source of truth (accessors and the effect
 	// dispatcher still use them) until message handling moves fully behind the
 	// interface. Populated once in New(); safe because *Model is never copied.
-	tabRegistry map[state.ViewMode]tab.Renderer
+	tabRegistry map[state.ViewMode]tab.Tab
 	tabOrder    []state.ViewMode
 
 	// Modal models (dialogs and modals)

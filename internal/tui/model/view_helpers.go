@@ -217,7 +217,7 @@ func (m *Model) renderMainLayoutView() string {
 		content = m.settingsTabModel.View()
 	default:
 		if t, ok := m.tabRegistry[m.layoutContentMode()]; ok {
-			content = t.View()
+			content = t.View(&m.appState)
 		} else {
 			content = m.graphTabModel.View()
 		}
