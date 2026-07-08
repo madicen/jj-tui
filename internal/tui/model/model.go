@@ -1356,55 +1356,45 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Esc in Settings: close in-tab overlays (theme picker, cleanup confirm) first; otherwise leave settings.
 		if m.appState.ViewMode == state.ViewSettings && msg.String() == "esc" {
-			if !m.settingsTabModel.EscHandledInsideSettings() {
+			if !m.escHandledInsideSettings() {
 				return m.handleNavigate(state.NavigateTarget{Kind: state.NavigateBackToGraph, StatusMessage: "Settings cancelled"})
 			}
 		}
-		// Delegate to tab models for their specific views (tabs own selection state)
-		switch m.appState.ViewMode {
-		case state.ViewCommitGraph:
-			updated, cmd := m.graphTabModel.UpdateWithApp(msg, &m.appState)
-			m.graphTabModel = updated
-			if cmd != nil {
-				return m, m.wrapGraphTabCmd(cmd)
-			}
-		case state.ViewPullRequests:
-			updated, cmd := m.prsTabModel.UpdateWithApp(msg, &m.appState)
-			m.prsTabModel = updated
-			if cmd != nil {
-				return m, m.wrapSpinnerStart(cmd)
-			}
-			// Fall through to handleKeyMsg for non-delegated keys
-		case state.ViewBranches:
-			updated, cmd := m.branchesTabModel.UpdateWithApp(msg, &m.appState)
-			m.branchesTabModel = updated
-			if cmd != nil {
-				return m, m.wrapSpinnerStart(cmd)
-			}
-		case state.ViewTickets:
-			wasStatusChange := m.ticketsTabModel.IsStatusChangeMode()
-			updated, cmd := m.ticketsTabModel.UpdateWithApp(msg, &m.appState)
-			m.ticketsTabModel = updated
-			if cmd != nil {
-				return m, cmd
-			}
-			if msg.String() == "esc" && wasStatusChange && !m.ticketsTabModel.IsStatusChangeMode() {
+		// Delegate to the active tab behind the registry (tabs own selection
+		// state). The adapters apply the per-tab command wrapper the inline
+		// paths used (graph → wrapGraphTabCmd; prs/branches → wrapSpinnerStart)
+		// so the returned cmd is already wrapped. Per-view control flow (Settings
+		// always consumes; Help swallows tab/shift+tab; Tickets swallows the
+		// esc that closed status-change mode) is preserved below; every other
+		// view falls through to handleKeyMsg when the tab didn't consume the key.
+		if t, ok := m.tabRegistry[m.appState.ViewMode]; ok {
+			switch m.appState.ViewMode {
+			case state.ViewTickets:
+				wasStatusChange := m.isTicketsStatusChangeMode()
+				if _, cmd := t.Update(msg, &m.appState); cmd != nil {
+					return m, cmd
+				}
+				if msg.String() == "esc" && wasStatusChange && !m.isTicketsStatusChangeMode() {
+					return m, nil
+				}
+			case state.ViewSettings:
+				_, cmd := t.Update(msg, &m.appState)
+				if cmd != nil {
+					return m, cmd
+				}
 				return m, nil
-			}
-		case state.ViewSettings:
-			cmds := util.PropagateUpdate(msg, &m.settingsTabModel)
-			if len(cmds) > 0 && cmds[0] != nil {
-				return m, cmds[0]
-			}
-			return m, nil
-		case state.ViewHelp:
-			cmds := util.PropagateUpdate(msg, &m.helpTabModel)
-			if len(cmds) > 0 && cmds[0] != nil {
-				return m, cmds[0]
-			}
-			// Tab/shift+tab switch help sub-tab; don't fall through to handleKeyMsg (which would switch to graph)
-			if msg.String() == "tab" || msg.String() == "shift+tab" {
-				return m, nil
+			case state.ViewHelp:
+				if _, cmd := t.Update(msg, &m.appState); cmd != nil {
+					return m, cmd
+				}
+				// Tab/shift+tab switch help sub-tab; don't fall through to handleKeyMsg (which would switch to graph)
+				if msg.String() == "tab" || msg.String() == "shift+tab" {
+					return m, nil
+				}
+			default: // graph, prs, branches
+				if _, cmd := t.Update(msg, &m.appState); cmd != nil {
+					return m, cmd
+				}
 			}
 		}
 		return m.handleKeyMsg(msg)
@@ -1499,90 +1489,30 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.fileDiffModal = updated
 				return m, cmd
 			}
+			// Wheel over a primary tab: every view sized its tab before
+			// delegating, so do that generically through the registry (the
+			// adapters apply the same command wrappers the inline paths used).
 			contentHeight := m.estimatedContentHeight()
-			switch m.appState.ViewMode {
-			case state.ViewCommitGraph:
-				m.graphTabModel.SetDimensions(m.width, contentHeight)
-				updated, cmd := m.graphTabModel.UpdateWithApp(msg, &m.appState)
-				m.graphTabModel = updated
-				if cmd != nil {
-					return m, m.wrapGraphTabCmd(cmd)
-				}
-			case state.ViewPullRequests:
-				m.prsTabModel.SetDimensions(m.width, contentHeight)
-				updated, cmd := m.prsTabModel.UpdateWithApp(msg, &m.appState)
-				m.prsTabModel = updated
-				if cmd != nil {
-					return m, m.wrapSpinnerStart(cmd)
-				}
-			case state.ViewBranches:
-				m.branchesTabModel.SetDimensions(m.width, contentHeight)
-				cmds := util.PropagateUpdate(msg, &m.branchesTabModel)
-				if len(cmds) > 0 && cmds[0] != nil {
-					return m, cmds[0]
-				}
-			case state.ViewTickets:
-				m.ticketsTabModel.SetDimensions(m.width, contentHeight)
-				updated, cmd := m.ticketsTabModel.UpdateWithApp(msg, &m.appState)
-				m.ticketsTabModel = updated
-				if cmd != nil {
+			if t, ok := m.tabRegistry[m.appState.ViewMode]; ok {
+				t.SetDimensions(m.width, contentHeight)
+				if _, cmd := t.Update(msg, &m.appState); cmd != nil {
 					return m, cmd
-				}
-			case state.ViewSettings:
-				m.settingsTabModel.SetDimensions(m.width, contentHeight)
-				cmds := util.PropagateUpdate(msg, &m.settingsTabModel)
-				if len(cmds) > 0 && cmds[0] != nil {
-					return m, cmds[0]
-				}
-			case state.ViewHelp:
-				m.helpTabModel.SetDimensions(m.width, contentHeight)
-				cmds := util.PropagateUpdate(msg, &m.helpTabModel)
-				if len(cmds) > 0 && cmds[0] != nil {
-					return m, cmds[0]
 				}
 			}
 			return m, nil
 		}
-		// Delegate other mouse to active tab (same as KeyMsg) for any other scroll/click handling
-		// Set dimensions for list tabs so wheel/scroll works even when isWheel wasn't true (e.g. terminal encoding)
+		// Delegate other mouse to active tab (same as KeyMsg) for any other scroll/click handling.
+		// The list tabs (prs/branches/tickets) size themselves first so scroll works even when the
+		// wheel encoding wasn't recognized above; graph/settings/help delegate without a resize,
+		// matching the pre-registry behavior exactly.
 		contentHeight := m.estimatedContentHeight()
-		switch m.appState.ViewMode {
-		case state.ViewCommitGraph:
-			updated, cmd := m.graphTabModel.UpdateWithApp(msg, &m.appState)
-			m.graphTabModel = updated
-			if cmd != nil {
-				return m, m.wrapGraphTabCmd(cmd)
+		if t, ok := m.tabRegistry[m.appState.ViewMode]; ok {
+			switch m.appState.ViewMode {
+			case state.ViewPullRequests, state.ViewBranches, state.ViewTickets:
+				t.SetDimensions(m.width, contentHeight)
 			}
-		case state.ViewPullRequests:
-			m.prsTabModel.SetDimensions(m.width, contentHeight)
-			updated, cmd := m.prsTabModel.UpdateWithApp(msg, &m.appState)
-			m.prsTabModel = updated
-			if cmd != nil {
-				return m, m.wrapSpinnerStart(cmd)
-			}
-		case state.ViewBranches:
-			m.branchesTabModel.SetDimensions(m.width, contentHeight)
-			updated, cmd := m.branchesTabModel.UpdateWithApp(msg, &m.appState)
-			m.branchesTabModel = updated
-			if cmd != nil {
-				return m, m.wrapSpinnerStart(cmd)
-			}
-		case state.ViewTickets:
-			m.ticketsTabModel.SetDimensions(m.width, contentHeight)
-			updated, cmd := m.ticketsTabModel.UpdateWithApp(msg, &m.appState)
-			m.ticketsTabModel = updated
-			if cmd != nil {
+			if _, cmd := t.Update(msg, &m.appState); cmd != nil {
 				return m, cmd
-			}
-		case state.ViewSettings:
-			cmds := util.PropagateUpdate(msg, &m.settingsTabModel)
-			if len(cmds) > 0 && cmds[0] != nil {
-				return m, cmds[0]
-			}
-		case state.ViewHelp:
-			cmds := util.PropagateUpdate(msg, &m.helpTabModel)
-			if len(cmds) > 0 && cmds[0] != nil {
-				return m, cmds[0]
 			}
 		}
 		if msg.Action == tea.MouseActionRelease {
@@ -1637,33 +1567,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.fileDiffModal = updated
 			return m, cmd
 		}
-		// Delegate to tab when in that view so it can return requests
-		if m.appState.ViewMode == state.ViewCommitGraph {
-			updated, cmd := m.graphTabModel.UpdateWithApp(msg, &m.appState)
-			m.graphTabModel = updated
-			if cmd != nil {
-				return m, m.wrapGraphTabCmd(cmd)
-			}
-		}
-		if m.appState.ViewMode == state.ViewPullRequests {
-			updated, cmd := m.prsTabModel.UpdateWithApp(msg, &m.appState)
-			m.prsTabModel = updated
-			if cmd != nil {
-				return m, m.wrapSpinnerStart(cmd)
-			}
-		}
-		if m.appState.ViewMode == state.ViewBranches {
-			updated, cmd := m.branchesTabModel.UpdateWithApp(msg, &m.appState)
-			m.branchesTabModel = updated
-			if cmd != nil {
-				return m, m.wrapSpinnerStart(cmd)
-			}
-		}
-		if m.appState.ViewMode == state.ViewTickets {
-			updated, cmd := m.ticketsTabModel.UpdateWithApp(msg, &m.appState)
-			m.ticketsTabModel = updated
-			if cmd != nil {
-				return m, cmd
+		// Delegate to the active content tab (graph/prs/branches/tickets) so it
+		// can return requests; settings/help are handled inside handleZoneClick.
+		// Graph, PRs, Branches, and Tickets already receive zone.MsgZoneInBounds
+		// here before handleZoneClick runs, so handleZoneClick must not re-Update
+		// them (double-processing the release).
+		switch m.appState.ViewMode {
+		case state.ViewCommitGraph, state.ViewPullRequests, state.ViewBranches, state.ViewTickets:
+			if t, ok := m.tabRegistry[m.appState.ViewMode]; ok {
+				if _, cmd := t.Update(msg, &m.appState); cmd != nil {
+					return m, cmd
+				}
 			}
 		}
 		return m.handleZoneClick(msg)

@@ -94,6 +94,9 @@ func (a ticketsTabAdapter) View(*state.AppState) string { return a.m.View() }
 
 func (a ticketsTabAdapter) SetDimensions(w, h int) { a.m.SetDimensions(w, h) }
 
+// IsStatusChangeMode satisfies statusChangeModeReporter.
+func (a ticketsTabAdapter) IsStatusChangeMode() bool { return a.m.IsStatusChangeMode() }
+
 // settingsTabAdapter wraps *settingstab.Model. Settings has no app-aware
 // Update, so the adapter drops the app argument; the settings sub-model reads
 // everything it needs from the ViewOpts the root pushes before rendering.
@@ -110,6 +113,9 @@ func (a settingsTabAdapter) Update(msg tea.Msg, _ *state.AppState) (tab.Tab, tea
 func (a settingsTabAdapter) View(*state.AppState) string { return a.m.View() }
 
 func (a settingsTabAdapter) SetDimensions(w, h int) { a.m.SetDimensions(w, h) }
+
+// EscHandledInsideSettings satisfies escConsumer.
+func (a settingsTabAdapter) EscHandledInsideSettings() bool { return a.m.EscHandledInsideSettings() }
 
 // helpTabAdapter wraps *helptab.Model.
 type helpTabAdapter struct {
