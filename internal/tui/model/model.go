@@ -449,10 +449,10 @@ func (m *Model) refreshRepository() tea.Cmd {
 	if m.appState.JJService == nil {
 		cmds = append(cmds, data.InitializeServices(m.appState.DemoMode))
 	} else {
-		cmds = append(cmds, data.LoadRepository(m.appState.JJService))
+		cmds = append(cmds, m.applyEffects(effReloadRepository{}))
 		// Branches tab keeps its own list (trunk graph, HasConflict); ^r must reload it too or diverged
 		// bookmarks look stale after resolve until the user switches tabs or something else loads branches.
-		cmds = append(cmds, branchestab.LoadBranchesCmd(m.appState.JJService, m.settingsTabModel.GetSettingsBranchLimit()))
+		cmds = append(cmds, m.applyEffects(effLoadBranches{}))
 	}
 	if m.isGitHubAvailable() {
 		existing := 0
@@ -607,7 +607,7 @@ func (m *Model) handleNavigate(t state.NavigateTarget) (tea.Model, tea.Cmd) {
 		return m.startEditingDescription(t.Commit)
 	case state.NavigateCreateBookmark:
 		m.startCreateBookmark()
-		return m, branchestab.LoadBranchesCmd(m.appState.JJService, m.settingsTabModel.GetSettingsBranchLimit())
+		return m, m.applyEffects(effLoadBranches{})
 	case state.NavigateCreateBookmarkFromTicket:
 		m.beginModalUnderlay()
 		m.appState.ViewMode = state.ViewCreateBookmark
@@ -2044,10 +2044,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.appState.Loading = false
 			return m, nil
 		}
-		return m, tea.Batch(
-			branchestab.LoadBranchesCmd(m.appState.JJService, m.settingsTabModel.GetSettingsBranchLimit()),
-			data.LoadRepository(m.appState.JJService),
-		)
+		return m, m.applyEffects(effLoadBranches{}, effReloadRepository{})
 
 	case settingstab.SettingsSavedMsg:
 		wasSettings := m.appState.ViewMode == state.ViewSettings
@@ -2062,7 +2059,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// to the live service and reload the branch list so the change is reflected immediately.
 		if m.appState.JJService != nil && m.appState.Config != nil {
 			m.appState.JJService.BookmarkListPreferTracked = m.appState.Config.BranchesFilterToTrackedAndMine()
-			cmd = tea.Batch(cmd, branchestab.LoadBranchesCmd(m.appState.JJService, m.settingsTabModel.GetSettingsBranchLimit()))
+			cmd = tea.Batch(cmd, m.applyEffects(effLoadBranches{}))
 		}
 		// Broadcast the config change so config-dependent modals/tabs re-read the
 		// new snapshot (handled by the config.ChangedMsg case below).

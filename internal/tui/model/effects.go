@@ -2,6 +2,8 @@ package model
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/madicen/jj-tui/internal/tui/data"
+	branchestab "github.com/madicen/jj-tui/internal/tui/tabs/branches"
 	prstab "github.com/madicen/jj-tui/internal/tui/tabs/prs"
 )
 
@@ -33,6 +35,16 @@ func (effClearError) isEffect() {}
 type effResolveOpenPRs struct{}
 
 func (effResolveOpenPRs) isEffect() {}
+
+// effReloadRepository reloads the repository graph (foreground load).
+type effReloadRepository struct{}
+
+func (effReloadRepository) isEffect() {}
+
+// effLoadBranches reloads the branch list using the configured limit.
+type effLoadBranches struct{}
+
+func (effLoadBranches) isEffect() {}
 
 // applyEffects applies every effect in order and batches any resulting commands.
 // Effects that only mutate component state contribute no command.
@@ -66,6 +78,10 @@ func (m *Model) applyEffect(e effect) tea.Cmd {
 		return nil
 	case effResolveOpenPRs:
 		return prstab.ResolveOpenPRsForBookmarksCmd(m.appState.GitHubService, m.bookmarksNeedingPRLookup(), m.appState.DemoMode)
+	case effReloadRepository:
+		return data.LoadRepository(m.appState.JJService)
+	case effLoadBranches:
+		return branchestab.LoadBranchesCmd(m.appState.JJService, m.settingsTabModel.GetSettingsBranchLimit())
 	default:
 		return nil
 	}

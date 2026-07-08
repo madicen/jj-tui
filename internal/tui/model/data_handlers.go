@@ -169,10 +169,7 @@ func (m *Model) handleRemoteOpResultMsg(msg data.RemoteOpResultMsg) (tea.Model, 
 	}
 	m.refreshSettingsOriginURL()
 	// Reload the repo (and branches) so any newly fetched remote bookmarks appear immediately.
-	cmds := []tea.Cmd{
-		data.LoadRepository(m.appState.JJService),
-	}
-	return m, tea.Batch(cmds...)
+	return m, m.applyEffects(effReloadRepository{})
 }
 
 // handlePushResultMsg processes the outcome of a standalone Push current / Push all action from
@@ -202,7 +199,7 @@ func (m *Model) handlePushResultMsg(msg data.PushResultMsg) (tea.Model, tea.Cmd)
 		}
 	}
 	// Reload the repo so the graph picks up new remote-tracking bookmarks (e.g. main@origin).
-	return m, data.LoadRepository(m.appState.JJService)
+	return m, m.applyEffects(effReloadRepository{})
 }
 
 // handleDataRepositoryLoadedMsg delegates to shared applyRepositoryLoaded.
