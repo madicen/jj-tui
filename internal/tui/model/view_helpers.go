@@ -63,6 +63,9 @@ func (m *Model) View() string {
 	if m.evologDescribePreviewActive {
 		v = applyBubbleOverlayCentered(v, m.renderEvologDescribePreview(), m.width, m.height)
 	}
+	if m.absorbPreviewActive {
+		v = applyBubbleOverlayCentered(v, m.renderAbsorbPreview(), m.width, m.height)
+	}
 	if key != "warning" {
 		if warningContent := m.warningModal.View(); warningContent != "" {
 			v = applyBubbleOverlayCentered(v, warningContent, m.width, m.height)
@@ -170,6 +173,23 @@ func (m *Model) renderEvologDescribePreview() string {
 	} else {
 		b.WriteString(muted.Render("y apply · n or Esc discard"))
 	}
+	box := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(styles.ColorMuted).Padding(1, 2).Width(min(m.width-4, 84))
+	return box.Render(b.String())
+}
+
+func (m *Model) renderAbsorbPreview() string {
+	maxW := min(m.width-8, 78)
+	title := lipgloss.NewStyle().Bold(true).Foreground(styles.ColorPrimary).Render("Absorb working-copy changes")
+	muted := lipgloss.NewStyle().Foreground(styles.ColorMuted)
+	var b strings.Builder
+	b.WriteString(title)
+	b.WriteString("\n\n")
+	for _, line := range strings.Split(m.absorbPreviewSummary, "\n") {
+		b.WriteString(runewidth.Truncate(line, maxW, "…"))
+		b.WriteString("\n")
+	}
+	b.WriteString("\n")
+	b.WriteString(muted.Render("y confirm · n or Esc cancel"))
 	box := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(styles.ColorMuted).Padding(1, 2).Width(min(m.width-4, 84))
 	return box.Render(b.String())
 }

@@ -125,6 +125,12 @@ func (m GraphModel) handleKeyMsg(msg tea.KeyMsg) (GraphModel, *Request, tea.Cmd)
 		if m.repository != nil && m.selectedCommit >= 0 && m.selectedCommit < len(m.repository.Graph.Commits) {
 			return m, &Request{Abandon: true}, nil
 		}
+	case "A":
+		// Absorb always operates on the working copy (@), so it doesn't depend on
+		// the current graph selection — only on having a loaded repository.
+		if m.repository != nil {
+			return m, &Request{StartAbsorb: true}, nil
+		}
 	case "m":
 		if m.repository != nil {
 			return m, &Request{CreateBookmark: true}, nil

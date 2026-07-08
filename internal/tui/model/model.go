@@ -109,6 +109,10 @@ type Model struct {
 	// evologPrecomputedDescribe* come from AI suggest (chain preview); used when describe-after-split runs without a second LLM.
 	evologPrecomputedDescribeParent string
 	evologPrecomputedDescribeChild  string
+	// Absorb dry-run preview (y confirm / n discard). Populated from a
+	// non-mutating `jj absorb --no-integrate-operation` before the real absorb.
+	absorbPreviewActive  bool
+	absorbPreviewSummary string
 	fileDiffModal                   filedifftab.Model
 	bookmarkModal                   bookmarktab.Model
 	prFormModal                     prformtab.Model
@@ -1285,6 +1289,27 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		}
+		if m.absorbPreviewActive {
+			switch msg.String() {
+			case "y", "Y":
+				m.absorbPreviewActive = false
+				m.absorbPreviewSummary = ""
+				m.redoOperationID = ""
+				m.appState.Loading = true
+				m.appState.StatusMessage = "Absorbing…"
+				return m, tea.Batch(
+					graphtab.AbsorbApplyCmd(m.appState.JJService),
+					m.startBusySpinnerCmd(),
+				)
+			case "n", "N", "esc":
+				m.absorbPreviewActive = false
+				m.absorbPreviewSummary = ""
+				m.appState.StatusMessage = "Absorb cancelled"
+				return m, nil
+			default:
+				return m, nil
+			}
+		}
 		// When an overlay or blocking modal is showing, route keys to handleKeyMsg (init, error, warning) or view modals.
 		if m.initRepoModel.Path() != "" || m.errorModal.GetError() != nil || m.warningModal.IsShown() {
 			return m.handleKeyMsg(msg)
@@ -2183,6 +2208,20 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.errorModal.SetError(msg.Err, false, "")
 		}
 		return m, conflicttab.HandleBookmarkConflictResolvedMsg(msg, &m.appState, m.settingsTabModel.GetSettingsBranchLimit())
+	case graphtab.AbsorbPreviewReadyMsg:
+		m.appState.Loading = false
+		if msg.Err != nil {
+			m.errorModal.SetError(msg.Err, false, "")
+			return m, nil
+		}
+		if msg.Preview == nil || msg.Preview.Nothing {
+			m.appState.StatusMessage = "Nothing to absorb"
+			return m, nil
+		}
+		m.absorbPreviewSummary = msg.Preview.Summary
+		m.absorbPreviewActive = true
+		m.appState.StatusMessage = "Review absorb preview: y confirm · n or Esc cancel"
+		return m, nil
 	case graphtab.DivergentCommitInfoMsg:
 		cmd, info := divergenttab.HandleDivergentCommitInfoMsg(msg, &m.appState)
 		if info != nil {

@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
+	"github.com/madicen/jj-tui/internal/tui/util"
 )
 
 // RepositoryLoadedMsg indicates the repository was loaded.
@@ -50,6 +51,42 @@ type DivergentCommitInfoMsg struct {
 	ChangeID string
 	Versions []jj.DivergentVersion
 	Err      error
+}
+
+// AbsorbPreviewReadyMsg carries the result of a non-mutating absorb dry run so the
+// main model can show a preview + confirm before running the real absorb.
+type AbsorbPreviewReadyMsg struct {
+	Preview *jj.AbsorbPreview
+	Err     error
+}
+
+// AbsorbDryRunCmd previews `jj absorb` without mutating the repo and sends AbsorbPreviewReadyMsg.
+func AbsorbDryRunCmd(svc *jj.Service) tea.Cmd {
+	if svc == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		preview, err := svc.AbsorbDryRun(context.Background())
+		return AbsorbPreviewReadyMsg{Preview: preview, Err: err}
+	}
+}
+
+// AbsorbApplyCmd runs the real `jj absorb`, then reloads the repository so the
+// graph reflects the absorbed changes.
+func AbsorbApplyCmd(svc *jj.Service) tea.Cmd {
+	if svc == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		if _, err := svc.Absorb(context.Background()); err != nil {
+			return util.ErrorMsg{Err: fmt.Errorf("failed to absorb: %w", err)}
+		}
+		repo, err := svc.GetRepository(context.Background(), "")
+		if err != nil {
+			return util.ErrorMsg{Err: err}
+		}
+		return RepositoryLoadedMsg{Repository: repo}
+	}
 }
 
 // LoadChangedFilesCmd returns a command that loads changed files for the commit and sends ChangedFilesLoadedMsg.
@@ -144,6 +181,8 @@ type Request struct {
 	StartEvologSplit bool
 	// ResolveBookmarkConflict: open diverged-bookmark dialog (local vs remote) for selected commit.
 	ResolveBookmarkConflict bool
+	// StartAbsorb: preview `jj absorb` (dry run) then open a confirm modal in the main model.
+	StartAbsorb bool
 }
 
 // Cmd returns a tea.Cmd that sends this request to the program.

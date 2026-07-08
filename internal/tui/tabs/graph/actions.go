@@ -66,6 +66,9 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 		cmd, status := executeAbandon(ctx)
 		return Result{Cmd: cmd, Status: status, SuccessStatus: "Abandoning commit…", Loading: true}
 	}
+	if r.StartAbsorb {
+		return Result{Cmd: AbsorbDryRunCmd(ctx.JJService), SuccessStatus: "Previewing absorb…", Loading: true}
+	}
 	if r.PerformRebase {
 		cmd, status := executePerformRebase(r.RebaseDestIndex, ctx)
 		if status != "" {

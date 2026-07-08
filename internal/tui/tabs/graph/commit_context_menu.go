@@ -65,6 +65,11 @@ func (m *GraphModel) commitContextMenuRows(ci int, firstParentImmutable bool) []
 	if m.repository.Graph.Commits[ci].Immutable {
 		return out
 	}
+	// Absorb only makes sense on the working copy (@), whose changes get folded
+	// into their closest mutable ancestors.
+	if m.repository.Graph.Commits[ci].IsWorking {
+		out = append(out, commitContextMenuItem{Label: "Absorb", Key: "A", Request: Request{StartAbsorb: true}, Mutable: true})
+	}
 	data := m.buildGraphData()
 	prBranch := ""
 	if data.CommitPRBranch != nil {
