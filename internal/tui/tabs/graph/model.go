@@ -11,6 +11,7 @@ import (
 	overlay "github.com/madicen/bubble-overlay"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
+	"github.com/madicen/jj-tui/internal/tui/keys"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/mousedouble"
 	"github.com/madicen/jj-tui/internal/tui/render"
@@ -24,6 +25,8 @@ import (
 type GraphModel struct {
 	zoneManager *zone.Manager
 	repository  *internal.Repository
+
+	keys keys.GraphKeyMap
 
 	width          int
 	height         int
@@ -129,6 +132,7 @@ func NewGraphModel(zoneManager *zone.Manager) GraphModel {
 	filesVp.MouseWheelEnabled = true
 	return GraphModel{
 		zoneManager:          zoneManager,
+		keys:                 keys.DefaultGraphKeyMap(nil),
 		graphFocused:         true, // default to graph pane focused so j/k navigate commits and wheel scrolls graph
 		viewport:             vp,
 		filesViewport:        filesVp,
