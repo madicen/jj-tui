@@ -11,15 +11,17 @@ Set Shell "bash"
 Set Theme "Builtin Dark"
 Set TypingSpeed 75ms
 
+# Color support is forced in demo mode via lipgloss.SetColorProfile()
+
 Hide
-Type "( bash fixtures/setup-op-log-vhs-repo.sh && cd fixtures/op-log-vhs-repo && ../../jj-tui )"
+Type "( bash fixtures/setup-op-log-vhs-repo.sh && cd fixtures/op-log-vhs-repo && ../../jj-tui --demo )"
 Enter
 Sleep 6s
 Show
 
 Sleep 2s
 
-# Open operation log (real jj repo — not --demo).
+# Open operation log (real jj fixture repo; --demo only mocks GitHub/tickets).
 Ctrl+o
 Sleep 3s
 

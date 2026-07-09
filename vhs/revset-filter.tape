@@ -11,8 +11,10 @@ Set Shell "bash"
 Set Theme "Builtin Dark"
 Set TypingSpeed 75ms
 
+# Color support is forced in demo mode via lipgloss.SetColorProfile()
+
 Hide
-Type "( bash fixtures/setup-revset-filter-vhs-repo.sh && cd fixtures/revset-filter-vhs-repo && ../../jj-tui )"
+Type "( bash fixtures/setup-revset-filter-vhs-repo.sh && cd fixtures/revset-filter-vhs-repo && ../../jj-tui --demo )"
 Enter
 Sleep 6s
 Show
