@@ -437,10 +437,11 @@ const followUpOnOriginMessage = "Follow-up (local changes on top of origin)"
 // revision Git already has: it fetches, creates a new commit on top of bookmark@origin with the same
 // tree as the bookmark tip, moves the bookmark there, rebases any non–working-copy children of the
 // old tip onto the new bookmark tip (so local stacks stay intact), then abandons the old tip.
-// localChangeID is the selected revision’s change ID (for diff). localCommitID is the git commit id
-// (short or full) for revsets where the change ID may be divergent; pass commit.ID from the graph.
+// localChangeID identifies the selected row when localCommitID is empty; prefer localCommitID (graph
+// commit.ID). Diff / resolve tip always use commit_id — amend-after-push keeps one change ID on both
+// the local tip and bookmark@origin, so a bare change ID is divergent and jj rejects it.
 func (s *Service) MoveBookmarkDeltaOntoOrigin(ctx context.Context, bookmarkName, localChangeID, localCommitID string) error {
-	if strings.TrimSpace(bookmarkName) == "" || strings.TrimSpace(localChangeID) == "" {
+	if strings.TrimSpace(bookmarkName) == "" || (strings.TrimSpace(localChangeID) == "" && strings.TrimSpace(localCommitID) == "") {
 		return fmt.Errorf("bookmark name and local revision are required")
 	}
 	revForSel := strings.TrimSpace(localCommitID)
@@ -479,7 +480,8 @@ func (s *Service) MoveBookmarkDeltaOntoOrigin(ctx context.Context, bookmarkName,
 			rebaseChildRoots = append(rebaseChildRoots, id)
 		}
 	}
-	diffOut, err := s.runJJOutput(ctx, "diff", "--from", remoteRef, "--to", localChangeID, "--summary")
+	// Same commit_id(...) revset as enrichCommitsDeltaVsOrigin — required when change ID is divergent.
+	diffOut, err := s.runJJOutput(ctx, "diff", "--from", remoteRef, "--to", revsetCommitID(tipCommitID), "--summary")
 	if err != nil {
 		return fmt.Errorf("diff vs origin: %w", err)
 	}
