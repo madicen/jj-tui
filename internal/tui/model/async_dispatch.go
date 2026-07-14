@@ -1092,9 +1092,6 @@ func (m *Model) dispatchAsyncMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case ActionMsg:
-		return m.handleAction(msg.Action)
-
 	// Handle messages from actions package
 	case util.ExternalEditorOpenedMsg:
 		m.appState.Loading = false

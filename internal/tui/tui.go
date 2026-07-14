@@ -57,14 +57,4 @@ func ErrorMsg(err error) model.ErrorMsgType {
 // Message types for external use
 type (
 	TabSelectedMsg = model.TabSelectedMsg
-	ActionMsg      = model.ActionMsg
-)
-
-// ActionType constants
-const (
-	ActionQuit     = model.ActionQuit
-	ActionRefresh  = model.ActionRefresh
-	ActionNewPR    = model.ActionNewPR
-	ActionCheckout = model.ActionCheckout
-	ActionEdit     = model.ActionEdit
 )

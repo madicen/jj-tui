@@ -186,18 +186,3 @@ func (m *Model) handleZoneClick(msg zone.MsgZoneInBounds) (tea.Model, tea.Cmd) {
 
 	return m, nil
 }
-
-// handleAction handles action messages (e.g. from external triggers). Tab navigation and graph actions are handled in keys/mouse.
-func (m *Model) handleAction(action ActionType) (tea.Model, tea.Cmd) {
-	switch action {
-	case ActionQuit:
-		util.FlushMouse()
-		return m, tea.Quit
-	case ActionRefresh:
-		return m, m.refreshRepository()
-	case ActionNewPR:
-		m.appState.ViewMode = state.ViewCreatePR
-		return m, nil
-	}
-	return m, nil
-}

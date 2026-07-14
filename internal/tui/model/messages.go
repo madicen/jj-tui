@@ -24,25 +24,6 @@ type TabSelectedMsg struct {
 	Tab state.ViewMode
 }
 
-// ActionMsg is emitted when an action button is clicked
-type ActionMsg struct {
-	Action ActionType
-}
-
-// ActionType represents the type of action triggered
-type ActionType string
-
-const (
-	ActionQuit     ActionType = "quit"
-	ActionRefresh  ActionType = "refresh"
-	ActionNewPR    ActionType = "new_pr"
-	ActionCheckout ActionType = "checkout"
-	ActionEdit     ActionType = "edit"
-	ActionSquash   ActionType = "squash"
-	ActionRebase   ActionType = "rebase"
-	ActionHelp     ActionType = "help"
-)
-
 // SelectionMode indicates what the user is selecting commits for
 type SelectionMode int
 
