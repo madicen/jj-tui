@@ -622,72 +622,46 @@ func (c *Config) ClearGitHub() {
 	c.GitHubAuthMethod = GitHubAuthNone
 }
 
-// ShowMergedPRs returns whether to show merged PRs (defaults to true)
-func (c *Config) ShowMergedPRs() bool {
-	if c.GitHubShowMerged == nil {
-		return true
+func boolOr(p *bool, def bool) bool {
+	if p == nil {
+		return def
 	}
-	return *c.GitHubShowMerged
+	return *p
 }
+
+func intOr(p *int, def int) int {
+	if p == nil {
+		return def
+	}
+	return *p
+}
+
+// ShowMergedPRs returns whether to show merged PRs (defaults to true)
+func (c *Config) ShowMergedPRs() bool { return boolOr(c.GitHubShowMerged, true) }
 
 // ShowClosedPRs returns whether to show closed PRs (defaults to true)
-func (c *Config) ShowClosedPRs() bool {
-	if c.GitHubShowClosed == nil {
-		return true
-	}
-	return *c.GitHubShowClosed
-}
+func (c *Config) ShowClosedPRs() bool { return boolOr(c.GitHubShowClosed, true) }
 
 // OnlyMyPRs returns whether to show only the user's own PRs (defaults to false)
-func (c *Config) OnlyMyPRs() bool {
-	if c.GitHubOnlyMine == nil {
-		return false
-	}
-	return *c.GitHubOnlyMine
-}
+func (c *Config) OnlyMyPRs() bool { return boolOr(c.GitHubOnlyMine, false) }
 
 // PRLimit returns the maximum number of PRs to load (defaults to 100)
-func (c *Config) PRLimit() int {
-	if c.GitHubPRLimit == nil {
-		return 100
-	}
-	return *c.GitHubPRLimit
-}
+func (c *Config) PRLimit() int { return intOr(c.GitHubPRLimit, 100) }
 
 // PRRefreshInterval returns the PR auto-refresh interval in seconds
 // Returns 0 if auto-refresh is disabled, defaults to 120 (2 minutes)
-func (c *Config) PRRefreshInterval() int {
-	if c.GitHubRefreshInterval == nil {
-		return 120 // Default: 2 minutes
-	}
-	return *c.GitHubRefreshInterval
-}
+func (c *Config) PRRefreshInterval() int { return intOr(c.GitHubRefreshInterval, 120) }
 
 // AutoInProgressOnBranch returns true if tickets should auto-transition to "In Progress" when creating a branch
 // Defaults to true (enabled)
-func (c *Config) AutoInProgressOnBranch() bool {
-	if c.TicketAutoInProgress == nil {
-		return true // Default: enabled
-	}
-	return *c.TicketAutoInProgress
-}
+func (c *Config) AutoInProgressOnBranch() bool { return boolOr(c.TicketAutoInProgress, true) }
 
 // BranchLimit returns the maximum number of branches to calculate stats for (defaults to 50)
 // Branches beyond this limit will still show but without ahead/behind counts
-func (c *Config) BranchLimit() int {
-	if c.BranchStatsLimit == nil {
-		return 50
-	}
-	return *c.BranchStatsLimit
-}
+func (c *Config) BranchLimit() int { return intOr(c.BranchStatsLimit, 50) }
 
 // ShouldSanitizeBookmarkNames returns whether to auto-fix invalid bookmark names (defaults to true)
-func (c *Config) ShouldSanitizeBookmarkNames() bool {
-	if c.SanitizeBookmarkNames == nil {
-		return true // Default: enabled
-	}
-	return *c.SanitizeBookmarkNames
-}
+func (c *Config) ShouldSanitizeBookmarkNames() bool { return boolOr(c.SanitizeBookmarkNames, true) }
 
 // ConfirmDestructiveOps returns whether destructive jj operations (abandon, divergent-commit
 // resolution, backout, force-ish push) should show a y/n confirmation first. Nil-safe:
@@ -713,19 +687,13 @@ func (c *Config) AutoRefreshInterval() time.Duration {
 // untracked origin/* bookmarks whose tip you did not author. Nil-safe (defaults
 // to true so shared repos with many open PR branches don't drown the list).
 func (c *Config) BranchesFilterToTrackedAndMine() bool {
-	if c == nil || c.BranchesShowAllRemotes == nil {
-		return true
-	}
-	return !*c.BranchesShowAllRemotes
+	return c == nil || !boolOr(c.BranchesShowAllRemotes, false)
 }
 
 // GraphFilterToMine returns true when the graph revset should be intersected
 // with a "mine-or-@-neighborhood" filter. Nil-safe; defaults to true.
 func (c *Config) GraphFilterToMine() bool {
-	if c == nil || c.GraphShowEveryonesCommits == nil {
-		return true
-	}
-	return !*c.GraphShowEveryonesCommits
+	return c == nil || !boolOr(c.GraphShowEveryonesCommits, false)
 }
 
 // HasJira returns true if Jira is fully configured
