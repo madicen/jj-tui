@@ -1085,9 +1085,10 @@ func (m *Model) dispatchAsyncMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Theme color picker: close picker and update color when user confirms or cancels
 	case bubblepicker.ColorChosenMsg, bubblepicker.ColorCanceledMsg:
 		if m.appState.ViewMode == state.ViewSettings {
-			cmds := util.PropagateUpdate(msg, &m.settingsTabModel)
-			if len(cmds) > 0 && cmds[0] != nil {
-				return m, cmds[0]
+			updated, cmd := m.settingsTabModel.Update(msg)
+			m.settingsTabModel = updated
+			if cmd != nil {
+				return m, cmd
 			}
 		}
 		return m, nil

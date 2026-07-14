@@ -311,7 +311,20 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// Propagate dimensions to tab models so they can render
-		cmds := util.PropagateUpdate(msg, &m.graphTabModel, &m.prsTabModel, &m.branchesTabModel, &m.ticketsTabModel, &m.settingsTabModel, &m.helpTabModel)
+		var cmds []tea.Cmd
+		var cmd tea.Cmd
+		m.graphTabModel, cmd = m.graphTabModel.UpdateWithApp(msg, nil)
+		cmds = append(cmds, cmd)
+		m.prsTabModel, cmd = m.prsTabModel.Update(msg)
+		cmds = append(cmds, cmd)
+		m.branchesTabModel, cmd = m.branchesTabModel.Update(msg)
+		cmds = append(cmds, cmd)
+		m.ticketsTabModel, cmd = m.ticketsTabModel.Update(msg)
+		cmds = append(cmds, cmd)
+		m.settingsTabModel, cmd = m.settingsTabModel.Update(msg)
+		cmds = append(cmds, cmd)
+		m.helpTabModel, cmd = m.helpTabModel.Update(msg)
+		cmds = append(cmds, cmd)
 		// Set content-area height on tabs so graph/files split fills the content area (not full window)
 		for _, vm := range m.tabOrder {
 			m.tabRegistry[vm].SetDimensions(m.width, contentHeight)

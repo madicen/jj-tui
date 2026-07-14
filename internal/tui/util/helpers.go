@@ -37,36 +37,3 @@ func OpenURL(url string) tea.Cmd {
 		return nil
 	}
 }
-
-// PropagateUpdate calls Update(msg) on each updatable (pointer to a model with Update(tea.Msg) (tea.Model, tea.Cmd)),
-// updates the value at the pointer, and returns the collected commands.
-func PropagateUpdate(msg tea.Msg, updatables ...any) (results []tea.Cmd) {
-	for _, updatable := range updatables {
-		ptrValue := reflect.ValueOf(updatable)
-		if ptrValue.Kind() != reflect.Pointer {
-			panic("updatable must be a pointer")
-		}
-		method := ptrValue.MethodByName("Update")
-		if !method.IsValid() {
-			panic("updatable must have an Update method")
-		}
-		callResults := method.Call([]reflect.Value{reflect.ValueOf(msg)})
-		if len(callResults) != 2 {
-			panic("Update method must return (model, tea.Cmd)")
-		}
-		updatedValue := callResults[0]
-		if updatedValue.Kind() == reflect.Interface && !updatedValue.IsNil() {
-			updatedValue = updatedValue.Elem()
-		}
-		cmd, ok := callResults[1].Interface().(tea.Cmd)
-		if !ok {
-			panic("second return value from Update must be tea.Cmd")
-		}
-		if updatedValue.Kind() == reflect.Pointer {
-			updatedValue = updatedValue.Elem()
-		}
-		ptrValue.Elem().Set(updatedValue)
-		results = append(results, cmd)
-	}
-	return results
-}
