@@ -227,9 +227,6 @@ func clampAITimeout(v int) int {
 	return v
 }
 
-// Init implements tea.Model.
-func (m Model) Init() tea.Cmd { return nil }
-
 // Update forwards to the focused text input.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch m.focusedField {
@@ -265,9 +262,6 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 	}
 }
-
-// View is unused; parent renders.
-func (m Model) View() string { return "" }
 
 // GetAIEnabled returns whether AI assist is enabled.
 func (m *Model) GetAIEnabled() bool { return m.aiEnabled }

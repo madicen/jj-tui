@@ -110,11 +110,6 @@ func NewModelFromConfig(cfg *config.Config) Model {
 	return m
 }
 
-// Init initializes the model
-func (m Model) Init() tea.Cmd {
-	return nil
-}
-
 // Update handles messages: vertical navigation cycles focus; everything else is
 // routed to the focused input.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
@@ -124,11 +119,6 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		}
 	}
 	return m, m.form.Update(msg)
-}
-
-// View renders the model
-func (m Model) View() string {
-	return "" // Rendered by parent
 }
 
 // Accessors

@@ -101,19 +101,9 @@ func presetIndexFromConfig(s string) int {
 	return 0
 }
 
-// Init initializes the model
-func (m Model) Init() tea.Cmd {
-	return nil
-}
-
 // Update handles messages (key handling for inputs; zones handled by parent)
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, m.form.Update(msg)
-}
-
-// View renders the model
-func (m Model) View() string {
-	return "" // Rendered by parent
 }
 
 // GetSanitizeBookmarks returns whether to sanitize bookmark names
