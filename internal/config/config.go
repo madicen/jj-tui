@@ -306,163 +306,19 @@ func loadFromFile(path string) (*Config, error) {
 	return &cfg, nil
 }
 
-// mergeConfig merges source config into dest, only overwriting non-empty values
+// mergeConfig merges source into dest. Fields with omitempty are omitted when
+// empty, so absent/empty locals leave dest untouched; present keys overwrite.
+// Maps (e.g. Keys) merge into an existing non-nil dest map.
+// lazy: marshal round-trip — avoid hand-maintaining a per-field merge.
 func mergeConfig(dest, source *Config) {
 	if source == nil {
 		return
 	}
-	if source.GitHubToken != "" {
-		dest.GitHubToken = source.GitHubToken
+	data, err := json.Marshal(source)
+	if err != nil {
+		return
 	}
-	if source.GitHubAuthMethod != "" {
-		dest.GitHubAuthMethod = source.GitHubAuthMethod
-	}
-	if source.GitHubTokenSource != "" {
-		dest.GitHubTokenSource = source.GitHubTokenSource
-	}
-	if source.GitHubShowMerged != nil {
-		dest.GitHubShowMerged = source.GitHubShowMerged
-	}
-	if source.GitHubShowClosed != nil {
-		dest.GitHubShowClosed = source.GitHubShowClosed
-	}
-	if source.GitHubOnlyMine != nil {
-		dest.GitHubOnlyMine = source.GitHubOnlyMine
-	}
-	if source.GitHubPRLimit != nil {
-		dest.GitHubPRLimit = source.GitHubPRLimit
-	}
-	if source.GitHubRefreshInterval != nil {
-		dest.GitHubRefreshInterval = source.GitHubRefreshInterval
-	}
-	if source.TicketProvider != "" {
-		dest.TicketProvider = source.TicketProvider
-	}
-	if source.JiraURL != "" {
-		dest.JiraURL = source.JiraURL
-	}
-	if source.JiraUser != "" {
-		dest.JiraUser = source.JiraUser
-	}
-	if source.JiraToken != "" {
-		dest.JiraToken = source.JiraToken
-	}
-	if source.JiraProject != "" {
-		dest.JiraProject = source.JiraProject
-	}
-	if source.JiraProjectFilter != "" {
-		dest.JiraProjectFilter = source.JiraProjectFilter
-	}
-	if source.JiraIssueType != "" {
-		dest.JiraIssueType = source.JiraIssueType
-	}
-	if source.JiraJQL != "" {
-		dest.JiraJQL = source.JiraJQL
-	}
-	if source.JiraExcludedStatuses != "" {
-		dest.JiraExcludedStatuses = source.JiraExcludedStatuses
-	}
-	if source.CodecksSubdomain != "" {
-		dest.CodecksSubdomain = source.CodecksSubdomain
-	}
-	if source.CodecksToken != "" {
-		dest.CodecksToken = source.CodecksToken
-	}
-	if source.CodecksProject != "" {
-		dest.CodecksProject = source.CodecksProject
-	}
-	if source.CodecksExcludedStatuses != "" {
-		dest.CodecksExcludedStatuses = source.CodecksExcludedStatuses
-	}
-	if source.GitHubIssuesExcludedStatuses != "" {
-		dest.GitHubIssuesExcludedStatuses = source.GitHubIssuesExcludedStatuses
-	}
-	if source.TicketAutoInProgress != nil {
-		dest.TicketAutoInProgress = source.TicketAutoInProgress
-	}
-	if source.BranchStatsLimit != nil {
-		dest.BranchStatsLimit = source.BranchStatsLimit
-	}
-	if source.SanitizeBookmarkNames != nil {
-		dest.SanitizeBookmarkNames = source.SanitizeBookmarkNames
-	}
-	if source.BranchesShowAllRemotes != nil {
-		dest.BranchesShowAllRemotes = source.BranchesShowAllRemotes
-	}
-	if source.GraphRevset != "" {
-		dest.GraphRevset = source.GraphRevset
-	}
-	if source.GraphShowEveryonesCommits != nil {
-		dest.GraphShowEveryonesCommits = source.GraphShowEveryonesCommits
-	}
-	if source.ConfirmDestructive != nil {
-		dest.ConfirmDestructive = source.ConfirmDestructive
-	}
-	if source.ThemePrimary != "" {
-		dest.ThemePrimary = source.ThemePrimary
-	}
-	if source.ThemeSecondary != "" {
-		dest.ThemeSecondary = source.ThemeSecondary
-	}
-	if source.ThemeMuted != "" {
-		dest.ThemeMuted = source.ThemeMuted
-	}
-	if source.ExternalFileEditor != "" {
-		dest.ExternalFileEditor = source.ExternalFileEditor
-	}
-	if source.ExternalFileEditorCustom != "" {
-		dest.ExternalFileEditorCustom = source.ExternalFileEditorCustom
-	}
-	if source.AIEnabled != nil {
-		dest.AIEnabled = source.AIEnabled
-	}
-	if source.AIBaseURL != "" {
-		dest.AIBaseURL = source.AIBaseURL
-	}
-	if source.AIModel != "" {
-		dest.AIModel = source.AIModel
-	}
-	if source.AITimeoutSeconds != nil {
-		dest.AITimeoutSeconds = source.AITimeoutSeconds
-	}
-	if source.AIProvider != "" {
-		dest.AIProvider = source.AIProvider
-	}
-	if source.AIAPIKey != "" {
-		dest.AIAPIKey = source.AIAPIKey
-	}
-	if len(source.AIProfiles) > 0 {
-		dest.AIProfiles = make([]AIProfile, len(source.AIProfiles))
-		copy(dest.AIProfiles, source.AIProfiles)
-	}
-	if source.AIActiveProfile != "" {
-		dest.AIActiveProfile = source.AIActiveProfile
-	}
-	if source.AIEvologDescribeAfterSplitDefault != nil {
-		dest.AIEvologDescribeAfterSplitDefault = source.AIEvologDescribeAfterSplitDefault
-	}
-	if source.AIEvologFileSplitEnabled != nil {
-		dest.AIEvologFileSplitEnabled = source.AIEvologFileSplitEnabled
-	}
-	if source.AIEvologHunkSplitEnabled != nil {
-		dest.AIEvologHunkSplitEnabled = source.AIEvologHunkSplitEnabled
-	}
-	if source.AIEvologMultiSplitMax != nil {
-		dest.AIEvologMultiSplitMax = source.AIEvologMultiSplitMax
-	}
-	if source.AIEvologMultiSplitMode != "" {
-		dest.AIEvologMultiSplitMode = source.AIEvologMultiSplitMode
-	}
-	// Keybinding overrides merge per-key so a local .jj-tui.json can rebind a
-	// single action without dropping the rest of the global map.
-	if len(source.Keys) > 0 {
-		if dest.Keys == nil {
-			dest.Keys = make(map[string]string, len(source.Keys))
-		}
-		for k, v := range source.Keys {
-			dest.Keys[k] = v
-		}
-	}
+	_ = json.Unmarshal(data, dest)
 }
 
 // Canonical external editor presets (NormalizeExternalFileEditor).
