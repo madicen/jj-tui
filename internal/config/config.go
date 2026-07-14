@@ -737,46 +737,6 @@ func (c *Config) ApplyToEnvironment() {
 	}
 }
 
-// UpdateFromEnvironment updates config with current environment values
-func (c *Config) UpdateFromEnvironment() {
-	// Legacy: only copy GITHUB_TOKEN into config when github_token_source was never set.
-	if strings.TrimSpace(c.GitHubTokenSource) == "" {
-		if token := os.Getenv("GITHUB_TOKEN"); token != "" {
-			c.GitHubToken = token
-		}
-	}
-	if url := os.Getenv("JIRA_URL"); url != "" {
-		c.JiraURL = url
-	}
-	if user := os.Getenv("JIRA_USER"); user != "" {
-		c.JiraUser = user
-	}
-	if token := os.Getenv("JIRA_TOKEN"); token != "" {
-		c.JiraToken = token
-	}
-	if project := os.Getenv("JIRA_PROJECT"); project != "" {
-		c.JiraProject = project
-	}
-	if filter := os.Getenv("JIRA_PROJECT_FILTER"); filter != "" {
-		c.JiraProjectFilter = filter
-	}
-	if issueType := os.Getenv("JIRA_ISSUE_TYPE"); issueType != "" {
-		c.JiraIssueType = issueType
-	}
-	if jql := os.Getenv("JIRA_JQL"); jql != "" {
-		c.JiraJQL = jql
-	}
-	if subdomain := os.Getenv("CODECKS_SUBDOMAIN"); subdomain != "" {
-		c.CodecksSubdomain = subdomain
-	}
-	if token := os.Getenv("CODECKS_TOKEN"); token != "" {
-		c.CodecksToken = token
-	}
-	if project := os.Getenv("CODECKS_PROJECT"); project != "" {
-		c.CodecksProject = project
-	}
-}
-
 // HasGitHub returns true if the chosen token source yields a non-empty token.
 func (c *Config) HasGitHub() bool {
 	tok, _ := GitHubTokenForAPI(c)
@@ -990,18 +950,6 @@ func (c *Config) AIBaseURLResolved() string {
 		return "https://api.openai.com/v1"
 	}
 	return strings.TrimSuffix(s, "/")
-}
-
-// AIModelOrDefault returns the chat model name.
-func (c *Config) AIModelOrDefault() string {
-	if c == nil {
-		return "gpt-4o-mini"
-	}
-	s := strings.TrimSpace(c.AIModel)
-	if s == "" {
-		return "gpt-4o-mini"
-	}
-	return s
 }
 
 // AIModelResolved returns the model id to send to the provider, using provider-specific defaults when AIModel is empty.
