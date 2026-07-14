@@ -16,8 +16,13 @@ import (
 	"github.com/madicen/jj-tui/internal/tui/longpress"
 )
 
-// wheelStep is the number of list rows a single mouse-wheel notch scrolls.
-const wheelStep = 3
+const (
+	// wheelStep is the number of list rows a single mouse-wheel notch scrolls.
+	wheelStep = 3
+	// LongPressThreshold is how long a row press must be held before the shared
+	// list-tab context menus open. Shared by branches, PRs, and tickets.
+	LongPressThreshold = 500 * time.Millisecond
+)
 
 // Model holds the shared list scroll offset and long-press arming state. It is
 // meant to be embedded (anonymously) in a tab's own Model so the fields and
@@ -77,6 +82,21 @@ type LongPressConfig struct {
 	// MakeTick builds the tea.Msg emitted after Threshold, carrying the press id
 	// so a stale tick (from an earlier, since-cancelled press) can be ignored.
 	MakeTick func(pressID int) tea.Msg
+}
+
+// HoverHitTest returns the index of the first zoneFn(i) under the mouse, or -1.
+// Used by open context menus (and ticket status submenu) for hover highlighting.
+func HoverHitTest(zm *zone.Manager, msg tea.MouseMsg, zoneFn func(i int) string, n int) int {
+	if zm == nil || zoneFn == nil || n <= 0 {
+		return -1
+	}
+	for i := 0; i < n; i++ {
+		z := zm.Get(zoneFn(i))
+		if z != nil && z.InBounds(msg) {
+			return i
+		}
+	}
+	return -1
 }
 
 // ArmLongPress runs the shared press/motion/release arming state machine and
