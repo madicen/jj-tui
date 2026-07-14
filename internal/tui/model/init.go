@@ -44,7 +44,6 @@ func New(ctx context.Context) *Model {
 	settingsTabModel := settingstab.NewModelWithConfig(cfg)
 
 	m := &Model{
-		ctx:         ctx,
 		zoneManager: zm,
 		keys:        keys.DefaultGlobalKeyMap(nil),
 		busySpinner: newBusySpinner(),

@@ -396,8 +396,8 @@ func (m *Model) UpdateBranches(branches []internal.Branch) {
 }
 
 // OnRepositoryLoaded caches the newly-loaded repository (used for trunk/target
-// rendering). It implements tab.RepositoryAware (P2.8). Branches themselves are
-// loaded via a separate loadBranches() call, not from repository directly.
+// rendering). Branches themselves are loaded via a separate loadBranches() call,
+// not from repository directly.
 func (m *Model) OnRepositoryLoaded(repo *internal.Repository) {
 	m.repository = repo
 }

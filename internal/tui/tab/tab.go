@@ -5,14 +5,13 @@
 // root model currently holds each primary tab as a concrete field and
 // dispatches to it via per-ViewMode switches. Renderer is the first, safe slice
 // of that contract (render + size) and is wired through the model's tab
-// registry today. Tab, RepositoryAware, and Activatable are the target
-// contracts the remaining migration (generic message forwarding, concrete-field
-// removal) grows into; they are documented here so the direction is explicit.
+// registry today. Tab is the target contract the remaining migration (generic
+// message forwarding, concrete-field removal) grows into; it is documented here
+// so the direction is explicit.
 package tab
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/tui/state"
 )
 
@@ -40,17 +39,4 @@ type Tab interface {
 	Update(msg tea.Msg, app *state.AppState) (Tab, tea.Cmd)
 	View(app *state.AppState) string
 	SetDimensions(width, height int)
-}
-
-// RepositoryAware is an optional hook a tab implements when it needs to recompute
-// derived state after a repository load. Checked by type assertion.
-type RepositoryAware interface {
-	OnRepositoryLoaded(*internal.Repository)
-}
-
-// Activatable is an optional hook a tab implements when it needs to react to
-// becoming (or ceasing to be) the active view. Checked by type assertion.
-type Activatable interface {
-	OnActivated()
-	OnDeactivated()
 }

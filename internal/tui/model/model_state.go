@@ -9,7 +9,6 @@ package model
 // file and init.go.
 
 import (
-	"context"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -45,7 +44,6 @@ import (
 // All clickable elements are wrapped with zone.Mark() in the View.
 // Mouse events are handled via zone.MsgZoneInBounds messages.
 type Model struct {
-	ctx         context.Context
 	zoneManager *zone.Manager
 	appState    state.AppState // Shared state and services; submodels receive &appState
 

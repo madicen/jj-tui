@@ -399,12 +399,6 @@ func HandleRequest(r Request, ctx *RequestContext) Result {
 	return Result{}
 }
 
-// ExecuteRequest is deprecated: use HandleRequest and Result instead.
-func ExecuteRequest(r Request, ctx *RequestContext) (cmd tea.Cmd, statusMsg string) {
-	res := HandleRequest(r, ctx)
-	return res.Cmd, res.Status
-}
-
 func executeCheckout(ctx *RequestContext) (tea.Cmd, string) {
 	if !ctx.IsSelectedCommitValid() {
 		return nil, ""

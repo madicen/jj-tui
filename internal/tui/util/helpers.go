@@ -38,14 +38,6 @@ func OpenURL(url string) tea.Cmd {
 	}
 }
 
-// If returns trueVal when condition is true, otherwise falseVal. Generic ternary helper.
-func If[T any](condition bool, trueVal, falseVal T) T {
-	if condition {
-		return trueVal
-	}
-	return falseVal
-}
-
 // PropagateUpdate calls Update(msg) on each updatable (pointer to a model with Update(tea.Msg) (tea.Model, tea.Cmd)),
 // updates the value at the pointer, and returns the collected commands.
 func PropagateUpdate(msg tea.Msg, updatables ...any) (results []tea.Cmd) {

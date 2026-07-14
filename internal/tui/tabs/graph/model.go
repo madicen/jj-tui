@@ -774,9 +774,8 @@ func (m *GraphModel) GetCreatePRBranch() string {
 }
 
 // OnRepositoryLoaded recomputes graph-derived state (selection, rebase drag) from
-// the newly-loaded repository. It implements tab.RepositoryAware (P2.8): the root
-// no longer fans a cached copy out to every tab; it invokes this hook only on tabs
-// that need to recompute on load.
+// the newly-loaded repository. The root invokes this hook on tabs that need to
+// recompute on load (no longer fans a cached copy out to every tab).
 func (m *GraphModel) OnRepositoryLoaded(repo *internal.Repository) {
 	if repo == nil {
 		return

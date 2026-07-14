@@ -16,21 +16,13 @@ type Model = model.Model
 
 // ViewMode constants - re-exported from state package
 const (
-	ViewCommitGraph     = state.ViewCommitGraph
-	ViewPullRequests    = state.ViewPullRequests
-	ViewJira            = state.ViewTickets // alias for Tickets tab
-	ViewSettings        = state.ViewSettings
-	ViewHelp            = state.ViewHelp
-	ViewEditDescription = state.ViewEditDescription
-	ViewCreatePR        = state.ViewCreatePR
-	ViewCreateBookmark  = state.ViewCreateBookmark
-	ViewGitHubLogin     = state.ViewGitHubLogin
-)
-
-// SelectionMode constants - re-exported from model package
-const (
-	SelectionNormal            = model.SelectionNormal
-	SelectionRebaseDestination = model.SelectionRebaseDestination
+	ViewCommitGraph    = state.ViewCommitGraph
+	ViewPullRequests   = state.ViewPullRequests
+	ViewJira           = state.ViewTickets // alias for Tickets tab
+	ViewSettings       = state.ViewSettings
+	ViewHelp           = state.ViewHelp
+	ViewCreatePR       = state.ViewCreatePR
+	ViewCreateBookmark = state.ViewCreateBookmark
 )
 
 // New creates a new Model - re-exported from model package

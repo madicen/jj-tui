@@ -24,14 +24,6 @@ type TabSelectedMsg struct {
 	Tab state.ViewMode
 }
 
-// SelectionMode indicates what the user is selecting commits for
-type SelectionMode int
-
-const (
-	SelectionNormal            SelectionMode = iota // Normal selection
-	SelectionRebaseDestination                      // Selecting destination for rebase
-)
-
 // Internal message types (not exported).
 
 // tickMsg is sent on each timer tick for auto-refresh (jj repository)
