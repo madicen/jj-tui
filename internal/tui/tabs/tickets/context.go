@@ -6,16 +6,6 @@ import (
 	"github.com/madicen/jj-tui/internal/tui/state"
 )
 
-// ContextProvider is implemented by the main model so the Tickets tab can build context without depending on model package.
-type ContextProvider interface {
-	GetTickets() []tickets.Ticket
-	GetSelectedTicket() int
-	GetAvailableTransitions() []tickets.Transition
-	GetTransitionInProgress() bool
-	GetTicketService() tickets.Service
-	GetIsStatusChangeMode() bool
-}
-
 // BuildRequestContextFromApp builds RequestContext from app state and the tickets tab model (for UpdateWithApp flow).
 func BuildRequestContextFromApp(app *state.AppState, m *Model) *RequestContext {
 	if app == nil || m == nil {
@@ -28,21 +18,6 @@ func BuildRequestContextFromApp(app *state.AppState, m *Model) *RequestContext {
 		TransitionInProgress: m.GetTransitionInProgress(),
 		TicketService:        app.TicketService,
 		IsStatusChangeMode:   m.IsStatusChangeMode(),
-	})
-}
-
-// BuildRequestContextFrom builds RequestContext from a provider (e.g. main model).
-func BuildRequestContextFrom(p ContextProvider) *RequestContext {
-	if p == nil {
-		return nil
-	}
-	return BuildRequestContext(&ContextInput{
-		TicketList:           p.GetTickets(),
-		SelectedTicket:       p.GetSelectedTicket(),
-		AvailableTransitions: p.GetAvailableTransitions(),
-		TransitionInProgress: p.GetTransitionInProgress(),
-		TicketService:        p.GetTicketService(),
-		IsStatusChangeMode:   p.GetIsStatusChangeMode(),
 	})
 }
 
