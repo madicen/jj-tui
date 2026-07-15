@@ -9,7 +9,16 @@ import (
 	zone "github.com/lrstanley/bubblezone"
 	bubbledropdown "github.com/madicen/bubble-dropdown"
 	"github.com/madicen/jj-tui/internal/config"
+	"github.com/madicen/jj-tui/internal/tui/form"
 	"github.com/madicen/jj-tui/internal/tui/form/dropdown"
+)
+
+// Field indices into the shared form (also the parent's local focus order).
+const (
+	fieldBaseURL = iota
+	fieldModel
+	fieldAPIKey
+	fieldProfileName
 )
 
 // aiProviderValues maps the provider dropdown indices to their config values;
@@ -59,11 +68,7 @@ const (
 type Model struct {
 	aiEnabled              bool
 	aiProvider             string
-	aiBaseURLInput         textinput.Model
-	aiModelInput           textinput.Model
-	aiAPIKeyInput          textinput.Model
-	aiProfileNameInput     textinput.Model
-	focusedField           int // 0 = base URL, 1 = model, 2 = API key
+	form                   form.Model
 	aiTimeoutSeconds       int // clamped to [AITimeoutMinSeconds, AITimeoutMaxSeconds]; mirrors cfg.AITimeout() default
 	evologDescribeDefault  bool
 	evologFileSplitEnabled bool
@@ -73,9 +78,9 @@ type Model struct {
 
 	// AI profile management: profiles holds every saved profile (snapshots, not
 	// references to cfg.AIProfiles). selectedIdx points to the one being edited
-	// (its values are mirrored to aiProvider/aiBaseURLInput/aiModelInput/
-	// aiAPIKeyInput/aiTimeoutSeconds above). activeName tracks the persistently
-	// active profile so the row can be marked with ● and used as the default.
+	// (its values are mirrored to aiProvider/form fields/aiTimeoutSeconds above).
+	// activeName tracks the persistently active profile so the row can be marked
+	// with ● and used as the default.
 	profiles    []config.AIProfile
 	selectedIdx int
 	activeName  string
@@ -115,11 +120,7 @@ func NewModel() Model {
 		evologHunkSplitEnabled: true,
 		evologMultiMax:         config.EvologAIMultiSplitHardMax,
 		aiTimeoutSeconds:       AITimeoutDefaultSeconds,
-		aiBaseURLInput:         aiURL,
-		aiModelInput:           aiModel,
-		aiAPIKeyInput:          aiKey,
-		aiProfileNameInput:     aiName,
-		focusedField:           0,
+		form:                   form.New(aiURL, aiModel, aiKey, aiName),
 		profiles: []config.AIProfile{
 			{Name: config.DefaultAIProfileName, Provider: "openai_compatible"},
 		},
@@ -171,18 +172,18 @@ func (m *Model) loadSelectedProfileIntoInputs() {
 	if m.providerDropdown != nil {
 		m.providerDropdown.SetSelectedIndex(aiProviderIndex(m.aiProvider))
 	}
-	m.aiBaseURLInput.SetValue(p.BaseURL)
-	m.aiModelInput.SetValue(p.Model)
+	m.form.SetValue(fieldBaseURL, p.BaseURL)
+	m.form.SetValue(fieldModel, p.Model)
 	if m.aiProvider == "ollama" {
 		if strings.TrimSpace(p.BaseURL) == "" {
-			m.aiBaseURLInput.SetValue(config.OllamaDefaultChatBaseURL)
+			m.form.SetValue(fieldBaseURL, config.OllamaDefaultChatBaseURL)
 		}
 		if strings.TrimSpace(p.Model) == "" {
-			m.aiModelInput.SetValue(config.OllamaDefaultModel)
+			m.form.SetValue(fieldModel, config.OllamaDefaultModel)
 		}
 	}
-	m.aiAPIKeyInput.SetValue(p.APIKey)
-	m.aiProfileNameInput.SetValue(p.Name)
+	m.form.SetValue(fieldAPIKey, p.APIKey)
+	m.form.SetValue(fieldProfileName, p.Name)
 	if p.TimeoutSeconds > 0 {
 		m.aiTimeoutSeconds = clampAITimeout(p.TimeoutSeconds)
 	} else {
@@ -202,16 +203,16 @@ func (m *Model) commitInputsToSelectedProfile() {
 	if t := clampAITimeout(m.aiTimeoutSeconds); t > 0 && t != AITimeoutDefaultSeconds {
 		timeout = t
 	}
-	name := strings.TrimSpace(m.aiProfileNameInput.Value())
+	name := strings.TrimSpace(m.form.Value(fieldProfileName))
 	if name == "" {
 		name = m.profiles[m.selectedIdx].Name
 	}
 	m.profiles[m.selectedIdx] = config.AIProfile{
 		Name:           name,
 		Provider:       config.NormalizeAIProvider(m.aiProvider),
-		BaseURL:        strings.TrimSpace(m.aiBaseURLInput.Value()),
-		Model:          strings.TrimSpace(m.aiModelInput.Value()),
-		APIKey:         strings.TrimSpace(m.aiAPIKeyInput.Value()),
+		BaseURL:        strings.TrimSpace(m.form.Value(fieldBaseURL)),
+		Model:          strings.TrimSpace(m.form.Value(fieldModel)),
+		APIKey:         strings.TrimSpace(m.form.Value(fieldAPIKey)),
 		TimeoutSeconds: timeout,
 	}
 }
@@ -227,40 +228,21 @@ func clampAITimeout(v int) int {
 	return v
 }
 
-// Update forwards to the focused text input.
+// Update forwards to the focused text input; when the profile-name field is
+// focused, also mirrors the typed name into the selected profile row.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
-	switch m.focusedField {
-	case 0:
-		var cmd tea.Cmd
-		m.aiBaseURLInput, cmd = m.aiBaseURLInput.Update(msg)
-		return m, cmd
-	case 1:
-		var cmd tea.Cmd
-		m.aiModelInput, cmd = m.aiModelInput.Update(msg)
-		return m, cmd
-	case 2:
-		var cmd tea.Cmd
-		m.aiAPIKeyInput, cmd = m.aiAPIKeyInput.Update(msg)
-		return m, cmd
-	case 3:
-		var cmd tea.Cmd
-		m.aiProfileNameInput, cmd = m.aiProfileNameInput.Update(msg)
-		// Mirror the typed name back into the selected profile so the row label
-		// updates as the user types instead of waiting for Save.
-		if m.selectedIdx >= 0 && m.selectedIdx < len(m.profiles) {
-			name := strings.TrimSpace(m.aiProfileNameInput.Value())
-			if name != "" {
-				prevName := m.profiles[m.selectedIdx].Name
-				m.profiles[m.selectedIdx].Name = name
-				if strings.EqualFold(m.activeName, prevName) {
-					m.activeName = name
-				}
+	cmd := m.form.Update(msg)
+	if m.form.Focused() == fieldProfileName && m.selectedIdx >= 0 && m.selectedIdx < len(m.profiles) {
+		name := strings.TrimSpace(m.form.Value(fieldProfileName))
+		if name != "" {
+			prevName := m.profiles[m.selectedIdx].Name
+			m.profiles[m.selectedIdx].Name = name
+			if strings.EqualFold(m.activeName, prevName) {
+				m.activeName = name
 			}
 		}
-		return m, cmd
-	default:
-		return m, nil
 	}
+	return m, cmd
 }
 
 // GetAIEnabled returns whether AI assist is enabled.
@@ -344,11 +326,11 @@ func (m *Model) SetAIProvider(s string) {
 		m.aiProvider = "openai_compatible"
 	}
 	if m.aiProvider == "ollama" && prev != "ollama" {
-		if strings.TrimSpace(m.aiBaseURLInput.Value()) == "" {
-			m.aiBaseURLInput.SetValue(config.OllamaDefaultChatBaseURL)
+		if strings.TrimSpace(m.form.Value(fieldBaseURL)) == "" {
+			m.form.SetValue(fieldBaseURL, config.OllamaDefaultChatBaseURL)
 		}
-		if strings.TrimSpace(m.aiModelInput.Value()) == "" {
-			m.aiModelInput.SetValue(config.OllamaDefaultModel)
+		if strings.TrimSpace(m.form.Value(fieldModel)) == "" {
+			m.form.SetValue(fieldModel, config.OllamaDefaultModel)
 		}
 	}
 	if m.providerDropdown != nil {
@@ -382,72 +364,50 @@ func (m *Model) UpdateDropdown(msg tea.Msg) tea.Cmd {
 
 // GetAIBaseURL returns the configured API base URL field.
 func (m *Model) GetAIBaseURL() string {
-	return strings.TrimSpace(m.aiBaseURLInput.Value())
+	return strings.TrimSpace(m.form.Value(fieldBaseURL))
 }
 
 // GetAIModel returns the configured model field.
 func (m *Model) GetAIModel() string {
-	return strings.TrimSpace(m.aiModelInput.Value())
+	return strings.TrimSpace(m.form.Value(fieldModel))
 }
 
 // GetAIAPIKey returns the key field (may be empty).
 func (m *Model) GetAIAPIKey() string {
-	return strings.TrimSpace(m.aiAPIKeyInput.Value())
+	return strings.TrimSpace(m.form.Value(fieldAPIKey))
 }
 
 // GetInputViews returns API URL, model, and API key views (global input indices 16–18 on the AI tab).
+// Profile name is rendered separately via GetProfileNameInputView.
 func (m *Model) GetInputViews() []string {
-	return []string{
-		m.aiBaseURLInput.View(),
-		m.aiModelInput.View(),
-		m.aiAPIKeyInput.View(),
-	}
+	views := m.form.Views()
+	return views[:3]
 }
 
-// GetFocusedField returns 0–2 for the three AI text inputs.
+// GetFocusedField returns 0–3 for the AI text inputs.
 func (m *Model) GetFocusedField() int {
-	return m.focusedField
+	return m.form.Focused()
 }
 
 // SetFocusedField focuses one of the AI inputs (0–3). Returns tea.Cmd from Focus().
 // 0 = base URL, 1 = model, 2 = API key, 3 = profile name.
 func (m *Model) SetFocusedField(i int) tea.Cmd {
-	if i < 0 {
-		i = 0
-	}
-	if i > 3 {
-		i = 3
-	}
-	m.focusedField = i
-	m.aiBaseURLInput.Blur()
-	m.aiModelInput.Blur()
-	m.aiAPIKeyInput.Blur()
-	m.aiProfileNameInput.Blur()
-	switch m.focusedField {
-	case 0:
-		return m.aiBaseURLInput.Focus()
-	case 1:
-		return m.aiModelInput.Focus()
-	case 2:
-		return m.aiAPIKeyInput.Focus()
-	default:
-		return m.aiProfileNameInput.Focus()
-	}
+	return m.form.Focus(i)
 }
 
-// SetInputWidth sets widths for AI text fields.
+// SetInputWidth sets widths for AI text fields. Profile name stays half-width.
 func (m *Model) SetInputWidth(w int) {
 	if w < 40 {
 		w = 40
 	}
-	m.aiBaseURLInput.Width = w
-	m.aiModelInput.Width = w
-	m.aiAPIKeyInput.Width = w
+	m.form.SetWidth(w)
 	nameWidth := w / 2
 	if nameWidth < 20 {
 		nameWidth = 20
 	}
-	m.aiProfileNameInput.Width = nameWidth
+	if in := m.form.Input(fieldProfileName); in != nil {
+		in.Width = nameWidth
+	}
 }
 
 // Profiles returns the current in-memory profile list (snapshots, not
@@ -578,14 +538,14 @@ func (m *Model) CycleSelected(delta int) {
 // GetProfileNameInputView returns the rendered profile-name textinput for the
 // settings view layer. Kept here so the editor row can include a Mark/Zone.
 func (m *Model) GetProfileNameInputView() string {
-	return m.aiProfileNameInput.View()
+	return m.form.Input(fieldProfileName).View()
 }
 
 // SetProfileNameInputValue replaces the profile-name textinput's contents.
 // Used by tests and any flow that wants to set the in-editor profile name
 // without typing keystroke-by-keystroke.
 func (m *Model) SetProfileNameInputValue(s string) {
-	m.aiProfileNameInput.SetValue(s)
+	m.form.SetValue(fieldProfileName, s)
 }
 
 // CommitInputs is the externally-callable form of commitInputsToSelectedProfile.
