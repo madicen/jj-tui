@@ -58,6 +58,12 @@ jj new
 
 # Create some source files
 mkdir -p src
+# Nested module so parent `go build ./...` skips this fixture tree (see L0.1).
+cat > src/go.mod << 'EOF'
+module demo-fixture
+go 1.25
+EOF
+
 cat > src/main.go << 'EOF'
 package main
 
@@ -180,6 +186,14 @@ push_bookmark fix/pagination
 
 # Fetch to ensure jj knows about the remote branches
 jj git fetch --remote origin
+
+# Final WC may lack src/go.mod (branched from main / jj edits). Re-write so the
+# parent-repo-tracked fixtures/demo-repo/src/go.mod exists after rm -rf + setup.
+mkdir -p src
+cat > src/go.mod << 'EOF'
+module demo-fixture
+go 1.25
+EOF
 
 echo ""
 echo "Demo repository created successfully!"

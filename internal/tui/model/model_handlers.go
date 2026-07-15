@@ -56,8 +56,8 @@ const autoRefreshInterval = 5 * time.Second
 // to the tabs that keep derived state or a render cache. It replaces the old
 // per-site UpdateRepository fan-out (P2.8): tabs that never consumed the repository
 // (tickets/settings/help/…) no longer implement or receive a repository hook, and
-// the three that do (graph selection, prs selection, branches render cache) satisfy
-// tab.RepositoryAware via OnRepositoryLoaded.
+// the three that do (graph selection, prs selection, branches render cache) expose
+// OnRepositoryLoaded.
 //
 // PLAN(P2.8): the graph/prs/branches tabs still hold a *cached snapshot* of the repo
 // (m.repository) rather than reading m.appState.Repository directly. That final

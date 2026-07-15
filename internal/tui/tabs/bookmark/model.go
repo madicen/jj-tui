@@ -44,11 +44,7 @@ type Model struct {
 	// can be word-wrapped instead of producing a giant border that the outer frame's Width
 	// then chops into stacked horizontal segments.
 	contentWidth int
-	// Long-press AI profile picker over the Generate chip. Same pattern as the
-	// other three generate-bearing modals (descedit, prform, ticketform).
-	genMenu       genmenu.State
-	profiles      []config.AIProfile
-	activeProfile string
+	profileMenu  genmenu.ProfileMenu
 }
 
 // NewModel creates a new Bookmark model. zoneManager may be nil.
@@ -71,6 +67,7 @@ func NewModel(zoneManager *zone.Manager) Model {
 		selectedBookmarkIdx: -1,
 		fromJira:            false,
 		zoneManager:         zoneManager,
+		profileMenu:         genmenu.NewProfileMenu(mouse.ZoneBookmarkGenerate),
 	}
 }
 
@@ -89,22 +86,25 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case CancelRequestedMsg:
 		m.shown = false
 		m.nameInput.SetValue("")
-		m.genMenu.Reset()
+		m.profileMenu.Reset()
 		return m, state.NavigateTarget{Kind: state.NavigateBackToGraph, StatusMessage: "Bookmark creation cancelled"}.Cmd()
 	case SubmitRequestedMsg:
 		return m, state.NavigateTarget{Kind: state.NavigateSubmitBookmark}.Cmd()
 	}
 	switch msg := msg.(type) {
 	case genmenu.TickMsg:
-		m.genMenu.OpenIfMatches(msg)
+		m.profileMenu.OpenIfMatches(msg)
 		return m, nil
 	case tea.MouseMsg:
-		return m.handleMouseForMenu(msg)
+		// Long-press only when in "new name" mode — Generate chip is otherwise inactive.
+		return m, m.profileMenu.HandleMouse(m.zoneManager, msg, m.selectedBookmarkIdx == -1, func(name string) tea.Cmd {
+			return state.NavigateTarget{Kind: state.NavigateGenerateBookmarkName, AIOverrideProfile: name}.Cmd()
+		})
 	case zone.MsgZoneInBounds:
-		if m.genMenu.IsShown() {
+		if m.profileMenu.IsShown() {
 			return m, nil
 		}
-		m.genMenu.CancelPress()
+		m.profileMenu.CancelPress()
 		if m.zoneManager != nil {
 			if zoneID := m.resolveClickedZone(msg); zoneID != "" {
 				return m.handleZoneClick(zoneID)
@@ -112,8 +112,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		return m, nil
 	case tea.KeyMsg:
-		if m.genMenu.IsShown() && msg.String() == "esc" {
-			m.genMenu.Close()
+		if m.profileMenu.IsShown() && msg.String() == "esc" {
+			m.profileMenu.Close()
 			return m, nil
 		}
 		return m.handleKeyMsg(msg)
@@ -122,52 +122,6 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.nameInput, cmd = m.nameInput.Update(msg)
 	return m, cmd
-}
-
-// handleMouseForMenu drives the long-press AI profile picker for the Generate chip.
-// Mirrors descedit.handleMouseForMenu so the gesture is consistent across modals.
-// Long-press is only armed when the bookmark form is in "new name" mode (selectedBookmarkIdx
-// is -1) since the Generate chip is otherwise inactive on this form.
-func (m Model) handleMouseForMenu(msg tea.MouseMsg) (Model, tea.Cmd) {
-	if m.zoneManager == nil {
-		return m, nil
-	}
-	if m.genMenu.IsShown() {
-		switch msg.Action {
-		case tea.MouseActionMotion, tea.MouseActionPress:
-			m.genMenu.UpdateHover(m.zoneManager, msg, len(m.profiles))
-			return m, nil
-		case tea.MouseActionRelease:
-			if msg.Button != tea.MouseButtonLeft {
-				return m, nil
-			}
-			idx := m.genMenu.HitTestRelease(m.zoneManager, msg, len(m.profiles))
-			if idx >= 0 && idx < len(m.profiles) {
-				return m, state.NavigateTarget{
-					Kind:              state.NavigateGenerateBookmarkName,
-					AIOverrideProfile: m.profiles[idx].Name,
-				}.Cmd()
-			}
-			return m, nil
-		}
-		return m, nil
-	}
-	switch msg.Action {
-	case tea.MouseActionPress:
-		if msg.Button != tea.MouseButtonLeft {
-			return m, nil
-		}
-		if m.selectedBookmarkIdx != -1 {
-			return m, nil
-		}
-		z := m.zoneManager.Get(mouse.ZoneBookmarkGenerate)
-		if z != nil && z.InBounds(msg) && len(m.profiles) > 0 {
-			return m, m.genMenu.BeginPress(mouse.ZoneBookmarkGenerate, msg)
-		}
-	case tea.MouseActionMotion:
-		m.genMenu.OnMotion(m.zoneManager, msg)
-	}
-	return m, nil
 }
 
 // View renders the Bookmark creation dialog
@@ -467,23 +421,17 @@ func (m *Model) SetContentWidth(w int) {
 // SetAIProfiles updates the profile list shown by the long-press menu and the
 // active profile mark.
 func (m *Model) SetAIProfiles(profiles []config.AIProfile, activeProfile string) {
-	m.profiles = profiles
-	m.activeProfile = activeProfile
+	m.profileMenu.SetAIProfiles(profiles, activeProfile)
 }
 
 // MenuState returns a pointer to the long-press menu state.
 func (m *Model) MenuState() *genmenu.State {
-	return &m.genMenu
+	return m.profileMenu.MenuState()
 }
 
 // MenuOverlay returns the rendered popover (empty when hidden) and its (x, y) anchor.
 func (m *Model) MenuOverlay() (string, int, int) {
-	if !m.genMenu.IsShown() {
-		return "", 0, 0
-	}
-	view := genmenu.Render(m.zoneManager, m.profiles, m.activeProfile, m.genMenu.HoverIndex())
-	x, y := m.genMenu.MouseAnchor()
-	return view, x, y
+	return m.profileMenu.Overlay(m.zoneManager)
 }
 
 // boxWidth returns the Width to set on the inner rounded boxes (Target / Jira Ticket).

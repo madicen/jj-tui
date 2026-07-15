@@ -1,6 +1,7 @@
 package render
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -8,6 +9,27 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	zone "github.com/lrstanley/bubblezone"
 )
+
+func TestTruncateMenuHeader(t *testing.T) {
+	if got := TruncateMenuHeader("short"); got != "short" {
+		t.Fatalf("short = %q", got)
+	}
+	long := strings.Repeat("a", 50)
+	got := TruncateMenuHeader(long)
+	if got != strings.Repeat("a", 37)+"..." {
+		t.Fatalf("long = %q, want 37 chars + ...", got)
+	}
+}
+
+func TestContextMenuRendersHeaderAndItems(t *testing.T) {
+	got := ContextMenu(nil, []ContextMenuItem{
+		{Label: "Open", Key: "o"},
+		{Label: "Merge", Key: "M", Disabled: true},
+	}, 0, "title", func(i int) string { return fmt.Sprintf("z%d", i) })
+	if !strings.Contains(got, "title") || !strings.Contains(got, "Open") || !strings.Contains(got, "Merge") {
+		t.Fatalf("ContextMenu missing content: %q", got)
+	}
+}
 
 func TestMarkNilManager(t *testing.T) {
 	if got := Mark(nil, "zone-id", "content"); got != "content" {

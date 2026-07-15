@@ -24,7 +24,7 @@
 [38;2;97;113;163m    Ollama: API key optional; first request after idle may exceed 60s—raise the generation timeout below if needed.[0m
 
 [1;38;2;126;0;175m  API base URL (Ollama; empty = http://127.0.0.1:11434/v1):[0m
-  [1134z> http://127.0.0.1:11434/v1                                    [1134z
+  [1134z> http://127.0.0.1:11434/v1[7m [0m                                   [1134z
   Model (empty = default):
   [1135z> qwen2.5-coder:7b                                             [1135z
   API key (optional for Ollama / local http://127.0.0.1:11434/v1; env overrides):

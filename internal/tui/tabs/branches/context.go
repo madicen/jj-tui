@@ -7,13 +7,6 @@ import (
 	"github.com/madicen/jj-tui/internal/tui/state"
 )
 
-// ContextProvider is implemented by the main model so the Branches tab can build context without depending on model package.
-type ContextProvider interface {
-	GetBranches() []internal.Branch
-	GetSelectedBranch() int
-	GetJJService() *jj.Service
-}
-
 // BuildRequestContextFromApp builds RequestContext from app state and the branches tab model (for UpdateWithApp flow).
 func BuildRequestContextFromApp(app *state.AppState, m *Model) *RequestContext {
 	if app == nil || m == nil {
@@ -23,18 +16,6 @@ func BuildRequestContextFromApp(app *state.AppState, m *Model) *RequestContext {
 		BranchList:     m.GetBranches(),
 		SelectedBranch: m.GetSelectedBranch(),
 		JJService:      app.JJService,
-	})
-}
-
-// BuildRequestContextFrom builds RequestContext from a provider (e.g. main model).
-func BuildRequestContextFrom(p ContextProvider) *RequestContext {
-	if p == nil {
-		return nil
-	}
-	return BuildRequestContext(&ContextInput{
-		BranchList:     p.GetBranches(),
-		SelectedBranch: p.GetSelectedBranch(),
-		JJService:      p.GetJJService(),
 	})
 }
 

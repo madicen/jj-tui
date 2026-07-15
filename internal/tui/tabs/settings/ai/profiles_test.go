@@ -17,10 +17,10 @@ func TestProfilesAddSelectDeleteCycle(t *testing.T) {
 	}
 
 	m.SetAIProvider("openai_compatible")
-	m.aiBaseURLInput.SetValue("https://api.openai.com/v1")
-	m.aiModelInput.SetValue("gpt-4o-mini")
-	m.aiAPIKeyInput.SetValue("sk-fast")
-	m.aiProfileNameInput.SetValue("fast")
+	m.form.SetValue(fieldBaseURL, "https://api.openai.com/v1")
+	m.form.SetValue(fieldModel, "gpt-4o-mini")
+	m.form.SetValue(fieldAPIKey, "sk-fast")
+	m.form.SetValue(fieldProfileName, "fast")
 	m.CommitInputs()
 	if got := m.profiles[0].Name; got != "fast" {
 		t.Fatalf("commit rename: got %q", got)
@@ -37,18 +37,18 @@ func TestProfilesAddSelectDeleteCycle(t *testing.T) {
 		t.Fatalf("derived name: got %q", m.SelectedName())
 	}
 
-	m.aiModelInput.SetValue("gpt-4o")
-	m.aiProfileNameInput.SetValue("smart")
+	m.form.SetValue(fieldModel, "gpt-4o")
+	m.form.SetValue(fieldProfileName, "smart")
 	m.SelectProfile(0)
 	if m.SelectedName() != "fast" {
 		t.Fatalf("SelectProfile back: got %q", m.SelectedName())
 	}
-	if m.aiModelInput.Value() != "gpt-4o-mini" {
-		t.Fatalf("inputs should reload from row 0; got %q", m.aiModelInput.Value())
+	if m.form.Value(fieldModel) != "gpt-4o-mini" {
+		t.Fatalf("inputs should reload from row 0; got %q", m.form.Value(fieldModel))
 	}
 	m.SelectProfile(1)
-	if m.aiModelInput.Value() != "gpt-4o" {
-		t.Fatalf("inputs should reload from row 1; got %q", m.aiModelInput.Value())
+	if m.form.Value(fieldModel) != "gpt-4o" {
+		t.Fatalf("inputs should reload from row 1; got %q", m.form.Value(fieldModel))
 	}
 
 	m.SetActiveByIndex(1)
@@ -73,13 +73,13 @@ func TestProfilesAddSelectDeleteCycle(t *testing.T) {
 // TestProfilesCycleSelectedWraps confirms CycleSelected wraps at both ends.
 func TestProfilesCycleSelectedWraps(t *testing.T) {
 	m := NewModel()
-	m.aiProfileNameInput.SetValue("a")
+	m.form.SetValue(fieldProfileName, "a")
 	m.CommitInputs()
 	m.AddProfile()
-	m.aiProfileNameInput.SetValue("b")
+	m.form.SetValue(fieldProfileName, "b")
 	m.CommitInputs()
 	m.AddProfile()
-	m.aiProfileNameInput.SetValue("c")
+	m.form.SetValue(fieldProfileName, "c")
 	m.CommitInputs()
 
 	m.SelectProfile(0)

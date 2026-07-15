@@ -97,90 +97,6 @@ func (m *Model) pushAIProfilesToFormModals() {
 	m.ticketFormModal.SetAIProfiles(profiles, active)
 }
 
-// activeFormModalGenMenu returns the genmenu.State for the currently shown
-// form modal that has a generate-button long-press popover, or nil when no
-// such modal is active. Used by the mouse-routing path to forward press /
-// motion / release events and by the view layer to overlay the popover.
-func (m *Model) activeFormModalGenMenu() *genmenu.State {
-	switch m.appState.ViewMode {
-	case state.ViewEditDescription:
-		return m.desceditModal.MenuState()
-	case state.ViewCreatePR:
-		return m.prFormModal.MenuState()
-	case state.ViewCreateBookmark:
-		return m.bookmarkModal.MenuState()
-	case state.ViewCreateTicket:
-		return m.ticketFormModal.MenuState()
-	}
-	return nil
-}
-
-// forwardMouseToActiveFormModal forwards a tea.MouseMsg to whichever form modal
-// owns the active view so the modal's long-press genmenu can advance its state.
-// Returns the cmd from the modal Update (typically the tick cmd on a fresh press
-// or a NavigateGenerate* cmd on release over a menu row).
-func (m *Model) forwardMouseToActiveFormModal(msg tea.MouseMsg) tea.Cmd {
-	switch m.appState.ViewMode {
-	case state.ViewEditDescription:
-		updated, cmd := m.desceditModal.Update(msg)
-		m.desceditModal = updated
-		return cmd
-	case state.ViewCreatePR:
-		updated, cmd := m.prFormModal.Update(msg)
-		m.prFormModal = updated
-		return cmd
-	case state.ViewCreateBookmark:
-		updated, cmd := m.bookmarkModal.Update(msg)
-		m.bookmarkModal = updated
-		return cmd
-	case state.ViewCreateTicket:
-		updated, cmd := m.ticketFormModal.Update(msg)
-		m.ticketFormModal = updated
-		return cmd
-	}
-	return nil
-}
-
-// forwardGenMenuTickToActiveFormModal routes a genmenu.TickMsg to the active
-// form modal so its long-press tick can pop the menu when still pressed.
-func (m *Model) forwardGenMenuTickToActiveFormModal(msg genmenu.TickMsg) tea.Cmd {
-	switch m.appState.ViewMode {
-	case state.ViewEditDescription:
-		updated, cmd := m.desceditModal.Update(msg)
-		m.desceditModal = updated
-		return cmd
-	case state.ViewCreatePR:
-		updated, cmd := m.prFormModal.Update(msg)
-		m.prFormModal = updated
-		return cmd
-	case state.ViewCreateBookmark:
-		updated, cmd := m.bookmarkModal.Update(msg)
-		m.bookmarkModal = updated
-		return cmd
-	case state.ViewCreateTicket:
-		updated, cmd := m.ticketFormModal.Update(msg)
-		m.ticketFormModal = updated
-		return cmd
-	}
-	return nil
-}
-
-// activeFormModalGenMenuOverlay returns (view, x, y) for the currently visible
-// long-press popover, or ("", 0, 0) when none is shown. Used in view_helpers.go.
-func (m *Model) activeFormModalGenMenuOverlay() (string, int, int) {
-	switch m.appState.ViewMode {
-	case state.ViewEditDescription:
-		return m.desceditModal.MenuOverlay()
-	case state.ViewCreatePR:
-		return m.prFormModal.MenuOverlay()
-	case state.ViewCreateBookmark:
-		return m.bookmarkModal.MenuOverlay()
-	case state.ViewCreateTicket:
-		return m.ticketFormModal.MenuOverlay()
-	}
-	return "", 0, 0
-}
-
 // buildSettingsViewOpts builds ViewOpts for the settings tab (used when entering settings or on resize).
 func (m *Model) tickCmd() tea.Cmd {
 	return tea.Tick(autoRefreshInterval, func(t time.Time) tea.Msg {
@@ -395,7 +311,20 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// Propagate dimensions to tab models so they can render
-		cmds := util.PropagateUpdate(msg, &m.graphTabModel, &m.prsTabModel, &m.branchesTabModel, &m.ticketsTabModel, &m.settingsTabModel, &m.helpTabModel)
+		cmds := make([]tea.Cmd, 0, 6)
+		var cmd tea.Cmd
+		m.graphTabModel, cmd = m.graphTabModel.UpdateWithApp(msg, nil)
+		cmds = append(cmds, cmd)
+		m.prsTabModel, cmd = m.prsTabModel.Update(msg)
+		cmds = append(cmds, cmd)
+		m.branchesTabModel, cmd = m.branchesTabModel.Update(msg)
+		cmds = append(cmds, cmd)
+		m.ticketsTabModel, cmd = m.ticketsTabModel.Update(msg)
+		cmds = append(cmds, cmd)
+		m.settingsTabModel, cmd = m.settingsTabModel.Update(msg)
+		cmds = append(cmds, cmd)
+		m.helpTabModel, cmd = m.helpTabModel.Update(msg)
+		cmds = append(cmds, cmd)
 		// Set content-area height on tabs so graph/files split fills the content area (not full window)
 		for _, vm := range m.tabOrder {
 			m.tabRegistry[vm].SetDimensions(m.width, contentHeight)

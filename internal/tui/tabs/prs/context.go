@@ -7,16 +7,6 @@ import (
 	"github.com/madicen/jj-tui/internal/tui/state"
 )
 
-// ContextProvider is implemented by the main model so the PRs tab can build context without depending on model package.
-type ContextProvider interface {
-	GetRepository() *internal.Repository
-	GetSelectedPR() int
-	IsGitHubAvailable() bool
-	IsDemoMode() bool
-	GetGitHubService() *github.Service
-	GetGitHubInfo() string
-}
-
 // BuildRequestContextFromApp builds RequestContext from app state and the PRs tab model (for UpdateWithApp flow).
 func BuildRequestContextFromApp(app *state.AppState, m *Model) *RequestContext {
 	if app == nil || m == nil {
@@ -30,21 +20,6 @@ func BuildRequestContextFromApp(app *state.AppState, m *Model) *RequestContext {
 		DemoMode:      app.DemoMode,
 		GitHubService: app.GitHubService,
 		GitHubInfo:    app.GithubInfo,
-	})
-}
-
-// BuildRequestContextFrom builds RequestContext from a provider (e.g. main model).
-func BuildRequestContextFrom(p ContextProvider) *RequestContext {
-	if p == nil {
-		return nil
-	}
-	return BuildRequestContext(&ContextInput{
-		Repository:    p.GetRepository(),
-		SelectedPR:    p.GetSelectedPR(),
-		GitHubOK:      p.IsGitHubAvailable(),
-		DemoMode:      p.IsDemoMode(),
-		GitHubService: p.GetGitHubService(),
-		GitHubInfo:    p.GetGitHubInfo(),
 	})
 }
 

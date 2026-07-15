@@ -300,7 +300,11 @@ func SubmitPR(modal *Model, repo *internal.Repository, jjService *jj.Service, gi
 	if demoMode {
 		statusMessage = "Creating PR (demo)..."
 	} else {
-		statusMessage = fmt.Sprintf("%s %s and creating PR...", util.If(modal.NeedsMoveBookmark(), "Moving bookmark", "Pushing"), modal.GetHeadBranch())
+		action := "Pushing"
+		if modal.NeedsMoveBookmark() {
+			action = "Moving bookmark"
+		}
+		statusMessage = fmt.Sprintf("%s %s and creating PR...", action, modal.GetHeadBranch())
 	}
 	return SubmitPRResult{Cmd: cmd, StatusMessage: statusMessage}
 }

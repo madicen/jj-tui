@@ -2,18 +2,12 @@ package tickets
 
 import (
 	"fmt"
-	"strings"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/madicen/jj-tui/internal/tui/listnav"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/render"
-	"github.com/madicen/jj-tui/internal/tui/styles"
 )
-
-const longPressThreshold = 500 * time.Millisecond
 
 // ContextMenuState holds the state of the ticket-row long-press context menu.
 type ContextMenuState struct {
@@ -55,51 +49,18 @@ func ticketContextMenuItems() []ticketContextMenuItem {
 
 func (m *Model) renderContextMenu() string {
 	items := ticketContextMenuItems()
-
-	menuBorder := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(styles.ColorPrimary).
-		Padding(0, 1)
-
-	itemStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#F8F8F2"))
-	hoverStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#F8F8F2")).
-		Background(styles.ColorPrimary)
-	hoverKeyStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#CCCCCC")).
-		Background(styles.ColorPrimary)
-	disabledStyle := lipgloss.NewStyle().
-		Foreground(styles.ColorMuted)
-	keyStyle := lipgloss.NewStyle().
-		Foreground(styles.ColorMuted)
+	renderItems := make([]render.ContextMenuItem, len(items))
+	for i, item := range items {
+		renderItems[i] = render.ContextMenuItem{
+			Label:    item.Label,
+			Key:      item.Key,
+			Disabled: item.RequireCreate && !m.canCreateTicket,
+		}
+	}
 
 	hoverIdx := -1
 	if m.contextMenu != nil {
 		hoverIdx = m.contextMenu.HoverItem
-	}
-
-	var rows []string
-	zoneIdx := 0
-	for _, item := range items {
-		i := zoneIdx
-		zoneIdx++
-		if item.RequireCreate && !m.canCreateTicket {
-			row := disabledStyle.Render(fmt.Sprintf("  %s  %s", item.Label, item.Key))
-			rows = append(rows, row)
-			continue
-		}
-		isHovered := i == hoverIdx
-		ls := itemStyle
-		ks := keyStyle
-		if isHovered {
-			ls = hoverStyle
-			ks = hoverKeyStyle
-		}
-		label := ls.Render(fmt.Sprintf("  %s", item.Label))
-		key := ks.Render(fmt.Sprintf("  %s", item.Key))
-		row := render.Mark(m.zoneManager, mouse.ZoneTicketCtxMenuItem(i), label+key)
-		rows = append(rows, row)
 	}
 
 	header := ""
@@ -111,48 +72,22 @@ func (m *Model) renderContextMenu() string {
 			if displayKey == "" {
 				displayKey = ticket.Key
 			}
-			title := displayKey + " " + ticket.Summary
-			if len(title) > 40 {
-				title = render.TruncateEllipsis(title, 37)
-			}
-			header = lipgloss.NewStyle().
-				Foreground(styles.ColorSecondary).
-				Bold(true).
-				Render(title)
+			header = render.TruncateMenuHeader(displayKey + " " + ticket.Summary)
 		}
 	}
 
-	content := header + "\n" + strings.Join(rows, "\n")
-	return menuBorder.Render(content)
+	return render.ContextMenu(m.zoneManager, renderItems, hoverIdx, header, mouse.ZoneTicketCtxMenuItem)
 }
 
 func (m *Model) handleLongPress(msg tea.MouseMsg) tea.Cmd {
-	// Track hover over status submenu zones.
 	if m.statusSubmenu != nil && (msg.Action == tea.MouseActionMotion || msg.Action == tea.MouseActionPress) {
-		hit := -1
-		for i := range m.availableTransitions {
-			zoneID := mouse.ZoneJiraTransition + fmt.Sprintf("%d", i)
-			z := m.zoneManager.Get(zoneID)
-			if z != nil && z.InBounds(msg) {
-				hit = i
-				break
-			}
-		}
-		m.statusSubmenu.HoverItem = hit
+		m.statusSubmenu.HoverItem = listnav.HoverHitTest(m.zoneManager, msg, func(i int) string {
+			return mouse.ZoneJiraTransition + fmt.Sprintf("%d", i)
+		}, len(m.availableTransitions))
 	}
 
-	// Track hover over context menu zones.
 	if m.contextMenu != nil && (msg.Action == tea.MouseActionMotion || msg.Action == tea.MouseActionPress) {
-		items := ticketContextMenuItems()
-		hit := -1
-		for i := range items {
-			z := m.zoneManager.Get(mouse.ZoneTicketCtxMenuItem(i))
-			if z != nil && z.InBounds(msg) {
-				hit = i
-				break
-			}
-		}
-		m.contextMenu.HoverItem = hit
+		m.contextMenu.HoverItem = listnav.HoverHitTest(m.zoneManager, msg, mouse.ZoneTicketCtxMenuItem, len(ticketContextMenuItems()))
 	}
 
 	// Stay armed while the cursor remains over the ticket row or within the
@@ -163,7 +98,7 @@ func (m *Model) handleLongPress(msg tea.MouseMsg) tea.Cmd {
 		MenuOpen:  m.contextMenu != nil || m.statusSubmenu != nil,
 		ItemCount: len(m.ticketList),
 		RowZoneID: mouse.ZoneJiraTicket,
-		Threshold: longPressThreshold,
+		Threshold: listnav.LongPressThreshold,
 		MakeTick:  func(pressID int) tea.Msg { return LongPressTickMsg{PressID: pressID} },
 	})
 }

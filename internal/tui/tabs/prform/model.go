@@ -28,11 +28,7 @@ type Model struct {
 	commitIndex       int  // Index of commit PR is being created from
 	needsMoveBookmark bool // True if we need to move the bookmark to include all commits
 	draft             bool // True if the PR should be created as a draft
-	// Long-press AI profile picker over the Generate chip; same structure used in
-	// the descedit, bookmark, and ticketform modals.
-	genMenu       genmenu.State
-	profiles      []config.AIProfile
-	activeProfile string
+	profileMenu       genmenu.ProfileMenu
 }
 
 // NewModel creates a new PR creation model. zoneManager may be nil (zones will be omitted).
@@ -56,6 +52,7 @@ func NewModel(zoneManager *zone.Manager) Model {
 		baseBranch:   "main",
 		focusedField: 0,
 		commitIndex:  -1,
+		profileMenu:  genmenu.NewProfileMenu(mouse.ZonePRGenerate),
 	}
 }
 
@@ -74,22 +71,24 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case CancelRequestedMsg:
 		m.shown = false
 		m.Reset()
-		m.genMenu.Reset()
+		m.profileMenu.Reset()
 		return m, state.NavigateTarget{Kind: state.NavigateBackFromPRForm, StatusMessage: "PR creation cancelled"}.Cmd()
 	case SubmitRequestedMsg:
 		return m, state.NavigateTarget{Kind: state.NavigateSubmitPR}.Cmd()
 	}
 	switch msg := msg.(type) {
 	case genmenu.TickMsg:
-		m.genMenu.OpenIfMatches(msg)
+		m.profileMenu.OpenIfMatches(msg)
 		return m, nil
 	case tea.MouseMsg:
-		return m.handleMouseForMenu(msg)
+		return m, m.profileMenu.HandleMouse(m.zoneManager, msg, true, func(name string) tea.Cmd {
+			return state.NavigateTarget{Kind: state.NavigateGeneratePRForm, AIOverrideProfile: name}.Cmd()
+		})
 	case zone.MsgZoneInBounds:
-		if m.genMenu.IsShown() {
+		if m.profileMenu.IsShown() {
 			return m, nil
 		}
-		m.genMenu.CancelPress()
+		m.profileMenu.CancelPress()
 		if m.zoneManager != nil {
 			if zoneID := m.resolveClickedZone(msg); zoneID != "" {
 				return m.handleZoneClick(zoneID)
@@ -97,8 +96,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		return m, nil
 	case tea.KeyMsg:
-		if m.genMenu.IsShown() && msg.String() == "esc" {
-			m.genMenu.Close()
+		if m.profileMenu.IsShown() && msg.String() == "esc" {
+			m.profileMenu.Close()
 			return m, nil
 		}
 		return m.handleKeyMsg(msg)
@@ -112,47 +111,6 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.bodyInput, cmd = m.bodyInput.Update(msg)
 	return m, cmd
-}
-
-// handleMouseForMenu drives the long-press AI profile picker for the Generate chip.
-// See descedit/model.go for the shared design notes.
-func (m Model) handleMouseForMenu(msg tea.MouseMsg) (Model, tea.Cmd) {
-	if m.zoneManager == nil {
-		return m, nil
-	}
-	if m.genMenu.IsShown() {
-		switch msg.Action {
-		case tea.MouseActionMotion, tea.MouseActionPress:
-			m.genMenu.UpdateHover(m.zoneManager, msg, len(m.profiles))
-			return m, nil
-		case tea.MouseActionRelease:
-			if msg.Button != tea.MouseButtonLeft {
-				return m, nil
-			}
-			idx := m.genMenu.HitTestRelease(m.zoneManager, msg, len(m.profiles))
-			if idx >= 0 && idx < len(m.profiles) {
-				return m, state.NavigateTarget{
-					Kind:              state.NavigateGeneratePRForm,
-					AIOverrideProfile: m.profiles[idx].Name,
-				}.Cmd()
-			}
-			return m, nil
-		}
-		return m, nil
-	}
-	switch msg.Action {
-	case tea.MouseActionPress:
-		if msg.Button != tea.MouseButtonLeft {
-			return m, nil
-		}
-		z := m.zoneManager.Get(mouse.ZonePRGenerate)
-		if z != nil && z.InBounds(msg) && len(m.profiles) > 0 {
-			return m, m.genMenu.BeginPress(mouse.ZonePRGenerate, msg)
-		}
-	case tea.MouseActionMotion:
-		m.genMenu.OnMotion(m.zoneManager, msg)
-	}
-	return m, nil
 }
 
 // View renders the PR creation dialog
@@ -432,22 +390,16 @@ func (m *Model) GetBodyInput() *textarea.Model {
 // SetAIProfiles updates the profile list shown by the long-press menu and the
 // active profile mark. See descedit/model.go SetAIProfiles for design notes.
 func (m *Model) SetAIProfiles(profiles []config.AIProfile, activeProfile string) {
-	m.profiles = profiles
-	m.activeProfile = activeProfile
+	m.profileMenu.SetAIProfiles(profiles, activeProfile)
 }
 
 // MenuState returns a pointer to the long-press menu state so main can render
 // the popover overlay or check IsShown when laying out the view.
 func (m *Model) MenuState() *genmenu.State {
-	return &m.genMenu
+	return m.profileMenu.MenuState()
 }
 
 // MenuOverlay returns the rendered popover (empty when hidden) and its (x, y) anchor.
 func (m *Model) MenuOverlay() (string, int, int) {
-	if !m.genMenu.IsShown() {
-		return "", 0, 0
-	}
-	view := genmenu.Render(m.zoneManager, m.profiles, m.activeProfile, m.genMenu.HoverIndex())
-	x, y := m.genMenu.MouseAnchor()
-	return view, x, y
+	return m.profileMenu.Overlay(m.zoneManager)
 }

@@ -127,11 +127,6 @@ func NewModelFromConfig(cfg *config.Config) Model {
 	return m
 }
 
-// Init initializes the model
-func (m Model) Init() tea.Cmd {
-	return nil
-}
-
 // Update handles messages
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -151,11 +146,6 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.originInput, cmd = m.originInput.Update(msg)
 	}
 	return m, cmd
-}
-
-// View renders the model
-func (m Model) View() string {
-	return "" // Rendered by parent
 }
 
 // handleKeyMsg handles keyboard input

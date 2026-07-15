@@ -1,20 +1,12 @@
 package branches
 
 import (
-	"fmt"
-	"strings"
-	"time"
-
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/tui/listnav"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/render"
-	"github.com/madicen/jj-tui/internal/tui/styles"
 )
-
-const longPressThreshold = 500 * time.Millisecond
 
 // ContextMenuState holds the state of the branch-row long-press context menu.
 type ContextMenuState struct {
@@ -84,66 +76,19 @@ func (m *Model) renderContextMenu() string {
 	branch := m.branchList[bi]
 	items := branchContextMenuItems(branch)
 
-	menuBorder := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(styles.ColorPrimary).
-		Padding(0, 1)
-
-	itemStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#F8F8F2"))
-	hoverStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#F8F8F2")).
-		Background(styles.ColorPrimary)
-	hoverKeyStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#CCCCCC")).
-		Background(styles.ColorPrimary)
-	keyStyle := lipgloss.NewStyle().
-		Foreground(styles.ColorMuted)
-
-	hoverIdx := m.contextMenu.HoverItem
-
-	var rows []string
+	renderItems := make([]render.ContextMenuItem, len(items))
 	for i, item := range items {
-		isHovered := i == hoverIdx
-		ls := itemStyle
-		ks := keyStyle
-		if isHovered {
-			ls = hoverStyle
-			ks = hoverKeyStyle
-		}
-		label := ls.Render(fmt.Sprintf("  %s", item.Label))
-		key := ks.Render(fmt.Sprintf("  %s", item.Key))
-		row := render.Mark(m.zoneManager, mouse.ZoneBranchCtxMenuItem(i), label+key)
-		rows = append(rows, row)
+		renderItems[i] = render.ContextMenuItem{Label: item.Label, Key: item.Key}
 	}
-
-	branchName := branch.Name
-	if len(branchName) > 40 {
-		branchName = render.TruncateEllipsis(branchName, 37)
-	}
-	header := lipgloss.NewStyle().
-		Foreground(styles.ColorSecondary).
-		Bold(true).
-		Render(branchName)
-
-	content := header + "\n" + strings.Join(rows, "\n")
-	return menuBorder.Render(content)
+	return render.ContextMenu(m.zoneManager, renderItems, m.contextMenu.HoverItem,
+		render.TruncateMenuHeader(branch.Name), mouse.ZoneBranchCtxMenuItem)
 }
 
 func (m *Model) handleLongPress(msg tea.MouseMsg) tea.Cmd {
 	if m.contextMenu != nil && (msg.Action == tea.MouseActionMotion || msg.Action == tea.MouseActionPress) {
 		if m.contextMenu.BranchIndex >= 0 && m.contextMenu.BranchIndex < len(m.branchList) {
-			branch := m.branchList[m.contextMenu.BranchIndex]
-			items := branchContextMenuItems(branch)
-			hit := -1
-			for i := range items {
-				z := m.zoneManager.Get(mouse.ZoneBranchCtxMenuItem(i))
-				if z != nil && z.InBounds(msg) {
-					hit = i
-					break
-				}
-			}
-			m.contextMenu.HoverItem = hit
+			n := len(branchContextMenuItems(m.branchList[m.contextMenu.BranchIndex]))
+			m.contextMenu.HoverItem = listnav.HoverHitTest(m.zoneManager, msg, mouse.ZoneBranchCtxMenuItem, n)
 		}
 	}
 
@@ -151,7 +96,7 @@ func (m *Model) handleLongPress(msg tea.MouseMsg) tea.Cmd {
 		MenuOpen:  m.contextMenu != nil,
 		ItemCount: len(m.branchList),
 		RowZoneID: mouse.ZoneBranch,
-		Threshold: longPressThreshold,
+		Threshold: listnav.LongPressThreshold,
 		MakeTick:  func(pressID int) tea.Msg { return LongPressTickMsg{PressID: pressID} },
 	})
 }

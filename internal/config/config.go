@@ -306,163 +306,19 @@ func loadFromFile(path string) (*Config, error) {
 	return &cfg, nil
 }
 
-// mergeConfig merges source config into dest, only overwriting non-empty values
+// mergeConfig merges source into dest. Fields with omitempty are omitted when
+// empty, so absent/empty locals leave dest untouched; present keys overwrite.
+// Maps (e.g. Keys) merge into an existing non-nil dest map.
+// lazy: marshal round-trip — avoid hand-maintaining a per-field merge.
 func mergeConfig(dest, source *Config) {
 	if source == nil {
 		return
 	}
-	if source.GitHubToken != "" {
-		dest.GitHubToken = source.GitHubToken
+	data, err := json.Marshal(source)
+	if err != nil {
+		return
 	}
-	if source.GitHubAuthMethod != "" {
-		dest.GitHubAuthMethod = source.GitHubAuthMethod
-	}
-	if source.GitHubTokenSource != "" {
-		dest.GitHubTokenSource = source.GitHubTokenSource
-	}
-	if source.GitHubShowMerged != nil {
-		dest.GitHubShowMerged = source.GitHubShowMerged
-	}
-	if source.GitHubShowClosed != nil {
-		dest.GitHubShowClosed = source.GitHubShowClosed
-	}
-	if source.GitHubOnlyMine != nil {
-		dest.GitHubOnlyMine = source.GitHubOnlyMine
-	}
-	if source.GitHubPRLimit != nil {
-		dest.GitHubPRLimit = source.GitHubPRLimit
-	}
-	if source.GitHubRefreshInterval != nil {
-		dest.GitHubRefreshInterval = source.GitHubRefreshInterval
-	}
-	if source.TicketProvider != "" {
-		dest.TicketProvider = source.TicketProvider
-	}
-	if source.JiraURL != "" {
-		dest.JiraURL = source.JiraURL
-	}
-	if source.JiraUser != "" {
-		dest.JiraUser = source.JiraUser
-	}
-	if source.JiraToken != "" {
-		dest.JiraToken = source.JiraToken
-	}
-	if source.JiraProject != "" {
-		dest.JiraProject = source.JiraProject
-	}
-	if source.JiraProjectFilter != "" {
-		dest.JiraProjectFilter = source.JiraProjectFilter
-	}
-	if source.JiraIssueType != "" {
-		dest.JiraIssueType = source.JiraIssueType
-	}
-	if source.JiraJQL != "" {
-		dest.JiraJQL = source.JiraJQL
-	}
-	if source.JiraExcludedStatuses != "" {
-		dest.JiraExcludedStatuses = source.JiraExcludedStatuses
-	}
-	if source.CodecksSubdomain != "" {
-		dest.CodecksSubdomain = source.CodecksSubdomain
-	}
-	if source.CodecksToken != "" {
-		dest.CodecksToken = source.CodecksToken
-	}
-	if source.CodecksProject != "" {
-		dest.CodecksProject = source.CodecksProject
-	}
-	if source.CodecksExcludedStatuses != "" {
-		dest.CodecksExcludedStatuses = source.CodecksExcludedStatuses
-	}
-	if source.GitHubIssuesExcludedStatuses != "" {
-		dest.GitHubIssuesExcludedStatuses = source.GitHubIssuesExcludedStatuses
-	}
-	if source.TicketAutoInProgress != nil {
-		dest.TicketAutoInProgress = source.TicketAutoInProgress
-	}
-	if source.BranchStatsLimit != nil {
-		dest.BranchStatsLimit = source.BranchStatsLimit
-	}
-	if source.SanitizeBookmarkNames != nil {
-		dest.SanitizeBookmarkNames = source.SanitizeBookmarkNames
-	}
-	if source.BranchesShowAllRemotes != nil {
-		dest.BranchesShowAllRemotes = source.BranchesShowAllRemotes
-	}
-	if source.GraphRevset != "" {
-		dest.GraphRevset = source.GraphRevset
-	}
-	if source.GraphShowEveryonesCommits != nil {
-		dest.GraphShowEveryonesCommits = source.GraphShowEveryonesCommits
-	}
-	if source.ConfirmDestructive != nil {
-		dest.ConfirmDestructive = source.ConfirmDestructive
-	}
-	if source.ThemePrimary != "" {
-		dest.ThemePrimary = source.ThemePrimary
-	}
-	if source.ThemeSecondary != "" {
-		dest.ThemeSecondary = source.ThemeSecondary
-	}
-	if source.ThemeMuted != "" {
-		dest.ThemeMuted = source.ThemeMuted
-	}
-	if source.ExternalFileEditor != "" {
-		dest.ExternalFileEditor = source.ExternalFileEditor
-	}
-	if source.ExternalFileEditorCustom != "" {
-		dest.ExternalFileEditorCustom = source.ExternalFileEditorCustom
-	}
-	if source.AIEnabled != nil {
-		dest.AIEnabled = source.AIEnabled
-	}
-	if source.AIBaseURL != "" {
-		dest.AIBaseURL = source.AIBaseURL
-	}
-	if source.AIModel != "" {
-		dest.AIModel = source.AIModel
-	}
-	if source.AITimeoutSeconds != nil {
-		dest.AITimeoutSeconds = source.AITimeoutSeconds
-	}
-	if source.AIProvider != "" {
-		dest.AIProvider = source.AIProvider
-	}
-	if source.AIAPIKey != "" {
-		dest.AIAPIKey = source.AIAPIKey
-	}
-	if len(source.AIProfiles) > 0 {
-		dest.AIProfiles = make([]AIProfile, len(source.AIProfiles))
-		copy(dest.AIProfiles, source.AIProfiles)
-	}
-	if source.AIActiveProfile != "" {
-		dest.AIActiveProfile = source.AIActiveProfile
-	}
-	if source.AIEvologDescribeAfterSplitDefault != nil {
-		dest.AIEvologDescribeAfterSplitDefault = source.AIEvologDescribeAfterSplitDefault
-	}
-	if source.AIEvologFileSplitEnabled != nil {
-		dest.AIEvologFileSplitEnabled = source.AIEvologFileSplitEnabled
-	}
-	if source.AIEvologHunkSplitEnabled != nil {
-		dest.AIEvologHunkSplitEnabled = source.AIEvologHunkSplitEnabled
-	}
-	if source.AIEvologMultiSplitMax != nil {
-		dest.AIEvologMultiSplitMax = source.AIEvologMultiSplitMax
-	}
-	if source.AIEvologMultiSplitMode != "" {
-		dest.AIEvologMultiSplitMode = source.AIEvologMultiSplitMode
-	}
-	// Keybinding overrides merge per-key so a local .jj-tui.json can rebind a
-	// single action without dropping the rest of the global map.
-	if len(source.Keys) > 0 {
-		if dest.Keys == nil {
-			dest.Keys = make(map[string]string, len(source.Keys))
-		}
-		for k, v := range source.Keys {
-			dest.Keys[k] = v
-		}
-	}
+	_ = json.Unmarshal(data, dest)
 }
 
 // Canonical external editor presets (NormalizeExternalFileEditor).
@@ -737,46 +593,6 @@ func (c *Config) ApplyToEnvironment() {
 	}
 }
 
-// UpdateFromEnvironment updates config with current environment values
-func (c *Config) UpdateFromEnvironment() {
-	// Legacy: only copy GITHUB_TOKEN into config when github_token_source was never set.
-	if strings.TrimSpace(c.GitHubTokenSource) == "" {
-		if token := os.Getenv("GITHUB_TOKEN"); token != "" {
-			c.GitHubToken = token
-		}
-	}
-	if url := os.Getenv("JIRA_URL"); url != "" {
-		c.JiraURL = url
-	}
-	if user := os.Getenv("JIRA_USER"); user != "" {
-		c.JiraUser = user
-	}
-	if token := os.Getenv("JIRA_TOKEN"); token != "" {
-		c.JiraToken = token
-	}
-	if project := os.Getenv("JIRA_PROJECT"); project != "" {
-		c.JiraProject = project
-	}
-	if filter := os.Getenv("JIRA_PROJECT_FILTER"); filter != "" {
-		c.JiraProjectFilter = filter
-	}
-	if issueType := os.Getenv("JIRA_ISSUE_TYPE"); issueType != "" {
-		c.JiraIssueType = issueType
-	}
-	if jql := os.Getenv("JIRA_JQL"); jql != "" {
-		c.JiraJQL = jql
-	}
-	if subdomain := os.Getenv("CODECKS_SUBDOMAIN"); subdomain != "" {
-		c.CodecksSubdomain = subdomain
-	}
-	if token := os.Getenv("CODECKS_TOKEN"); token != "" {
-		c.CodecksToken = token
-	}
-	if project := os.Getenv("CODECKS_PROJECT"); project != "" {
-		c.CodecksProject = project
-	}
-}
-
 // HasGitHub returns true if the chosen token source yields a non-empty token.
 func (c *Config) HasGitHub() bool {
 	tok, _ := GitHubTokenForAPI(c)
@@ -806,72 +622,46 @@ func (c *Config) ClearGitHub() {
 	c.GitHubAuthMethod = GitHubAuthNone
 }
 
-// ShowMergedPRs returns whether to show merged PRs (defaults to true)
-func (c *Config) ShowMergedPRs() bool {
-	if c.GitHubShowMerged == nil {
-		return true
+func boolOr(p *bool, def bool) bool {
+	if p == nil {
+		return def
 	}
-	return *c.GitHubShowMerged
+	return *p
 }
+
+func intOr(p *int, def int) int {
+	if p == nil {
+		return def
+	}
+	return *p
+}
+
+// ShowMergedPRs returns whether to show merged PRs (defaults to true)
+func (c *Config) ShowMergedPRs() bool { return boolOr(c.GitHubShowMerged, true) }
 
 // ShowClosedPRs returns whether to show closed PRs (defaults to true)
-func (c *Config) ShowClosedPRs() bool {
-	if c.GitHubShowClosed == nil {
-		return true
-	}
-	return *c.GitHubShowClosed
-}
+func (c *Config) ShowClosedPRs() bool { return boolOr(c.GitHubShowClosed, true) }
 
 // OnlyMyPRs returns whether to show only the user's own PRs (defaults to false)
-func (c *Config) OnlyMyPRs() bool {
-	if c.GitHubOnlyMine == nil {
-		return false
-	}
-	return *c.GitHubOnlyMine
-}
+func (c *Config) OnlyMyPRs() bool { return boolOr(c.GitHubOnlyMine, false) }
 
 // PRLimit returns the maximum number of PRs to load (defaults to 100)
-func (c *Config) PRLimit() int {
-	if c.GitHubPRLimit == nil {
-		return 100
-	}
-	return *c.GitHubPRLimit
-}
+func (c *Config) PRLimit() int { return intOr(c.GitHubPRLimit, 100) }
 
 // PRRefreshInterval returns the PR auto-refresh interval in seconds
 // Returns 0 if auto-refresh is disabled, defaults to 120 (2 minutes)
-func (c *Config) PRRefreshInterval() int {
-	if c.GitHubRefreshInterval == nil {
-		return 120 // Default: 2 minutes
-	}
-	return *c.GitHubRefreshInterval
-}
+func (c *Config) PRRefreshInterval() int { return intOr(c.GitHubRefreshInterval, 120) }
 
 // AutoInProgressOnBranch returns true if tickets should auto-transition to "In Progress" when creating a branch
 // Defaults to true (enabled)
-func (c *Config) AutoInProgressOnBranch() bool {
-	if c.TicketAutoInProgress == nil {
-		return true // Default: enabled
-	}
-	return *c.TicketAutoInProgress
-}
+func (c *Config) AutoInProgressOnBranch() bool { return boolOr(c.TicketAutoInProgress, true) }
 
 // BranchLimit returns the maximum number of branches to calculate stats for (defaults to 50)
 // Branches beyond this limit will still show but without ahead/behind counts
-func (c *Config) BranchLimit() int {
-	if c.BranchStatsLimit == nil {
-		return 50
-	}
-	return *c.BranchStatsLimit
-}
+func (c *Config) BranchLimit() int { return intOr(c.BranchStatsLimit, 50) }
 
 // ShouldSanitizeBookmarkNames returns whether to auto-fix invalid bookmark names (defaults to true)
-func (c *Config) ShouldSanitizeBookmarkNames() bool {
-	if c.SanitizeBookmarkNames == nil {
-		return true // Default: enabled
-	}
-	return *c.SanitizeBookmarkNames
-}
+func (c *Config) ShouldSanitizeBookmarkNames() bool { return boolOr(c.SanitizeBookmarkNames, true) }
 
 // ConfirmDestructiveOps returns whether destructive jj operations (abandon, divergent-commit
 // resolution, backout, force-ish push) should show a y/n confirmation first. Nil-safe:
@@ -897,19 +687,13 @@ func (c *Config) AutoRefreshInterval() time.Duration {
 // untracked origin/* bookmarks whose tip you did not author. Nil-safe (defaults
 // to true so shared repos with many open PR branches don't drown the list).
 func (c *Config) BranchesFilterToTrackedAndMine() bool {
-	if c == nil || c.BranchesShowAllRemotes == nil {
-		return true
-	}
-	return !*c.BranchesShowAllRemotes
+	return c == nil || !boolOr(c.BranchesShowAllRemotes, false)
 }
 
 // GraphFilterToMine returns true when the graph revset should be intersected
 // with a "mine-or-@-neighborhood" filter. Nil-safe; defaults to true.
 func (c *Config) GraphFilterToMine() bool {
-	if c == nil || c.GraphShowEveryonesCommits == nil {
-		return true
-	}
-	return !*c.GraphShowEveryonesCommits
+	return c == nil || !boolOr(c.GraphShowEveryonesCommits, false)
 }
 
 // HasJira returns true if Jira is fully configured
@@ -990,18 +774,6 @@ func (c *Config) AIBaseURLResolved() string {
 		return "https://api.openai.com/v1"
 	}
 	return strings.TrimSuffix(s, "/")
-}
-
-// AIModelOrDefault returns the chat model name.
-func (c *Config) AIModelOrDefault() string {
-	if c == nil {
-		return "gpt-4o-mini"
-	}
-	s := strings.TrimSpace(c.AIModel)
-	if s == "" {
-		return "gpt-4o-mini"
-	}
-	return s
 }
 
 // AIModelResolved returns the model id to send to the provider, using provider-specific defaults when AIModel is empty.
