@@ -20,8 +20,9 @@ const (
 	ZoneActionRefresh      = "zone:action:refresh"
 	ZoneActionNewCommit    = "zone:action:newcommit"
 	ZoneActionCopyError    = "zone:action:copyerror"
-	ZoneActionDismissError = "zone:action:dismisserror"
-	ZoneActionRetry        = "zone:action:retry"
+	ZoneActionDismissError   = "zone:action:dismisserror"
+	ZoneActionRetry          = "zone:action:retry"
+	ZoneActionKillGPGAgent   = "zone:action:killgpgagent"
 	ZoneActionUndo         = "zone:action:undo"
 	ZoneActionRedo         = "zone:action:redo"
 

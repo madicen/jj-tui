@@ -33,11 +33,12 @@ func CopyErrorCmd(errMsg string) tea.Cmd {
 // separator, button row, padding, and border). Used to cap the error body so the dialog fits the terminal.
 const fixedChromeLines = 15
 
-// renderModal renders the error dialog (title, message, dismiss/copy/retry/quit buttons).
+// renderModal renders the error dialog (title, message, dismiss/copy/retry/kill/quit buttons).
 // Content is intended to be centered by the caller. The Retry button is only drawn when
 // hasRetry is true; many errors (jj op failures, parse errors, etc.) have nothing replayable
-// and showing a button that just refreshed the repo proved confusing.
-func renderModal(zm *zone.Manager, width, height int, errStr string, copied, hasRetry bool) string {
+// and showing a button that just refreshed the repo proved confusing. Kill gpg-agent is only
+// drawn when hasKillGPG is true (signing/pinentry classifier).
+func renderModal(zm *zone.Manager, width, height int, errStr string, copied, hasRetry, hasKillGPG bool) string {
 	modalWidth := min(max(width-8, 50), 80)
 
 	errorStyle := lipgloss.NewStyle().
@@ -105,6 +106,10 @@ func renderModal(zm *zone.Manager, width, height int, errStr string, copied, has
 	if hasRetry {
 		retryBtn := mark(mouse.ZoneActionRetry, buttonStyle.Render("Retry (^r)"))
 		row += "  " + retryBtn
+	}
+	if hasKillGPG {
+		killBtn := mark(mouse.ZoneActionKillGPGAgent, buttonStyle.Render("Kill gpg-agent (k)"))
+		row += "  " + killBtn
 	}
 	row += "  " + quitBtn
 	content.WriteString(row)

@@ -858,9 +858,10 @@ func ApplyResult(res Result, graphModel *GraphModel, ctx *RequestContext, app *s
 
 // NewCommit creates a new commit as a child of the given parent.
 func NewCommit(svc *jj.Service, parentCommitID string) tea.Cmd {
-	return func() tea.Msg {
+	var cmd tea.Cmd
+	cmd = func() tea.Msg {
 		if err := svc.NewCommit(context.Background(), parentCommitID); err != nil {
-			return util.ErrorMsg{Err: fmt.Errorf("failed to create commit: %w", err)}
+			return util.ErrorMsg{Err: fmt.Errorf("failed to create commit: %w", err), Retry: cmd}
 		}
 		repo, err := svc.GetRepository(context.Background(), "")
 		if err != nil {
@@ -868,6 +869,7 @@ func NewCommit(svc *jj.Service, parentCommitID string) tea.Cmd {
 		}
 		return RepositoryLoadedMsg{Repository: repo}
 	}
+	return cmd
 }
 
 // MoveBookmarkDeltaOntoOriginCmd runs jj fetch + new/restore/bookmark dance; see jj.Service.MoveBookmarkDeltaOntoOrigin.

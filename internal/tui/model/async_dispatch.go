@@ -1117,7 +1117,30 @@ func (m *Model) dispatchAsyncMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.evologDescribeChild = ""
 		m.evologPrecomputedDescribeParent = ""
 		m.evologPrecomputedDescribeChild = ""
+		if msg.Retry != nil {
+			m.appState.Loading = false
+			return m, m.applyEffects(effShowRetryableError{err: msg.Err, retry: msg.Retry})
+		}
 		return m.Update(errorMsg{Err: msg.Err})
+	case util.KillGPGAgentResultMsg:
+		if msg.Err != nil {
+			m.appState.Loading = false
+			m.appState.StatusMessage = util.StatusStringFromError(msg.Err, 220)
+			return m, nil
+		}
+		m.appState.StatusMessage = "gpg-agent killed"
+		if m.pendingRetryCmd != nil {
+			m.errorModal.ClearError()
+			retryCmd := m.pendingRetryCmd
+			m.pendingRetryCmd = nil
+			if !m.isFormModalView() {
+				m.appState.ViewMode = state.ViewCommitGraph
+			}
+			m.appState.Loading = true
+			return m, retryCmd
+		}
+		m.appState.Loading = false
+		return m, nil
 	}
 
 	return m, nil

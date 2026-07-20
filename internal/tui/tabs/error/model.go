@@ -3,6 +3,7 @@ package error
 import (
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
+	"github.com/madicen/jj-tui/internal/integrations/jj/jjout"
 	"github.com/madicen/jj-tui/internal/tui/mouse"
 	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/util"
@@ -13,6 +14,7 @@ type Model struct {
 	err         error
 	copied      bool
 	hasRetry    bool // true => render Retry button and accept ctrl+r / ZoneActionRetry
+	hasKillGPG  bool // true => signing/pinentry failure; offer Kill gpg-agent
 	zoneManager *zone.Manager
 	width       int
 	height      int
@@ -57,7 +59,7 @@ func (m Model) View() string {
 	if w < 50 {
 		w = 80
 	}
-	return renderModal(m.zoneManager, w, m.height, errStr, m.copied, m.hasRetry)
+	return renderModal(m.zoneManager, w, m.height, errStr, m.copied, m.hasRetry, m.hasKillGPG)
 }
 
 func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
@@ -70,6 +72,11 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, state.NavigateTarget{Kind: state.NavigateRetryError}.Cmd()
+	case "k":
+		if !m.hasKillGPG {
+			return m, nil
+		}
+		return m, state.NavigateTarget{Kind: state.NavigateKillGPGAgent}.Cmd()
 	case "esc", "enter", " ":
 		return m, state.NavigateTarget{Kind: state.NavigateDismissError, StatusMessage: "Error dismissed"}.Cmd()
 	case "c":
@@ -80,13 +87,16 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 // ZoneIDs returns the zone IDs used when rendering this modal's buttons. The Retry zone is
 // only included when hasRetry is set so clicks in that area don't get swallowed when the button
-// isn't actually drawn (see SetHasRetry).
+// isn't actually drawn (see SetHasRetry). Same for Kill gpg-agent.
 func (m Model) ZoneIDs() []string {
 	ids := []string{
 		mouse.ZoneActionCopyError, mouse.ZoneActionDismissError, mouse.ZoneActionQuit,
 	}
 	if m.hasRetry {
 		ids = append(ids, mouse.ZoneActionRetry)
+	}
+	if m.hasKillGPG {
+		ids = append(ids, mouse.ZoneActionKillGPGAgent)
 	}
 	return ids
 }
@@ -115,6 +125,11 @@ func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, state.NavigateTarget{Kind: state.NavigateRetryError}.Cmd()
+	case mouse.ZoneActionKillGPGAgent:
+		if !m.hasKillGPG {
+			return m, nil
+		}
+		return m, state.NavigateTarget{Kind: state.NavigateKillGPGAgent}.Cmd()
 	case mouse.ZoneActionQuit:
 		util.FlushMouse()
 		return m, tea.Quit
@@ -144,11 +159,13 @@ func (m *Model) GetError() error {
 
 // SetError sets the error (path is ignored; init-repo screen uses initrepo tab). hasRetry resets
 // to false; callers that want a Retry button (e.g. AI generation failures with a saved replay
-// target on the main Model) must follow up with SetHasRetry(true).
+// target on the main Model) must follow up with SetHasRetry(true). Signing/pinentry failures
+// automatically arm the Kill gpg-agent action.
 func (m *Model) SetError(err error, _ bool, _ string) {
 	m.err = err
 	m.copied = false
 	m.hasRetry = false
+	m.hasKillGPG = err != nil && jjout.IsSigningPinentryFailure(err.Error())
 }
 
 // ClearError clears the error.
@@ -156,6 +173,7 @@ func (m *Model) ClearError() {
 	m.err = nil
 	m.copied = false
 	m.hasRetry = false
+	m.hasKillGPG = false
 }
 
 // SetHasRetry toggles whether the Retry (^r) button is rendered and the corresponding
@@ -168,6 +186,11 @@ func (m *Model) SetHasRetry(has bool) {
 // HasRetry reports whether Retry is currently offered for the active error.
 func (m *Model) HasRetry() bool {
 	return m.hasRetry
+}
+
+// HasKillGPG reports whether Kill gpg-agent is offered for the active error.
+func (m *Model) HasKillGPG() bool {
+	return m.hasKillGPG
 }
 
 // IsCopied returns whether the error was just copied.

@@ -6,11 +6,12 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen/jj-tui/internal/tui/data"
 	"github.com/madicen/jj-tui/internal/tui/state"
+	"github.com/madicen/jj-tui/internal/tui/util"
 )
 
 // navigate_repo.go holds the per-domain NavigateKind handlers for repository /
 // remote setup (init, origin remote, push) and the error-modal dismiss/retry
-// paths, plus the GitHub-login cancel teardown.
+// paths (dismiss / retry / kill gpg-agent), plus the GitHub-login cancel teardown.
 
 // handleNavigateInit covers running and dismissing the init-repository modal.
 func (m *Model) handleNavigateInit(t state.NavigateTarget) (tea.Model, tea.Cmd, bool) {
@@ -152,6 +153,10 @@ func (m *Model) handleNavigateError(t state.NavigateTarget) (tea.Model, tea.Cmd,
 			m.appState.ViewMode = state.ViewCommitGraph
 		}
 		return m, m.refreshRepository(), true
+	case state.NavigateKillGPGAgent:
+		m.appState.Loading = true
+		m.appState.StatusMessage = "Killing gpg-agent…"
+		return m, util.KillGPGAgentCmd(), true
 	default:
 		return m, nil, false
 	}

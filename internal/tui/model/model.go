@@ -311,7 +311,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// Propagate dimensions to tab models so they can render
-		var cmds []tea.Cmd
+		cmds := make([]tea.Cmd, 0, 6)
 		var cmd tea.Cmd
 		m.graphTabModel, cmd = m.graphTabModel.UpdateWithApp(msg, nil)
 		cmds = append(cmds, cmd)
