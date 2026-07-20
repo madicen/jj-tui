@@ -32,6 +32,10 @@ const (
 	// recent retry-eligible action (currently: in-flight AI generation kind saved on Model). If
 	// nothing is replayable, main falls back to a repository refresh.
 	NavigateRetryError
+	// NavigateKillGPGAgent is fired by the error modal when the failure looks like a GPG
+	// signing/pinentry problem. Main runs `gpgconf --kill gpg-agent` and, on success, auto-retries
+	// pendingRetryCmd when one is stashed.
+	NavigateKillGPGAgent
 	NavigateBackFromPRForm // back to graph and hide PR form modal
 	NavigateCreateTicket   // open Create Ticket modal (from Tickets tab)
 	NavigateBackFromTicketForm

@@ -59,6 +59,27 @@ func TestExtractErrorMessage(t *testing.T) {
 		{"first meaningful line", "Warning: skip\nHint: skip\nsomething useful", "something useful"},
 		{"nothing", "Warning: only\nHint: only\n\n", ""},
 		{"empty", "", ""},
+		{
+			name: "internal error with caused by chain",
+			in: `Internal error: Unexpected error from backend
+Caused by:
+1: Could not write object of type commit
+2: Signing error
+3: GPG failed with exit status: 2:
+gpg: signing failed: No pinentry
+Hint: something else`,
+			want: `Internal error: Unexpected error from backend
+Caused by:
+1: Could not write object of type commit
+2: Signing error
+3: GPG failed with exit status: 2:
+gpg: signing failed: No pinentry`,
+		},
+		{
+			name: "error with caused by stops at blank",
+			in:   "Error: push failed\nCaused by:\n1: network down\n\nHint: retry",
+			want: "push failed\nCaused by:\n1: network down",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -66,5 +87,23 @@ func TestExtractErrorMessage(t *testing.T) {
 				t.Errorf("ExtractErrorMessage(%q) = %q, want %q", tc.in, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestIsSigningPinentryFailure(t *testing.T) {
+	cases := []struct {
+		in   string
+		want bool
+	}{
+		{"Internal error: Unexpected error from backend\nCaused by:\n2: Signing error\ngpg: signing failed: No pinentry", true},
+		{"signing error", true},
+		{"gpg: signing failed: No pinentry", true},
+		{"failed to push: remote rejected", false},
+		{"", false},
+	}
+	for _, tc := range cases {
+		if got := IsSigningPinentryFailure(tc.in); got != tc.want {
+			t.Errorf("IsSigningPinentryFailure(%q) = %v, want %v", tc.in, got, tc.want)
+		}
 	}
 }
