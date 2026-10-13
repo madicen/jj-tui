@@ -68,14 +68,25 @@ homebrew_casks:
     license: "MIT"
     binaries:
       - jj-tui
-    # Unsigned GitHub release binaries are quarantined; without this, macOS shows
-    # "could not verify… malware" until the user runs xattr manually. Prefer real
-    # signing + notarization when feasible; see https://goreleaser.com/customization/publish/homebrew_casks/
+    # Unsigned GitHub release binaries are quarantined on macOS. Quarantine
+    # alone is not enough on recent macOS: Gatekeeper SIGKILLs the
+    # linker/ad-hoc signature (Code Signature Invalid). Strip quarantine and
+    # re-sign ad-hoc in preflight. Proper fix later: Developer ID + notarization.
+    caveats: |
+      On macOS, if Gatekeeper blocks a GitHub/direct download ("Not Opened" /
+      Code Signature Invalid), clear quarantine and re-sign ad-hoc:
+
+        xattr -dr com.apple.quarantine "$(which jj-tui)"
+        codesign --force --sign - "$(which jj-tui)"
+
+      Or use System Settings → Privacy & Security → Open Anyway.
+      Prefer `brew install --cask madicen/tap/jj-tui` (cask preflight handles this).
     hooks:
-      post:
-        install: |
-          if OS.mac?
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/jj-tui"]
+      pre:
+        install_steps: |
+          on_macos do
+            run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/jj-tui"]
+            run "/usr/bin/codesign", args: ["--force", "--sign", "-", "{{ .StagedPath }}/jj-tui"]
           end
 
 release:
