@@ -277,9 +277,9 @@ func prDetailGuidance(diff string) string {
 	case tierSmall:
 		return "This is a small change: keep the body to a single sentence and use no bullets."
 	case tierMedium:
-		return "This is a medium change: write a 1-2 sentence summary, then up to ~4 short bullets only if they add detail the summary can't convey."
+		return "This is a medium change: write a 1-2 sentence summary of what changed and why, then up to ~4 short bullets only if they add intent or behavior the summary can't convey—not one bullet per file."
 	default:
-		return "This is a large change: write a short summary paragraph, then concise bullets grouped by area or file-set. Stay skimmable and avoid a blow-by-blow of every edit."
+		return "This is a large change: write a short summary of the overall goal, then concise bullets grouped by theme or capability (not by file path). Stay skimmable; never inventory files or restate the diff."
 	}
 }
 
@@ -290,9 +290,9 @@ func ticketDetailGuidance(diff string) string {
 	case tierSmall:
 		return "This is a small change: keep the description to a sentence or two; no bullets."
 	case tierMedium:
-		return "This is a medium change: a short summary, then a few bullets only if they add detail the summary can't convey."
+		return "This is a medium change: a short summary of the problem and why it matters, then a few bullets only if they add intent the summary can't convey—not one bullet per file."
 	default:
-		return "This is a large change: a short summary paragraph, then concise bullets grouped by area. Stay skimmable; don't enumerate every edit."
+		return "This is a large change: a short summary of the problem, then concise bullets grouped by theme. Stay skimmable; don't inventory files or enumerate every edit."
 	}
 }
 
@@ -301,8 +301,11 @@ const PRSystem = `You write pull request titles and bodies for GitHub.
 Respond with a single JSON object only, no markdown fences, using exactly these keys:
 {"title":"...","body":"..."}
 The response must be valid JSON: newlines inside body must be \n escapes inside the quoted string, not literal line breaks.
-Title: at most 200 characters, capturing the change's primary purpose. Body: a plain summary of what changed and why. Markdown allowed; use bullets only when they add detail the summary can't. No boilerplate headings (no "## Summary", "## Test plan"), do not restate the diff line by line, and keep it skimmable. Match the length to the change: the user message states a length budget for this PR—follow it.
-Use the "Files changed" summary to judge scope and lead with the change that dominates. If the commits span clearly unrelated areas, describe the overarching intent rather than one file; never infer the whole PR's purpose from a single incidental hunk.
+Title: at most 200 characters, capturing the change's primary purpose.
+Body: explain what changed and why it matters to a reviewer who has not opened the diff. Lead with intent/motivation, then name the main behaviors or capabilities affected. Prefer a short prose summary; use bullets only for distinct outcomes or tradeoffs the summary can't convey.
+Do NOT: walk the "Files changed" list; write one bullet (or sentence) per file/path; paraphrase hunks; or produce a changelog-style inventory. The file list and diff are context for you—reviewers already see them in GitHub.
+No boilerplate headings (no "## Summary", "## Test plan"). Keep it skimmable. Match the length to the change: the user message states a length budget for this PR—follow it.
+Use the "Files changed" summary only to judge scope and lead with the dominant change. If the commits span clearly unrelated areas, describe the overarching intent rather than one file; never infer the whole PR's purpose from a single incidental hunk.
 If—and only if—the "Suggested title hint" in the user message already begins with a real ticket/issue id from that hint (e.g. a short alphanumeric key with hyphens, sometimes in brackets), copy that exact prefix into the JSON title and only improve the rest. If the hint has no such prefix, the JSON title must not add one: do not invent keys, placeholders, or example ids from these instructions.`
 
 // PRUser builds the user message for PR title+body. chainSummary is an
@@ -329,7 +332,7 @@ func PRUser(baseBranch, headBranch, hintTitle, chainSummary, diff string) string
 	b.WriteString(truncateRunes(diff, maxPromptDiffRunes))
 	b.WriteString("\n\nLength budget for the body: ")
 	b.WriteString(prDetailGuidance(diff))
-	b.WriteString("\n\nWrite JSON with title and body for this pull request that reflects the whole chain of commits, not just the tip. Preserve a leading ticket/issue prefix only when it is already present in the hint above; never invent one.")
+	b.WriteString("\n\nWrite JSON with title and body for this pull request that reflects the whole chain of commits, not just the tip. Focus on what changed and why—not a file-by-file restatement of the diff or the Files changed list. Preserve a leading ticket/issue prefix only when it is already present in the hint above; never invent one.")
 	return b.String()
 }
 
@@ -339,7 +342,7 @@ The user supplies a unified diff of a proposed fix. Infer what problem or task t
 Respond with a single JSON object only, no markdown fences, using exactly these keys:
 {"title":"...","body":"..."}
 The response must be valid JSON: any newlines inside body must be written as \n inside the quoted string, not as literal line breaks. Prefer one line for the whole object if unsure.
-Title: at most 300 characters, capturing the core problem or task. Body: a concise plain summary of the problem; markdown allowed but no boilerplate headings, and don't restate the diff. Match the length to the change: the user message states a length budget—follow it. Use the "Files changed" summary to judge scope and focus on the dominant change; if the diff spans unrelated areas, describe the overarching intent rather than one file. If—and only if—the draft title in the user message already starts with a real ticket/issue id from that text, keep that exact prefix in the JSON title; otherwise do not add any key or placeholder.`
+Title: at most 300 characters, capturing the core problem or task. Body: a concise summary of the problem and why it matters; markdown allowed but no boilerplate headings. Do not walk the "Files changed" list, write one bullet per file, or restate the diff. Match the length to the change: the user message states a length budget—follow it. Use the "Files changed" summary only to judge scope and focus on the dominant change; if the diff spans unrelated areas, describe the overarching intent rather than one file. If—and only if—the draft title in the user message already starts with a real ticket/issue id from that text, keep that exact prefix in the JSON title; otherwise do not add any key or placeholder.`
 
 // TicketUser builds the user message for AI-filled create-ticket fields.
 // chainSummary is an optional pre-formatted block listing the commits in

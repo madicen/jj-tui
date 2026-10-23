@@ -152,6 +152,27 @@ func TestPRUser_includesLengthBudget(t *testing.T) {
 	}
 }
 
+// lazy: string anchors — catches prompt regressions that invite file-by-file PR bodies.
+func TestPRSystem_focusesOnWhatAndWhy(t *testing.T) {
+	for _, want := range []string{
+		"what changed and why",
+		"one bullet (or sentence) per file",
+		"walk the \"Files changed\" list",
+	} {
+		if !strings.Contains(PRSystem, want) {
+			t.Fatalf("PRSystem missing %q", want)
+		}
+	}
+	u := PRUser("main", "feature", "", "", makeDiff(2, 20))
+	if !strings.Contains(u, "file-by-file") {
+		t.Fatalf("PRUser closing instruction missing file-by-file guard; got:\n%s", u)
+	}
+	large := prDetailGuidance(makeDiff(10, 60))
+	if !strings.Contains(large, "not by file path") {
+		t.Fatalf("large tier should forbid path-grouped bullets; got: %q", large)
+	}
+}
+
 func TestFormatDiffFileStat_perFileCounts(t *testing.T) {
 	diff := "diff --git a/foo.go b/foo.go\n" +
 		"--- a/foo.go\n+++ b/foo.go\n@@ -1,2 +1,3 @@\n+a\n+b\n-c\n" +
