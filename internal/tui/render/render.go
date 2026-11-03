@@ -8,6 +8,7 @@ package render
 import (
 	"strings"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/x/ansi"
 	zone "github.com/lrstanley/bubblezone"
 )
@@ -55,6 +56,13 @@ func Separator(width int) string {
 		w = separatorFallbackWidth
 	}
 	return strings.Repeat("─", w)
+}
+
+// TextInputWidth returns the textinput.Width that makes ti render exactly total cells.
+// With a value, textinput draws Prompt + Width + one trailing cursor cell; with only a
+// placeholder it draws exactly Width, so the full total would grow by 3 cells on first keystroke.
+func TextInputWidth(ti textinput.Model, total int) int {
+	return SafeWidth(total, ansi.StringWidth(ti.Prompt)+1)
 }
 
 // SafeWidth returns total minus padding, clamped to a minimum of zero so it is safe

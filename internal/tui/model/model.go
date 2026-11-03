@@ -14,6 +14,7 @@ import (
 	"github.com/madicen/jj-tui/internal/config"
 	"github.com/madicen/jj-tui/internal/tui/data"
 	"github.com/madicen/jj-tui/internal/tui/genmenu"
+	"github.com/madicen/jj-tui/internal/tui/render"
 	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/util"
 )
@@ -280,9 +281,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.desceditModal.SetDimensions(inputWidth, max(m.height-24, 3))
 		m.prFormModal.GetBodyInput().SetWidth(inputWidth)
-		m.prFormModal.GetTitleInput().Width = inputWidth
+		m.prFormModal.GetTitleInput().Width = render.TextInputWidth(*m.prFormModal.GetTitleInput(), inputWidth)
 		m.ticketFormModal.GetBodyInput().SetWidth(inputWidth)
-		m.ticketFormModal.GetTitleInput().Width = inputWidth
+		m.ticketFormModal.GetTitleInput().Width = render.TextInputWidth(*m.ticketFormModal.GetTitleInput(), inputWidth)
 		// PR form body uses full content height when in create-PR view
 		contentHeight := m.estimatedContentHeight()
 		if m.appState.ViewMode == state.ViewCreatePR {
