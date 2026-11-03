@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/madicen/jj-tui/internal/tickets"
+	"github.com/madicen/jj-tui/internal/tui/render"
 	"github.com/madicen/jj-tui/internal/tui/util"
 )
 
@@ -23,7 +24,7 @@ func OpenCreateTicket(modal *Model, ticketService tickets.Service, width, height
 	}
 	providerName := ticketService.GetProviderName()
 	modal.Show(providerName)
-	modal.GetTitleInput().Width = width
+	modal.GetTitleInput().Width = render.TextInputWidth(*modal.GetTitleInput(), width)
 	modal.GetBodyInput().SetWidth(width)
 	const fixedFormLines = 12
 	bodyHeight := height - fixedFormLines

@@ -5,10 +5,27 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	zone "github.com/lrstanley/bubblezone"
 )
+
+func TestTextInputWidthStableAcrossPlaceholderAndValue(t *testing.T) {
+	const total = 40
+	ti := textinput.New()
+	ti.Placeholder = "Pull request title"
+	ti.Width = TextInputWidth(ti, total)
+	ti.Focus()
+
+	if w := ansi.StringWidth(ti.View()); w > total {
+		t.Fatalf("placeholder view width = %d, want <= %d", w, total)
+	}
+	ti.SetValue("asdf")
+	if w := ansi.StringWidth(ti.View()); w != total {
+		t.Fatalf("value view width = %d, want %d", w, total)
+	}
+}
 
 func TestTruncateMenuHeader(t *testing.T) {
 	if got := TruncateMenuHeader("short"); got != "short" {

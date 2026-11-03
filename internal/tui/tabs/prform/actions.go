@@ -10,6 +10,7 @@ import (
 	"github.com/madicen/jj-tui/internal"
 	"github.com/madicen/jj-tui/internal/integrations/github"
 	"github.com/madicen/jj-tui/internal/integrations/jj"
+	"github.com/madicen/jj-tui/internal/tui/render"
 	"github.com/madicen/jj-tui/internal/tui/state"
 	"github.com/madicen/jj-tui/internal/tui/util"
 )
@@ -242,7 +243,7 @@ func OpenCreatePR(modal *Model, repo *internal.Repository, commitIdx int, jiraTi
 	modal.GetTitleInput().Focus()
 	modal.GetBodyInput().Blur()
 	modal.SetBody("")
-	modal.GetTitleInput().Width = width
+	modal.GetTitleInput().Width = render.TextInputWidth(*modal.GetTitleInput(), width)
 	modal.GetBodyInput().SetWidth(width)
 	// Use full content height: fixed lines (branch, "Title:", title input, "Body:",
 	// draft toggle + spacer, buttons) ≈ 13
