@@ -85,7 +85,7 @@ func (m *Model) SetDimensions(width, height int) {
 	m.height = height
 }
 
-// helpKeyColW is the shared key-column width so descriptions align (widest: ctrl+shift+u).
+// helpKeyColW is the shared key-column width so descriptions align.
 const helpKeyColW = 18
 
 // row renders a "  <key>  <desc>" help line from a bubbles/key Binding, using the
@@ -129,7 +129,7 @@ func (m Model) lines() []string {
 	lines = append(lines, "")
 	lines = append(lines, staticRow("^s", "Save description"))
 	lines = append(lines, staticRow("Esc", "Cancel"))
-	lines = append(lines, staticRow("ctrl+shift+u", "Clear description text"))
+	lines = append(lines, staticRow("^x", "Clear description text (same as the red ✗)"))
 	lines = append(lines, staticRow("✧^g", "Same as the purple ✧ ^g chip beside the title (optional AI; Settings → AI + API key)"))
 	lines = append(lines, row(g.Abandon))
 	lines = append(lines, row(g.NewCommit))
@@ -157,6 +157,7 @@ func (m Model) lines() []string {
 	lines = append(lines, staticRow("✧^g", "Same as the ✧ ^g chip beside the modal title"))
 	lines = append(lines, staticRow("Esc", "Cancel"))
 	lines = append(lines, staticRow("Tab", "Switch title / body"))
+	lines = append(lines, staticRow("^x", "Clear the focused field (same as its red ✗)"))
 	lines = append(lines, "")
 	lines = append(lines, styles.TitleStyle.Render("Create Ticket modal"))
 	lines = append(lines, "")
