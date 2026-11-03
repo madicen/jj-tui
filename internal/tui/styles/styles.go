@@ -49,6 +49,11 @@ func AIGenerateChip() string {
 	return StyleAIGenerateIcon(AIGenerateMark + " ^g")
 }
 
+// ClearMark is the clickable red ✗ that empties a text field.
+func ClearMark() string {
+	return lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555")).Bold(true).Render("✗")
+}
+
 // SpreadRow lays out left and right so the row uses totalWidth terminal cells when possible
 // (spaces between). If totalWidth is too small, falls back to "left right" with a single space.
 func SpreadRow(totalWidth int, left, right string) string {

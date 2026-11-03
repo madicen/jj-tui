@@ -154,10 +154,10 @@ func (m Model) renderForm() string {
 		lipgloss.Left,
 		branchLine,
 		"",
-		"Title:",
+		styles.SpreadRow(contentW, "Title:", mark(mouse.ZonePRTitleClear, styles.ClearMark())),
 		titleInput,
 		"",
-		"Body:",
+		styles.SpreadRow(contentW, "Body:", mark(mouse.ZonePRBodyClear, styles.ClearMark())),
 		bodyInput,
 		"",
 		draftToggle,
@@ -188,6 +188,11 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "ctrl+d":
 		m.draft = !m.draft
 		return m, nil
+	case "ctrl+x":
+		if m.focusedField == 0 {
+			return m.handleZoneClick(mouse.ZonePRTitleClear)
+		}
+		return m.handleZoneClick(mouse.ZonePRBodyClear)
 	case "ctrl+s", "ctrl+enter":
 		return m, SubmitRequestedCmd()
 	case "tab":
@@ -215,7 +220,7 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 // ZoneIDs returns the zone IDs this modal uses when rendering. Used to resolve clicks.
 func (m Model) ZoneIDs() []string {
-	return []string{mouse.ZonePRTitle, mouse.ZonePRBody, mouse.ZonePRDraft, mouse.ZonePRSubmit, mouse.ZonePRGenerate, mouse.ZonePRCancel}
+	return []string{mouse.ZonePRTitle, mouse.ZonePRBody, mouse.ZonePRTitleClear, mouse.ZonePRBodyClear, mouse.ZonePRDraft, mouse.ZonePRSubmit, mouse.ZonePRGenerate, mouse.ZonePRCancel}
 }
 
 func (m Model) resolveClickedZone(msg zone.MsgZoneInBounds) string {
@@ -240,6 +245,14 @@ func (m Model) handleZoneClick(zoneID string) (Model, tea.Cmd) {
 		m.SetFocusedField(0)
 		return m, nil
 	case mouse.ZonePRBody:
+		m.SetFocusedField(1)
+		return m, nil
+	case mouse.ZonePRTitleClear:
+		m.titleInput.SetValue("")
+		m.SetFocusedField(0)
+		return m, nil
+	case mouse.ZonePRBodyClear:
+		m.bodyInput.SetValue("")
 		m.SetFocusedField(1)
 		return m, nil
 	case mouse.ZonePRDraft:

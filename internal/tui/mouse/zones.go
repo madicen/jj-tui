@@ -44,6 +44,8 @@ const (
 	// PR creation zones
 	ZonePRTitle        = "zone:pr:title"
 	ZonePRBody         = "zone:pr:body"
+	ZonePRTitleClear   = "zone:pr:title_clear"
+	ZonePRBodyClear    = "zone:pr:body_clear"
 	ZonePRDraft        = "zone:pr:draft"
 	ZonePRSubmit       = "zone:pr:submit"
 	ZonePRCancel       = "zone:pr:cancel"

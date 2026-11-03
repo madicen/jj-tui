@@ -104,7 +104,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			return m, state.NavigateTarget{Kind: state.NavigateGenerateCommitDescription}.Cmd()
 		case "esc":
 			return m, CancelRequestedCmd()
-		case "ctrl+shift+u":
+		case "ctrl+x":
 			return m.clearDescription()
 		}
 	}
@@ -183,13 +183,12 @@ func (m Model) View() string {
 	actionButtons := lipgloss.JoinHorizontal(
 		lipgloss.Left,
 		mark(mouse.ZoneDescSave, styles.ButtonStyle.Render("Save (Ctrl+S)")),
-		mark(mouse.ZoneDescClear, styles.ButtonStyle.Render("Clear (Ctrl+Shift+U)")),
 		mark(mouse.ZoneDescCancel, styles.ButtonStyle.Render("Cancel (Esc)")),
 	)
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		commitLine,
-		"",
+		styles.SpreadRow(contentW, "Description:", mark(mouse.ZoneDescClear, styles.ClearMark())),
 		m.descriptionInput.View(),
 		"",
 		actionButtons,
